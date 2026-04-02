@@ -1,0 +1,24 @@
+{
+  "name": "gws_care",
+  "author": "",
+  "version": "0.9.0",
+  "variables": {
+    "gws_care:testdata_dir": "${CURRENT_DIR}/tests/testdata"
+  },
+  "technical_info": null,
+  "environment": {
+    "bricks": [
+      {
+        "name": "gws_core",
+        "version": "0.21.0"
+      }
+    ],
+    "pip": [
+      {
+        "source": "https://pypi.python.org/simple",
+        "packages": []
+      }
+    ],
+    "git": []
+  }
+}

@@ -1,0 +1,286 @@
+"""Company detail page — shows company info and its patients."""
+
+import reflex as rx
+from gws_reflex_main import main_component
+
+from ..common.page_layout import page_layout
+from ..patient_list.patient_form_component import patient_form_dialog
+from ..patient_list.patient_form_state import PatientFormState
+from .company_detail_state import (
+    CompanyDetailDTO,
+    CompanyDetailState,
+    CompanyPatientRowDTO,
+)
+
+
+def _info_item(label: str, value: rx.Var) -> rx.Component:
+    return rx.vstack(
+        rx.text(label, size="1", color="var(--gray-9)", weight="medium"),
+        rx.cond(
+            value != "",
+            rx.text(value, size="2"),
+            rx.text("—", size="2", color="var(--gray-7)"),
+        ),
+        spacing="0",
+        align_items="start",
+    )
+
+
+def _company_info_card(company: CompanyDetailDTO) -> rx.Component:
+    return rx.card(
+        rx.vstack(
+            rx.hstack(
+                rx.icon("building-2", size=18, color="var(--accent-9)"),
+                rx.heading(company.name, size="5"),
+                rx.cond(
+                    company.is_active,
+                    rx.badge("Active", color_scheme="green", variant="soft", size="1"),
+                    rx.badge("Inactive", color_scheme="gray", variant="soft", size="1"),
+                ),
+                spacing="2",
+                align="center",
+            ),
+            rx.separator(width="100%"),
+            rx.grid(
+                _info_item("Registration N°", company.registration_number),
+                _info_item("City", company.city),
+                _info_item("Address", company.address),
+                _info_item("Postal Code", company.postal_code),
+                _info_item("Phone", company.phone),
+                _info_item("Email", company.email),
+                _info_item("Contact", company.contact_name),
+                columns="3",
+                spacing="4",
+                width="100%",
+            ),
+            spacing="3",
+            width="100%",
+        ),
+        width="100%",
+    )
+
+
+def _gender_badge(gender: str) -> rx.Component:
+    return rx.match(
+        gender,
+        ("M", rx.badge("M", color_scheme="blue", variant="soft", size="1")),
+        ("F", rx.badge("F", color_scheme="pink", variant="soft", size="1")),
+        rx.badge(gender, color_scheme="gray", variant="soft", size="1"),
+    )
+
+
+def _patient_row(p: CompanyPatientRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(p.patient_number, size="2", weight="medium")),
+        rx.table.cell(rx.text(f"{p.first_name} {p.last_name}", size="2")),
+        rx.table.cell(_gender_badge(p.gender)),
+        rx.table.cell(rx.text(p.date_of_birth, size="2")),
+        rx.table.cell(
+            rx.cond(p.city, rx.text(p.city, size="2"), rx.text("—", size="2", color="var(--gray-8)"))
+        ),
+        rx.table.cell(
+            rx.cond(p.phone, rx.text(p.phone, size="2"), rx.text("—", size="2", color="var(--gray-8)"))
+        ),
+        rx.table.cell(
+            rx.hstack(
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("chevron-right", size=14),
+                        variant="ghost",
+                        size="1",
+                        on_click=lambda: CompanyDetailState.go_to_patient(p.id),
+                    ),
+                    content="View patient",
+                ),
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("unlink", size=14),
+                        variant="ghost",
+                        size="1",
+                        color_scheme="red",
+                        on_click=lambda: CompanyDetailState.remove_patient(p.id),
+                    ),
+                    content="Remove from company",
+                ),
+                spacing="1",
+            )
+        ),
+        style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
+        on_click=lambda: CompanyDetailState.go_to_patient(p.id),
+    )
+
+
+def _assign_patient_dialog() -> rx.Component:
+    """Dialog to assign an existing unlinked patient to this company."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Assign Existing Patient"),
+            rx.dialog.description(
+                "Select a patient who is not yet assigned to any company.",
+                size="2",
+                margin_bottom="1rem",
+            ),
+            rx.cond(
+                CompanyDetailState.unassigned_patients.length() > 0,
+                rx.vstack(
+                    rx.select.root(
+                        rx.select.trigger(placeholder="Search a patient…", width="100%"),
+                        rx.select.content(
+                            rx.foreach(
+                                CompanyDetailState.unassigned_patients,
+                                lambda p: rx.select.item(p.label, value=p.id),
+                            )
+                        ),
+                        value=CompanyDetailState.assign_patient_id,
+                        on_change=CompanyDetailState.set_assign_patient_id,
+                        width="100%",
+                    ),
+                    rx.hstack(
+                        rx.button(
+                            "Cancel",
+                            variant="soft",
+                            color_scheme="gray",
+                            on_click=CompanyDetailState.close_assign_dialog,
+                            disabled=CompanyDetailState.is_assigning,
+                        ),
+                        rx.button(
+                            rx.cond(
+                                CompanyDetailState.is_assigning,
+                                rx.spinner(size="2"),
+                                rx.text("Assign"),
+                            ),
+                            on_click=CompanyDetailState.confirm_assign,
+                            disabled=(CompanyDetailState.assign_patient_id == "")
+                            | CompanyDetailState.is_assigning,
+                        ),
+                        spacing="3",
+                        justify="end",
+                        width="100%",
+                    ),
+                    width="100%",
+                    spacing="4",
+                ),
+                rx.vstack(
+                    rx.text(
+                        "All patients are already assigned to a company.",
+                        size="2",
+                        color="var(--gray-9)",
+                    ),
+                    rx.button(
+                        "Close",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=CompanyDetailState.close_assign_dialog,
+                    ),
+                    spacing="3",
+                    align_items="end",
+                    width="100%",
+                ),
+            ),
+            on_interact_outside=CompanyDetailState.close_assign_dialog,
+            on_escape_key_down=CompanyDetailState.close_assign_dialog,
+            max_width="480px",
+        ),
+        open=CompanyDetailState.assign_dialog_open,
+    )
+
+
+def _patients_section() -> rx.Component:
+    return rx.vstack(
+        rx.hstack(
+            rx.heading("Patients", size="4"),
+            rx.spacer(),
+            rx.hstack(
+                rx.button(
+                    rx.icon("user-plus", size=14),
+                    "Assign existing",
+                    variant="outline",
+                    size="2",
+                    on_click=CompanyDetailState.open_assign_dialog,
+                ),
+                rx.button(
+                    rx.icon("plus", size=14),
+                    "New patient",
+                    size="2",
+                    on_click=lambda: PatientFormState.open_create_for_company(CompanyDetailState.company.id),
+                ),
+                spacing="2",
+            ),
+            width="100%",
+            align="center",
+        ),
+        rx.separator(width="100%"),
+        rx.cond(
+            CompanyDetailState.patients.length() > 0,
+            rx.table.root(
+                rx.table.header(
+                    rx.table.row(
+                        rx.table.column_header_cell("N°"),
+                        rx.table.column_header_cell("Patient"),
+                        rx.table.column_header_cell("Gender"),
+                        rx.table.column_header_cell("Date of Birth"),
+                        rx.table.column_header_cell("City"),
+                        rx.table.column_header_cell("Phone"),
+                        rx.table.column_header_cell("Actions"),
+                    )
+                ),
+                rx.table.body(
+                    rx.foreach(CompanyDetailState.patients, _patient_row)
+                ),
+                width="100%",
+                variant="surface",
+            ),
+            rx.center(
+                rx.text(
+                    "No patients assigned to this company yet.",
+                    size="2",
+                    color="var(--gray-9)",
+                ),
+                padding="2rem",
+            ),
+        ),
+        width="100%",
+        spacing="3",
+    )
+
+
+def company_detail_page() -> rx.Component:
+    """Company detail page."""
+    return main_component(
+        page_layout(
+            rx.button(
+                rx.icon("arrow-left", size=16),
+                "Back to companies",
+                on_click=CompanyDetailState.go_back,
+                variant="ghost",
+                size="2",
+            ),
+            rx.cond(
+                CompanyDetailState.error_message != "",
+                rx.callout(
+                    CompanyDetailState.error_message,
+                    icon="triangle-alert",
+                    color_scheme="red",
+                ),
+            ),
+            rx.cond(
+                CompanyDetailState.is_loading,
+                rx.center(rx.spinner(size="3"), padding="3rem"),
+                rx.cond(
+                    CompanyDetailState.company,
+                    rx.vstack(
+                        _company_info_card(CompanyDetailState.company),
+                        _patients_section(),
+                        width="100%",
+                        spacing="5",
+                    ),
+                    rx.center(
+                        rx.text("Company not found.", color="var(--gray-9)"),
+                        padding="3rem",
+                    ),
+                ),
+            ),
+            _assign_patient_dialog(),
+            patient_form_dialog(),
+        )
+    )
