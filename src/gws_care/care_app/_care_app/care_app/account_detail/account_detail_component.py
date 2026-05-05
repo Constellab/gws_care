@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..patient_list.patient_form_component import patient_form_dialog
 from ..patient_list.patient_form_state import PatientFormState
@@ -34,21 +35,21 @@ def _account_info_card(account: AccountDetailDTO) -> rx.Component:
                 rx.heading(account.name, size="5"),
                 rx.cond(
                     account.is_active,
-                    rx.badge("Active", color_scheme="green", variant="soft", size="1"),
-                    rx.badge("Inactive", color_scheme="gray", variant="soft", size="1"),
+                    rx.badge(LanguageState.tr["active_badge"], color_scheme="green", variant="soft", size="1"),
+                    rx.badge(LanguageState.tr["inactive_badge"], color_scheme="gray", variant="soft", size="1"),
                 ),
                 spacing="2",
                 align="center",
             ),
             rx.separator(width="100%"),
             rx.grid(
-                _info_item("Registration N°", account.registration_number),
-                _info_item("City", account.city),
-                _info_item("Address", account.address),
-                _info_item("Postal Code", account.postal_code),
-                _info_item("Phone", account.phone),
-                _info_item("Email", account.email),
-                _info_item("Contact", account.contact_name),
+                _info_item(LanguageState.tr["info_registration"], account.registration_number),
+                _info_item(LanguageState.tr["info_city"], account.city),
+                _info_item(LanguageState.tr["info_address"], account.address),
+                _info_item(LanguageState.tr["info_postal_code"], account.postal_code),
+                _info_item(LanguageState.tr["info_phone"], account.phone),
+                _info_item(LanguageState.tr["info_email"], account.email),
+                _info_item(LanguageState.tr["info_contact"], account.contact_name),
                 columns="3",
                 spacing="4",
                 width="100%",
@@ -90,7 +91,7 @@ def _patient_row(p: AccountPatientRowDTO) -> rx.Component:
                         size="1",
                         on_click=lambda: AccountDetailState.go_to_patient(p.id),
                     ),
-                    content="View patient",
+                    content=LanguageState.tr["tooltip_view_patient"],
                 ),
                 rx.tooltip(
                     rx.icon_button(
@@ -100,7 +101,7 @@ def _patient_row(p: AccountPatientRowDTO) -> rx.Component:
                         color_scheme="red",
                         on_click=lambda: AccountDetailState.remove_patient(p.id),
                     ),
-                    content="Remove from account",
+                    content=LanguageState.tr["tooltip_remove_from_account"],
                 ),
                 spacing="1",
             )
@@ -114,9 +115,9 @@ def _assign_patient_dialog() -> rx.Component:
     """Dialog to assign an existing unlinked patient to this account."""
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Assign Existing Patient"),
+            rx.dialog.title(LanguageState.tr["assign_patient_dialog_title"]),
             rx.dialog.description(
-                "Select a patient who is not yet assigned to any account.",
+                LanguageState.tr["assign_patient_dialog_desc"],
                 size="2",
                 margin_bottom="1rem",
             ),
@@ -124,7 +125,7 @@ def _assign_patient_dialog() -> rx.Component:
                 AccountDetailState.unassigned_patients.length() > 0,
                 rx.vstack(
                     rx.select.root(
-                        rx.select.trigger(placeholder="Search a patient…", width="100%"),
+                        rx.select.trigger(placeholder=LanguageState.tr["search_a_patient_placeholder"], width="100%"),
                         rx.select.content(
                             rx.foreach(
                                 AccountDetailState.unassigned_patients,
@@ -137,7 +138,7 @@ def _assign_patient_dialog() -> rx.Component:
                     ),
                     rx.hstack(
                         rx.button(
-                            "Cancel",
+                            LanguageState.tr["cancel_btn"],
                             variant="soft",
                             color_scheme="gray",
                             on_click=AccountDetailState.close_assign_dialog,
@@ -147,7 +148,7 @@ def _assign_patient_dialog() -> rx.Component:
                             rx.cond(
                                 AccountDetailState.is_assigning,
                                 rx.spinner(size="2"),
-                                rx.text("Assign"),
+                                rx.text(LanguageState.tr["assign_btn"]),
                             ),
                             on_click=AccountDetailState.confirm_assign,
                             disabled=(AccountDetailState.assign_patient_id == "")
@@ -162,12 +163,12 @@ def _assign_patient_dialog() -> rx.Component:
                 ),
                 rx.vstack(
                     rx.text(
-                        "All patients are already assigned to an account.",
+                        LanguageState.tr["all_patients_assigned"],
                         size="2",
                         color="var(--gray-9)",
                     ),
                     rx.button(
-                        "Close",
+                        LanguageState.tr["close_btn"],
                         variant="soft",
                         color_scheme="gray",
                         on_click=AccountDetailState.close_assign_dialog,
@@ -188,19 +189,19 @@ def _assign_patient_dialog() -> rx.Component:
 def _patients_section() -> rx.Component:
     return rx.vstack(
         rx.hstack(
-            rx.heading("Patients", size="4"),
+            rx.heading(LanguageState.tr["patients_in_account_title"], size="4"),
             rx.spacer(),
             rx.hstack(
                 rx.button(
                     rx.icon("user-plus", size=14),
-                    "Assign existing",
+                    LanguageState.tr["assign_existing_btn"],
                     variant="outline",
                     size="2",
                     on_click=AccountDetailState.open_assign_dialog,
                 ),
                 rx.button(
                     rx.icon("plus", size=14),
-                    "New patient",
+                    LanguageState.tr["new_patient_small_btn"],
                     size="2",
                     on_click=lambda: PatientFormState.open_create_for_account(AccountDetailState.account.id),
                 ),
@@ -215,13 +216,13 @@ def _patients_section() -> rx.Component:
             rx.table.root(
                 rx.table.header(
                     rx.table.row(
-                        rx.table.column_header_cell("N°"),
-                        rx.table.column_header_cell("Patient"),
-                        rx.table.column_header_cell("Gender"),
-                        rx.table.column_header_cell("Date of Birth"),
-                        rx.table.column_header_cell("City"),
-                        rx.table.column_header_cell("Phone"),
-                        rx.table.column_header_cell("Actions"),
+                        rx.table.column_header_cell(LanguageState.tr["col_patient_number"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_patient"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_gender"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_dob"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_city"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_phone"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_actions"]),
                     )
                 ),
                 rx.table.body(
@@ -232,7 +233,7 @@ def _patients_section() -> rx.Component:
             ),
             rx.center(
                 rx.text(
-                    "No patients assigned to this account yet.",
+                    LanguageState.tr["no_patients_assigned"],
                     size="2",
                     color="var(--gray-9)",
                 ),
@@ -250,7 +251,7 @@ def account_detail_page() -> rx.Component:
         page_layout(
             rx.button(
                 rx.icon("arrow-left", size=16),
-                "Back to accounts",
+                LanguageState.tr["back_to_accounts"],
                 on_click=AccountDetailState.go_back,
                 variant="ghost",
                 size="2",
@@ -275,7 +276,7 @@ def account_detail_page() -> rx.Component:
                         spacing="5",
                     ),
                     rx.center(
-                        rx.text("Account not found.", color="var(--gray-9)"),
+                        rx.text(LanguageState.tr["account_not_found"], color="var(--gray-9)"),
                         padding="3rem",
                     ),
                 ),

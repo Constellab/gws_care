@@ -10,14 +10,18 @@ class CareRole(str, Enum):
     A user can hold multiple CareRoles simultaneously.
     """
 
-    ADMIN = "ADMIN"          # Full access: user management, all data
-    DOCTOR = "DOCTOR"        # Can enter/validate exam interpretations
-    OPERATOR = "OPERATOR"    # Scheduling and patient/account management
+    ADMIN = "ADMIN"                  # Full access: user management, all data
+    DOCTOR = "DOCTOR"                # Can enter/validate exam interpretations
+    OPERATOR = "OPERATOR"            # Scheduling and patient/account management
+    ACCOUNT_ADMIN = "ACCOUNT_ADMIN"  # Administrator for a single account (company)
+    PATIENT = "PATIENT"              # Linked to a single patient record
 
     def get_label(self) -> str:
         labels = {
             CareRole.ADMIN: "Administrator",
             CareRole.DOCTOR: "Doctor",
             CareRole.OPERATOR: "Operator",
+            CareRole.ACCOUNT_ADMIN: "Account Administrator",
+            CareRole.PATIENT: "Patient",
         }
         return labels[self]

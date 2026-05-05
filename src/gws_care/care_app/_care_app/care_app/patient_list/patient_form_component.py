@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_base import form_dialog_component
 
+from ..common.language_state import LanguageState
 from .patient_form_state import PatientFormState
 
 
@@ -21,7 +22,7 @@ def _form_fields() -> rx.Component:
     return rx.vstack(
         rx.grid(
             _field(
-                "Last Name *",
+                LanguageState.tr["field_last_name"],
                 rx.input(
                     value=PatientFormState.form_last_name,
                     on_change=PatientFormState.set_form_last_name,
@@ -31,7 +32,7 @@ def _form_fields() -> rx.Component:
                 ),
             ),
             _field(
-                "First Name *",
+                LanguageState.tr["field_first_name"],
                 rx.input(
                     value=PatientFormState.form_first_name,
                     on_change=PatientFormState.set_form_first_name,
@@ -45,18 +46,18 @@ def _form_fields() -> rx.Component:
             width="100%",
         ),
         _field(
-            "Birth Name",
+            LanguageState.tr["field_birth_name"],
             rx.input(
                 value=PatientFormState.form_birth_name,
                 on_change=PatientFormState.set_form_birth_name,
-                placeholder="Maiden name (if different)",
+                placeholder=LanguageState.tr["birth_name_placeholder"],
                 size="2",
                 width="100%",
             ),
         ),
         rx.grid(
             _field(
-                "Date of Birth *",
+                LanguageState.tr["field_dob"],
                 rx.input(
                     value=PatientFormState.form_date_of_birth,
                     on_change=PatientFormState.set_form_date_of_birth,
@@ -66,13 +67,13 @@ def _form_fields() -> rx.Component:
                 ),
             ),
             _field(
-                "Gender *",
+                LanguageState.tr["field_gender"],
                 rx.select.root(
-                    rx.select.trigger(placeholder="Select gender"),
+                    rx.select.trigger(placeholder=LanguageState.tr["select_gender_placeholder"]),
                     rx.select.content(
-                        rx.select.item("Male", value="M"),
-                        rx.select.item("Female", value="F"),
-                        rx.select.item("Other", value="Other"),
+                        rx.select.item(LanguageState.tr["gender_male"], value="M"),
+                        rx.select.item(LanguageState.tr["gender_female"], value="F"),
+                        rx.select.item(LanguageState.tr["gender_other"], value="Other"),
                     ),
                     value=PatientFormState.form_gender,
                     on_change=PatientFormState.set_form_gender,
@@ -85,10 +86,10 @@ def _form_fields() -> rx.Component:
             width="100%",
         ),
         rx.separator(width="100%"),
-        rx.text("Contact", size="2", weight="bold", color="var(--gray-9)"),
+        rx.text(LanguageState.tr["section_contact"], size="2", weight="bold", color="var(--gray-9)"),
         rx.grid(
             _field(
-                "Phone",
+                LanguageState.tr["field_phone"],
                 rx.input(
                     value=PatientFormState.form_phone,
                     on_change=PatientFormState.set_form_phone,
@@ -98,7 +99,7 @@ def _form_fields() -> rx.Component:
                 ),
             ),
             _field(
-                "Email",
+                LanguageState.tr["field_email"],
                 rx.input(
                     value=PatientFormState.form_email,
                     on_change=PatientFormState.set_form_email,
@@ -113,7 +114,7 @@ def _form_fields() -> rx.Component:
             width="100%",
         ),
         _field(
-            "Address",
+            LanguageState.tr["field_address"],
             rx.input(
                 value=PatientFormState.form_address,
                 on_change=PatientFormState.set_form_address,
@@ -124,7 +125,7 @@ def _form_fields() -> rx.Component:
         ),
         rx.grid(
             _field(
-                "Postal Code",
+                LanguageState.tr["field_postal_code"],
                 rx.input(
                     value=PatientFormState.form_postal_code,
                     on_change=PatientFormState.set_form_postal_code,
@@ -134,7 +135,7 @@ def _form_fields() -> rx.Component:
                 ),
             ),
             _field(
-                "City",
+                LanguageState.tr["field_city"],
                 rx.input(
                     value=PatientFormState.form_city,
                     on_change=PatientFormState.set_form_city,
@@ -148,10 +149,10 @@ def _form_fields() -> rx.Component:
             width="100%",
         ),
         rx.separator(width="100%"),
-        rx.text("Primary Care Physician", size="2", weight="bold", color="var(--gray-9)"),
+        rx.text(LanguageState.tr["section_primary_physician"], size="2", weight="bold", color="var(--gray-9)"),
         rx.grid(
             _field(
-                "Physician Name",
+                LanguageState.tr["field_physician_name"],
                 rx.input(
                     value=PatientFormState.form_primary_physician_name,
                     on_change=PatientFormState.set_form_primary_physician_name,
@@ -161,7 +162,7 @@ def _form_fields() -> rx.Component:
                 ),
             ),
             _field(
-                "Physician Phone",
+                LanguageState.tr["field_physician_phone"],
                 rx.input(
                     value=PatientFormState.form_primary_physician_phone,
                     on_change=PatientFormState.set_form_primary_physician_phone,
@@ -176,7 +177,7 @@ def _form_fields() -> rx.Component:
         ),
         rx.hstack(
             rx.button(
-                "Cancel",
+                LanguageState.tr["cancel_btn"],
                 variant="soft",
                 color_scheme="gray",
                 on_click=PatientFormState.close_dialog,
@@ -188,8 +189,8 @@ def _form_fields() -> rx.Component:
                     rx.spinner(size="2"),
                     rx.cond(
                         PatientFormState.is_create_mode,
-                        rx.text("Create Patient"),
-                        rx.text("Save Changes"),
+                        rx.text(LanguageState.tr["create_patient_btn"]),
+                        rx.text(LanguageState.tr["save_changes_btn"]),
                     ),
                 ),
                 type="submit",
@@ -211,13 +212,13 @@ def patient_form_dialog() -> rx.Component:
         state=PatientFormState,
         title=rx.cond(
             PatientFormState.is_create_mode,
-            "New Patient",
-            "Edit Patient",
+            LanguageState.tr["new_patient_title"],
+            LanguageState.tr["edit_patient_title"],
         ),
         description=rx.cond(
             PatientFormState.is_create_mode,
-            "Fill in the details to create a new patient file. A unique patient number will be generated automatically.",
-            "Update the patient's information.",
+            LanguageState.tr["new_patient_desc"],
+            LanguageState.tr["edit_patient_desc"],
         ),
         form_content=_form_fields(),
         max_width="680px",

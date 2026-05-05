@@ -3,15 +3,49 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .account_form_component import account_form_dialog
 from .account_form_state import AccountFormState
 from .account_list_state import AccountListState, AccountRowDTO
 
 
+def _sortable_header(label: str, column: str) -> rx.Component:
+    """Column header cell with a sort-direction arrow."""
+    return rx.table.column_header_cell(
+        rx.hstack(
+            rx.text(label, size="2"),
+            rx.cond(
+                AccountListState.sort_column == column,
+                rx.cond(
+                    AccountListState.sort_ascending,
+                    rx.icon("chevron-up", size=13, color="var(--accent-9)"),
+                    rx.icon("chevron-down", size=13, color="var(--accent-9)"),
+                ),
+                rx.icon("chevrons-up-down", size=13, color="var(--gray-7)"),
+            ),
+            spacing="1",
+            align="center",
+        ),
+        on_click=lambda: AccountListState.set_sort(column),
+        style={"cursor": "pointer"},
+    )
+
+
 def _account_row(account: AccountRowDTO) -> rx.Component:
     return rx.table.row(
-        rx.table.cell(rx.text(account.name, size="2", weight="medium")),
+        rx.table.cell(
+            rx.hstack(
+                rx.text(account.name, size="2", weight="medium"),
+                rx.cond(
+                    account.account_type == "INDIVIDUAL",
+                    rx.badge(LanguageState.tr["account_individual_badge"], color_scheme="purple", variant="soft", size="1"),
+                    rx.badge(LanguageState.tr["account_company_badge"], color_scheme="blue", variant="soft", size="1"),
+                ),
+                spacing="2",
+                align="center",
+            )
+        ),
         rx.table.cell(
             rx.cond(account.city, rx.text(account.city, size="2"), rx.text("—", size="2", color="var(--gray-8)"))
         ),
@@ -27,8 +61,8 @@ def _account_row(account: AccountRowDTO) -> rx.Component:
         rx.table.cell(
             rx.cond(
                 account.is_active,
-                rx.badge("Active", color_scheme="green", variant="soft", size="1"),
-                rx.badge("Inactive", color_scheme="gray", variant="soft", size="1"),
+                rx.badge(LanguageState.tr["active_badge"], color_scheme="green", variant="soft", size="1"),
+                rx.badge(LanguageState.tr["inactive_badge"], color_scheme="gray", variant="soft", size="1"),
             )
         ),
         rx.table.cell(
@@ -40,7 +74,7 @@ def _account_row(account: AccountRowDTO) -> rx.Component:
                         size="1",
                         on_click=lambda: AccountListState.go_to_account(account.id),
                     ),
-                    content="View account",
+                    content=LanguageState.tr["tooltip_view_account"],
                 ),
                 rx.tooltip(
                     rx.icon_button(
@@ -49,7 +83,7 @@ def _account_row(account: AccountRowDTO) -> rx.Component:
                         size="1",
                         on_click=lambda: AccountFormState.open_edit_dialog(account.id),
                     ),
-                    content="Edit account",
+                    content=LanguageState.tr["tooltip_edit_account"],
                 ),
                 rx.cond(
                     account.is_active,
@@ -61,7 +95,7 @@ def _account_row(account: AccountRowDTO) -> rx.Component:
                             color_scheme="red",
                             on_click=lambda: AccountListState.deactivate_account(account.id),
                         ),
-                        content="Deactivate account",
+                        content=LanguageState.tr["tooltip_deactivate_account"],
                     ),
                 ),
                 spacing="1",
@@ -77,11 +111,11 @@ def account_list_page() -> rx.Component:
     return main_component(
         page_layout(
             rx.hstack(
-                rx.heading("Accounts", size="6"),
+                rx.heading(LanguageState.tr["accounts_page_title"], size="6"),
                 rx.spacer(),
                 rx.button(
                     rx.icon("plus", size=16),
-                    "New Account",
+                    LanguageState.tr["new_account_page_btn"],
                     on_click=AccountFormState.open_create_dialog,
                     size="2",
                 ),
@@ -91,7 +125,7 @@ def account_list_page() -> rx.Component:
             account_form_dialog(),
             rx.hstack(
                 rx.input(
-                    placeholder="Search by name…",
+                    placeholder=LanguageState.tr["search_by_name"],
                     value=AccountListState.search_name,
                     on_change=AccountListState.handle_name_change,
                     min_width="260px",
@@ -99,7 +133,7 @@ def account_list_page() -> rx.Component:
                 ),
                 rx.button(
                     rx.icon("x", size=14),
-                    "Clear",
+                    LanguageState.tr["clear_btn"],
                     on_click=AccountListState.clear_filters,
                     variant="outline",
                     size="2",
@@ -123,12 +157,12 @@ def account_list_page() -> rx.Component:
                     rx.table.root(
                         rx.table.header(
                             rx.table.row(
-                                rx.table.column_header_cell("Account Name"),
-                                rx.table.column_header_cell("City"),
-                                rx.table.column_header_cell("Contact"),
-                                rx.table.column_header_cell("Phone"),
-                                rx.table.column_header_cell("Email"),
-                                rx.table.column_header_cell("Status"),
+                                _sortable_header(LanguageState.tr["col_account_name"], "name"),
+                                _sortable_header(LanguageState.tr["col_city"], "city"),
+                                _sortable_header(LanguageState.tr["col_contact"], "contact_name"),
+                                _sortable_header(LanguageState.tr["col_phone"], "phone"),
+                                _sortable_header(LanguageState.tr["col_email"], "email"),
+                                _sortable_header(LanguageState.tr["col_status"], "is_active"),
                                 rx.table.column_header_cell(""),
                             )
                         ),
@@ -141,7 +175,7 @@ def account_list_page() -> rx.Component:
                     rx.center(
                         rx.vstack(
                             rx.icon("building-2", size=40, color="var(--gray-7)"),
-                            rx.text("No accounts found", color="var(--gray-9)"),
+                            rx.text(LanguageState.tr["no_accounts_found"], color="var(--gray-9)"),
                             align="center",
                             spacing="2",
                         ),

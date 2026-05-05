@@ -16,6 +16,7 @@ class PatientRowDTO(BaseModel):
     gender: str
     city: str | None = None
     phone: str | None = None
+    account_name: str | None = None
 
 
 class AccountOptionDTO(BaseModel):
@@ -39,6 +40,8 @@ class PatientListState(ReflexMainState):
     filter_account_id: str = ""
     filter_dob_from: str = ""
     filter_dob_to: str = ""
+    sort_column: str = "last_name"
+    sort_ascending: bool = True
 
     @rx.event
     async def on_load(self):
@@ -94,6 +97,16 @@ class PatientListState(ReflexMainState):
         await self._load_patients()
 
     @rx.event
+    async def set_sort(self, column: str):
+        """Sort by column; toggle direction if already sorted by the same column."""
+        if self.sort_column == column:
+            self.sort_ascending = not self.sort_ascending
+        else:
+            self.sort_column = column
+            self.sort_ascending = True
+        await self._load_patients()
+
+    @rx.event
     def go_to_patient(self, patient_id: str):
         """Navigate to the patient detail page."""
         return rx.redirect(f"/patient/{patient_id}")
@@ -130,7 +143,7 @@ class PatientListState(ReflexMainState):
                     dob_from=self.filter_dob_from or None,
                     dob_to=self.filter_dob_to or None,
                 )
-                self.patients = [
+                patient_rows = [
                     PatientRowDTO(
                         id=str(p.id),
                         patient_number=p.patient_number,
@@ -140,9 +153,16 @@ class PatientListState(ReflexMainState):
                         gender=p.gender,
                         city=p.city,
                         phone=p.phone,
+                        account_name=p.billing_account.name if p.billing_account_id else None,
                     )
                     for p in patients
                 ]
+                sort_col = self.sort_column
+                self.patients = sorted(
+                    patient_rows,
+                    key=lambda row: (getattr(row, sort_col) or "").lower(),
+                    reverse=not self.sort_ascending,
+                )
         except Exception as e:
             self.error_message = f"Error loading patients: {e}"
         finally:

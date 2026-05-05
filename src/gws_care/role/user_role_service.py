@@ -29,6 +29,49 @@ class UserRoleService:
         UserCareRole.get_or_create(user=user, role=role)
 
     @classmethod
+    def assign_role_with_link(
+        cls,
+        user_id: str,
+        role: CareRole,
+        linked_account_id: str | None = None,
+        linked_patient_id: str | None = None,
+    ) -> None:
+        """Assign a role to a user with an optional entity link.
+
+        For ACCOUNT_ADMIN, pass linked_account_id.
+        For PATIENT, pass linked_patient_id.
+        Creates the row if absent; updates the link columns if already present.
+        """
+        user = User.get_by_id(user_id)
+        row, created = UserCareRole.get_or_create(user=user, role=role)
+        if linked_account_id is not None:
+            row.linked_account_id = linked_account_id
+        if linked_patient_id is not None:
+            row.linked_patient_id = linked_patient_id
+        if not created or linked_account_id or linked_patient_id:
+            row.save()
+
+    @classmethod
+    def get_linked_account_id(cls, user_id: str) -> str | None:
+        """Return the linked account ID for an ACCOUNT_ADMIN user, or None."""
+        row = (
+            UserCareRole.select()
+            .where(UserCareRole.user == user_id, UserCareRole.role == CareRole.ACCOUNT_ADMIN)
+            .first()
+        )
+        return row.linked_account_id if row else None
+
+    @classmethod
+    def get_linked_patient_id(cls, user_id: str) -> str | None:
+        """Return the linked patient ID for a PATIENT user, or None."""
+        row = (
+            UserCareRole.select()
+            .where(UserCareRole.user == user_id, UserCareRole.role == CareRole.PATIENT)
+            .first()
+        )
+        return row.linked_patient_id if row else None
+
+    @classmethod
     def revoke_role(cls, user_id: str, role: CareRole) -> None:
         """Remove a role from a user (no-op if not assigned)."""
         UserCareRole.delete().where(
@@ -42,13 +85,25 @@ class UserRoleService:
         users = list(User.select().where(User.is_active == True).order_by(User.last_name))
         result = []
         for u in users:
-            roles = cls.get_roles_for_user(str(u.id))
+            rows = list(UserCareRole.select().where(UserCareRole.user == u.id))
+            role_values = [r.role.value for r in rows]
+            # Collect linked IDs keyed by role
+            linked_account_id = next(
+                (r.linked_account_id for r in rows if r.role == CareRole.ACCOUNT_ADMIN),
+                None,
+            )
+            linked_patient_id = next(
+                (r.linked_patient_id for r in rows if r.role == CareRole.PATIENT),
+                None,
+            )
             result.append(
                 {
                     "id": str(u.id),
                     "full_name": f"{u.first_name} {u.last_name}",
                     "email": u.email,
-                    "roles": [r.value for r in roles],
+                    "roles": role_values,
+                    "linked_account_id": linked_account_id or "",
+                    "linked_patient_id": linked_patient_id or "",
                 }
             )
         return result

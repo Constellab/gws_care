@@ -9,8 +9,10 @@ from .account_dto import AccountDTO
 class Account(ModelWithUser):
     """
     Billing account — a company or individual who pays for health services.
+    account_type is either "COMPANY" or "INDIVIDUAL".
     """
 
+    account_type: str = CharField(max_length=20, default="COMPANY", null=False)
     name: str = CharField(max_length=255, null=False)
     registration_number: str = CharField(max_length=100, null=True)
     address: str = CharField(max_length=500, null=True)
@@ -26,6 +28,7 @@ class Account(ModelWithUser):
             id=self.id,
             created_at=self.created_at,
             last_modified_at=self.last_modified_at,
+            account_type=self.account_type,
             name=self.name,
             registration_number=self.registration_number,
             address=self.address,

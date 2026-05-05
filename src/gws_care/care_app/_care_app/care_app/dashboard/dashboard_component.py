@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .dashboard_state import (
     AccountOptionDTO,
@@ -135,12 +136,12 @@ def dashboard_page() -> rx.Component:
     return main_component(
         page_layout(
             rx.hstack(
-                rx.heading("Dashboard", size="6"),
+                rx.heading(LanguageState.tr["dashboard_title"], size="6"),
                 rx.spacer(),
                 rx.select.root(
-                    rx.select.trigger(placeholder="All Accounts"),
+                    rx.select.trigger(placeholder=LanguageState.tr["all_accounts"]),
                     rx.select.content(
-                        rx.select.item("All Accounts", value="ALL"),
+                        rx.select.item(LanguageState.tr["all_accounts"], value="ALL"),
                         rx.foreach(DashboardState.companies, _account_filter_option),
                     ),
                     value=DashboardState.filter_account_id,
@@ -164,16 +165,16 @@ def dashboard_page() -> rx.Component:
                 rx.vstack(
                     # KPI row
                     rx.grid(
-                        _kpi_card("Patients", DashboardState.total_patients, "users", "blue"),
-                        _kpi_card("Exams", DashboardState.total_exams, "stethoscope", "violet"),
+                        _kpi_card(LanguageState.tr["kpi_patients"], DashboardState.total_patients, "users", "blue"),
+                        _kpi_card(LanguageState.tr["kpi_exams"], DashboardState.total_exams, "stethoscope", "violet"),
                         _kpi_card(
-                            "Appointments",
+                            LanguageState.tr["kpi_appointments"],
                             DashboardState.total_appointments,
                             "calendar",
                             "orange",
                         ),
                         _kpi_card(
-                            "Certificates",
+                            LanguageState.tr["kpi_certificates"],
                             DashboardState.total_certificates,
                             "file-check",
                             "green",
@@ -186,7 +187,7 @@ def dashboard_page() -> rx.Component:
                     rx.grid(
                         # Exams by type
                         _panel(
-                            "Exams by Type",
+                            LanguageState.tr["panel_exams_by_type"],
                             "bar-chart-2",
                             rx.cond(
                                 DashboardState.exams_by_type,
@@ -195,12 +196,12 @@ def dashboard_page() -> rx.Component:
                                     width="100%",
                                     spacing="2",
                                 ),
-                                rx.text("No exams yet.", size="2", color="var(--gray-7)"),
+                                rx.text(LanguageState.tr["no_exams_yet"], size="2", color="var(--gray-7)"),
                             ),
                         ),
                         # Appointments by status
                         _panel(
-                            "Appointments by Status",
+                            LanguageState.tr["panel_appts_by_status"],
                             "pie-chart",
                             rx.cond(
                                 DashboardState.appointments_by_status,
@@ -212,7 +213,7 @@ def dashboard_page() -> rx.Component:
                                     width="100%",
                                     spacing="2",
                                 ),
-                                rx.text("No appointments yet.", size="2", color="var(--gray-7)"),
+                                rx.text(LanguageState.tr["no_appts_yet"], size="2", color="var(--gray-7)"),
                             ),
                         ),
                         columns="2",
@@ -221,7 +222,7 @@ def dashboard_page() -> rx.Component:
                     ),
                     # Monthly trend
                     _panel(
-                        "Monthly Exam Volume (last 12 months)",
+                        LanguageState.tr["panel_monthly_exams"],
                         "trending-up",
                         rx.cond(
                             DashboardState.monthly_exams,
@@ -230,7 +231,7 @@ def dashboard_page() -> rx.Component:
                                 width="100%",
                                 spacing="2",
                             ),
-                            rx.text("No data yet.", size="2", color="var(--gray-7)"),
+                            rx.text(LanguageState.tr["no_data_yet"], size="2", color="var(--gray-7)"),
                         ),
                     ),
                     width="100%",

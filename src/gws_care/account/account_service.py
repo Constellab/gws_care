@@ -46,6 +46,7 @@ class AccountService:
 
     @classmethod
     def _apply_dto(cls, account: Account, dto: SaveAccountDTO) -> None:
+        account.account_type = dto.account_type
         account.name = dto.name.strip()
         account.registration_number = dto.registration_number
         account.address = dto.address

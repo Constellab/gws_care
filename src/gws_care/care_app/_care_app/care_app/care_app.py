@@ -5,15 +5,18 @@ from .account_detail.account_detail_component import account_detail_page
 from .account_detail.account_detail_state import AccountDetailState
 from .account_list.account_list_component import account_list_page
 from .account_list.account_list_state import AccountListState
-from .admin.admin_component import admin_page
+from .admin.admin_component import settings_page
 from .admin.admin_state import AdminState
 from .appointment_list.appointment_list_component import appointment_list_page
 from .appointment_list.appointment_list_state import AppointmentListState
+from .common.language_state import LanguageState
 from .common.page_layout import page_layout
 from .dashboard.dashboard_component import dashboard_page
 from .dashboard.dashboard_state import DashboardState
 from .exam_detail.exam_detail_component import exam_detail_page
 from .exam_detail.exam_detail_state import ExamDetailState
+from .notifications.notifications_component import notifications_page
+from .notifications.notifications_state import NotificationsState
 from .patient_detail.patient_detail_component import patient_detail_page
 from .patient_detail.patient_detail_state import PatientDetailState
 from .patient_list.patient_list_component import patient_list_page
@@ -38,6 +41,10 @@ def _ensure_care_db_tables() -> None:
         db_manager = CareDbManager.get_instance()
         if not db_manager.is_initialized():
             return
+
+        # Ensure all model modules are imported so CareDbManager has the full model list
+        import gws_care.notification.notification_models  # noqa: F401
+        import gws_care.user.user_language_pref  # noqa: F401
 
         # 1. CREATE TABLE IF NOT EXISTS for all models
         BaseModelService.create_database_tables(db_manager)
@@ -102,6 +109,47 @@ def _ensure_care_db_tables() -> None:
                 "ALTER TABLE gws_care_exam ADD COLUMN lab_results LONGTEXT NULL DEFAULT NULL"
             )
 
+        # Migration 1.0.0 — smtp credentials_name replaces password on smtp_config
+        from gws_care.notification.notification_models import SmtpConfig
+        if SmtpConfig.column_exists("password") and not SmtpConfig.column_exists("credentials_name"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_smtp_config ADD COLUMN credentials_name VARCHAR(255) NULL DEFAULT NULL"
+            )
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_smtp_config DROP COLUMN password"
+            )
+        elif not SmtpConfig.column_exists("credentials_name"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_smtp_config ADD COLUMN credentials_name VARCHAR(255) NULL DEFAULT NULL"
+            )
+
+        # Migration 1.1.0 — account_type on account (COMPANY / INDIVIDUAL)
+        from gws_care.account.account import Account
+        if not Account.column_exists("account_type"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_account ADD COLUMN account_type VARCHAR(20) NOT NULL DEFAULT 'COMPANY'"
+            )
+
+        # Migration 1.2.0 — recipient_phone on notification_log; BrevoConfig table
+        from gws_care.notification.notification_models import BrevoConfig
+        from gws_care.notification.notification_models import NotificationLog as NLog
+        if not NLog.column_exists("recipient_phone"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_notification_log ADD COLUMN recipient_phone VARCHAR(50) NULL DEFAULT NULL"
+            )
+        # BrevoConfig table is created by BaseModelService.create_database_tables above
+
+        # Migration 1.3.0 — linked_account_id / linked_patient_id on user_role
+        from gws_care.role.user_care_role import UserCareRole
+        if not UserCareRole.column_exists("linked_account_id"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_user_role ADD COLUMN linked_account_id VARCHAR(36) NULL DEFAULT NULL"
+            )
+        if not UserCareRole.column_exists("linked_patient_id"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_user_role ADD COLUMN linked_patient_id VARCHAR(36) NULL DEFAULT NULL"
+            )
+
     except Exception as exc:
         # Non-fatal: the app will log the error when a query fails
         print(f"[gws_care] Warning: could not ensure DB tables/migrations: {exc}")
@@ -112,7 +160,7 @@ _ensure_care_db_tables()
 app = register_gws_reflex_app()
 
 
-@rx.page(route="/", on_load=[PatientListState.on_load])
+@rx.page(route="/", on_load=[PatientListState.on_load, LanguageState.on_load])
 def index():
     """Main page — patient list."""
     return patient_list_page()
@@ -148,14 +196,20 @@ def appointments():
     return appointment_list_page()
 
 
-@rx.page(route="/admin", on_load=[AdminState.on_load])
-def admin():
-    """Admin panel — user role management."""
-    return admin_page()
+@rx.page(route="/settings", on_load=[AdminState.on_load, NotificationsState.on_load, LanguageState.on_load])
+def settings():
+    """Settings page — import, user roles, and notification configuration."""
+    return settings_page()
 
 
 @rx.page(route="/dashboard", on_load=[DashboardState.on_load])
 def dashboard():
     """Statistics dashboard."""
     return dashboard_page()
+
+
+@rx.page(route="/notifications", on_load=[NotificationsState.on_load])
+def notifications():
+    """Notifications — history, preferences and compose."""
+    return notifications_page()
 

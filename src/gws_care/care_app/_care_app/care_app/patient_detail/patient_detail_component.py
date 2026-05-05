@@ -5,6 +5,7 @@ from gws_reflex_main import main_component
 
 from ..appointment_list.appointment_form_component import appointment_form_dialog
 from ..appointment_list.appointment_form_state import AppointmentFormState
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..patient_list.patient_form_component import patient_form_dialog
 from ..patient_list.patient_form_state import PatientFormState
@@ -51,8 +52,8 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
                     rx.badge(patient.patient_number, variant="outline", size="2"),
                     rx.match(
                         patient.gender,
-                        ("M", rx.badge("Male", color_scheme="blue", variant="soft", size="2")),
-                        ("F", rx.badge("Female", color_scheme="pink", variant="soft", size="2")),
+                        ("M", rx.badge(LanguageState.tr["gender_male_badge"], color_scheme="blue", variant="soft", size="2")),
+                        ("F", rx.badge(LanguageState.tr["gender_female_badge"], color_scheme="pink", variant="soft", size="2")),
                         rx.badge(patient.gender, color_scheme="gray", variant="soft", size="2"),
                     ),
                     spacing="2",
@@ -64,14 +65,14 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
             rx.hstack(
                 rx.button(
                     rx.icon("download", size=15),
-                    "Export CSV",
+                    LanguageState.tr["export_csv"],
                     on_click=PatientDetailState.download_exam_history,
                     variant="ghost",
                     size="2",
                 ),
                 rx.button(
                     rx.icon("pencil", size=15),
-                    "Edit",
+                    LanguageState.tr["edit_btn"],
                     on_click=lambda: PatientFormState.open_edit_dialog(patient.id),
                     variant="outline",
                     size="2",
@@ -85,23 +86,23 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
         # Sections
         rx.grid(
             _section(
-                "Personal Information",
-                _info_row("Date of Birth", patient.date_of_birth),
-                _info_row("Birth Name", patient.birth_name),
-                _info_row("Gender", patient.gender),
+                LanguageState.tr["section_personal_info"],
+                _info_row(LanguageState.tr["info_dob"], patient.date_of_birth),
+                _info_row(LanguageState.tr["info_birth_name"], patient.birth_name),
+                _info_row(LanguageState.tr["info_gender"], patient.gender),
             ),
             _section(
-                "Contact",
-                _info_row("Phone", patient.phone),
-                _info_row("Email", patient.email),
-                _info_row("Address", patient.address),
-                _info_row("Postal Code", patient.postal_code),
-                _info_row("City", patient.city),
+                LanguageState.tr["section_contact"],
+                _info_row(LanguageState.tr["info_phone"], patient.phone),
+                _info_row(LanguageState.tr["info_email"], patient.email),
+                _info_row(LanguageState.tr["info_address"], patient.address),
+                _info_row(LanguageState.tr["info_postal_code"], patient.postal_code),
+                _info_row(LanguageState.tr["info_city"], patient.city),
             ),
             _section(
-                "Primary Care Physician",
-                _info_row("Name", patient.primary_physician_name),
-                _info_row("Phone", patient.primary_physician_phone),
+                LanguageState.tr["section_primary_physician"],
+                _info_row(LanguageState.tr["info_physician_name"], patient.primary_physician_name),
+                _info_row(LanguageState.tr["info_physician_phone"], patient.primary_physician_phone),
             ),
             columns="2",
             spacing="4",
@@ -115,9 +116,9 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
 def _exam_status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
-        ("DRAFT", rx.badge("Draft", color_scheme="gray", variant="soft", size="1")),
-        ("PENDING", rx.badge("Pending", color_scheme="orange", variant="soft", size="1")),
-        ("INTERPRETED", rx.badge("Interpreted", color_scheme="green", variant="soft", size="1")),
+        ("DRAFT", rx.badge(LanguageState.tr["exam_status_draft"], color_scheme="gray", variant="soft", size="1")),
+        ("PENDING", rx.badge(LanguageState.tr["exam_status_pending"], color_scheme="orange", variant="soft", size="1")),
+        ("INTERPRETED", rx.badge(LanguageState.tr["exam_status_interpreted"], color_scheme="green", variant="soft", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -130,7 +131,7 @@ def _exam_row(exam: ExamRowDTO) -> rx.Component:
         rx.table.cell(
             rx.button(
                 rx.icon("eye", size=14),
-                "View",
+                LanguageState.tr["view_btn"],
                 variant="ghost",
                 size="1",
                 on_click=lambda: PatientDetailState.go_to_exam(exam.id),
@@ -144,11 +145,11 @@ def _exam_row(exam: ExamRowDTO) -> rx.Component:
 def _exams_section() -> rx.Component:
     return rx.vstack(
         rx.hstack(
-            rx.heading("Exams", size="4"),
+            rx.heading(LanguageState.tr["exams_section_title"], size="4"),
             rx.spacer(),
             rx.button(
                 rx.icon("plus", size=15),
-                "New Exam",
+                LanguageState.tr["new_exam_btn"],
                 on_click=lambda: ExamFormState.open_create_dialog(PatientDetailState.patient.id),
                 size="2",
             ),
@@ -160,9 +161,9 @@ def _exams_section() -> rx.Component:
             rx.table.root(
                 rx.table.header(
                     rx.table.row(
-                        rx.table.column_header_cell("Date"),
-                        rx.table.column_header_cell("Type"),
-                        rx.table.column_header_cell("Status"),
+                        rx.table.column_header_cell(LanguageState.tr["col_date"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_type"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_status"]),
                         rx.table.column_header_cell(""),
                     )
                 ),
@@ -173,7 +174,7 @@ def _exams_section() -> rx.Component:
                 variant="surface",
             ),
             rx.center(
-                rx.text("No exams recorded yet.", color="var(--gray-8)", size="2"),
+                rx.text(LanguageState.tr["no_exams_recorded"], color="var(--gray-8)", size="2"),
                 padding="2rem",
                 border="1px dashed var(--gray-5)",
                 border_radius="8px",
@@ -188,10 +189,10 @@ def _exams_section() -> rx.Component:
 def _appointment_status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
-        ("SCHEDULED", rx.badge("Scheduled", color_scheme="blue", variant="soft", size="1")),
-        ("IN_PROGRESS", rx.badge("In Progress", color_scheme="orange", variant="soft", size="1")),
-        ("DONE", rx.badge("Done", color_scheme="green", variant="soft", size="1")),
-        ("CANCELLED", rx.badge("Cancelled", color_scheme="gray", variant="soft", size="1")),
+        ("SCHEDULED", rx.badge(LanguageState.tr["status_scheduled"], color_scheme="blue", variant="soft", size="1")),
+        ("IN_PROGRESS", rx.badge(LanguageState.tr["status_in_progress"], color_scheme="orange", variant="soft", size="1")),
+        ("DONE", rx.badge(LanguageState.tr["status_done"], color_scheme="green", variant="soft", size="1")),
+        ("CANCELLED", rx.badge(LanguageState.tr["status_cancelled"], color_scheme="gray", variant="soft", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -215,11 +216,11 @@ def _appointment_row(appt: AppointmentRowDTO) -> rx.Component:
 def _appointments_section() -> rx.Component:
     return rx.vstack(
         rx.hstack(
-            rx.heading("Appointments", size="4"),
+            rx.heading(LanguageState.tr["appointments_section_title"], size="4"),
             rx.spacer(),
             rx.button(
                 rx.icon("plus", size=15),
-                "New Appointment",
+                LanguageState.tr["new_appointment_btn"],
                 on_click=lambda: AppointmentFormState.open_create_dialog(
                     PatientDetailState.patient.id,
                     f"{PatientDetailState.patient.first_name} {PatientDetailState.patient.last_name}",
@@ -227,7 +228,7 @@ def _appointments_section() -> rx.Component:
                 size="2",
             ),
             rx.button(
-                "View All",
+                LanguageState.tr["view_all_btn"],
                 on_click=PatientDetailState.go_to_appointments,
                 variant="ghost",
                 size="2",
@@ -241,10 +242,10 @@ def _appointments_section() -> rx.Component:
             rx.table.root(
                 rx.table.header(
                     rx.table.row(
-                        rx.table.column_header_cell("Scheduled"),
-                        rx.table.column_header_cell("Exam Type"),
-                        rx.table.column_header_cell("Account"),
-                        rx.table.column_header_cell("Status"),
+                        rx.table.column_header_cell(LanguageState.tr["col_scheduled"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_exam_type"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_account"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_status"]),
                     )
                 ),
                 rx.table.body(
@@ -254,7 +255,7 @@ def _appointments_section() -> rx.Component:
                 variant="surface",
             ),
             rx.center(
-                rx.text("No appointments yet.", color="var(--gray-8)", size="2"),
+                rx.text(LanguageState.tr["no_appts_section"], color="var(--gray-8)", size="2"),
                 padding="2rem",
                 border="1px dashed var(--gray-5)",
                 border_radius="8px",
@@ -275,7 +276,7 @@ def patient_detail_page() -> rx.Component:
             appointment_form_dialog(),
             rx.button(
                 rx.icon("arrow-left", size=16),
-                "Back to patients",
+                LanguageState.tr["back_to_patients"],
                 on_click=PatientDetailState.go_back,
                 variant="ghost",
                 size="2",
@@ -300,7 +301,7 @@ def patient_detail_page() -> rx.Component:
                         width="100%",
                         spacing="6",
                     ),
-                    rx.center(rx.text("Patient not found", color="var(--gray-9)"), padding="3rem"),
+                    rx.center(rx.text(LanguageState.tr["patient_not_found"], color="var(--gray-9)"), padding="3rem"),
                 ),
             ),
         )

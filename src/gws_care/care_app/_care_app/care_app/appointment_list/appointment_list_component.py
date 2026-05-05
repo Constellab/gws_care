@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .appointment_form_component import appointment_form_dialog
 from .appointment_form_state import AppointmentFormState
@@ -17,10 +18,10 @@ from .appointment_list_state import (
 def _status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
-        ("SCHEDULED", rx.badge("Scheduled", color_scheme="blue", variant="soft", size="1")),
-        ("IN_PROGRESS", rx.badge("In Progress", color_scheme="orange", variant="soft", size="1")),
-        ("DONE", rx.badge("Done", color_scheme="green", variant="soft", size="1")),
-        ("CANCELLED", rx.badge("Cancelled", color_scheme="gray", variant="soft", size="1")),
+        ("SCHEDULED", rx.badge(LanguageState.tr["status_scheduled"], color_scheme="blue", variant="soft", size="1")),
+        ("IN_PROGRESS", rx.badge(LanguageState.tr["status_in_progress"], color_scheme="orange", variant="soft", size="1")),
+        ("DONE", rx.badge(LanguageState.tr["status_done"], color_scheme="green", variant="soft", size="1")),
+        ("CANCELLED", rx.badge(LanguageState.tr["status_cancelled"], color_scheme="gray", variant="soft", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -57,7 +58,7 @@ def _appointment_row(appt: AppointmentRowDTO) -> rx.Component:
                             size="1",
                             on_click=lambda: AppointmentFormState.open_edit_dialog(appt.id),
                         ),
-                        content="Edit appointment",
+                        content=LanguageState.tr["tooltip_edit_appt"],
                     ),
                 ),
                 # Start button — SCHEDULED → IN_PROGRESS
@@ -71,7 +72,7 @@ def _appointment_row(appt: AppointmentRowDTO) -> rx.Component:
                             color_scheme="orange",
                             on_click=lambda: AppointmentListState.start_appointment(appt.id),
                         ),
-                        content="Start appointment",
+                        content=LanguageState.tr["tooltip_start_appt"],
                     ),
                 ),
                 # Complete button — IN_PROGRESS → DONE
@@ -85,7 +86,7 @@ def _appointment_row(appt: AppointmentRowDTO) -> rx.Component:
                             color_scheme="green",
                             on_click=lambda: AppointmentListState.complete_appointment(appt.id),
                         ),
-                        content="Mark as done",
+                        content=LanguageState.tr["tooltip_done_appt"],
                     ),
                 ),
                 # Cancel button — SCHEDULED or IN_PROGRESS
@@ -99,7 +100,7 @@ def _appointment_row(appt: AppointmentRowDTO) -> rx.Component:
                             color_scheme="red",
                             on_click=lambda: AppointmentListState.cancel_appointment(appt.id),
                         ),
-                        content="Cancel appointment",
+                        content=LanguageState.tr["tooltip_cancel_appt"],
                     ),
                 ),
                 spacing="1",
@@ -111,6 +112,28 @@ def _appointment_row(appt: AppointmentRowDTO) -> rx.Component:
 
 def _account_filter_option(account: AccountOptionDTO) -> rx.Component:
     return rx.select.item(account.name, value=account.id)
+
+
+def _sortable_header(label: str, column: str) -> rx.Component:
+    """Column header cell with a sort-direction arrow."""
+    return rx.table.column_header_cell(
+        rx.hstack(
+            rx.text(label, size="2"),
+            rx.cond(
+                AppointmentListState.sort_column == column,
+                rx.cond(
+                    AppointmentListState.sort_ascending,
+                    rx.icon("chevron-up", size=13, color="var(--accent-9)"),
+                    rx.icon("chevron-down", size=13, color="var(--accent-9)"),
+                ),
+                rx.icon("chevrons-up-down", size=13, color="var(--gray-7)"),
+            ),
+            spacing="1",
+            align="center",
+        ),
+        on_click=lambda: AppointmentListState.set_sort(column),
+        style={"cursor": "pointer"},
+    )
 
 
 # ── Calendar view ─────────────────────────────────────────────────────────────
@@ -224,10 +247,13 @@ def _calendar_view() -> rx.Component:
         ),
         # Weekday header row
         rx.grid(
-            *[
-                rx.text(d, size="1", weight="medium", color="var(--gray-9)", text_align="center", padding_y="4px")
-                for d in _DAY_HEADERS
-            ],
+            rx.text(LanguageState.tr["cal_mon"], size="1", weight="medium", color="var(--gray-9)", text_align="center", padding_y="4px"),
+            rx.text(LanguageState.tr["cal_tue"], size="1", weight="medium", color="var(--gray-9)", text_align="center", padding_y="4px"),
+            rx.text(LanguageState.tr["cal_wed"], size="1", weight="medium", color="var(--gray-9)", text_align="center", padding_y="4px"),
+            rx.text(LanguageState.tr["cal_thu"], size="1", weight="medium", color="var(--gray-9)", text_align="center", padding_y="4px"),
+            rx.text(LanguageState.tr["cal_fri"], size="1", weight="medium", color="var(--gray-9)", text_align="center", padding_y="4px"),
+            rx.text(LanguageState.tr["cal_sat"], size="1", weight="medium", color="var(--gray-9)", text_align="center", padding_y="4px"),
+            rx.text(LanguageState.tr["cal_sun"], size="1", weight="medium", color="var(--gray-9)", text_align="center", padding_y="4px"),
             columns="7",
             width="100%",
         ),
@@ -248,7 +274,7 @@ def appointment_list_page() -> rx.Component:
         page_layout(
             appointment_form_dialog(),
             rx.hstack(
-                rx.heading("Appointments", size="6"),
+                rx.heading(LanguageState.tr["appointments_page_title"], size="6"),
                 rx.spacer(),
                 rx.segmented_control.root(
                     rx.segmented_control.item(rx.icon("list", size=15), value="list"),
@@ -259,7 +285,7 @@ def appointment_list_page() -> rx.Component:
                 ),
                 rx.button(
                     rx.icon("plus", size=16),
-                    "New Appointment",
+                    LanguageState.tr["new_appointment_page_btn"],
                     on_click=AppointmentFormState.open_create_dialog_standalone,
                     size="2",
                 ),
@@ -271,29 +297,29 @@ def appointment_list_page() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.input(
-                        placeholder="Search patient…",
+                        placeholder=LanguageState.tr["search_patient_placeholder"],
                         value=AppointmentListState.search,
                         on_change=AppointmentListState.set_search,
                         size="2",
                         max_width="260px",
                     ),
                     rx.select.root(
-                        rx.select.trigger(placeholder="All Statuses"),
+                        rx.select.trigger(placeholder=LanguageState.tr["all_statuses"]),
                         rx.select.content(
-                            rx.select.item("All Statuses", value="ALL"),
-                            rx.select.item("Scheduled", value="SCHEDULED"),
-                            rx.select.item("In Progress", value="IN_PROGRESS"),
-                            rx.select.item("Done", value="DONE"),
-                            rx.select.item("Cancelled", value="CANCELLED"),
+                            rx.select.item(LanguageState.tr["all_statuses"], value="ALL"),
+                            rx.select.item(LanguageState.tr["status_scheduled"], value="SCHEDULED"),
+                            rx.select.item(LanguageState.tr["status_in_progress"], value="IN_PROGRESS"),
+                            rx.select.item(LanguageState.tr["status_done"], value="DONE"),
+                            rx.select.item(LanguageState.tr["status_cancelled"], value="CANCELLED"),
                         ),
                         value=AppointmentListState.filter_status,
                         on_change=AppointmentListState.set_filter_status,
                         size="2",
                     ),
                     rx.select.root(
-                        rx.select.trigger(placeholder="All Accounts"),
+                        rx.select.trigger(placeholder=LanguageState.tr["all_accounts"]),
                         rx.select.content(
-                            rx.select.item("All Accounts", value="ALL"),
+                            rx.select.item(LanguageState.tr["all_accounts"], value="ALL"),
                             rx.foreach(AppointmentListState.companies, _account_filter_option),
                         ),
                         value=AppointmentListState.filter_account_id,
@@ -308,14 +334,14 @@ def appointment_list_page() -> rx.Component:
                 rx.cond(
                     AppointmentListState.view_mode == "list",
                     rx.hstack(
-                        rx.text("Date:", size="2", color="var(--gray-9)", white_space="nowrap"),
+                        rx.text(LanguageState.tr["date_filter_label"], size="2", color="var(--gray-9)", white_space="nowrap"),
                         rx.input(
                             type="date",
                             value=AppointmentListState.filter_date_from,
                             on_change=AppointmentListState.set_filter_date_from,
                             size="2",
                         ),
-                        rx.text("→", size="2", color="var(--gray-9)"),
+                        rx.text(LanguageState.tr["date_range_arrow"], size="2", color="var(--gray-9)"),
                         rx.input(
                             type="date",
                             value=AppointmentListState.filter_date_to,
@@ -325,7 +351,7 @@ def appointment_list_page() -> rx.Component:
                         rx.spacer(),
                         rx.button(
                             rx.icon("x", size=14),
-                            "Clear",
+                            LanguageState.tr["clear_btn"],
                             on_click=AppointmentListState.clear_filters,
                             variant="outline",
                             size="2",
@@ -340,7 +366,7 @@ def appointment_list_page() -> rx.Component:
                         rx.spacer(),
                         rx.button(
                             rx.icon("x", size=14),
-                            "Clear",
+                            LanguageState.tr["clear_btn"],
                             on_click=AppointmentListState.clear_filters,
                             variant="outline",
                             size="2",
@@ -372,11 +398,11 @@ def appointment_list_page() -> rx.Component:
                         rx.table.root(
                             rx.table.header(
                                 rx.table.row(
-                                    rx.table.column_header_cell("Patient"),
-                                    rx.table.column_header_cell("Account"),
-                                    rx.table.column_header_cell("Scheduled"),
-                                    rx.table.column_header_cell("Exam Type"),
-                                    rx.table.column_header_cell("Status"),
+                                    _sortable_header(LanguageState.tr["col_patient"], "patient_name"),
+                                    _sortable_header(LanguageState.tr["col_account"], "account_name"),
+                                    _sortable_header(LanguageState.tr["col_scheduled"], "scheduled_at"),
+                                    _sortable_header(LanguageState.tr["col_exam_type"], "exam_type_label"),
+                                    _sortable_header(LanguageState.tr["col_status"], "status"),
                                     rx.table.column_header_cell(""),
                                 )
                             ),
@@ -387,7 +413,7 @@ def appointment_list_page() -> rx.Component:
                             variant="surface",
                         ),
                         rx.center(
-                            rx.text("No appointments found.", size="2", color="var(--gray-8)"),
+                            rx.text(LanguageState.tr["no_appointments_found"], size="2", color="var(--gray-8)"),
                             padding="3rem",
                         ),
                     ),

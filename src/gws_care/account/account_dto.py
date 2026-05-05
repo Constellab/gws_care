@@ -2,6 +2,7 @@ from gws_core import BaseModelDTO, ModelDTO
 
 
 class AccountDTO(ModelDTO):
+    account_type: str = "COMPANY"
     name: str
     registration_number: str | None
     address: str | None
@@ -14,6 +15,7 @@ class AccountDTO(ModelDTO):
 
 
 class SaveAccountDTO(BaseModelDTO):
+    account_type: str = "COMPANY"
     name: str
     registration_number: str | None = None
     address: str | None = None

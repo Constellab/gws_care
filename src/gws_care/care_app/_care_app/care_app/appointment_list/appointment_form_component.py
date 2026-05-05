@@ -3,24 +3,25 @@
 import reflex as rx
 from gws_reflex_base import form_dialog_component
 
+from ..common.language_state import LanguageState
 from .appointment_form_state import AppointmentFormState
 
-_EXAM_TYPE_OPTIONS = [
-    ("biology", "Biology"),
-    ("radiology", "Radiology"),
-    ("ophthalmology", "Ophthalmology"),
-    ("orl", "ORL"),
-    ("ecg", "ECG"),
-    ("spirometry", "Spirometry"),
-    ("clinical", "Clinical Exam"),
-    ("hormones", "Hormones"),
-    ("hematology", "Hematology"),
-    ("bacteriology", "Bacteriology"),
-    ("parasitology", "Parasitology"),
-    ("drug_test", "Drug Test"),
-    ("immunology", "Immunology"),
-    ("hepatic_markers", "Hepatic Markers"),
-    ("other", "Other"),
+_EXAM_TYPE_KEYS = [
+    ("biology", "exam_type_biology"),
+    ("radiology", "exam_type_radiology"),
+    ("ophthalmology", "exam_type_ophthalmology"),
+    ("orl", "exam_type_orl"),
+    ("ecg", "exam_type_ecg"),
+    ("spirometry", "exam_type_spirometry"),
+    ("clinical", "exam_type_clinical"),
+    ("hormones", "exam_type_hormones"),
+    ("hematology", "exam_type_hematology"),
+    ("bacteriology", "exam_type_bacteriology"),
+    ("parasitology", "exam_type_parasitology"),
+    ("drug_test", "exam_type_drug_test"),
+    ("immunology", "exam_type_immunology"),
+    ("hepatic_markers", "exam_type_hepatic_markers"),
+    ("other", "exam_type_other"),
 ]
 
 
@@ -40,7 +41,7 @@ def _form_fields() -> rx.Component:
             AppointmentFormState.form_patient_label != "",
             # Pre-filled: show read-only
             _field(
-                "Patient",
+                LanguageState.tr["field_patient_readonly"],
                 rx.input(
                     value=AppointmentFormState.form_patient_label,
                     read_only=True,
@@ -51,10 +52,10 @@ def _form_fields() -> rx.Component:
             ),
             # Standalone: show select
             _field(
-                "Patient *",
+                LanguageState.tr["field_patient_required"],
                 rx.select.root(
                     rx.select.trigger(
-                        placeholder="Select a patient…",
+                        placeholder=LanguageState.tr["select_patient_placeholder"],
                         width="100%",
                     ),
                     rx.select.content(
@@ -72,7 +73,7 @@ def _form_fields() -> rx.Component:
         ),
         rx.grid(
             _field(
-                "Date & Time *",
+                LanguageState.tr["field_datetime"],
                 rx.input(
                     value=AppointmentFormState.form_scheduled_at,
                     on_change=AppointmentFormState.set_form_scheduled_at,
@@ -82,11 +83,11 @@ def _form_fields() -> rx.Component:
                 ),
             ),
             _field(
-                "Exam Type *",
+                LanguageState.tr["field_exam_type_required"],
                 rx.select.root(
                     rx.select.trigger(width="100%"),
                     rx.select.content(
-                        *[rx.select.item(label, value=value) for value, label in _EXAM_TYPE_OPTIONS],
+                        *[rx.select.item(LanguageState.tr[key], value=value) for value, key in _EXAM_TYPE_KEYS],
                     ),
                     value=AppointmentFormState.form_exam_type,
                     on_change=AppointmentFormState.set_form_exam_type,
@@ -99,11 +100,11 @@ def _form_fields() -> rx.Component:
             width="100%",
         ),
         _field(
-            "Notes",
+            LanguageState.tr["field_notes"],
             rx.text_area(
                 value=AppointmentFormState.form_notes,
                 on_change=AppointmentFormState.set_form_notes,
-                placeholder="Optional notes...",
+                placeholder=LanguageState.tr["notes_placeholder"],
                 size="2",
                 width="100%",
                 rows="3",
@@ -120,8 +121,8 @@ def appointment_form_dialog() -> rx.Component:
         state=AppointmentFormState,
         title=rx.cond(
             AppointmentFormState.is_create_mode,
-            "New Appointment",
-            "Edit Appointment",
+            LanguageState.tr["new_appointment_form_title"],
+            LanguageState.tr["edit_appointment_form_title"],
         ),
         form_content=_form_fields(),
     )

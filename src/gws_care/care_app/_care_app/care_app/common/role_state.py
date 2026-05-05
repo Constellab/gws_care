@@ -21,6 +21,8 @@ class RoleState(ReflexMainState):
 
     _care_roles: list[str] = []   # private — backend use only
     _is_platform_admin: bool = False  # private — True when gws_core UserGroup is ADMIN
+    _linked_account_id: str = ""  # private — set for ACCOUNT_ADMIN role
+    _linked_patient_id: str = ""  # private — set for PATIENT role
 
     # ── Computed role shortcuts (public — read by frontend) ───────────────────
 
@@ -43,6 +45,22 @@ class RoleState(ReflexMainState):
     def has_any_role(self) -> bool:
         return True
 
+    @rx.var
+    def is_account_admin(self) -> bool:
+        return "ACCOUNT_ADMIN" in self._care_roles
+
+    @rx.var
+    def is_patient_user(self) -> bool:
+        return "PATIENT" in self._care_roles
+
+    @rx.var
+    def linked_account_id(self) -> str:
+        return self._linked_account_id
+
+    @rx.var
+    def linked_patient_id(self) -> str:
+        return self._linked_patient_id
+
     # ── Internal loader ───────────────────────────────────────────────────────
 
     async def _load_roles(self) -> None:
@@ -59,6 +77,9 @@ class RoleState(ReflexMainState):
                 from gws_core import UserGroup
                 roles = UserRoleService.get_roles_for_user(str(auth_user.id))
                 self._care_roles = [r.value for r in roles]
+                # Linked entity IDs for ACCOUNT_ADMIN / PATIENT roles
+                self._linked_account_id = UserRoleService.get_linked_account_id(str(auth_user.id)) or ""
+                self._linked_patient_id = UserRoleService.get_linked_patient_id(str(auth_user.id)) or ""
                 # Check if the user is a gws_core platform admin
                 try:
                     local_user = User.get_by_id(str(auth_user.id))
@@ -67,4 +88,6 @@ class RoleState(ReflexMainState):
                     self._is_platform_admin = False
         except Exception:
             self._care_roles = []
+            self._linked_account_id = ""
+            self._linked_patient_id = ""
             self._is_platform_admin = False

@@ -13,6 +13,8 @@ class UserRoleRowDTO(BaseModel):
     full_name: str
     email: str
     roles: list[str]   # list of CareRole values
+    linked_account_id: str = ""
+    linked_patient_id: str = ""
 
     @property
     def is_admin(self) -> bool:
@@ -26,6 +28,19 @@ class UserRoleRowDTO(BaseModel):
     def is_operator(self) -> bool:
         return "OPERATOR" in self.roles
 
+    @property
+    def is_account_admin(self) -> bool:
+        return "ACCOUNT_ADMIN" in self.roles
+
+    @property
+    def is_patient_user(self) -> bool:
+        return "PATIENT" in self.roles
+
+
+class EntityOption(BaseModel):
+    id: str
+    label: str
+
 
 class AdminState(RoleState):
     """State for the /admin page."""
@@ -35,10 +50,19 @@ class AdminState(RoleState):
     error_message: str = ""
     success_message: str = ""
 
+    # Options for the linked-entity selectors
+    account_options: list[EntityOption] = []
+    patient_options: list[EntityOption] = []
+
+    # Per-user pending link selections (user_id → entity_id)
+    _pending_account_links: dict[str, str] = {}
+    _pending_patient_links: dict[str, str] = {}
+
     @rx.event
     async def on_load(self):
         await self._load_roles()
         await self._load_users()
+        await self._load_entity_options()
 
     @rx.event
     async def toggle_role(self, user_id: str, role: str):
@@ -55,11 +79,47 @@ class AdminState(RoleState):
                     UserRoleService.revoke_role(user_id, care_role)
                     self.success_message = f"Role '{care_role.get_label()}' revoked."
                 else:
+                    # For ACCOUNT_ADMIN / PATIENT, assign without link first;
+                    # user can set the link via the selector that appears.
                     UserRoleService.assign_role(user_id, care_role)
                     self.success_message = f"Role '{care_role.get_label()}' assigned."
             await self._load_users()
         except Exception as e:
             self.error_message = f"Error updating role: {e}"
+
+    @rx.event
+    async def set_account_link(self, user_id: str, account_id: str):
+        """Save the linked account for an ACCOUNT_ADMIN user."""
+        self.error_message = ""
+        self.success_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.role.care_role import CareRole
+                from gws_care.role.user_role_service import UserRoleService
+                UserRoleService.assign_role_with_link(
+                    user_id, CareRole.ACCOUNT_ADMIN, linked_account_id=account_id or None
+                )
+                self.success_message = "Account link saved."
+            await self._load_users()
+        except Exception as e:
+            self.error_message = f"Error saving account link: {e}"
+
+    @rx.event
+    async def set_patient_link(self, user_id: str, patient_id: str):
+        """Save the linked patient for a PATIENT user."""
+        self.error_message = ""
+        self.success_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.role.care_role import CareRole
+                from gws_care.role.user_role_service import UserRoleService
+                UserRoleService.assign_role_with_link(
+                    user_id, CareRole.PATIENT, linked_patient_id=patient_id or None
+                )
+                self.success_message = "Patient link saved."
+            await self._load_users()
+        except Exception as e:
+            self.error_message = f"Error saving patient link: {e}"
 
     async def _load_users(self):
         if not await self.check_authentication():
@@ -75,6 +135,8 @@ class AdminState(RoleState):
                         full_name=r["full_name"],
                         email=r["email"],
                         roles=r["roles"],
+                        linked_account_id=r.get("linked_account_id") or "",
+                        linked_patient_id=r.get("linked_patient_id") or "",
                     )
                     for r in rows
                 ]
@@ -82,3 +144,26 @@ class AdminState(RoleState):
             self.error_message = f"Error loading users: {e}"
         finally:
             self.is_loading = False
+
+    async def _load_entity_options(self):
+        """Load account and patient lists for the link selectors."""
+        try:
+            with await self.authenticate_user():
+                from gws_care.account.account_service import AccountService
+                from gws_care.patient.patient_service import PatientService
+
+                accounts = AccountService.list_accounts()
+                self.account_options = [
+                    EntityOption(id=str(a.id), label=a.name)
+                    for a in accounts
+                ]
+                patients = PatientService.search_patients()
+                self.patient_options = [
+                    EntityOption(
+                        id=str(p.id),
+                        label=f"{p.last_name} {p.first_name} ({p.patient_number})",
+                    )
+                    for p in patients
+                ]
+        except Exception:
+            pass

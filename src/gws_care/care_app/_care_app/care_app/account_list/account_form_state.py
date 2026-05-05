@@ -5,10 +5,19 @@ from typing import AsyncGenerator
 import reflex as rx
 from gws_reflex_base import FormDialogState
 from gws_reflex_main import ReflexMainState
+from pydantic import BaseModel
+
+
+class PatientFillOption(BaseModel):
+    id: str
+    display: str   # "First Last"
 
 
 class AccountFormState(FormDialogState, rx.State):
     """Manages the create / update account dialog."""
+
+    # Account type: "COMPANY" or "INDIVIDUAL"
+    form_account_type: str = "COMPANY"
 
     # Form fields (public — bound to inputs in the UI)
     form_name: str = ""
@@ -20,10 +29,18 @@ class AccountFormState(FormDialogState, rx.State):
     form_email: str = ""
     form_contact_name: str = ""
 
+    # Fill-from-patient
+    patient_fill_options: list[PatientFillOption] = []
+    selected_patient_fill: str = ""
+
     # Set when editing an existing account
     _editing_account_id: str = ""
 
     # ── Setters ───────────────────────────────────────────────────────────────
+
+    @rx.event
+    def set_form_account_type(self, value: str):
+        self.form_account_type = value
 
     @rx.event
     def set_form_name(self, value: str):
@@ -57,6 +74,33 @@ class AccountFormState(FormDialogState, rx.State):
     def set_form_contact_name(self, value: str):
         self.form_contact_name = value
 
+    @rx.event
+    def set_selected_patient_fill(self, value: str):
+        """Select a patient and immediately fill the form with their contact details."""
+        self.selected_patient_fill = value
+        if not value:
+            return
+        try:
+            from gws_care.patient.patient_service import PatientService
+            patient = PatientService.get_patient(value)
+            self.form_name = patient.get_full_name()
+            self.form_address = patient.address or ""
+            self.form_postal_code = patient.postal_code or ""
+            self.form_city = patient.city or ""
+            self.form_phone = patient.phone or ""
+            self.form_email = patient.email or ""
+        except Exception:
+            pass
+
+    async def _load_patient_fill_options(self) -> None:
+        """Load all patients into the fill selector."""
+        from gws_care.patient.patient_service import PatientService
+        patients = PatientService.search_patients()
+        self.patient_fill_options = [
+            PatientFillOption(id=str(p.id), display=p.get_full_name())
+            for p in patients
+        ]
+
     # ── Dialog open helpers ───────────────────────────────────────────────────
 
     @rx.event
@@ -65,15 +109,12 @@ class AccountFormState(FormDialogState, rx.State):
         self.is_update_mode = False
         self._editing_account_id = ""
         await self._clear_form_state()
+        await self._load_patient_fill_options()
         self.dialog_opened = True
 
     @rx.event
     async def open_edit_dialog(self, account_id: str):
-        """Open the dialog in edit mode pre-filled with the account's data.
-
-        :param account_id: DB id of the account to edit
-        :type account_id: str
-        """
+        """Open the dialog in edit mode pre-filled with the account's data."""
         self.is_update_mode = True
         self._editing_account_id = account_id
 
@@ -81,6 +122,7 @@ class AccountFormState(FormDialogState, rx.State):
         with await _main.authenticate_user():
             from gws_care.account.account_service import AccountService
             a = AccountService.get_account(account_id)
+            self.form_account_type = a.account_type or "COMPANY"
             self.form_name = a.name or ""
             self.form_registration_number = a.registration_number or ""
             self.form_address = a.address or ""
@@ -90,11 +132,13 @@ class AccountFormState(FormDialogState, rx.State):
             self.form_email = a.email or ""
             self.form_contact_name = a.contact_name or ""
 
+        await self._load_patient_fill_options()
         self.dialog_opened = True
 
     # ── FormDialogState abstract method implementations ───────────────────────
 
     async def _clear_form_state(self) -> None:
+        self.form_account_type = "COMPANY"
         self.form_name = ""
         self.form_registration_number = ""
         self.form_address = ""
@@ -103,20 +147,15 @@ class AccountFormState(FormDialogState, rx.State):
         self.form_phone = ""
         self.form_email = ""
         self.form_contact_name = ""
+        self.selected_patient_fill = ""
         self._editing_account_id = ""
         self.is_update_mode = False
 
-    async def _create(self, form_data: dict) -> AsyncGenerator:
-        """Create a new account from form data."""
+    def _build_save_dto(self):
         from gws_care.account.account_dto import SaveAccountDTO
-        from gws_care.account.account_service import AccountService
-
         name = self.form_name.strip()
-        if not name:
-            yield rx.toast.error("Account name is required")
-            return
-
-        dto = SaveAccountDTO(
+        return name, SaveAccountDTO(
+            account_type=self.form_account_type,
             name=name,
             registration_number=self.form_registration_number or None,
             address=self.form_address or None,
@@ -126,6 +165,15 @@ class AccountFormState(FormDialogState, rx.State):
             email=self.form_email or None,
             contact_name=self.form_contact_name or None,
         )
+
+    async def _create(self, form_data: dict) -> AsyncGenerator:
+        """Create a new account from form data."""
+        from gws_care.account.account_service import AccountService
+
+        name, dto = self._build_save_dto()
+        if not name:
+            yield rx.toast.error("Account name is required")
+            return
 
         async with self:
             _main = await self.get_state(ReflexMainState)
@@ -139,24 +187,12 @@ class AccountFormState(FormDialogState, rx.State):
 
     async def _update(self, form_data: dict) -> AsyncGenerator:
         """Update an existing account from form data."""
-        from gws_care.account.account_dto import SaveAccountDTO
         from gws_care.account.account_service import AccountService
 
-        name = self.form_name.strip()
+        name, dto = self._build_save_dto()
         if not name:
             yield rx.toast.error("Account name is required")
             return
-
-        dto = SaveAccountDTO(
-            name=name,
-            registration_number=self.form_registration_number or None,
-            address=self.form_address or None,
-            postal_code=self.form_postal_code or None,
-            city=self.form_city or None,
-            phone=self.form_phone or None,
-            email=self.form_email or None,
-            contact_name=self.form_contact_name or None,
-        )
 
         async with self:
             _main = await self.get_state(ReflexMainState)

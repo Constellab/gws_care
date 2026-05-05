@@ -44,6 +44,8 @@ class AppointmentListState(ReflexMainState):
     filter_account_id: str = ""
     filter_date_from: str = ""
     filter_date_to: str = ""
+    sort_column: str = "scheduled_at"
+    sort_ascending: bool = True
 
     # View mode: "list" or "calendar"
     view_mode: str = "list"
@@ -138,6 +140,16 @@ class AppointmentListState(ReflexMainState):
         else:
             self.filter_date_from = ""
             self.filter_date_to = ""
+        await self._load_appointments()
+
+    @rx.event
+    async def set_sort(self, column: str):
+        """Sort by column; toggle direction if already sorted by the same column."""
+        if self.sort_column == column:
+            self.sort_ascending = not self.sort_ascending
+        else:
+            self.sort_column = column
+            self.sort_ascending = True
         await self._load_appointments()
 
     @rx.event
@@ -260,7 +272,7 @@ class AppointmentListState(ReflexMainState):
                     date_from=self.filter_date_from or None,
                     date_to=self.filter_date_to or None,
                 )
-                self.appointments = [
+                appt_rows = [
                     AppointmentRowDTO(
                         id=str(a.id),
                         patient_id=str(a.patient_id),
@@ -272,6 +284,12 @@ class AppointmentListState(ReflexMainState):
                     )
                     for a in appts
                 ]
+                sort_col = self.sort_column
+                self.appointments = sorted(
+                    appt_rows,
+                    key=lambda row: (getattr(row, sort_col) or "").lower(),
+                    reverse=not self.sort_ascending,
+                )
                 if self.view_mode == "calendar":
                     self._build_calendar()
         except Exception as e:
