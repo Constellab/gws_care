@@ -4,7 +4,7 @@ from datetime import date
 
 from gws_core import EnumField
 from gws_core.core.model.db_field import JSONField
-from peewee import CharField, DateField, FloatField, ForeignKeyField, TextField
+from peewee import BooleanField, CharField, DateField, FloatField, ForeignKeyField, TextField
 
 from gws_care.account.account import Account
 from gws_care.core.care_db_manager import CareDbManager
@@ -40,6 +40,11 @@ class Exam(ModelWithUser):
     lab_results: list = JSONField(null=True)  # list of {parameter, value, reference_range, status}
     interpretation: str = TextField(null=True)
     interpreted_by: User = ForeignKeyField(User, null=True, backref="+")
+    # Terrain fields (Phase 4)
+    tube_qr_code: str = CharField(max_length=100, null=True, index=True)
+    is_done_on_site: bool = BooleanField(default=False, null=False)
+    # Phase 8 — visit FK (nullable for backward compat with standalone exams)
+    visit_id: str = CharField(max_length=36, null=True, index=True)
 
     def to_dto(self) -> ExamDTO:
         return ExamDTO(

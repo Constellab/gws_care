@@ -7,8 +7,6 @@ from .account_list.account_list_component import account_list_page
 from .account_list.account_list_state import AccountListState
 from .admin.admin_component import settings_page
 from .admin.admin_state import AdminState
-from .appointment_list.appointment_list_component import appointment_list_page
-from .appointment_list.appointment_list_state import AppointmentListState
 from .common.language_state import LanguageState
 from .common.page_layout import page_layout
 from .dashboard.dashboard_component import dashboard_page
@@ -21,6 +19,23 @@ from .patient_detail.patient_detail_component import patient_detail_page
 from .patient_detail.patient_detail_state import PatientDetailState
 from .patient_list.patient_list_component import patient_list_page
 from .patient_list.patient_list_state import PatientListState
+from .patient_portal.patient_portal_component import (
+    my_appointments_page,
+    my_documents_page,
+    my_messages_page,
+    my_results_page,
+)
+from .patient_portal.patient_portal_state import PatientPortalState
+from .program_detail.program_detail_component import program_detail_page
+from .program_detail.program_detail_state import ProgramDetailState
+from .program_list.program_list_component import program_list_page
+from .program_list.program_list_state import ProgramListState
+from .terrain.terrain_component import terrain_page
+from .terrain.terrain_state import TerrainState
+from .visit_detail.visit_detail_component import visit_detail_page
+from .visit_detail.visit_detail_state import VisitDetailState
+from .visit_list.visit_list_component import visit_list_page
+from .visit_list.visit_list_state import VisitListState
 
 
 def _ensure_care_db_tables() -> None:
@@ -150,6 +165,81 @@ def _ensure_care_db_tables() -> None:
                 "ALTER TABLE gws_care_user_role ADD COLUMN linked_patient_id VARCHAR(36) NULL DEFAULT NULL"
             )
 
+        # Migration 1.4.0 — Phase 4: QR codes
+        # qr_code on patient
+        if not Patient.column_exists("qr_code"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_patient ADD COLUMN qr_code LONGTEXT NULL DEFAULT NULL"
+            )
+        # tube_qr_code + is_done_on_site on exam
+        if not Exam.column_exists("tube_qr_code"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_exam ADD COLUMN tube_qr_code VARCHAR(100) NULL DEFAULT NULL"
+            )
+        if not Exam.column_exists("is_done_on_site"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_exam ADD COLUMN is_done_on_site TINYINT(1) NOT NULL DEFAULT 0"
+            )
+
+        # Migration 1.5.0 — program_id, billing_account_id and interpretation fields on visit
+        from gws_care.visit.visit import Visit
+        if not Visit.column_exists("program_id"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_visit ADD COLUMN program_id VARCHAR(36) NULL DEFAULT NULL"
+            )
+        if not Visit.column_exists("billing_account_id"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_visit ADD COLUMN billing_account_id VARCHAR(36) NULL DEFAULT NULL"
+            )
+        if not Visit.column_exists("doctor_clinic_interpretation"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_visit ADD COLUMN doctor_clinic_interpretation LONGTEXT NULL DEFAULT NULL"
+            )
+        if not Visit.column_exists("doctor_company_interpretation"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_visit ADD COLUMN doctor_company_interpretation LONGTEXT NULL DEFAULT NULL"
+            )
+        if not Visit.column_exists("doctor_company_message"):
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_visit ADD COLUMN doctor_company_message LONGTEXT NULL DEFAULT NULL"
+            )
+
+        # Migration 1.6.0 — make account_id nullable on medical_program (individual programs)
+        from gws_care.medical_program.medical_program import MedicalProgram
+        try:
+            db_manager.db.execute_sql(
+                "ALTER TABLE gws_care_medical_program MODIFY COLUMN account_id VARCHAR(36) NULL DEFAULT NULL"
+            )
+        except Exception:
+            pass  # already nullable or column doesn't exist yet
+
+        # Migration 1.7.0 — add is_individual flag to medical_program
+        try:
+            if not MedicalProgram.column_exists("is_individual"):
+                db_manager.db.execute_sql(
+                    "ALTER TABLE gws_care_medical_program ADD COLUMN is_individual TINYINT(1) NOT NULL DEFAULT 0"
+                )
+        except Exception:
+            pass
+
+        # Seed ExamTypeModel from enum (idempotent — skips existing codes)
+        # seed_from_enum() uses ModelWithUser which requires an auth context;
+        # find the first admin user to provide one.
+        try:
+            from gws_care.exam.exam_type_service import ExamTypeService
+            from gws_care.user.user import User as CareUser
+            from gws_core import CurrentUserService
+            from gws_core import User as GwsCoreUser
+            seed_user = GwsCoreUser.select().first()
+            if seed_user is not None:
+                CurrentUserService.set_auth_user(seed_user)
+                try:
+                    ExamTypeService.seed_from_enum()
+                finally:
+                    CurrentUserService.clear_auth_context()
+        except Exception as seed_exc:
+            print(f"[gws_care] Warning: exam type seed skipped: {seed_exc}")
+
     except Exception as exc:
         # Non-fatal: the app will log the error when a query fails
         print(f"[gws_care] Warning: could not ensure DB tables/migrations: {exc}")
@@ -190,10 +280,10 @@ def exam_detail():
     return exam_detail_page()
 
 
-@rx.page(route="/appointments", on_load=[AppointmentListState.on_load])
-def appointments():
-    """Appointment scheduling page."""
-    return appointment_list_page()
+@rx.page(route="/visits", on_load=[VisitListState.on_load, LanguageState.on_load])
+def visits():
+    """Scheduled visits page — list and calendar view."""
+    return visit_list_page()
 
 
 @rx.page(route="/settings", on_load=[AdminState.on_load, NotificationsState.on_load, LanguageState.on_load])
@@ -212,4 +302,52 @@ def dashboard():
 def notifications():
     """Notifications — history, preferences and compose."""
     return notifications_page()
+
+
+@rx.page(route="/programs", on_load=[ProgramListState.on_load, LanguageState.on_load])
+def programs():
+    """MedicalProgram list page."""
+    return program_list_page()
+
+
+@rx.page(route="/program/[program_id_param]", on_load=[ProgramDetailState.on_load, LanguageState.on_load])
+def program_detail():
+    """MedicalProgram detail page with patients, exam types and visits."""
+    return program_detail_page()
+
+
+@rx.page(route="/visit/[visit_id_param]", on_load=[VisitDetailState.on_load, LanguageState.on_load])
+def visit_detail():
+    """Visit detail page with exam results and interpretation workflow."""
+    return visit_detail_page()
+
+
+@rx.page(route="/my-results", on_load=[PatientPortalState.on_load_results, LanguageState.on_load])
+def my_results():
+    """Patient portal — my completed results."""
+    return my_results_page()
+
+
+@rx.page(route="/my-appointments", on_load=[PatientPortalState.on_load_appointments, LanguageState.on_load])
+def my_appointments():
+    """Patient portal — my appointments."""
+    return my_appointments_page()
+
+
+@rx.page(route="/my-messages", on_load=[PatientPortalState.on_load_messages, LanguageState.on_load])
+def my_messages():
+    """Patient portal — my messages / notifications."""
+    return my_messages_page()
+
+
+@rx.page(route="/my-documents", on_load=[PatientPortalState.on_load_documents, LanguageState.on_load])
+def my_documents():
+    """Patient portal — my medical certificates."""
+    return my_documents_page()
+
+
+@rx.page(route="/on-site/[program_id_param]", on_load=[TerrainState.on_load, LanguageState.on_load])
+def terrain():
+    """Terrain page — mobile-optimised for Opérateur Terrain."""
+    return terrain_page()
 

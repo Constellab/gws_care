@@ -61,6 +61,9 @@ class AdminState(RoleState):
     @rx.event
     async def on_load(self):
         await self._load_roles()
+        redirect = await self._require_any_of(self.is_admin)
+        if redirect:
+            return redirect
         await self._load_users()
         await self._load_entity_options()
 

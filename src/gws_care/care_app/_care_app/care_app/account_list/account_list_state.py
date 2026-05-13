@@ -4,6 +4,8 @@ import reflex as rx
 from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
 
+from ..common.role_state import RoleState
+
 
 class AccountRowDTO(BaseModel):
     """Lightweight DTO for displaying an account in the list."""
@@ -18,7 +20,7 @@ class AccountRowDTO(BaseModel):
     is_active: bool = True
 
 
-class AccountListState(ReflexMainState):
+class AccountListState(RoleState):
     """State for the account list page."""
 
     accounts: list[AccountRowDTO] = []
@@ -31,6 +33,10 @@ class AccountListState(ReflexMainState):
     @rx.event
     async def on_load(self):
         """Load accounts when the page is mounted."""
+        await self._load_roles()
+        redirect = await self._require_any_of(self.is_operator, self.is_doctor, self.is_account_admin)
+        if redirect:
+            return redirect
         await self._load_accounts()
 
     @rx.event

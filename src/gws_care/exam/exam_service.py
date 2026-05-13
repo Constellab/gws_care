@@ -121,3 +121,71 @@ class ExamService:
     def delete_exam(cls, exam_id: str) -> None:
         exam = cls.get_exam(exam_id)
         exam.delete_instance()
+
+    # ── Phase 4 — Terrain / QR code methods ──────────────────────────────────
+
+    @classmethod
+    def assign_tube_qr(cls, exam_id: str, tube_qr_code: str) -> Exam:
+        """Assign a tube QR code to an exam."""
+        exam = cls.get_exam(exam_id)
+        exam.tube_qr_code = tube_qr_code
+        exam.save()
+        return exam
+
+    @classmethod
+    def mark_terrain_done(cls, exam_id: str) -> Exam:
+        """Mark an exam as done on-site (OT checks off the exam)."""
+        exam = cls.get_exam(exam_id)
+        exam.is_done_on_site = True
+        exam.save()
+        return exam
+
+    @classmethod
+    def find_by_tube_qr(cls, qr_code: str) -> dict | None:
+        """Lookup an exam by its tube QR code.
+
+        The tube QR code format is TUBE-<patient_number>-<exam_type_code>.
+        Returns a dict with keys: patient, visit, exams_to_do (list of Exam).
+        Returns None if not found.
+        """
+        from gws_care.patient.patient import Patient as PatientModel
+        from gws_care.visit.visit import Visit
+
+        exam = Exam.get_or_none(Exam.tube_qr_code == qr_code)
+        if exam is None:
+            return None
+
+        patient = PatientModel.get_or_none(PatientModel.id == exam.patient_id)
+        if patient is None:
+            return None
+
+        # All exams for the same patient (regardless of visit — standalone or visit-linked)
+        all_exams_for_patient = list(
+            Exam.select()
+            .where(Exam.patient == exam.patient_id)
+            .order_by(Exam.exam_date.desc())
+        )
+
+        return {
+            "patient": patient,
+            "visit": None,  # visit FK not yet on Exam; extension point
+            "exams_to_do": [e for e in all_exams_for_patient if not e.is_done_on_site],
+        }
+
+    @classmethod
+    def list_exams_for_campaign_terrain(cls, program_id: str) -> list[Exam]:
+        """Return all exams (via Visit) for a program for on-site view.
+
+        Falls back to patient-level exams if no visit FK is present.
+        """
+        from gws_care.medical_program.medical_program_service import MedicalProgramService
+        from gws_care.visit.visit import Visit
+        patients = MedicalProgramService.get_patients(program_id)
+        if not patients:
+            return []
+        patient_ids = [str(p.id) for p in patients]
+        return list(
+            Exam.select()
+            .where(Exam.patient << patient_ids)
+            .order_by(Exam.patient_id, Exam.exam_date)
+        )

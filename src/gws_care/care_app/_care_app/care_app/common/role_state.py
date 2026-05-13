@@ -28,30 +28,38 @@ class RoleState(ReflexMainState):
 
     @rx.var
     def is_admin(self) -> bool:
-        # TODO: remove dev bypass before production
-        return True
+        """True for the platform super-admin or any user with the ADMIN care role."""
+        return self._is_platform_admin or "ADMIN" in self._care_roles
 
     @rx.var
     def is_doctor(self) -> bool:
-        # TODO: remove dev bypass before production
-        return True
+        """True for Clinic Doctor PSC (DOCTOR role) or ADMIN."""
+        return self.is_admin or "DOCTOR" in self._care_roles
 
     @rx.var
     def is_operator(self) -> bool:
-        # TODO: remove dev bypass before production
-        return True
-
-    @rx.var
-    def has_any_role(self) -> bool:
-        return True
+        """True for HQ Operator PSC (OPERATOR role) or ADMIN."""
+        return self.is_admin or "OPERATOR" in self._care_roles
 
     @rx.var
     def is_account_admin(self) -> bool:
-        return "ACCOUNT_ADMIN" in self._care_roles
+        """True for Company Doctor / Responsable RH (ACCOUNT_ADMIN role) or ADMIN."""
+        return self.is_admin or "ACCOUNT_ADMIN" in self._care_roles
+
+    @rx.var
+    def is_rh(self) -> bool:
+        """Alias for is_account_admin — used in RH / company-doctor context."""
+        return self.is_account_admin
 
     @rx.var
     def is_patient_user(self) -> bool:
+        """True when the user is a linked patient (PATIENT role)."""
         return "PATIENT" in self._care_roles
+
+    @rx.var
+    def has_any_role(self) -> bool:
+        """True when the user has at least one CareRole (or is platform admin)."""
+        return self._is_platform_admin or len(self._care_roles) > 0
 
     @rx.var
     def linked_account_id(self) -> str:
@@ -91,3 +99,17 @@ class RoleState(ReflexMainState):
             self._linked_account_id = ""
             self._linked_patient_id = ""
             self._is_platform_admin = False
+
+    async def _require_any_of(self, *role_checks: bool, redirect_to: str = "/dashboard"):
+        """Redirect to *redirect_to* if none of the given role conditions are True.
+
+        Call this **after** ``await self._load_roles()`` inside ``on_load``.
+
+        Example::
+
+            await self._load_roles()
+            yield await self._require_any_of(self.is_operator, self.is_doctor)
+        """
+        if not any(role_checks):
+            return rx.redirect(redirect_to)
+        return None

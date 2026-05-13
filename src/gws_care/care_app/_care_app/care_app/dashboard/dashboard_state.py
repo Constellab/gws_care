@@ -1,8 +1,9 @@
 """Dashboard state — aggregated statistics for the home dashboard."""
 
 import reflex as rx
-from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
+
+from ..common.role_state import RoleState
 
 
 class ExamTypeStat(BaseModel):
@@ -28,7 +29,7 @@ class AccountOptionDTO(BaseModel):
     name: str
 
 
-class DashboardState(ReflexMainState):
+class DashboardState(RoleState):
     """State for the /dashboard statistics page."""
 
     total_patients: int = 0
@@ -48,6 +49,7 @@ class DashboardState(ReflexMainState):
 
     @rx.event
     async def on_load(self):
+        await self._load_roles()
         await self._load_companies()
         await self._load_stats()
 
@@ -77,29 +79,29 @@ class DashboardState(ReflexMainState):
         self.error_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.appointment.appointment import Appointment
-                from gws_care.appointment.appointment_status import AppointmentStatus
                 from gws_care.certificate.medical_certificate import MedicalCertificate
                 from gws_care.exam.exam import Exam
                 from gws_care.exam.exam_type import ExamType
                 from gws_care.patient.patient import Patient
+                from gws_care.visit.visit import Visit
+                from gws_care.visit.visit_status import VisitStatus
 
                 cid = self.filter_account_id or None
 
                 patient_q = Patient.select()
                 exam_q = Exam.select()
-                appt_q = Appointment.select()
+                visit_q = Visit.select().where(Visit.scheduled_at.is_null(False))
                 cert_q = MedicalCertificate.select()
 
                 if cid:
                     patient_q = patient_q.where(Patient.billing_account == cid)
                     exam_q = exam_q.where(Exam.billing_account == cid)
-                    appt_q = appt_q.where(Appointment.billing_account == cid)
+                    visit_q = visit_q.where(Visit.billing_account == cid)
                     cert_q = cert_q.join(Patient).where(Patient.billing_account == cid)
 
                 self.total_patients = patient_q.count()
                 self.total_exams = exam_q.count()
-                self.total_appointments = appt_q.count()
+                self.total_appointments = visit_q.count()
                 self.total_certificates = cert_q.count()
 
                 # Exams by type
@@ -118,25 +120,20 @@ class DashboardState(ReflexMainState):
                     for row in type_q.tuples()
                 ]
 
-                # Appointments by status
+                # Visits by status (scheduled visits only)
                 status_q = (
-                    Appointment.select(
-                        Appointment.status, fn.COUNT(Appointment.id).alias("cnt")
+                    Visit.select(
+                        Visit.status, fn.COUNT(Visit.id).alias("cnt")
                     )
-                    .group_by(Appointment.status)
+                    .where(Visit.scheduled_at.is_null(False))
+                    .group_by(Visit.status)
                 )
                 if cid:
-                    status_q = status_q.where(Appointment.billing_account == cid)
-                _STATUS_LABELS = {
-                    "SCHEDULED": "Scheduled",
-                    "IN_PROGRESS": "In Progress",
-                    "DONE": "Done",
-                    "CANCELLED": "Cancelled",
-                }
+                    status_q = status_q.where(Visit.billing_account == cid)
                 self.appointments_by_status = [
                     AppointmentStatusStat(
                         status=row[0],
-                        label=_STATUS_LABELS.get(row[0], row[0]),
+                        label=VisitStatus(row[0]).get_label(),
                         count=row[1],
                     )
                     for row in status_q.tuples()

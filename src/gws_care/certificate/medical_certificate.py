@@ -94,4 +94,14 @@ class MedicalCertificateService:
         cert.restrictions = dto.restrictions
         cert.issued_by = issued_by
         cert.save()
+
+        # Phase 5 — notify the patient that their certificate is available
+        try:
+            from gws_care.notification.notification_service import NotificationService
+            from gws_care.patient.patient import Patient
+            patient = Patient.get_by_id(dto.patient_id)
+            NotificationService.notify_certificate_available(cert, patient, sent_by=issued_by)
+        except Exception:
+            pass  # Notification failure must never block the workflow
+
         return cert

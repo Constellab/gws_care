@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import date
 
@@ -31,21 +32,27 @@ class PatientService:
     def search_patients(
         cls,
         name: str | None = None,
+        search: str | None = None,
         patient_number: str | None = None,
+        patient_number_prefix: str | None = None,
         phone: str | None = None,
         account_id: str | None = None,
         dob_from: str | None = None,
         dob_to: str | None = None,
+        limit: int | None = None,
     ) -> list[Patient]:
         query = Patient.select()
         if patient_number:
             query = query.where(Patient.patient_number == patient_number)
+        if patient_number_prefix:
+            query = query.where(Patient.patient_number.startswith(patient_number_prefix))
         if phone:
             query = query.where(Patient.phone == phone)
-        if name:
+        term = search or name
+        if term:
             query = query.where(
-                Patient.last_name.contains(name)
-                | Patient.first_name.contains(name)
+                Patient.last_name.contains(term)
+                | Patient.first_name.contains(term)
             )
         if account_id:
             query = query.where(Patient.billing_account == account_id)
@@ -55,7 +62,10 @@ class PatientService:
         if dob_to:
             from datetime import date as date_type
             query = query.where(Patient.date_of_birth <= date_type.fromisoformat(dob_to))
-        return list(query.order_by(Patient.last_name, Patient.first_name))
+        query = query.order_by(Patient.last_name, Patient.first_name)
+        if limit:
+            query = query.limit(limit)
+        return list(query)
 
     @classmethod
     def list_patients_for_account(cls, account_id: str) -> list[Patient]:
@@ -86,8 +96,32 @@ class PatientService:
         patient = Patient()
         patient.patient_number = cls._generate_patient_number()
         cls._apply_dto(patient, dto)
+        # Generate QR code on creation (encode patient_number)
+        try:
+            from gws_care.qr_code import generate_patient_qr_data_uri
+            patient.qr_code = generate_patient_qr_data_uri(patient.patient_number)
+        except Exception:
+            patient.qr_code = None  # non-fatal
         patient.save()
         return patient
+
+    @classmethod
+    def get_qr_code(cls, patient_id: str) -> str | None:
+        """Return the patient's QR code data URI, generating it if absent.
+
+        Returns None if the patient doesn't exist.
+        """
+        patient = Patient.get_or_none(Patient.id == patient_id)
+        if patient is None:
+            return None
+        if not patient.qr_code:
+            try:
+                from gws_care.qr_code import generate_patient_qr_data_uri
+                patient.qr_code = generate_patient_qr_data_uri(patient.patient_number)
+                patient.save()
+            except Exception:
+                return None
+        return patient.qr_code
 
     @classmethod
     def update_patient(cls, patient_id: str, dto: SavePatientDTO) -> Patient:
@@ -123,6 +157,13 @@ class PatientService:
         patient.email = dto.email
         patient.primary_physician_name = dto.primary_physician_name
         patient.primary_physician_phone = dto.primary_physician_phone
+        patient.social_security_number = dto.social_security_number
+        patient.weight = dto.weight
+        patient.height = dto.height
+        patient.sex = dto.sex if dto.sex in ("M", "F", "Autre") else None
+        patient.notification_preferences = (
+            json.dumps(dto.notification_preferences) if dto.notification_preferences else None
+        )
         if dto.account_id:
             account = Account.get_or_none(Account.id == dto.account_id)
             patient.billing_account = account

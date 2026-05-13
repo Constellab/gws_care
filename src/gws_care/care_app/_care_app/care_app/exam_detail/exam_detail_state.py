@@ -519,3 +519,17 @@ class ExamDetailState(RoleState):
             await self._load_exam()
         except Exception as e:
             self.error_message = f"Error deleting file: {e}"
+
+    # ── Phase 8 — Certificate PDF download ───────────────────────────────────
+
+    @rx.event
+    async def download_certificate_pdf(self, certificate_id: str):
+        """Generate and download a medical certificate PDF."""
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.pdf import generate_certificate_pdf
+                pdf_bytes = generate_certificate_pdf(certificate_id)
+            return rx.download(data=pdf_bytes, filename=f"certificat_{certificate_id[:8]}.pdf")
+        except Exception as e:
+            self.error_message = f"Erreur génération PDF : {e}"

@@ -19,11 +19,12 @@ def _info_item(label: str, value: rx.Var) -> rx.Component:
         rx.text(label, size="1", color="var(--gray-9)", weight="medium"),
         rx.cond(
             value != "",
-            rx.text(value, size="2"),
+            rx.text(value, size="2", overflow_wrap="break-word", word_break="break-word"),
             rx.text("—", size="2", color="var(--gray-7)"),
         ),
         spacing="0",
         align_items="start",
+        min_width="0",
     )
 
 
@@ -213,23 +214,27 @@ def _patients_section() -> rx.Component:
         rx.separator(width="100%"),
         rx.cond(
             AccountDetailState.patients.length() > 0,
-            rx.table.root(
-                rx.table.header(
-                    rx.table.row(
-                        rx.table.column_header_cell(LanguageState.tr["col_patient_number"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_patient"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_gender"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_dob"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_city"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_phone"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_actions"]),
-                    )
+            rx.box(
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            rx.table.column_header_cell(LanguageState.tr["col_patient_number"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_patient"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_gender"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_dob"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_city"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_phone"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_actions"]),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(AccountDetailState.patients, _patient_row)
+                    ),
+                    width="100%",
+                    variant="surface",
                 ),
-                rx.table.body(
-                    rx.foreach(AccountDetailState.patients, _patient_row)
-                ),
+                overflow_x="auto",
                 width="100%",
-                variant="surface",
             ),
             rx.center(
                 rx.text(

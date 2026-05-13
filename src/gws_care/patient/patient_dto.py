@@ -19,6 +19,11 @@ class PatientDTO(ModelDTO):
     primary_physician_name: str | None
     primary_physician_phone: str | None
     account_id: str | None = None
+    social_security_number: str | None = None
+    weight: float | None = None
+    height: float | None = None
+    sex: str | None = None
+    notification_preferences: dict | None = None
 
 
 class SavePatientDTO(BaseModelDTO):
@@ -36,3 +41,8 @@ class SavePatientDTO(BaseModelDTO):
     primary_physician_name: str | None = None
     primary_physician_phone: str | None = None
     account_id: str | None = None
+    social_security_number: str | None = None
+    weight: float | None = None
+    height: float | None = None
+    sex: str | None = None
+    notification_preferences: dict | None = None

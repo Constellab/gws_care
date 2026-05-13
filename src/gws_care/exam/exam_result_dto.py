@@ -2,6 +2,8 @@
 
 from gws_core import BaseModelDTO, ModelDTO
 
+from gws_care.exam.appreciation import Appreciation
+
 
 class ExamResultDTO(ModelDTO):
     """Full exam result record."""
@@ -9,6 +11,9 @@ class ExamResultDTO(ModelDTO):
     exam_id: str
     result_data: dict
     image_paths: list[str]
+    appreciation: Appreciation | None = None
+    calculated_appreciation: Appreciation | None = None
+    appreciation_override: bool = False
 
 
 class SaveExamResultDTO(BaseModelDTO):
@@ -16,6 +21,19 @@ class SaveExamResultDTO(BaseModelDTO):
 
     result_data: dict
     image_paths: list[str] = []
+    # Optional: primary numeric value used to auto-calculate appreciation.
+    # Callers should supply this when saving a result that has a single measurable value
+    # (e.g. glycaemia = 5.8 mmol/L).  Leave None for image-based or multi-parameter exams.
+    primary_value: float | None = None
+    # Optional: explicitly specify which ExamTypeModel to use for threshold calculation.
+    # If omitted, the service will attempt to match by exam category.
+    exam_type_model_id: str | None = None
+
+
+class OverrideAppreciationDTO(BaseModelDTO):
+    """DTO for a Clinic Doctor manual appreciation override."""
+
+    appreciation: Appreciation
 
 
 # ── Per-type result data shapes (used as result_data dict) ────────────────────

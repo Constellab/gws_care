@@ -1,0 +1,322 @@
+"""MedicalProgram list page component."""
+
+import reflex as rx
+from gws_reflex_main import main_component
+
+from ..common.language_state import LanguageState
+from ..common.page_layout import page_layout
+from .program_list_state import AccountOptionDTO, ProgramListState, ProgramRowDTO
+
+# ── Status color helper ────────────────────────────────────────────────────────
+
+_STATUS_COLORS: dict[str, str] = {
+    "draft": "gray",
+    "validated": "blue",
+    "in_progress": "amber",
+    "lab_done": "orange",
+    "doctor_clinic_validated": "violet",
+    "doctor_company_validated": "green",
+    "archived": "gray",
+}
+
+
+def _status_badge(status: str, label: str) -> rx.Component:
+    color = _STATUS_COLORS.get(status, "gray")
+    return rx.badge(label, color_scheme=color, variant="soft", size="1")
+
+
+def _campaign_row(program: ProgramRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(
+            rx.vstack(
+                rx.text(program.name, size="2", weight="medium"),
+                rx.text(program.program_number, size="1", color="var(--gray-9)"),
+                spacing="0",
+            )
+        ),
+        rx.table.cell(
+            rx.cond(
+                program.account_name != "",
+                rx.text(program.account_name, size="2"),
+                rx.text("—", size="2", color="var(--gray-8)"),
+            )
+        ),
+        rx.table.cell(
+            rx.hstack(
+                rx.text(program.start_date, size="2"),
+                rx.text("→", size="2", color="var(--gray-8)"),
+                rx.text(program.end_date, size="2"),
+                spacing="1",
+            )
+        ),
+        rx.table.cell(
+            rx.hstack(
+                rx.icon("users", size=13, color="var(--gray-9)"),
+                rx.text(program.patient_count, size="2"),
+                rx.text("|", size="2", color="var(--gray-6)"),
+                rx.icon("test-tube", size=13, color="var(--gray-9)"),
+                rx.text(program.exam_type_count, size="2"),
+                spacing="1",
+                align="center",
+            )
+        ),
+        rx.table.cell(
+            _status_badge(program.status, program.status_label)
+        ),
+        rx.table.cell(
+            rx.hstack(
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("chevron-right", size=14),
+                        variant="ghost",
+                        size="1",
+                        on_click=lambda: ProgramListState.go_to_program(program.id),
+                    ),
+                    content=LanguageState.tr["tooltip_view_campaign"],
+                ),
+                rx.cond(
+                    program.status != "archived",
+                    rx.tooltip(
+                        rx.icon_button(
+                            rx.icon("archive", size=14),
+                            variant="ghost",
+                            size="1",
+                            color_scheme="gray",
+                            on_click=lambda: ProgramListState.archive_program(program.id),
+                        ),
+                        content=LanguageState.tr["tooltip_archive_program"],
+                    ),
+                ),
+                spacing="1",
+            )
+        ),
+        style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
+        on_click=lambda: ProgramListState.go_to_program(program.id),
+    )
+
+
+def _account_option(option: AccountOptionDTO) -> rx.Component:
+    return rx.select.item(option.name, value=option.id)
+
+
+def _sortable_header(label: str, column: str) -> rx.Component:
+    """Column header cell with a sort-direction arrow."""
+    return rx.table.column_header_cell(
+        rx.hstack(
+            rx.text(label, size="2"),
+            rx.cond(
+                ProgramListState.sort_column == column,
+                rx.cond(
+                    ProgramListState.sort_ascending,
+                    rx.icon("chevron-up", size=13, color="var(--accent-9)"),
+                    rx.icon("chevron-down", size=13, color="var(--accent-9)"),
+                ),
+                rx.icon("chevrons-up-down", size=13, color="var(--gray-7)"),
+            ),
+            spacing="1",
+            align="center",
+        ),
+        on_click=lambda: ProgramListState.set_sort(column),
+        style={"cursor": "pointer"},
+    )
+
+
+def _create_program_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(LanguageState.tr["new_campaign_form_title"]),
+            rx.form.root(
+                rx.form.field(
+                    rx.form.label(LanguageState.tr["field_campaign_name"]),
+                    rx.input(
+                        placeholder=LanguageState.tr["campaign_name_placeholder"],
+                        value=ProgramListState.form_name,
+                        on_change=ProgramListState.set_form_name,
+                        size="2",
+                    ),
+                ),
+                rx.form.field(
+                    rx.form.label(LanguageState.tr["col_account"]),
+                    rx.select.root(
+                        rx.select.trigger(
+                            placeholder=LanguageState.tr["all_accounts"],
+                            width="100%",
+                        ),
+                        rx.select.content(
+                            rx.foreach(ProgramListState.account_options, _account_option),
+                        ),
+                        value=ProgramListState.form_account_id,
+                        on_change=ProgramListState.set_form_account_id,
+                    ),
+                    width="100%",
+                ),
+                rx.grid(
+                    rx.form.field(
+                        rx.form.label(LanguageState.tr["field_start_date"]),
+                        rx.input(
+                            type="date",
+                            value=ProgramListState.form_start_date,
+                            on_change=ProgramListState.set_form_start_date,
+                            size="2",
+                        ),
+                    ),
+                    rx.form.field(
+                        rx.form.label(LanguageState.tr["field_end_date"]),
+                        rx.input(
+                            type="date",
+                            value=ProgramListState.form_end_date,
+                            on_change=ProgramListState.set_form_end_date,
+                            size="2",
+                        ),
+                    ),
+                    columns="2",
+                    spacing="3",
+                    width="100%",
+                ),
+                rx.cond(
+                    ProgramListState.form_error != "",
+                    rx.callout(
+                        ProgramListState.form_error,
+                        color_scheme="red",
+                        size="1",
+                        icon="triangle-alert",
+                    ),
+                ),
+                rx.hstack(
+                    rx.dialog.close(
+                        rx.button(
+                            LanguageState.tr["cancel_btn"],
+                            variant="soft",
+                            color_scheme="gray",
+                            on_click=ProgramListState.close_create_dialog,
+                        )
+                    ),
+                    rx.button(
+                        LanguageState.tr["create_program_btn"],
+                        on_click=ProgramListState.save_program,
+                        loading=ProgramListState.is_saving,
+                    ),
+                    spacing="2",
+                    justify="end",
+                    width="100%",
+                ),
+                display="flex",
+                flex_direction="column",
+                gap="1rem",
+                width="100%",
+            ),
+            on_interact_outside=ProgramListState.close_create_dialog,
+            on_escape_key_down=ProgramListState.close_create_dialog,
+            max_width="480px",
+        ),
+        open=ProgramListState.create_dialog_open,
+    )
+
+
+def program_list_page() -> rx.Component:
+    return main_component(
+        page_layout(
+            rx.hstack(
+                rx.heading(LanguageState.tr["campaigns_page_title"], size="6"),
+                rx.spacer(),
+                rx.cond(
+                    ProgramListState.is_operator | ProgramListState.is_admin,
+                    rx.button(
+                        rx.icon("plus", size=16),
+                        LanguageState.tr["new_campaign_btn"],
+                        on_click=ProgramListState.open_create_dialog,
+                        size="2",
+                    ),
+                ),
+                width="100%",
+                align="center",
+            ),
+            # Filters
+            rx.hstack(
+                rx.input(
+                    rx.input.slot(rx.icon("search", size=14)),
+                    placeholder=LanguageState.tr["search_by_name"],
+                    value=ProgramListState.search_name,
+                    on_change=ProgramListState.set_search_name,
+                    size="2",
+                    width="220px",
+                ),
+                rx.select.root(
+                    rx.select.trigger(
+                        placeholder=LanguageState.tr["all_program_statuses"],
+                        width="180px",
+                    ),
+                    rx.select.content(
+                        rx.select.item(LanguageState.tr["all_program_statuses"], value="ALL"),
+                        rx.select.item(LanguageState.tr["status_draft"], value="draft"),
+                        rx.select.item(LanguageState.tr["status_validated"], value="validated"),
+                        rx.select.item(LanguageState.tr["status_in_progress"], value="in_progress"),
+                        rx.select.item(LanguageState.tr["status_lab_done"], value="lab_done"),
+                        rx.select.item(LanguageState.tr["status_doctor_clinic_validated"], value="doctor_clinic_validated"),
+                        rx.select.item(LanguageState.tr["status_doctor_company_validated"], value="doctor_company_validated"),
+                        rx.select.item(LanguageState.tr["status_archived"], value="archived"),
+                    ),
+                    value=ProgramListState.filter_status,
+                    on_change=ProgramListState.set_filter_status,
+                ),
+                rx.select.root(
+                    rx.select.trigger(
+                        placeholder=LanguageState.tr["all_accounts"],
+                        width="200px",
+                    ),
+                    rx.select.content(
+                        rx.select.item(LanguageState.tr["all_accounts"], value="ALL"),
+                        rx.foreach(ProgramListState.account_options, _account_option),
+                    ),
+                    value=rx.cond(ProgramListState.filter_account_id != "", ProgramListState.filter_account_id, "ALL"),
+                    on_change=ProgramListState.set_filter_account,
+                ),
+                spacing="2",
+                wrap="wrap",
+                width="100%",
+            ),
+            rx.cond(
+                ProgramListState.error_message != "",
+                rx.callout(
+                    ProgramListState.error_message,
+                    color_scheme="red",
+                    size="2",
+                    icon="triangle-alert",
+                ),
+            ),
+            rx.cond(
+                ProgramListState.is_loading,
+                rx.center(rx.spinner(size="3"), padding="2rem"),
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            _sortable_header(LanguageState.tr["col_name"], "name"),
+                            _sortable_header(LanguageState.tr["col_account"], "account_name"),
+                            _sortable_header(LanguageState.tr["col_dates"], "start_date"),
+                            rx.table.column_header_cell(LanguageState.tr["col_patients"] + " / " + LanguageState.tr["col_exam_types"]),
+                            _sortable_header(LanguageState.tr["col_status"], "status_label"),
+                            rx.table.column_header_cell(LanguageState.tr["col_actions"]),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.cond(
+                            ProgramListState.programs.length() == 0,
+                            rx.table.row(
+                                rx.table.cell(
+                                    rx.center(
+                                        rx.text(LanguageState.tr["no_campaigns_found"], color="var(--gray-9)", size="2"),
+                                        padding="1.5rem",
+                                    ),
+                                    col_span=6,
+                                )
+                            ),
+                            rx.foreach(ProgramListState.programs, _campaign_row),
+                        )
+                    ),
+                    width="100%",
+                    variant="surface",
+                ),
+            ),
+            _create_program_dialog(),
+        )
+    )

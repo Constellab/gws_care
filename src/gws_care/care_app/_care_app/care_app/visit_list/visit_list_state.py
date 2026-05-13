@@ -1,18 +1,21 @@
-"""State for the appointment list page."""
+"""State for the visit list / calendar page."""
 
 import reflex as rx
-from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
 
+from ..common.role_state import RoleState
 
-class AppointmentRowDTO(BaseModel):
+
+class VisitRowDTO(BaseModel):
     id: str
     patient_name: str
     patient_id: str
     account_name: str | None = None
-    scheduled_at: str
-    exam_type_label: str
+    campaign_name: str = ""
+    scheduled_at: str = ""  # empty for program visits without a scheduled date
     status: str
+    status_label: str = ""
+    visit_number: str = ""
 
 
 class AccountOptionDTO(BaseModel):
@@ -22,6 +25,13 @@ class AccountOptionDTO(BaseModel):
     name: str
 
 
+class PatientOptionDTO(BaseModel):
+    """Lightweight patient option for the new-visit dialog."""
+
+    id: str
+    label: str  # "Last, First (N° dossier)"
+
+
 class CalendarDayDTO(BaseModel):
     """One cell in the monthly calendar grid."""
 
@@ -29,18 +39,18 @@ class CalendarDayDTO(BaseModel):
     day_num: int = 0        # 0 for padding cells
     is_current_month: bool = False
     is_today: bool = False
-    appointments: list[AppointmentRowDTO] = []
+    visits: list[VisitRowDTO] = []
 
 
-class AppointmentListState(ReflexMainState):
-    """State for the /appointments page."""
+class VisitListState(RoleState):
+    """State for the /visits page."""
 
-    appointments: list[AppointmentRowDTO] = []
+    visits: list[VisitRowDTO] = []
     companies: list[AccountOptionDTO] = []
     is_loading: bool = False
     error_message: str = ""
     search: str = ""
-    filter_status: str = "ALL"  # "ALL" = no filter
+    filter_status: str = "ALL"
     filter_account_id: str = ""
     filter_date_from: str = ""
     filter_date_to: str = ""
@@ -54,19 +64,34 @@ class AppointmentListState(ReflexMainState):
     calendar_month_label: str = ""
     calendar_days: list[CalendarDayDTO] = []
 
+    # ── New Visit dialog ──────────────────────────────────────────────────────
+    show_new_visit_dialog: bool = False
+    new_visit_patient_search: str = ""
+    new_visit_patient_results: list[PatientOptionDTO] = []
+    new_visit_patient_id: str = ""
+    new_visit_patient_label: str = ""
+    new_visit_scheduled_at: str = ""
+    new_visit_account_id: str = ""
+    new_visit_error: str = ""
+    new_visit_is_saving: bool = False
+
     @rx.event
     async def on_load(self):
+        await self._load_roles()
+        redirect = await self._require_any_of(self.is_operator, self.is_doctor)
+        if redirect:
+            return redirect
         from datetime import date
         today = date.today()
         self.calendar_year = today.year
         self.calendar_month = today.month
         await self._load_companies()
-        await self._load_appointments()
+        await self._load_visits()
 
     @rx.event
     async def set_search(self, value: str):
         self.search = value
-        await self._load_appointments()
+        await self._load_visits()
 
     @rx.event
     async def set_view_mode(self, value: str | list[str]):
@@ -81,7 +106,7 @@ class AppointmentListState(ReflexMainState):
         else:
             self.filter_date_from = ""
             self.filter_date_to = ""
-        await self._load_appointments()
+        await self._load_visits()
 
     @rx.event
     async def calendar_prev_month(self):
@@ -92,7 +117,7 @@ class AppointmentListState(ReflexMainState):
         else:
             self.calendar_month -= 1
         self._apply_calendar_date_filter()
-        await self._load_appointments()
+        await self._load_visits()
 
     @rx.event
     async def calendar_next_month(self):
@@ -103,27 +128,27 @@ class AppointmentListState(ReflexMainState):
         else:
             self.calendar_month += 1
         self._apply_calendar_date_filter()
-        await self._load_appointments()
+        await self._load_visits()
 
     @rx.event
     async def set_filter_status(self, value: str):
         self.filter_status = value
-        await self._load_appointments()
+        await self._load_visits()
 
     @rx.event
     async def set_filter_account(self, value: str):
         self.filter_account_id = value if value != "ALL" else ""
-        await self._load_appointments()
+        await self._load_visits()
 
     @rx.event
     async def set_filter_date_from(self, value: str):
         self.filter_date_from = value
-        await self._load_appointments()
+        await self._load_visits()
 
     @rx.event
     async def set_filter_date_to(self, value: str):
         self.filter_date_to = value
-        await self._load_appointments()
+        await self._load_visits()
 
     @rx.event
     async def clear_filters(self):
@@ -140,7 +165,7 @@ class AppointmentListState(ReflexMainState):
         else:
             self.filter_date_from = ""
             self.filter_date_to = ""
-        await self._load_appointments()
+        await self._load_visits()
 
     @rx.event
     async def set_sort(self, column: str):
@@ -150,44 +175,95 @@ class AppointmentListState(ReflexMainState):
         else:
             self.sort_column = column
             self.sort_ascending = True
-        await self._load_appointments()
+        await self._load_visits()
 
     @rx.event
-    async def cancel_appointment(self, appointment_id: str):
-        """Cancel an appointment from the list."""
-        try:
-            with await self.authenticate_user():
-                from gws_care.appointment.appointment_service import AppointmentService
-                AppointmentService.cancel_appointment(appointment_id)
-            await self._load_appointments()
-        except Exception as e:
-            self.error_message = f"Error: {e}"
-
-    @rx.event
-    async def start_appointment(self, appointment_id: str):
-        """Mark appointment as In Progress."""
-        try:
-            with await self.authenticate_user():
-                from gws_care.appointment.appointment_service import AppointmentService
-                AppointmentService.start_appointment(appointment_id)
-            await self._load_appointments()
-        except Exception as e:
-            self.error_message = f"Error: {e}"
-
-    @rx.event
-    async def complete_appointment(self, appointment_id: str):
-        """Mark appointment as Done."""
-        try:
-            with await self.authenticate_user():
-                from gws_care.appointment.appointment_service import AppointmentService
-                AppointmentService.complete_appointment(appointment_id)
-            await self._load_appointments()
-        except Exception as e:
-            self.error_message = f"Error: {e}"
+    def go_to_visit(self, visit_id: str):
+        return rx.redirect(f"/visit/{visit_id}")
 
     @rx.event
     def go_to_patient(self, patient_id: str):
         return rx.redirect(f"/patient/{patient_id}")
+
+    # ── New Visit dialog events ───────────────────────────────────────────────
+
+    @rx.event
+    async def open_new_visit_dialog(self):
+        self.new_visit_patient_search = ""
+        self.new_visit_patient_results = []
+        self.new_visit_patient_id = ""
+        self.new_visit_patient_label = ""
+        self.new_visit_scheduled_at = ""
+        self.new_visit_account_id = ""
+        self.new_visit_error = ""
+        self.new_visit_is_saving = False
+        self.show_new_visit_dialog = True
+
+    @rx.event
+    def close_new_visit_dialog(self):
+        self.show_new_visit_dialog = False
+
+    @rx.event
+    async def search_new_visit_patient(self, query: str):
+        self.new_visit_patient_search = query
+        self.new_visit_patient_results = []
+        self.new_visit_patient_id = ""
+        self.new_visit_patient_label = ""
+        if len(query.strip()) < 2:
+            return
+        try:
+            with await self.authenticate_user():
+                from gws_care.patient.patient_service import PatientService
+                patients = PatientService.search_patients(search=query.strip(), limit=10)
+                self.new_visit_patient_results = [
+                    PatientOptionDTO(
+                        id=str(p.id),
+                        label=f"{p.last_name} {p.first_name} ({p.patient_number})",
+                    )
+                    for p in patients
+                ]
+        except Exception:
+            self.new_visit_patient_results = []
+
+    @rx.event
+    def select_new_visit_patient(self, patient_id: str, label: str):
+        self.new_visit_patient_id = patient_id
+        self.new_visit_patient_label = label
+        self.new_visit_patient_search = label
+        self.new_visit_patient_results = []
+
+    @rx.event
+    def set_new_visit_scheduled_at(self, value: str):
+        self.new_visit_scheduled_at = value
+
+    @rx.event
+    def set_new_visit_account_id(self, value: str):
+        self.new_visit_account_id = "" if value == "none" else value
+
+    @rx.event
+    async def save_new_visit(self):
+        if not self.new_visit_patient_id:
+            self.new_visit_error = "Please select a patient."
+            return
+        if not self.new_visit_scheduled_at:
+            self.new_visit_error = "Please select a date and time."
+            return
+        self.new_visit_error = ""
+        self.new_visit_is_saving = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.visit.visit_service import VisitService
+                _visit, program = VisitService.create_visit_with_default_program(
+                    patient_id=self.new_visit_patient_id,
+                    scheduled_at_str=self.new_visit_scheduled_at,
+                    billing_account_id=self.new_visit_account_id or None,
+                )
+            self.show_new_visit_dialog = False
+            return rx.redirect(f"/program/{program.id}")
+        except Exception as e:
+            self.new_visit_error = str(e)
+        finally:
+            self.new_visit_is_saving = False
 
     def _apply_calendar_date_filter(self):
         """Set filter_date_from/to to cover the current calendar month."""
@@ -197,16 +273,18 @@ class AppointmentListState(ReflexMainState):
         self.filter_date_to = f"{self.calendar_year:04d}-{self.calendar_month:02d}-{last_day:02d}"
 
     def _build_calendar(self):
-        """Build calendar_days grid from currently loaded appointments."""
+        """Build calendar_days grid from currently loaded visits."""
         import calendar
         from datetime import date
 
-        by_date: dict[str, list[AppointmentRowDTO]] = {}
-        for appt in self.appointments:
-            day_key = appt.scheduled_at[:10]
+        by_date: dict[str, list[VisitRowDTO]] = {}
+        for visit in self.visits:
+            if not visit.scheduled_at:
+                continue
+            day_key = visit.scheduled_at[:10]
             if day_key not in by_date:
                 by_date[day_key] = []
-            by_date[day_key].append(appt)
+            by_date[day_key].append(visit)
 
         today_str = date.today().isoformat()
         first_weekday, num_days = calendar.monthrange(self.calendar_year, self.calendar_month)
@@ -228,7 +306,7 @@ class AppointmentListState(ReflexMainState):
                 day_num=d,
                 is_current_month=True,
                 is_today=(date_str == today_str),
-                appointments=by_date.get(date_str, []),
+                visits=by_date.get(date_str, []),
             ))
         # Trailing padding to fill the last row
         remainder = len(days) % 7
@@ -249,7 +327,7 @@ class AppointmentListState(ReflexMainState):
         except Exception:
             self.companies = []
 
-    async def _load_appointments(self):
+    async def _load_visits(self):
         if not await self.check_authentication():
             return
 
@@ -257,42 +335,49 @@ class AppointmentListState(ReflexMainState):
         self.error_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.appointment.appointment_service import AppointmentService
-                from gws_care.appointment.appointment_status import AppointmentStatus
+                from gws_care.visit.visit_service import VisitService
+                from gws_care.visit.visit_status import VisitStatus
 
                 status_filter = (
-                    AppointmentStatus(self.filter_status)
+                    VisitStatus(self.filter_status)
                     if self.filter_status and self.filter_status != "ALL"
                     else None
                 )
-                appts = AppointmentService.list_all(
+                visits = VisitService.list_all(
                     status=status_filter,
                     search=self.search,
                     account_id=self.filter_account_id or None,
                     date_from=self.filter_date_from or None,
                     date_to=self.filter_date_to or None,
                 )
-                appt_rows = [
-                    AppointmentRowDTO(
-                        id=str(a.id),
-                        patient_id=str(a.patient_id),
-                        patient_name=f"{a.patient.first_name} {a.patient.last_name}",
-                        account_name=a.billing_account.name if a.billing_account_id else None,
-                        scheduled_at=a.scheduled_at.isoformat(),
-                        exam_type_label=a.exam_type.get_label(),
-                        status=a.status.value,
-                    )
-                    for a in appts
-                ]
+                visit_rows = []
+                for v in visits:
+                    campaign_name = ""
+                    if v.program_id:
+                        try:
+                            campaign_name = v.program.name
+                        except Exception:
+                            campaign_name = ""
+                    visit_rows.append(VisitRowDTO(
+                        id=str(v.id),
+                        patient_id=str(v.patient_id),
+                        patient_name=v.patient.get_full_name() if v.patient_id else "",
+                        account_name=v.billing_account.name if v.billing_account_id else None,
+                        campaign_name=campaign_name,
+                        scheduled_at=v.scheduled_at.isoformat() if v.scheduled_at else "",
+                        status=v.status.value,
+                        status_label=v.status.get_label(),
+                        visit_number=v.visit_number or "",
+                    ))
                 sort_col = self.sort_column
-                self.appointments = sorted(
-                    appt_rows,
+                self.visits = sorted(
+                    visit_rows,
                     key=lambda row: (getattr(row, sort_col) or "").lower(),
                     reverse=not self.sort_ascending,
                 )
                 if self.view_mode == "calendar":
                     self._build_calendar()
         except Exception as e:
-            self.error_message = f"Error loading appointments: {e}"
+            self.error_message = f"Error loading visits: {e}"
         finally:
             self.is_loading = False

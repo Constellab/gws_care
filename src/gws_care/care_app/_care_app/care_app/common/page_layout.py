@@ -8,6 +8,7 @@ from gws_reflex_main import (
 
 from .bell_state import BellEntryDTO, BellState
 from .language_state import LanguageState
+from .role_state import RoleState
 
 
 def _bell_entry(entry: BellEntryDTO) -> rx.Component:
@@ -123,17 +124,57 @@ def _sidebar_content() -> rx.Component:
             align="center",
             padding="1em",
         ),
-        # Nav items
+        # Nav items — shown / hidden based on the user's CareRole
         rx.vstack(
+            # Dashboard — visible to everyone with a role
             menu_item_component("layout-dashboard", LanguageState.tr["nav_dashboard"], "/dashboard"),
-            menu_item_component("users", LanguageState.tr["nav_patients"], "/"),
-            menu_item_component("calendar", LanguageState.tr["nav_appointments"], "/appointments"),
-            menu_item_component(
-                "building-2",
-                LanguageState.tr["nav_accounts"],
-                "/accounts",
-                additional_active_route_prefixes=["/account"],
+
+            # Patients — Operator, Doctor, Admin (not RH, not Patient)
+            rx.cond(
+                RoleState.is_operator | RoleState.is_doctor,
+                menu_item_component("users", LanguageState.tr["nav_patients"], "/"),
             ),
+
+            # Visits — Operator, Doctor, Admin
+            rx.cond(
+                RoleState.is_operator | RoleState.is_doctor,
+                menu_item_component("calendar", LanguageState.tr["nav_visits"], "/visits"),
+            ),
+
+            # MedicalPrograms — Operator, Doctor, Admin
+            rx.cond(
+                RoleState.is_operator | RoleState.is_doctor | RoleState.is_admin,
+                menu_item_component(
+                    "clipboard-list",
+                    LanguageState.tr["nav_campaigns"],
+                    "/programs",
+                    additional_active_route_prefixes=["/program", "/visit/"],
+                ),
+            ),
+
+            # Accounts — Operator, Doctor, Account Admin, Admin
+            rx.cond(
+                RoleState.is_operator | RoleState.is_doctor | RoleState.is_account_admin,
+                menu_item_component(
+                    "building-2",
+                    LanguageState.tr["nav_accounts"],
+                    "/accounts",
+                    additional_active_route_prefixes=["/account"],
+                ),
+            ),
+
+            # Patient portal — Patient role only
+            rx.cond(
+                RoleState.is_patient_user,
+                rx.vstack(
+                    menu_item_component("file-heart", LanguageState.tr["nav_my_results"], "/my-results"),
+                    menu_item_component("calendar-check", LanguageState.tr["nav_my_appointments"], "/my-appointments"),
+                    menu_item_component("file-text", LanguageState.tr["nav_my_documents"], "/my-documents"),
+                    width="100%",
+                    spacing="1",
+                ),
+            ),
+
             rx.separator(width="100%", margin_y="0.25rem"),
             menu_item_component("bell", LanguageState.tr["nav_notifications"], "/notifications"),
             rx.separator(width="100%", margin_y="0.25rem"),
@@ -148,14 +189,16 @@ def _sidebar_content() -> rx.Component:
     )
 
 
-def page_layout(*children: rx.Component) -> rx.Component:
+def page_layout(*children: rx.Component, **kwargs) -> rx.Component:
     """Wrap content in the standard sidebar layout.
 
     :param children: Page content components
     :return: Laid-out page
     :rtype: rx.Component
     """
+    vstack_props = {"width": "100%", "spacing": "4", "padding": "1.5rem", "min_width": "0", "overflow_x": "hidden"}
+    vstack_props.update(kwargs)
     return page_sidebar_component(
         sidebar_content=_sidebar_content(),
-        content=rx.vstack(*children, width="100%", spacing="4", padding="1.5rem"),
+        content=rx.vstack(*children, **vstack_props),
     )

@@ -4,6 +4,8 @@ import reflex as rx
 from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
 
+from ..common.role_state import RoleState
+
 
 class PatientRowDTO(BaseModel):
     """Lightweight DTO for displaying a patient row in the list."""
@@ -26,7 +28,7 @@ class AccountOptionDTO(BaseModel):
     name: str
 
 
-class PatientListState(ReflexMainState):
+class PatientListState(RoleState):
     """State for the patient list page."""
 
     patients: list[PatientRowDTO] = []
@@ -46,6 +48,10 @@ class PatientListState(ReflexMainState):
     @rx.event
     async def on_load(self):
         """Load patients when the page is mounted."""
+        await self._load_roles()
+        redirect = await self._require_any_of(self.is_operator, self.is_doctor)
+        if redirect:
+            return redirect
         await self._load_companies()
         await self._load_patients()
 
@@ -135,9 +141,15 @@ class PatientListState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.patient.patient_service import PatientService
+                # Normalize patient number input: strip "PAT-" prefix so that
+                # typing "PAT-01" or "01" both match PAT-01XXXX. An input of
+                # just "PAT-" strips to empty and shows all patients.
+                raw_pn = self.search_patient_number.strip()
+                if raw_pn.upper().startswith("PAT-"):
+                    raw_pn = raw_pn[4:]
                 patients = PatientService.search_patients(
                     name=self.search_name or None,
-                    patient_number=self.search_patient_number or None,
+                    patient_number_prefix=f"PAT-{raw_pn}" if raw_pn else None,
                     phone=self.search_phone or None,
                     account_id=self.filter_account_id or None,
                     dob_from=self.filter_dob_from or None,

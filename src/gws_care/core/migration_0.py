@@ -1,22 +1,23 @@
+"""DB migration v0.17.0 — Initial schema (collapsed).
+
+All tables are created by BaseModelService.create_database_tables on first
+startup. This migration simply marks the baseline version so the migration
+system knows no further migrations need to run.
+"""
+
 from gws_core import BrickMigration, SqlMigrator, Version, brick_migration
 
-from gws_care.company.company import Company
 from gws_care.core.care_db_manager import CareDbManager
-from gws_care.patient.patient import Patient
-from gws_care.user.user import User
 
 
 @brick_migration(
-    "0.1.0",
-    short_description="Initial schema: User, Company, Patient",
+    "0.17.0",
+    short_description="Initial schema — all tables created at startup",
     db_manager=CareDbManager.get_instance(),
 )
-class Migration010(BrickMigration):
+class Migration0170(BrickMigration):
     @classmethod
     def migrate(
         cls, sql_migrator: SqlMigrator, from_version: Version, to_version: Version
     ) -> None:
-        sql_migrator.create_table_if_not_exists(User)
-        sql_migrator.create_table_if_not_exists(Company)
-        sql_migrator.create_table_if_not_exists(Patient)
-        sql_migrator.migrate()
+        pass  # Tables are created by BaseModelService.create_database_tables

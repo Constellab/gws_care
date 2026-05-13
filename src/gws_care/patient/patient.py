@@ -1,6 +1,7 @@
+import json
 from datetime import date
 
-from peewee import CharField, DateField, ForeignKeyField
+from peewee import CharField, DateField, DecimalField, ForeignKeyField, TextField
 
 from gws_care.account.account import Account
 from gws_care.core.care_db_manager import CareDbManager
@@ -30,6 +31,16 @@ class Patient(ModelWithUser):
     primary_physician_name: str = CharField(max_length=255, null=True)
     primary_physician_phone: str = CharField(max_length=50, null=True)
     billing_account: Account = ForeignKeyField(Account, null=True, backref="patients", on_delete="SET NULL")
+    # QR code stored as base64 PNG string (data:image/png;base64,...)
+    qr_code: str = TextField(null=True)
+
+    # ── Medical / administrative extras ──────────────────────────────────────
+    social_security_number: str = CharField(max_length=30, null=True)
+    weight = DecimalField(null=True, decimal_places=2, max_digits=6)  # kg
+    height = DecimalField(null=True, decimal_places=2, max_digits=5)  # cm
+    sex: str = CharField(max_length=10, null=True)  # M / F / Autre
+    # JSON: {"email": bool, "sms": bool, "whatsapp": bool}
+    notification_preferences: str = TextField(null=True)
 
     def get_full_name(self) -> str:
         return f"{self.first_name} {self.last_name}"
@@ -46,6 +57,12 @@ class Patient(ModelWithUser):
         )
 
     def to_dto(self) -> PatientDTO:
+        notif_prefs = None
+        if self.notification_preferences:
+            try:
+                notif_prefs = json.loads(self.notification_preferences)
+            except Exception:
+                notif_prefs = None
         return PatientDTO(
             id=self.id,
             created_at=self.created_at,
@@ -65,6 +82,11 @@ class Patient(ModelWithUser):
             primary_physician_name=self.primary_physician_name,
             primary_physician_phone=self.primary_physician_phone,
             account_id=str(self.billing_account_id) if self.billing_account_id else None,
+            social_security_number=self.social_security_number,
+            weight=float(self.weight) if self.weight is not None else None,
+            height=float(self.height) if self.height is not None else None,
+            sex=self.sex,
+            notification_preferences=notif_prefs,
         )
 
     class Meta:

@@ -457,6 +457,187 @@ class NotificationService:
 
         return count
 
+    # ── Phase 5 — Typed appointment reminders (J-15, J-3, J-1) ──────────────
+
+    # Map: days_before → NotificationType (for idempotency)
+    _REMINDER_TYPE_MAP = {
+        15: NotificationType.APPOINTMENT_REMINDER_15D,
+        3: NotificationType.APPOINTMENT_REMINDER_3D,
+        1: NotificationType.APPOINTMENT_REMINDER_1D,
+    }
+
+    @classmethod
+    def send_daily_appointment_reminders(cls) -> int:
+        """
+        Daily scheduler method: send appointment reminders at J-15, J-3, and J-1.
+
+        Each reminder is idempotent — a second call on the same day for the same
+        (appointment, NotificationType) pair will be skipped.
+
+        Returns the number of reminders dispatched.
+        """
+        from datetime import date, timedelta
+
+        from gws_care.appointment.appointment import Appointment
+        from gws_care.appointment.appointment_status import AppointmentStatus
+
+        count = 0
+        today = date.today()
+
+        for days_before, notif_type in cls._REMINDER_TYPE_MAP.items():
+            target_date = today + timedelta(days=days_before)
+            target_dt_start = f"{target_date.isoformat()}T00:00:00"
+            target_dt_end = f"{target_date.isoformat()}T23:59:59"
+
+            upcoming = list(
+                Appointment.select()
+                .where(
+                    Appointment.scheduled_at >= target_dt_start,
+                    Appointment.scheduled_at <= target_dt_end,
+                    Appointment.status == AppointmentStatus.SCHEDULED,
+                )
+            )
+
+            for appt in upcoming:
+                # Skip if already attempted this typed reminder for this appointment
+                already_sent = (
+                    NotificationLog.select()
+                    .where(
+                        NotificationLog.related_appointment == appt.id,
+                        NotificationLog.notification_type == notif_type,
+                    )
+                    .exists()
+                )
+                if already_sent:
+                    continue
+
+                patient = appt.patient
+                if not patient.email:
+                    continue
+
+                subject = f"[Constellab Care] Rappel de rendez-vous — J-{days_before}"
+                body = (
+                    f"Cher(e) {patient.get_full_name()},\n\n"
+                    f"Nous vous rappelons que vous avez un rendez-vous prévu dans {days_before} jour(s), "
+                    f"le {appt.scheduled_at.strftime('%A %d %B %Y à %H:%M')}.\n\n"
+                    f"Type d'examen : {appt.exam_type.get_label()}\n\n"
+                    f"Contactez-nous si vous devez modifier ce rendez-vous.\n\nCordialement,\nConstellab Care"
+                )
+
+                log = cls._create_log(
+                    notification_type=notif_type,
+                    channel=NotificationChannel.EMAIL,
+                    subject=subject,
+                    body=body,
+                    recipient_email=patient.email,
+                    recipient_phone=patient.phone,
+                    recipient_name=patient.get_full_name(),
+                    sent_by=None,
+                    patient=patient,
+                    appointment=appt,
+                    extra_data={"days_before": days_before},
+                )
+                success = cls._dispatch(
+                    NotificationChannel.EMAIL.value,
+                    patient.email,
+                    patient.phone,
+                    patient.get_full_name(),
+                    subject,
+                    body,
+                )
+                cls._finalise_log(log, success)
+                count += 1
+
+        return count
+
+    # ── Phase 5 — Terrain thank-you ───────────────────────────────────────────
+
+    @classmethod
+    def send_terrain_thank_you(cls, patient, visit, sent_by: User | None = None) -> None:
+        """Email + in-app bell to a patient after their on-site visit is completed."""
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
+
+        patient_name = patient.get_full_name()
+        subject = "[Constellab Care] Merci pour votre visite on-site"
+        body = (
+            f"Cher(e) {patient_name},\n\n"
+            f"Merci d'avoir participé à la visite on-site #{visit.visit_number}.\n"
+            f"Vos prélèvements ont bien été enregistrés. "
+            f"Vous serez informé(e) dès que vos résultats seront disponibles.\n\n"
+            f"Cordialement,\nConstellab Care"
+        )
+        message = f"Merci pour votre participation à la visite on-site #{visit.visit_number}."
+
+        log = None
+        if patient.email:
+            log = cls._create_log(
+                notification_type=NotificationType.TERRAIN_THANK_YOU,
+                channel=NotificationChannel.EMAIL,
+                subject=subject,
+                body=body,
+                recipient_email=patient.email,
+                recipient_phone=patient.phone,
+                recipient_name=patient_name,
+                sent_by=sent_by,
+                patient=patient,
+                extra_data={"visit_id": str(visit.id)},
+            )
+            success = cls._dispatch(NotificationChannel.EMAIL.value, patient.email, patient.phone, patient_name, subject, body)
+            cls._finalise_log(log, success)
+
+        # Bell to PATIENT role user linked to this patient
+        patient_roles = list(UserCareRole.select().where(
+            UserCareRole.role == CareRole.PATIENT,
+            UserCareRole.linked_patient_id == str(patient.id),
+        ))
+        for role_entry in patient_roles:
+            cls.create_bell(str(role_entry.user_id), message, log=log)
+
+    # ── Phase 5 — Certificate available ──────────────────────────────────────
+
+    @classmethod
+    def notify_certificate_available(cls, certificate, patient, sent_by: User | None = None) -> None:
+        """Email + in-app bell to a patient when a medical certificate is issued."""
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
+
+        patient_name = patient.get_full_name()
+        subject = "[Constellab Care] Votre certificat médical est disponible"
+        body = (
+            f"Cher(e) {patient_name},\n\n"
+            f"Votre certificat médical daté du {certificate.issue_date.strftime('%d/%m/%Y')} "
+            f"est maintenant disponible.\n"
+            f"Vous pouvez le consulter et le télécharger depuis votre espace Constellab Care.\n\n"
+            f"Cordialement,\nConstellab Care"
+        )
+        message = f"Votre certificat médical du {certificate.issue_date.strftime('%d/%m/%Y')} est disponible."
+
+        log = None
+        if patient.email:
+            log = cls._create_log(
+                notification_type=NotificationType.CERTIFICATE_AVAILABLE,
+                channel=NotificationChannel.EMAIL,
+                subject=subject,
+                body=body,
+                recipient_email=patient.email,
+                recipient_phone=patient.phone,
+                recipient_name=patient_name,
+                sent_by=sent_by,
+                patient=patient,
+                extra_data={"certificate_id": str(certificate.id)},
+            )
+            success = cls._dispatch(NotificationChannel.EMAIL.value, patient.email, patient.phone, patient_name, subject, body)
+            cls._finalise_log(log, success)
+
+        # Bell to PATIENT role user linked to this patient
+        patient_roles = list(UserCareRole.select().where(
+            UserCareRole.role == CareRole.PATIENT,
+            UserCareRole.linked_patient_id == str(patient.id),
+        ))
+        for role_entry in patient_roles:
+            cls.create_bell(str(role_entry.user_id), message, log=log)
+
     # ── Preferences ───────────────────────────────────────────────────────────
 
     @classmethod
@@ -537,6 +718,134 @@ class NotificationService:
             .where(NotificationBell.user == user_id, NotificationBell.is_read == False)
             .count()
         )
+
+    # ── Phase 2 — Validation workflow notifications ───────────────────────────
+
+    @classmethod
+    def notify_lab_done_to_doctors(cls, program, sent_by: User | None = None) -> None:
+        """Bell notification to every DOCTOR user when a program moves to LAB_DONE.
+
+        Also attempts to send an email to each doctor user if an email address is set.
+        """
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
+
+        campaign_name = program.name
+        message = f"La campagne « {campaign_name} » est prête pour validation Clinic Doctor."
+        subject = f"[Constellab Care] Program pending validation — {program_name}"
+        body = (
+            f"Bonjour,\n\n"
+            f"La campagne « {campaign_name} » a été validée par le laboratoire.\n"
+            f"Tous les résultats sont disponibles et attendent votre validation Clinic Doctor.\n\n"
+            f"Veuillez vous connecter à Constellab Care pour procéder.\n\n"
+            f"Cordialement,\nConstellab Care"
+        )
+
+        log = cls._create_log(
+            notification_type=NotificationType.LAB_DONE,
+            channel=NotificationChannel.IN_APP,
+            subject=subject,
+            body=message,
+            recipient_email=None,
+            recipient_phone=None,
+            recipient_name=None,
+            sent_by=sent_by,
+            extra_data={"program_id": str(program.id)},
+        )
+
+        doctor_roles = list(UserCareRole.select(UserCareRole, UserCareRole.user).join(UserCareRole.user.rel_model).where(
+            UserCareRole.role == CareRole.DOCTOR
+        ))
+
+        for role_entry in doctor_roles:
+            cls.create_bell(str(role_entry.user_id), message, log=log)
+            user = role_entry.user
+            if hasattr(user, "email") and user.email:
+                cls._dispatch(NotificationChannel.EMAIL.value, user.email, None, None, subject, body)
+
+    @classmethod
+    def notify_clinic_validated_to_account_admins(cls, program, sent_by: User | None = None) -> None:
+        """Bell notification to ACCOUNT_ADMIN users of the program's account when clinic validates."""
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
+
+        campaign_name = program.name
+        account_id = str(program.account_id)
+        message = f"La campagne « {campaign_name} » est validée par le Clinic Doctor — vos résultats sont disponibles."
+        subject = f"[Constellab Care] Résultats disponibles — {campaign_name}"
+        body = (
+            f"Bonjour,\n\n"
+            f"La campagne « {campaign_name} » a été validée par le Clinic Doctor.\n"
+            f"Les résultats sont maintenant disponibles pour validation Company Doctor.\n\n"
+            f"Veuillez vous connecter à Constellab Care pour procéder.\n\n"
+            f"Cordialement,\nConstellab Care"
+        )
+
+        log = cls._create_log(
+            notification_type=NotificationType.CAMPAIGN_CLINIC_VALIDATED,
+            channel=NotificationChannel.IN_APP,
+            subject=subject,
+            body=message,
+            recipient_email=None,
+            recipient_phone=None,
+            recipient_name=None,
+            sent_by=sent_by,
+            extra_data={"program_id": str(program.id)},
+        )
+
+        admin_roles = list(UserCareRole.select(UserCareRole, UserCareRole.user).join(UserCareRole.user.rel_model).where(
+            UserCareRole.role == CareRole.ACCOUNT_ADMIN,
+            UserCareRole.linked_account_id == account_id,
+        ))
+
+        for role_entry in admin_roles:
+            cls.create_bell(str(role_entry.user_id), message, log=log)
+            user = role_entry.user
+            if hasattr(user, "email") and user.email:
+                cls._dispatch(NotificationChannel.EMAIL.value, user.email, None, None, subject, body)
+
+    @classmethod
+    def notify_results_available_to_patient(cls, visit, patient, sent_by: User | None = None) -> None:
+        """Email + bell notification to the Patient user when doctor company validates their visit."""
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
+
+        patient_name = patient.get_full_name()
+        message = f"Vos résultats médicaux sont disponibles — visite #{visit.visit_number}."
+        subject = "[Constellab Care] Vos résultats médicaux sont disponibles"
+        body = (
+            f"Cher(e) {patient_name},\n\n"
+            f"Vos résultats médicaux pour la visite #{visit.visit_number} ont été validés "
+            f"par le Company Doctor.\n"
+            f"Vous pouvez les consulter en vous connectant à votre espace Constellab Care.\n\n"
+            f"Cordialement,\nConstellab Care"
+        )
+
+        # Email directly to patient
+        log = None
+        if patient.email:
+            log = cls._create_log(
+                notification_type=NotificationType.RESULTS_AVAILABLE,
+                channel=NotificationChannel.EMAIL,
+                subject=subject,
+                body=body,
+                recipient_email=patient.email,
+                recipient_phone=patient.phone,
+                recipient_name=patient_name,
+                sent_by=sent_by,
+                patient=patient,
+                extra_data={"visit_id": str(visit.id)},
+            )
+            success = cls._dispatch(NotificationChannel.EMAIL.value, patient.email, patient.phone, patient_name, subject, body)
+            cls._finalise_log(log, success)
+
+        # Bell to the PATIENT role user linked to this patient
+        patient_role_entries = list(UserCareRole.select().where(
+            UserCareRole.role == CareRole.PATIENT,
+            UserCareRole.linked_patient_id == str(patient.id),
+        ))
+        for role_entry in patient_role_entries:
+            cls.create_bell(str(role_entry.user_id), message, log=log)
 
     # ── SMTP Configuration ────────────────────────────────────────────────────
 

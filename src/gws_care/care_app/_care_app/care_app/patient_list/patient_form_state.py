@@ -27,6 +27,15 @@ class PatientFormState(FormDialogState, rx.State):
     form_primary_physician_name: str = ""
     form_primary_physician_phone: str = ""
 
+    # New optional fields
+    form_social_security_number: str = ""
+    form_weight: str = ""  # stored as string; converted to float on save
+    form_height: str = ""  # stored as string; converted to float on save
+    form_sex: str = ""  # "M", "F", "Autre" or ""
+    form_notif_email: bool = False
+    form_notif_sms: bool = False
+    form_notif_whatsapp: bool = False
+
     # Set when editing an existing patient
     _editing_patient_id: str = ""
     # Account id of the patient being edited (preserved across updates)
@@ -84,6 +93,34 @@ class PatientFormState(FormDialogState, rx.State):
     def set_form_primary_physician_phone(self, value: str):
         self.form_primary_physician_phone = value
 
+    @rx.event
+    def set_form_social_security_number(self, value: str):
+        self.form_social_security_number = value
+
+    @rx.event
+    def set_form_weight(self, value: str):
+        self.form_weight = value
+
+    @rx.event
+    def set_form_height(self, value: str):
+        self.form_height = value
+
+    @rx.event
+    def set_form_sex(self, value: str):
+        self.form_sex = value
+
+    @rx.event
+    def set_form_notif_email(self, value: bool):
+        self.form_notif_email = value
+
+    @rx.event
+    def set_form_notif_sms(self, value: bool):
+        self.form_notif_sms = value
+
+    @rx.event
+    def set_form_notif_whatsapp(self, value: bool):
+        self.form_notif_whatsapp = value
+
     # ── Dialog open helpers ───────────────────────────────────────────────────
 
     @rx.event
@@ -132,6 +169,21 @@ class PatientFormState(FormDialogState, rx.State):
             self.form_primary_physician_phone = p.primary_physician_phone or ""
             self._form_account_id = str(p.billing_account_id) if p.billing_account_id else ""
 
+            self.form_social_security_number = p.social_security_number or ""
+            self.form_weight = str(p.weight) if p.weight is not None else ""
+            self.form_height = str(p.height) if p.height is not None else ""
+            self.form_sex = p.sex or ""
+            notif = p.notification_preferences or {}
+            if isinstance(notif, str):
+                import json as _json
+                try:
+                    notif = _json.loads(notif)
+                except Exception:
+                    notif = {}
+            self.form_notif_email = bool(notif.get("email", False))
+            self.form_notif_sms = bool(notif.get("sms", False))
+            self.form_notif_whatsapp = bool(notif.get("whatsapp", False))
+
         self.dialog_opened = True
 
     # ── FormDialogState abstract method implementations ───────────────────────
@@ -153,6 +205,13 @@ class PatientFormState(FormDialogState, rx.State):
         self._form_account_id = ""
         self._context_account_id = ""
         self.is_update_mode = False
+        self.form_social_security_number = ""
+        self.form_weight = ""
+        self.form_height = ""
+        self.form_sex = ""
+        self.form_notif_email = False
+        self.form_notif_sms = False
+        self.form_notif_whatsapp = False
 
     async def _create(self, form_data: dict) -> AsyncGenerator:
         """Create a new patient from form data."""
@@ -188,6 +247,15 @@ class PatientFormState(FormDialogState, rx.State):
             primary_physician_name=self.form_primary_physician_name or None,
             primary_physician_phone=self.form_primary_physician_phone or None,
             account_id=self._context_account_id or None,
+            social_security_number=self.form_social_security_number or None,
+            weight=float(self.form_weight) if self.form_weight.strip() else None,
+            height=float(self.form_height) if self.form_height.strip() else None,
+            sex=self.form_sex or None,
+            notification_preferences={
+                "email": self.form_notif_email,
+                "sms": self.form_notif_sms,
+                "whatsapp": self.form_notif_whatsapp,
+            },
         )
 
         async with self:
@@ -238,6 +306,15 @@ class PatientFormState(FormDialogState, rx.State):
             primary_physician_name=self.form_primary_physician_name or None,
             primary_physician_phone=self.form_primary_physician_phone or None,
             account_id=self._form_account_id or None,
+            social_security_number=self.form_social_security_number or None,
+            weight=float(self.form_weight) if self.form_weight.strip() else None,
+            height=float(self.form_height) if self.form_height.strip() else None,
+            sex=self.form_sex or None,
+            notification_preferences={
+                "email": self.form_notif_email,
+                "sms": self.form_notif_sms,
+                "whatsapp": self.form_notif_whatsapp,
+            },
         )
 
         async with self:

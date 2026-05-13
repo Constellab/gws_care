@@ -175,6 +175,86 @@ def _form_fields() -> rx.Component:
             spacing="3",
             width="100%",
         ),
+        rx.separator(width="100%"),
+        rx.text(LanguageState.tr["section_medical_info"], size="2", weight="bold", color="var(--gray-9)"),
+        _field(
+            LanguageState.tr["field_ssn"],
+            rx.input(
+                value=PatientFormState.form_social_security_number,
+                on_change=PatientFormState.set_form_social_security_number,
+                placeholder="1 85 07 75 123 456 78",
+                size="2",
+                width="100%",
+            ),
+        ),
+        rx.grid(
+            _field(
+                LanguageState.tr["field_weight"],
+                rx.input(
+                    value=PatientFormState.form_weight,
+                    on_change=PatientFormState.set_form_weight,
+                    placeholder="70",
+                    type="number",
+                    size="2",
+                    width="100%",
+                ),
+            ),
+            _field(
+                LanguageState.tr["field_height"],
+                rx.input(
+                    value=PatientFormState.form_height,
+                    on_change=PatientFormState.set_form_height,
+                    placeholder="175",
+                    type="number",
+                    size="2",
+                    width="100%",
+                ),
+            ),
+            _field(
+                LanguageState.tr["field_sex"],
+                rx.select.root(
+                    rx.select.trigger(placeholder=LanguageState.tr["select_sex_placeholder"]),
+                    rx.select.content(
+                        rx.select.item(LanguageState.tr["sex_male"], value="M"),
+                        rx.select.item(LanguageState.tr["sex_female"], value="F"),
+                        rx.select.item(LanguageState.tr["sex_other"], value="Autre"),
+                    ),
+                    value=PatientFormState.form_sex,
+                    on_change=PatientFormState.set_form_sex,
+                    size="2",
+                    width="100%",
+                ),
+            ),
+            columns="3",
+            spacing="3",
+            width="100%",
+        ),
+        rx.vstack(
+            rx.text(LanguageState.tr["field_notif_prefs"], size="2", weight="medium"),
+            rx.hstack(
+                rx.checkbox(
+                    LanguageState.tr["notif_email"],
+                    checked=PatientFormState.form_notif_email,
+                    on_change=PatientFormState.set_form_notif_email,
+                    size="2",
+                ),
+                rx.checkbox(
+                    LanguageState.tr["notif_sms"],
+                    checked=PatientFormState.form_notif_sms,
+                    on_change=PatientFormState.set_form_notif_sms,
+                    size="2",
+                ),
+                rx.checkbox(
+                    LanguageState.tr["notif_whatsapp"],
+                    checked=PatientFormState.form_notif_whatsapp,
+                    on_change=PatientFormState.set_form_notif_whatsapp,
+                    size="2",
+                ),
+                spacing="4",
+            ),
+            width="100%",
+            spacing="1",
+        ),
         rx.hstack(
             rx.button(
                 LanguageState.tr["cancel_btn"],
