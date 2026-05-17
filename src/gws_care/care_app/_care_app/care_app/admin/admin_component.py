@@ -7,6 +7,7 @@ from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..notifications.notifications_state import NotificationsState
 from .admin_state import AdminState, EntityOption, UserRoleRowDTO
+from .general_settings_state import GeneralSettingsState
 from .import_component import import_dialog
 from .import_state import ImportState
 
@@ -258,6 +259,55 @@ def _general_tab() -> rx.Component:
                     value=LanguageState.language,
                     on_change=LanguageState.set_language,
                     size="2",
+                ),
+                spacing="3",
+                width="100%",
+            ),
+            width="100%",
+        ),
+        rx.card(
+            rx.vstack(
+                rx.hstack(
+                    rx.icon("list", size=18, color="var(--accent-9)"),
+                    rx.heading("List page size", size="4"),
+                    spacing="2",
+                    align="center",
+                ),
+                rx.text(
+                    "Maximum number of items displayed per page in patient, account, visit and program lists.",
+                    size="2",
+                    color="var(--gray-10)",
+                ),
+                rx.separator(width="100%"),
+                rx.hstack(
+                    rx.select.root(
+                        rx.select.trigger(placeholder="Page size"),
+                        rx.select.content(
+                            rx.select.item("10 items", value="10"),
+                            rx.select.item("25 items", value="25"),
+                            rx.select.item("50 items", value="50"),
+                            rx.select.item("100 items", value="100"),
+                            rx.select.item("200 items", value="200"),
+                        ),
+                        value=GeneralSettingsState.page_size,
+                        on_change=GeneralSettingsState.set_page_size,
+                    ),
+                    rx.button(
+                        "Save",
+                        on_click=GeneralSettingsState.save_page_size_setting,
+                        loading=GeneralSettingsState.is_saving_page_size,
+                        size="2",
+                    ),
+                    rx.cond(
+                        GeneralSettingsState.save_page_size_success != "",
+                        rx.badge(GeneralSettingsState.save_page_size_success, color_scheme="green", size="1"),
+                    ),
+                    rx.cond(
+                        GeneralSettingsState.save_page_size_error != "",
+                        rx.badge(GeneralSettingsState.save_page_size_error, color_scheme="red", size="1"),
+                    ),
+                    spacing="3",
+                    align="center",
                 ),
                 spacing="3",
                 width="100%",
@@ -526,106 +576,6 @@ def _notifications_tab() -> rx.Component:
                     "Save SMTP Settings",
                     on_click=NotificationsState.save_smtp_config,
                     loading=NotificationsState.is_saving_smtp,
-                    size="2",
-                ),
-                spacing="3",
-                width="100%",
-            ),
-            width="100%",
-        ),
-        # ── Brevo configuration ───────────────────────────────────────────────
-        rx.card(
-            rx.vstack(
-                rx.hstack(
-                    rx.icon("message-circle", size=18, color="var(--accent-9)"),
-                    rx.heading("Brevo Configuration", size="4"),
-                    spacing="2",
-                    align="center",
-                ),
-                rx.text(
-                    "Configure Brevo to send emails, SMS, and WhatsApp messages. When a Brevo API key is configured, Brevo is used for email delivery instead of SMTP.",
-                    size="2",
-                    color="var(--gray-10)",
-                ),
-                rx.separator(width="100%"),
-                rx.vstack(
-                    rx.text("API Key Credentials Name", size="2", weight="medium"),
-                    rx.input(
-                        placeholder="e.g. brevo-care",
-                        value=NotificationsState.brevo_credentials_name,
-                        on_change=NotificationsState.set_brevo_credentials_name,
-                        size="2",
-                        width="100%",
-                    ),
-                    rx.text(
-                        "Name of a Constellab Credentials (type Basic) whose password field holds the Brevo API key.",
-                        size="1",
-                        color="var(--gray-9)",
-                    ),
-                    spacing="1",
-                    width="100%",
-                ),
-                rx.grid(
-                    rx.vstack(
-                        rx.text("From Email", size="2", weight="medium"),
-                        rx.input(
-                            placeholder="noreply@example.com",
-                            value=NotificationsState.brevo_from_email,
-                            on_change=NotificationsState.set_brevo_from_email,
-                            type="email",
-                            size="2",
-                            width="100%",
-                        ),
-                        spacing="1",
-                        width="100%",
-                    ),
-                    rx.vstack(
-                        rx.text("From Name", size="2", weight="medium"),
-                        rx.input(
-                            placeholder="Constellab Care",
-                            value=NotificationsState.brevo_from_name,
-                            on_change=NotificationsState.set_brevo_from_name,
-                            size="2",
-                            width="100%",
-                        ),
-                        spacing="1",
-                        width="100%",
-                    ),
-                    columns="2",
-                    spacing="4",
-                    width="100%",
-                ),
-                rx.vstack(
-                    rx.text("SMS / WhatsApp Sender Name", size="2", weight="medium"),
-                    rx.input(
-                        placeholder="ConstellCare",
-                        value=NotificationsState.brevo_sms_sender,
-                        on_change=NotificationsState.set_brevo_sms_sender,
-                        size="2",
-                        max_length=11,
-                        width="200px",
-                    ),
-                    rx.text(
-                        "Alphanumeric sender ID shown on the recipient's device (max 11 characters). Must be registered with Brevo.",
-                        size="1",
-                        color="var(--gray-9)",
-                    ),
-                    spacing="1",
-                    width="100%",
-                ),
-                rx.cond(
-                    NotificationsState.brevo_error != "",
-                    rx.callout(NotificationsState.brevo_error, icon="triangle-alert", color_scheme="red", size="1"),
-                ),
-                rx.cond(
-                    NotificationsState.brevo_success != "",
-                    rx.callout(NotificationsState.brevo_success, icon="check", color_scheme="green", size="1"),
-                ),
-                rx.button(
-                    rx.icon("save", size=14),
-                    "Save Brevo Settings",
-                    on_click=NotificationsState.save_brevo_config,
-                    loading=NotificationsState.is_saving_brevo,
                     size="2",
                 ),
                 spacing="3",

@@ -48,14 +48,11 @@ _APPRECIATION_LABELS = {
 # ── 8.1 — Certificate PDF ─────────────────────────────────────────────────────
 
 def generate_certificate_pdf(certificate_id: str) -> bytes:
-    """Generate a professional medical certificate PDF.
+    """Generate a type-aware professional medical certificate PDF.
 
-    Content:
-    - PSC letterhead + logo placeholder
-    - Patient identity block
-    - Exam date / conclusion / fitness decision
-    - Restrictions (if any)
-    - Doctor signature block
+    Supports all 7 certificate types:
+    - APTITUDE, WORK_STOPPAGE, PRE_EMPLOYMENT, PERIODIC,
+      WORK_ACCIDENT, SIR, VACCINATION
     """
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
@@ -70,15 +67,19 @@ def generate_certificate_pdf(certificate_id: str) -> bytes:
         TableStyle,
     )
 
-    from gws_care.certificate.medical_certificate import MedicalCertificate
+    from gws_care.certificate.medical_certificate import (
+        CERTIFICATE_TYPES,
+        MedicalCertificate,
+    )
     from gws_care.patient.patient import Patient
     from gws_care.user.user import User
 
     cert: MedicalCertificate = MedicalCertificate.get_by_id(certificate_id)
     patient: Patient = Patient.get_by_id(str(cert.patient_id))
+    cert_type = cert.certificate_type or "APTITUDE"
+    type_label = CERTIFICATE_TYPES.get(cert_type, cert_type)
 
     issued_by_name = "—"
-    issued_by_title = ""
     if cert.issued_by_id:
         try:
             u: User = User.get_by_id(str(cert.issued_by_id))
@@ -97,96 +98,157 @@ def generate_certificate_pdf(certificate_id: str) -> bytes:
     )
 
     styles = getSampleStyleSheet()
-    _br = _BLUE_DARK
-    blue_color = colors.Color(*_br)
+    blue_color = colors.Color(*_BLUE_DARK)
 
-    h1 = ParagraphStyle("h1", parent=styles["Heading1"], textColor=blue_color, fontSize=16, spaceAfter=4 * mm)
     h2 = ParagraphStyle("h2", parent=styles["Heading2"], textColor=blue_color, fontSize=12, spaceBefore=6 * mm, spaceAfter=2 * mm)
     body = ParagraphStyle("body", parent=styles["Normal"], fontSize=10, leading=14, spaceAfter=2 * mm)
     small = ParagraphStyle("small", parent=styles["Normal"], fontSize=8, textColor=colors.grey, leading=11)
     bold10 = ParagraphStyle("bold10", parent=styles["Normal"], fontSize=10, fontName="Helvetica-Bold")
     center_big = ParagraphStyle("center_big", parent=styles["Normal"], fontSize=13, fontName="Helvetica-Bold",
                                 textColor=blue_color, alignment=1, spaceBefore=8 * mm, spaceAfter=8 * mm)
+    right_small = ParagraphStyle("right", parent=styles["Normal"], fontSize=9, textColor=colors.grey, alignment=2)
+
+    def _fmt_date(d) -> str:
+        if not d:
+            return "—"
+        if hasattr(d, "strftime"):
+            return d.strftime("%d/%m/%Y")
+        return str(d)
+
+    def _info_table(rows: list[tuple[str, str]]) -> Table:
+        tbl = Table([(r[0], r[1]) for r in rows], colWidths=[5.5 * cm, 11.5 * cm])
+        tbl.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("BACKGROUND", (0, 0), (0, -1), colors.Color(*_BLUE_LIGHT)),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+            ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.lightgrey),
+        ]))
+        return tbl
 
     story: list = []
 
-    # ── Header ────────────────────────────────────────────────────────────────
-    header_data = [
-        [
-            Paragraph("<b>PS CONSULTING</b><br/><font size='9' color='grey'>Occupational Medicine</font>", bold10),
-            Paragraph(
-                "<font size='9' color='grey'>Généré par Constellab Care<br/>"
-                f"Date d'émission : {cert.issue_date.strftime('%d/%m/%Y')}</font>",
-                ParagraphStyle("right", parent=styles["Normal"], fontSize=9, textColor=colors.grey, alignment=2),
-            ),
-        ]
-    ]
-    header_tbl = Table(header_data, colWidths=[9 * cm, 8 * cm])
-    header_tbl.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-    ]))
-    story.append(header_tbl)
+    # ── Letterhead ────────────────────────────────────────────────────────────
+    header_data = [[
+        Paragraph("<b>PS CONSULTING</b><br/><font size='9' color='grey'>Médecine du travail</font>", bold10),
+        Paragraph(
+            f"<font size='9' color='grey'>Généré par Constellab Care<br/>"
+            f"Date d'émission : {_fmt_date(cert.issue_date)}</font>",
+            right_small,
+        ),
+    ]]
+    hdr_tbl = Table(header_data, colWidths=[9 * cm, 8 * cm])
+    hdr_tbl.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (1, 0), (1, 0), "RIGHT")]))
+    story.append(hdr_tbl)
     story.append(HRFlowable(width="100%", thickness=1.5, color=blue_color, spaceAfter=5 * mm))
 
-    # ── Title ─────────────────────────────────────────────────────────────────
-    story.append(Paragraph("CERTIFICAT MÉDICAL D'APTITUDE", center_big))
+    # ── Document title ────────────────────────────────────────────────────────
+    story.append(Paragraph(type_label.upper(), center_big))
 
-    # ── Patient block ─────────────────────────────────────────────────────────
+    # ── Patient identity ──────────────────────────────────────────────────────
     story.append(Paragraph("Identité du patient", h2))
-    dob = str(patient.date_of_birth) if patient.date_of_birth else "—"
-    patient_info = [
-        ["Nom, Prénom", f"{patient.last_name} {patient.first_name}"],
-        ["Date de naissance", dob],
-        ["Numéro patient", patient.patient_number],
-    ]
-    pt_tbl = Table(patient_info, colWidths=[5 * cm, 12 * cm])
-    pt_tbl.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("BACKGROUND", (0, 0), (0, -1), colors.Color(*_BLUE_LIGHT)),
-        ("BOX", (0, 0), (-1, -1), 0.5, colors.lightgrey),
-        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.lightgrey),
+    story.append(_info_table([
+        ("Nom, Prénom", f"{patient.last_name} {patient.first_name}"),
+        ("Date de naissance", _fmt_date(patient.date_of_birth)),
+        ("Numéro patient", patient.patient_number or "—"),
     ]))
-    story.append(pt_tbl)
 
-    # ── Conclusion ────────────────────────────────────────────────────────────
-    story.append(Paragraph("Conclusion médicale", h2))
-    story.append(Paragraph(cert.conclusion or "—", body))
+    # ── Type-specific fields ──────────────────────────────────────────────────
+    if cert_type == "APTITUDE":
+        story.append(Paragraph("Conclusion médicale", h2))
+        story.append(Paragraph(cert.conclusion or "—", body))
+        story.append(Paragraph("Décision d'aptitude", h2))
+        fitness_text = "APTE" if cert.is_fit_for_work else "INAPTE"
+        fitness_color = colors.Color(*_GREEN) if cert.is_fit_for_work else colors.Color(*_RED)
+        story.append(Paragraph(
+            f"<b><font color='{fitness_color.hexval()}'>{fitness_text}</font></b>",
+            ParagraphStyle("fitness", parent=styles["Normal"], fontSize=14, spaceAfter=3 * mm),
+        ))
+        if cert.restrictions:
+            story.append(Paragraph("Restrictions / réserves", h2))
+            story.append(Paragraph(cert.restrictions, body))
 
-    # ── Fitness decision ──────────────────────────────────────────────────────
-    story.append(Paragraph("Décision d'aptitude", h2))
-    fitness_text = "APTE" if cert.is_fit_for_work else "INAPTE"
-    fitness_color = colors.Color(*_GREEN) if cert.is_fit_for_work else colors.Color(*_RED)
-    story.append(Paragraph(
-        f"<b><font color='{fitness_color.hexval()}'>{fitness_text}</font></b>",
-        ParagraphStyle("fitness", parent=styles["Normal"], fontSize=14, spaceAfter=3 * mm),
-    ))
+    elif cert_type == "WORK_STOPPAGE":
+        story.append(Paragraph("Arrêt de travail", h2))
+        story.append(_info_table([
+            ("Date de début", _fmt_date(cert.start_date)),
+            ("Date de fin prévue", _fmt_date(cert.end_date)),
+            ("Date de reprise", _fmt_date(cert.return_date)),
+        ]))
+        story.append(Paragraph("Conclusion médicale", h2))
+        story.append(Paragraph(cert.conclusion or "—", body))
 
-    if cert.restrictions:
-        story.append(Paragraph("Restrictions / réserves", h2))
-        story.append(Paragraph(cert.restrictions, body))
+    elif cert_type in ("PRE_EMPLOYMENT", "PERIODIC"):
+        story.append(Paragraph("Type de visite", h2))
+        subtype_label = cert.visit_subtype or ("Visite d'embauche" if cert_type == "PRE_EMPLOYMENT" else "Visite périodique")
+        story.append(Paragraph(subtype_label, body))
+        story.append(Paragraph("Conclusion médicale", h2))
+        story.append(Paragraph(cert.conclusion or "—", body))
+        story.append(Paragraph("Décision d'aptitude", h2))
+        fitness_text = "APTE" if cert.is_fit_for_work else "INAPTE"
+        fitness_color = colors.Color(*_GREEN) if cert.is_fit_for_work else colors.Color(*_RED)
+        story.append(Paragraph(
+            f"<b><font color='{fitness_color.hexval()}'>{fitness_text}</font></b>",
+            ParagraphStyle("fitness", parent=styles["Normal"], fontSize=14, spaceAfter=3 * mm),
+        ))
+        if cert.restrictions:
+            story.append(Paragraph("Restrictions / réserves", h2))
+            story.append(Paragraph(cert.restrictions, body))
 
-    # ── Signature ─────────────────────────────────────────────────────────────
+    elif cert_type == "WORK_ACCIDENT":
+        story.append(Paragraph("Accident du travail / Maladie professionnelle", h2))
+        story.append(_info_table([
+            ("Date de l'accident / déclaration", _fmt_date(cert.accident_date)),
+            ("Zone corporelle atteinte", cert.body_part or "—"),
+        ]))
+        story.append(Paragraph("Conclusion médicale", h2))
+        story.append(Paragraph(cert.conclusion or "—", body))
+
+    elif cert_type == "SIR":
+        story.append(Paragraph("Suivi Individuel Renforcé", h2))
+        story.append(_info_table([
+            ("Type d'exposition", cert.exposure_type or "—"),
+        ]))
+        story.append(Paragraph("Conclusion médicale", h2))
+        story.append(Paragraph(cert.conclusion or "—", body))
+        story.append(Paragraph("Décision d'aptitude", h2))
+        fitness_text = "APTE" if cert.is_fit_for_work else "INAPTE"
+        fitness_color = colors.Color(*_GREEN) if cert.is_fit_for_work else colors.Color(*_RED)
+        story.append(Paragraph(
+            f"<b><font color='{fitness_color.hexval()}'>{fitness_text}</font></b>",
+            ParagraphStyle("fitness", parent=styles["Normal"], fontSize=14, spaceAfter=3 * mm),
+        ))
+
+    elif cert_type == "VACCINATION":
+        story.append(Paragraph("Vaccination", h2))
+        story.append(_info_table([
+            ("Vaccin", cert.vaccine_name or "—"),
+            ("Numéro de lot", cert.vaccine_lot or "—"),
+            ("Prochaine injection / rappel", _fmt_date(cert.next_booster)),
+        ]))
+        story.append(Paragraph("Conclusion médicale", h2))
+        story.append(Paragraph(cert.conclusion or "—", body))
+
+    else:
+        story.append(Paragraph("Conclusion médicale", h2))
+        story.append(Paragraph(cert.conclusion or "—", body))
+
+    # ── Signature block ───────────────────────────────────────────────────────
     story.append(Spacer(1, 10 * mm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey, spaceAfter=5 * mm))
-
-    sig_data = [
-        [
-            Paragraph(
-                f"<b>{issued_by_name}</b><br/>"
-                f"<font size='9' color='grey'>{issued_by_title or 'Occupational Doctor'}</font><br/><br/>"
-                "<i>(Signature)</i>",
-                ParagraphStyle("sig", parent=styles["Normal"], fontSize=10, alignment=2),
-            )
-        ]
-    ]
-    sig_tbl = Table(sig_data, colWidths=[17 * cm])
+    sig_tbl = Table([[
+        Paragraph(
+            f"<b>{issued_by_name}</b><br/>"
+            "<font size='9' color='grey'>Médecin du travail</font><br/><br/>"
+            "<i>(Signature)</i>",
+            ParagraphStyle("sig", parent=styles["Normal"], fontSize=10, alignment=2),
+        )
+    ]], colWidths=[17 * cm])
     sig_tbl.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "RIGHT")]))
     story.append(sig_tbl)
 
-    # ── Footer note ───────────────────────────────────────────────────────────
+    # ── Confidentiality footer ────────────────────────────────────────────────
     story.append(Spacer(1, 8 * mm))
     story.append(Paragraph(
         "Ce document est confidentiel. Il ne peut être communiqué qu'au salarié concerné "
@@ -708,4 +770,177 @@ def generate_patient_id_card_pdf(patient_id: str) -> bytes:
     )
 
     c.save()
+    return buf.getvalue()
+
+
+# ── 8.4 — Prescription PDF ───────────────────────────────────────────────────
+
+def generate_prescription_pdf(prescription_id: str) -> bytes:
+    """Generate a professional medical prescription PDF.
+
+    Content:
+    - PSC letterhead
+    - Patient identity block
+    - Diagnosis
+    - Drug table (name, dosage, frequency, duration)
+    - General instructions
+    - Doctor signature block
+    """
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import cm, mm
+    from reportlab.platypus import (
+        HRFlowable,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+
+    from gws_care.prescription.prescription import Prescription
+
+    presc: Prescription = Prescription.get_by_id(prescription_id)
+    detail = presc.to_detail_dto()
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        topMargin=2 * cm,
+        bottomMargin=2.5 * cm,
+        leftMargin=2 * cm,
+        rightMargin=2 * cm,
+    )
+
+    styles = getSampleStyleSheet()
+    blue_color = colors.Color(*_BLUE_DARK)
+    blue_light = colors.Color(*_BLUE_LIGHT)
+
+    h2 = ParagraphStyle("h2", parent=styles["Heading2"], textColor=blue_color,
+                         fontSize=11, spaceBefore=5 * mm, spaceAfter=2 * mm)
+    body = ParagraphStyle("body", parent=styles["Normal"], fontSize=10, leading=14, spaceAfter=2 * mm)
+    small = ParagraphStyle("small", parent=styles["Normal"], fontSize=8, textColor=colors.grey, leading=11)
+    bold10 = ParagraphStyle("bold10", parent=styles["Normal"], fontSize=10, fontName="Helvetica-Bold")
+    center_big = ParagraphStyle("center_big", parent=styles["Normal"], fontSize=14,
+                                 fontName="Helvetica-Bold", textColor=blue_color,
+                                 alignment=1, spaceBefore=6 * mm, spaceAfter=6 * mm)
+
+    # Format date dd/mm/yyyy
+    try:
+        from datetime import date as _date
+        d = _date.fromisoformat(detail.prescription_date)
+        date_display = d.strftime("%d/%m/%Y")
+    except Exception:
+        date_display = detail.prescription_date
+
+    story: list = []
+
+    # ── Header ────────────────────────────────────────────────────────────────
+    header_data = [
+        [
+            Paragraph("<b>PS CONSULTING</b><br/><font size='9' color='grey'>Médecine du travail</font>", bold10),
+            Paragraph(
+                f"<font size='9' color='grey'>Généré par Constellab Care<br/>Date : {date_display}</font>",
+                ParagraphStyle("right", parent=styles["Normal"], fontSize=9, textColor=colors.grey, alignment=2),
+            ),
+        ]
+    ]
+    header_tbl = Table(header_data, colWidths=[9 * cm, 8 * cm])
+    header_tbl.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+    ]))
+    story.append(header_tbl)
+    story.append(HRFlowable(width="100%", thickness=1.5, color=blue_color, spaceAfter=4 * mm))
+
+    # ── Title ─────────────────────────────────────────────────────────────────
+    story.append(Paragraph("ORDONNANCE MÉDICALE", center_big))
+
+    # ── Patient block ─────────────────────────────────────────────────────────
+    story.append(Paragraph("Patient", h2))
+    patient_info = [
+        ["Nom, Prénom", detail.patient_name],
+        ["Date de naissance", detail.patient_date_of_birth],
+        ["N° patient", detail.patient_number],
+    ]
+    pt_tbl = Table(patient_info, colWidths=[5 * cm, 12 * cm])
+    pt_tbl.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("BACKGROUND", (0, 0), (0, -1), blue_light),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.lightgrey),
+    ]))
+    story.append(pt_tbl)
+
+    # ── Diagnosis ─────────────────────────────────────────────────────────────
+    if detail.diagnosis:
+        story.append(Paragraph("Diagnostic / Motif", h2))
+        story.append(Paragraph(detail.diagnosis, body))
+
+    # ── Drug table ────────────────────────────────────────────────────────────
+    story.append(Paragraph("Médicaments prescrits", h2))
+    if detail.drugs:
+        drug_header = [
+            Paragraph("<b>Médicament</b>", bold10),
+            Paragraph("<b>Posologie</b>", bold10),
+            Paragraph("<b>Fréquence</b>", bold10),
+            Paragraph("<b>Durée</b>", bold10),
+        ]
+        drug_rows = [drug_header]
+        for drug in detail.drugs:
+            drug_rows.append([
+                Paragraph(drug.name or "—", body),
+                Paragraph(drug.dosage or "—", body),
+                Paragraph(drug.frequency or "—", body),
+                Paragraph(drug.duration or "—", body),
+            ])
+        drug_tbl = Table(drug_rows, colWidths=[5.5 * cm, 4 * cm, 4 * cm, 3.5 * cm])
+        drug_tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), blue_light),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+            ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.lightgrey),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.Color(*_LIGHT_GREY)]),
+        ]))
+        story.append(drug_tbl)
+    else:
+        story.append(Paragraph("Aucun médicament listé.", body))
+
+    # ── Instructions ──────────────────────────────────────────────────────────
+    if detail.instructions:
+        story.append(Paragraph("Instructions générales", h2))
+        story.append(Paragraph(detail.instructions, body))
+
+    # ── Signature ─────────────────────────────────────────────────────────────
+    story.append(Spacer(1, 12 * mm))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey, spaceAfter=5 * mm))
+    sig_data = [
+        [
+            Paragraph(
+                f"<b>{detail.prescribed_by_name}</b><br/>"
+                "<font size='9' color='grey'>Médecin prescripteur</font><br/><br/>"
+                "<i>(Signature)</i>",
+                ParagraphStyle("sig", parent=styles["Normal"], fontSize=10, alignment=2),
+            )
+        ]
+    ]
+    sig_tbl = Table(sig_data, colWidths=[17 * cm])
+    sig_tbl.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "RIGHT")]))
+    story.append(sig_tbl)
+
+    # ── Confidentiality footer ─────────────────────────────────────────────────
+    story.append(Spacer(1, 8 * mm))
+    story.append(Paragraph(
+        "Ordonnance confidentielle — à remettre uniquement au patient concerné. "
+        "Document généré électroniquement par Constellab Care — PS CONSULTING.",
+        small,
+    ))
+
+    doc.build(story)
     return buf.getvalue()

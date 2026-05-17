@@ -3,12 +3,14 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.account_picker_component import account_picker_button, account_picker_dialog
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
+from ..common.patient_picker_component import patient_picker_widget
 from .visit_list_state import (
     AccountOptionDTO,
     CalendarDayDTO,
-    PatientOptionDTO,
+    PatientAccountOption,
     VisitListState,
     VisitRowDTO,
 )
@@ -30,6 +32,13 @@ def _status_badge(status: str) -> rx.Component:
 
 def _visit_row(visit: VisitRowDTO) -> rx.Component:
     return rx.table.row(
+        rx.table.cell(
+            rx.cond(
+                visit.visit_number,
+                rx.text(visit.visit_number, size="2", weight="medium"),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
         rx.table.cell(
             rx.link(
                 visit.patient_name,
@@ -225,16 +234,8 @@ def _calendar_view() -> rx.Component:
     )
 
 
-def _patient_option_item(opt: PatientOptionDTO) -> rx.Component:
-    return rx.box(
-        rx.text(opt.label, size="2"),
-        padding="0.4rem 0.6rem",
-        cursor="pointer",
-        border_radius="var(--radius-2)",
-        width="100%",
-        on_click=lambda: VisitListState.select_new_visit_patient(opt.id, opt.label),
-        _hover={"background": "var(--accent-3)"},
-    )
+def _patient_account_option(option: PatientAccountOption) -> rx.Component:
+    return rx.select.item(option.name, value=option.id)
 
 
 def _new_visit_dialog() -> rx.Component:
@@ -244,32 +245,10 @@ def _new_visit_dialog() -> rx.Component:
             rx.dialog.title(LanguageState.tr["new_visit_form_title"]),
             rx.dialog.description(LanguageState.tr["new_visit_desc"]),
             rx.vstack(
-                # Patient search
+                # Patient picker table
                 rx.vstack(
                     rx.text(LanguageState.tr["field_patient_required"], size="2", weight="medium"),
-                    rx.input(
-                        placeholder=LanguageState.tr["select_patient_placeholder"],
-                        value=VisitListState.new_visit_patient_search,
-                        on_change=VisitListState.search_new_visit_patient,
-                        size="2",
-                        width="100%",
-                        auto_focus=True,
-                    ),
-                    rx.cond(
-                        VisitListState.new_visit_patient_results.length() > 0,
-                        rx.box(
-                            rx.foreach(
-                                VisitListState.new_visit_patient_results,
-                                _patient_option_item,
-                            ),
-                            border="1px solid var(--gray-5)",
-                            border_radius="var(--radius-3)",
-                            max_height="200px",
-                            overflow_y="auto",
-                            width="100%",
-                            padding="0.25rem",
-                        ),
-                    ),
+                    patient_picker_widget(VisitListState),
                     spacing="1",
                     width="100%",
                 ),
@@ -286,22 +265,39 @@ def _new_visit_dialog() -> rx.Component:
                     spacing="1",
                     width="100%",
                 ),
-                # Account select (optional)
-                rx.vstack(
-                    rx.text(LanguageState.tr["col_account_name"], size="2", weight="medium"),
-                    rx.select.root(
-                        rx.select.trigger(placeholder=LanguageState.tr["all_accounts"]),
-                        rx.select.content(
-                            rx.select.item(LanguageState.tr["all_accounts"], value="none"),
-                            rx.foreach(VisitListState.companies, _account_filter_option),
+                # Account selector — only shown once a patient with accounts is selected
+                rx.cond(
+                    VisitListState.picker_selected_id != "",
+                    rx.vstack(
+                        rx.text(LanguageState.tr["col_account_name"], size="2", weight="medium"),
+                        rx.cond(
+                            VisitListState.new_visit_patient_accounts.length() > 0,
+                            rx.select.root(
+                                rx.select.trigger(
+                                    placeholder=LanguageState.tr["select_account_placeholder"]
+                                ),
+                                rx.select.content(
+                                    rx.foreach(
+                                        VisitListState.new_visit_patient_accounts,
+                                        _patient_account_option,
+                                    )
+                                ),
+                                value=VisitListState.new_visit_account_id,
+                                on_change=VisitListState.set_new_visit_account_id,
+                                size="2",
+                                width="100%",
+                            ),
+                            # Patient has no accounts
+                            rx.callout(
+                                LanguageState.tr["no_account_alert_desc"],
+                                icon="triangle-alert",
+                                color_scheme="orange",
+                                size="1",
+                            ),
                         ),
-                        value=VisitListState.new_visit_account_id,
-                        on_change=VisitListState.set_new_visit_account_id,
-                        size="2",
+                        spacing="1",
                         width="100%",
                     ),
-                    spacing="1",
-                    width="100%",
                 ),
                 # Error
                 rx.cond(
@@ -325,6 +321,10 @@ def _new_visit_dialog() -> rx.Component:
                         LanguageState.tr["create_visit_btn"],
                         on_click=VisitListState.save_new_visit,
                         loading=VisitListState.new_visit_is_saving,
+                        disabled=(
+                            (VisitListState.picker_selected_id == "")
+                            | (VisitListState.new_visit_account_id == "")
+                        ),
                     ),
                     spacing="2",
                     width="100%",
@@ -335,9 +335,42 @@ def _new_visit_dialog() -> rx.Component:
             ),
             on_interact_outside=VisitListState.close_new_visit_dialog,
             on_escape_key_down=VisitListState.close_new_visit_dialog,
-            max_width="480px",
+            max_width="700px",
         ),
         open=VisitListState.show_new_visit_dialog,
+    )
+
+
+def _no_account_alert() -> rx.Component:
+    """Alert dialog shown when the selected patient has no linked account."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(LanguageState.tr["no_account_alert_title"]),
+            rx.dialog.description(
+                LanguageState.tr["no_account_alert_desc"],
+                size="2",
+            ),
+            rx.hstack(
+                rx.spacer(),
+                rx.button(
+                    LanguageState.tr["cancel_btn"],
+                    variant="outline",
+                    color_scheme="gray",
+                    on_click=VisitListState.close_no_account_alert,
+                ),
+                rx.button(
+                    LanguageState.tr["go_to_patient_btn"],
+                    on_click=lambda: VisitListState.go_to_patient(VisitListState.no_account_patient_id),
+                ),
+                spacing="2",
+                width="100%",
+                padding_top="1rem",
+            ),
+            on_interact_outside=VisitListState.close_no_account_alert,
+            on_escape_key_down=VisitListState.close_no_account_alert,
+            max_width="480px",
+        ),
+        open=VisitListState.show_no_account_alert,
     )
 
 
@@ -345,6 +378,7 @@ def visit_list_page() -> rx.Component:
     """Visit list page with filters, list and calendar views."""
     return main_component(
         page_layout(
+            account_picker_dialog(VisitListState),
             rx.hstack(
                 rx.heading(LanguageState.tr["visits_page_title"], size="6"),
                 rx.spacer(),
@@ -366,6 +400,7 @@ def visit_list_page() -> rx.Component:
                 spacing="3",
             ),
             _new_visit_dialog(),
+            _no_account_alert(),
             # Filters
             rx.vstack(
                 rx.hstack(
@@ -392,16 +427,7 @@ def visit_list_page() -> rx.Component:
                         on_change=VisitListState.set_filter_status,
                         size="2",
                     ),
-                    rx.select.root(
-                        rx.select.trigger(placeholder=LanguageState.tr["all_accounts"]),
-                        rx.select.content(
-                            rx.select.item(LanguageState.tr["all_accounts"], value="ALL"),
-                            rx.foreach(VisitListState.companies, _account_filter_option),
-                        ),
-                        value=VisitListState.filter_account_id,
-                        on_change=VisitListState.set_filter_account,
-                        size="2",
-                    ),
+                    account_picker_button(VisitListState),
                     spacing="3",
                     wrap="wrap",
                     width="100%",
@@ -471,20 +497,43 @@ def visit_list_page() -> rx.Component:
                     # ── List view ──
                     rx.cond(
                         VisitListState.visits,
-                        rx.table.root(
-                            rx.table.header(
-                                rx.table.row(
-                                    _sortable_header(LanguageState.tr["col_patient"], "patient_name"),
-                                    _sortable_header(LanguageState.tr["col_campaign_account"], "campaign_name"),
-                                    _sortable_header(LanguageState.tr["col_scheduled"], "scheduled_at"),
-                                    _sortable_header(LanguageState.tr["col_status"], "status"),
-                                )
+                        rx.vstack(
+                            rx.table.root(
+                                rx.table.header(
+                                    rx.table.row(
+                                        _sortable_header(LanguageState.tr["col_visit_number"], "visit_number"),
+                                        _sortable_header(LanguageState.tr["col_patient"], "patient_name"),
+                                        _sortable_header(LanguageState.tr["col_campaign_account"], "campaign_name"),
+                                        _sortable_header(LanguageState.tr["col_scheduled"], "scheduled_at"),
+                                        _sortable_header(LanguageState.tr["col_status"], "status"),
+                                    )
+                                ),
+                                rx.table.body(
+                                    rx.foreach(VisitListState.visits, _visit_row),
+                                ),
+                                width="100%",
+                                variant="surface",
                             ),
-                            rx.table.body(
-                                rx.foreach(VisitListState.visits, _visit_row),
+                            rx.cond(
+                                VisitListState.has_more,
+                                rx.center(
+                                    rx.button(
+                                        rx.cond(
+                                            VisitListState.is_loading_more,
+                                            rx.hstack(rx.spinner(size="2"), rx.text("Loading..."), spacing="2"),
+                                            rx.hstack(rx.icon("chevron-down", size=16), rx.text("Load more"), spacing="2"),
+                                        ),
+                                        variant="soft",
+                                        size="2",
+                                        on_click=VisitListState.load_more_visits,
+                                        disabled=VisitListState.is_loading_more,
+                                    ),
+                                    width="100%",
+                                    padding="1rem",
+                                ),
                             ),
                             width="100%",
-                            variant="surface",
+                            spacing="0",
                         ),
                         rx.center(
                             rx.text(LanguageState.tr["no_visits_found"], size="2", color="var(--gray-8)"),

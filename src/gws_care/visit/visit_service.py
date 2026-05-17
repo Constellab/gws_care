@@ -159,6 +159,8 @@ class VisitService:
         account_id: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[Visit]:
         """Return all visits (including program visits without scheduled_at).
 
@@ -187,7 +189,12 @@ class VisitService:
                 Visit.scheduled_at.is_null()
                 | (Visit.scheduled_at <= datetime.fromisoformat(date_to + "T23:59:59"))
             )
-        return list(query.order_by(Visit.created_at.desc()))
+        query = query.order_by(Visit.created_at.desc())
+        if offset:
+            query = query.offset(offset)
+        if limit:
+            query = query.limit(limit)
+        return list(query)
 
     @classmethod
     def create_standalone_visit(cls, dto: SaveStandaloneVisitDTO) -> Visit:

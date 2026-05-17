@@ -25,10 +25,15 @@ class AccountListState(RoleState):
 
     accounts: list[AccountRowDTO] = []
     is_loading: bool = False
+    is_loading_more: bool = False
+    has_more: bool = False
     error_message: str = ""
     search_name: str = ""
     sort_column: str = "name"
     sort_ascending: bool = True
+
+    _page_offset: int = 0
+    _current_page_size: int = 50
 
     @rx.event
     async def on_load(self):
@@ -67,6 +72,12 @@ class AccountListState(RoleState):
         return rx.redirect(f"/account/{account_id}")
 
     @rx.event
+    async def load_more_accounts(self):
+        """Append the next page of accounts to the current list."""
+        self.is_loading_more = True
+        await self._load_accounts(reset=False)
+
+    @rx.event
     async def deactivate_account(self, account_id: str):
         """Mark an account as inactive.
 
@@ -81,24 +92,31 @@ class AccountListState(RoleState):
         except Exception as e:
             self.error_message = f"Error deactivating account: {e}"
 
-    async def _load_accounts(self):
+    async def _load_accounts(self, reset: bool = True):
         """Internal: fetch accounts from DB."""
         if not await self.check_authentication():
             self.error_message = "Authentication required"
             return
 
-        self.is_loading = True
+        if reset:
+            self._page_offset = 0
+            self.is_loading = True
+            from gws_care.core.care_app_config_service import CareAppConfigService
+            self._current_page_size = CareAppConfigService.get_page_size()
         self.error_message = ""
 
         try:
             with await self.authenticate_user():
                 from gws_care.account.account_service import AccountService
-                accounts = AccountService.list_accounts(active_only=False)
-                filtered = [
-                    a for a in accounts
-                    if not self.search_name or self.search_name.lower() in a.name.lower()
-                ]
-                account_rows = [
+                accounts = AccountService.list_accounts(
+                    active_only=False,
+                    name=self.search_name or None,
+                    limit=self._current_page_size + 1,
+                    offset=self._page_offset,
+                )
+                has_more = len(accounts) > self._current_page_size
+                accounts = accounts[:self._current_page_size]
+                new_rows = [
                     AccountRowDTO(
                         id=str(a.id),
                         account_type=a.account_type or "COMPANY",
@@ -109,15 +127,19 @@ class AccountListState(RoleState):
                         contact_name=a.contact_name,
                         is_active=a.is_active,
                     )
-                    for a in filtered
+                    for a in accounts
                 ]
                 sort_col = self.sort_column
+                all_rows = new_rows if reset else self.accounts + new_rows
                 self.accounts = sorted(
-                    account_rows,
+                    all_rows,
                     key=lambda row: "" if getattr(row, sort_col) is None else str(getattr(row, sort_col)).lower(),
                     reverse=not self.sort_ascending,
                 )
+                self.has_more = has_more
+                self._page_offset += self._current_page_size
         except Exception as e:
             self.error_message = f"Error loading accounts: {e}"
         finally:
             self.is_loading = False
+            self.is_loading_more = False

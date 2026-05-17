@@ -15,16 +15,31 @@ class AccountService:
         return account
 
     @classmethod
-    def list_accounts(cls, active_only: bool = True) -> list[Account]:
+    def list_accounts(
+        cls,
+        active_only: bool = True,
+        name: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Account]:
         query = Account.select()
         if active_only:
             query = query.where(Account.is_active == True)
-        return list(query.order_by(Account.name))
+        if name:
+            query = query.where(Account.name.contains(name))
+        query = query.order_by(Account.name)
+        if offset:
+            query = query.offset(offset)
+        if limit:
+            query = query.limit(limit)
+        return list(query)
 
     @classmethod
     def create_account(cls, dto: SaveAccountDTO) -> Account:
         if not dto.name or not dto.name.strip():
             raise BadRequestException("Account name is required")
+        if Account.get_or_none(Account.name == dto.name.strip()) is not None:
+            raise BadRequestException(f"An account named '{dto.name.strip()}' already exists")
         account = Account()
         cls._apply_dto(account, dto)
         account.save()
@@ -33,6 +48,9 @@ class AccountService:
     @classmethod
     def update_account(cls, account_id: str, dto: SaveAccountDTO) -> Account:
         account = cls.get_account(account_id)
+        existing = Account.get_or_none(Account.name == dto.name.strip())
+        if existing is not None and str(existing.id) != str(account_id):
+            raise BadRequestException(f"An account named '{dto.name.strip()}' already exists")
         cls._apply_dto(account, dto)
         account.save()
         return account

@@ -7,6 +7,9 @@ from .account_list.account_list_component import account_list_page
 from .account_list.account_list_state import AccountListState
 from .admin.admin_component import settings_page
 from .admin.admin_state import AdminState
+from .admin.general_settings_state import GeneralSettingsState
+from .certificate_detail.certificate_detail_component import certificate_detail_page
+from .certificate_detail.certificate_detail_state import CertificateDetailState
 from .common.language_state import LanguageState
 from .common.page_layout import page_layout
 from .dashboard.dashboard_component import dashboard_page
@@ -26,6 +29,8 @@ from .patient_portal.patient_portal_component import (
     my_results_page,
 )
 from .patient_portal.patient_portal_state import PatientPortalState
+from .prescription_detail.prescription_detail_component import prescription_detail_page
+from .prescription_detail.prescription_detail_state import PrescriptionDetailState
 from .program_detail.program_detail_component import program_detail_page
 from .program_detail.program_detail_state import ProgramDetailState
 from .program_list.program_list_component import program_list_page
@@ -58,7 +63,10 @@ def _ensure_care_db_tables() -> None:
             return
 
         # Ensure all model modules are imported so CareDbManager has the full model list
+        import gws_care.core.care_app_config  # noqa: F401
         import gws_care.notification.notification_models  # noqa: F401
+        import gws_care.patient.patient_account  # noqa: F401
+        import gws_care.prescription.prescription  # noqa: F401
         import gws_care.user.user_language_pref  # noqa: F401
 
         # 1. CREATE TABLE IF NOT EXISTS for all models
@@ -145,14 +153,12 @@ def _ensure_care_db_tables() -> None:
                 "ALTER TABLE gws_care_account ADD COLUMN account_type VARCHAR(20) NOT NULL DEFAULT 'COMPANY'"
             )
 
-        # Migration 1.2.0 — recipient_phone on notification_log; BrevoConfig table
-        from gws_care.notification.notification_models import BrevoConfig
+        # Migration 1.2.0 — recipient_phone on notification_log
         from gws_care.notification.notification_models import NotificationLog as NLog
         if not NLog.column_exists("recipient_phone"):
             db_manager.db.execute_sql(
                 "ALTER TABLE gws_care_notification_log ADD COLUMN recipient_phone VARCHAR(50) NULL DEFAULT NULL"
             )
-        # BrevoConfig table is created by BaseModelService.create_database_tables above
 
         # Migration 1.3.0 — linked_account_id / linked_patient_id on user_role
         from gws_care.role.user_care_role import UserCareRole
@@ -222,6 +228,100 @@ def _ensure_care_db_tables() -> None:
         except Exception:
             pass
 
+        # Migration 2.0.0 — patient_account join table (patient can belong to multiple accounts)
+        try:
+            cursor = db_manager.db.execute_sql("SHOW TABLES LIKE 'gws_care_patient_account'")
+            has_join_table = cursor.fetchone() is not None
+            if not has_join_table:
+                db_manager.db.execute_sql(
+                    "CREATE TABLE IF NOT EXISTS gws_care_patient_account ("
+                    "  id VARCHAR(36) NOT NULL PRIMARY KEY,"
+                    "  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                    "  last_modified_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                    "  created_by_id VARCHAR(36) NOT NULL,"
+                    "  last_modified_by_id VARCHAR(36) NOT NULL,"
+                    "  patient_id VARCHAR(36) NOT NULL,"
+                    "  account_id VARCHAR(36) NOT NULL,"
+                    "  UNIQUE KEY uniq_patient_account (patient_id, account_id)"
+                    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+                )
+                # Migrate existing billing_account_id links to the new join table
+                if Patient.column_exists("billing_account_id"):
+                    first_user = db_manager.db.execute_sql(
+                        "SELECT id FROM gws_user LIMIT 1"
+                    ).fetchone()
+                    user_id = first_user[0] if first_user else None
+                    if user_id:
+                        db_manager.db.execute_sql(
+                            "INSERT IGNORE INTO gws_care_patient_account"
+                            "  (id, created_at, last_modified_at,"
+                            "   created_by_id, last_modified_by_id, patient_id, account_id)"
+                            " SELECT UUID(), NOW(), NOW(), %s, %s, p.id, p.billing_account_id"
+                            " FROM gws_care_patient p"
+                            " WHERE p.billing_account_id IS NOT NULL"
+                            "   AND p.billing_account_id != ''",
+                            (user_id, user_id),
+                        )
+        except Exception as mig_exc:
+            print(f"[gws_care] Warning: migration 2.0.0 failed: {mig_exc}")
+
+        # ── migration 3.1.0 — unique index on gws_care_account.name ─────────
+        try:
+            from gws_care.account.account import Account
+            idx_rows = db_manager.db.execute_sql(
+                "SELECT COUNT(*) FROM information_schema.statistics "
+                "WHERE table_schema=DATABASE() AND table_name='gws_care_account' "
+                "AND index_name='uniq_account_name'"
+            ).fetchone()
+            if idx_rows[0] == 0:
+                db_manager.db.execute_sql(
+                    "ALTER TABLE gws_care_account ADD UNIQUE INDEX uniq_account_name (name)"
+                )
+        except Exception as mig_exc:
+            print(f"[gws_care] Warning: migration 3.1.0 (account unique name) failed: {mig_exc}")
+
+        # ── migration 3.0.0 — MedicalCertificate extended columns ──────────────
+        try:
+            from gws_care.certificate.medical_certificate import MedicalCertificate
+            _cert_columns = [                ("certificate_type", "VARCHAR(30) NOT NULL DEFAULT 'APTITUDE'"),
+                ("start_date", "DATE NULL DEFAULT NULL"),
+                ("end_date", "DATE NULL DEFAULT NULL"),
+                ("return_date", "DATE NULL DEFAULT NULL"),
+                ("exposure_type", "VARCHAR(120) NULL DEFAULT NULL"),
+                ("vaccine_name", "VARCHAR(120) NULL DEFAULT NULL"),
+                ("vaccine_lot", "VARCHAR(80) NULL DEFAULT NULL"),
+                ("next_booster", "DATE NULL DEFAULT NULL"),
+                ("accident_date", "DATE NULL DEFAULT NULL"),
+                ("body_part", "VARCHAR(120) NULL DEFAULT NULL"),
+                ("visit_subtype", "VARCHAR(80) NULL DEFAULT NULL"),
+            ]
+            for _col_name, _col_def in _cert_columns:
+                if not MedicalCertificate.column_exists(_col_name):
+                    db_manager.db.execute_sql(
+                        f"ALTER TABLE gws_care_medical_certificate ADD COLUMN {_col_name} {_col_def}"
+                    )
+        except Exception as mig_exc:
+            print(f"[gws_care] Warning: migration 3.0.0 (certificates) failed: {mig_exc}")
+
+        # ── migration 3.2.0 — is_archived on prescription and certificate ────
+        try:
+            from gws_care.prescription.prescription import Prescription as _Presc
+            if not _Presc.column_exists("is_archived"):
+                db_manager.db.execute_sql(
+                    "ALTER TABLE gws_care_prescription ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0"
+                )
+        except Exception as mig_exc:
+            print(f"[gws_care] Warning: migration 3.2.0 (prescription.is_archived) failed: {mig_exc}")
+
+        try:
+            from gws_care.certificate.medical_certificate import MedicalCertificate as _Cert
+            if not _Cert.column_exists("is_archived"):
+                db_manager.db.execute_sql(
+                    "ALTER TABLE gws_care_medical_certificate ADD COLUMN is_archived TINYINT(1) NOT NULL DEFAULT 0"
+                )
+        except Exception as mig_exc:
+            print(f"[gws_care] Warning: migration 3.2.0 (certificate.is_archived) failed: {mig_exc}")
+
         # Seed ExamTypeModel from enum (idempotent — skips existing codes)
         # seed_from_enum() uses ModelWithUser which requires an auth context;
         # find the first admin user to provide one.
@@ -286,7 +386,7 @@ def visits():
     return visit_list_page()
 
 
-@rx.page(route="/settings", on_load=[AdminState.on_load, NotificationsState.on_load, LanguageState.on_load])
+@rx.page(route="/settings", on_load=[AdminState.on_load, NotificationsState.on_load, GeneralSettingsState.on_load, LanguageState.on_load])
 def settings():
     """Settings page — import, user roles, and notification configuration."""
     return settings_page()
@@ -350,4 +450,16 @@ def my_documents():
 def terrain():
     """Terrain page — mobile-optimised for Opérateur Terrain."""
     return terrain_page()
+
+
+@rx.page(route="/prescription/[prescription_id_param]", on_load=[PrescriptionDetailState.on_load])
+def prescription_detail():
+    """Prescription detail page."""
+    return prescription_detail_page()
+
+
+@rx.page(route="/certificate/[certificate_id_param]", on_load=[CertificateDetailState.on_load])
+def certificate_detail():
+    """Certificate detail page."""
+    return certificate_detail_page()
 

@@ -130,6 +130,20 @@ class BulkImportService:
         if gender not in _VALID_GENDERS:
             errors.append("gender must be M, F or Other")
 
+        weight_str = row.get("weight", "").strip()
+        if weight_str:
+            try:
+                float(weight_str)
+            except ValueError:
+                errors.append("weight must be a number (kg)")
+
+        height_str = row.get("height", "").strip()
+        if height_str:
+            try:
+                float(height_str)
+            except ValueError:
+                errors.append("height must be a number (cm)")
+
         return RowValidationResult(
             row_num=row_num,
             row_data=row,
@@ -170,8 +184,16 @@ class BulkImportService:
         account_name = (row_data.get("account_name") or "").strip()
         if account_name:
             account = Account.get_or_none(Account.name == account_name)
-            if account:
-                account_id = str(account.id)
+            if account is None:
+                raise ValueError(
+                    f"Account '{account_name}' not found. "
+                    "Import accounts first or check the spelling."
+                )
+            account_id = str(account.id)
+
+        def _parse_float(key: str):
+            v = row_data.get(key, "").strip()
+            return float(v) if v else None
 
         dto = SavePatientDTO(
             last_name=row_data.get("last_name", "").strip(),
@@ -187,6 +209,9 @@ class BulkImportService:
             primary_physician_name=row_data.get("primary_physician_name", "").strip() or None,
             primary_physician_phone=row_data.get("primary_physician_phone", "").strip() or None,
             account_id=account_id,
+            social_security_number=row_data.get("social_security_number", "").strip() or None,
+            weight=_parse_float("weight"),
+            height=_parse_float("height"),
         )
         PatientService.create_patient(dto)
 

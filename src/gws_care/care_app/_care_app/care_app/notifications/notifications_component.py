@@ -3,13 +3,13 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.account_picker_component import account_picker_button, account_picker_dialog
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
+from ..common.patient_picker_component import patient_picker_button, patient_picker_dialog
 from .notifications_state import (
-    AccountOption,
     NotificationLogRow,
     NotificationsState,
-    PatientOption,
 )
 
 # ── Status / type badges ──────────────────────────────────────────────────────
@@ -38,8 +38,6 @@ def _channel_badge(channel: str) -> rx.Component:
     return rx.match(
         channel,
         ("EMAIL", rx.badge(LanguageState.tr["notif_channel_email"], color_scheme="blue", variant="soft", size="1")),
-        ("SMS", rx.badge(LanguageState.tr["notif_channel_sms"], color_scheme="orange", variant="soft", size="1")),
-        ("WHATSAPP", rx.badge(LanguageState.tr["notif_channel_whatsapp"], color_scheme="green", variant="soft", size="1")),
         rx.badge(channel, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -150,14 +148,6 @@ def _history_tab() -> rx.Component:
 
 # ── Compose tab ───────────────────────────────────────────────────────────────
 
-def _patient_option(p: PatientOption) -> rx.Component:
-    return rx.select.item(p.display, value=p.id)
-
-
-def _account_option(a: AccountOption) -> rx.Component:
-    return rx.select.item(a.name, value=a.id)
-
-
 def _compose_tab() -> rx.Component:
     return rx.vstack(
         rx.card(
@@ -182,74 +172,39 @@ def _compose_tab() -> rx.Component:
                     spacing="3",
                     align="center",
                 ),
-                # Channel selector
-                rx.hstack(
-                    rx.text(LanguageState.tr["channel_label"], size="2", weight="medium"),
-                    rx.segmented_control.root(
-                        rx.segmented_control.item(LanguageState.tr["channel_email"], value="EMAIL"),
-                        rx.segmented_control.item(LanguageState.tr["channel_sms"], value="SMS"),
-                        rx.segmented_control.item(LanguageState.tr["channel_whatsapp"], value="WHATSAPP"),
-                        value=NotificationsState.compose_channel,
-                        on_change=NotificationsState.set_compose_channel,
-                        size="2",
-                    ),
-                    spacing="3",
-                    align="center",
-                ),
                 # Recipient selector
                 rx.cond(
                     NotificationsState.compose_mode == "patient",
                     rx.vstack(
                         rx.text(LanguageState.tr["send_to_patient"], size="2", weight="medium"),
-                        rx.select.root(
-                            rx.select.trigger(placeholder=LanguageState.tr["select_patient_notif"]),
-                            rx.select.content(
-                                rx.foreach(NotificationsState.patients, _patient_option)
-                            ),
-                            value=NotificationsState.compose_patient_id,
-                            on_change=NotificationsState.set_compose_patient,
-                            size="2",
-                            width="100%",
-                        ),
-                        spacing="1",
+                        patient_picker_button(NotificationsState),
+                        spacing="2",
                         width="100%",
                     ),
                     rx.vstack(
                         rx.text(LanguageState.tr["send_to_account"], size="2", weight="medium"),
-                        rx.select.root(
-                            rx.select.trigger(placeholder=LanguageState.tr["select_account_notif"]),
-                            rx.select.content(
-                                rx.foreach(NotificationsState.accounts, _account_option)
-                            ),
-                            value=NotificationsState.compose_account_id,
-                            on_change=NotificationsState.set_compose_account,
-                            size="2",
-                            width="100%",
-                        ),
+                        account_picker_button(NotificationsState),
                         rx.text(
                             LanguageState.tr["account_patients_note"],
                             size="1",
                             color="var(--gray-9)",
                         ),
-                        spacing="1",
+                        spacing="2",
                         width="100%",
                     ),
                 ),
-                # Subject (email only)
-                rx.cond(
-                    NotificationsState.compose_channel == "EMAIL",
-                    rx.vstack(
-                        rx.text(LanguageState.tr["subject_label"], size="2", weight="medium"),
-                        rx.input(
-                            placeholder=LanguageState.tr["subject_placeholder"],
-                            value=NotificationsState.compose_subject,
-                            on_change=NotificationsState.set_compose_subject,
-                            size="2",
-                            width="100%",
-                        ),
-                        spacing="1",
+                # Subject
+                rx.vstack(
+                    rx.text(LanguageState.tr["subject_label"], size="2", weight="medium"),
+                    rx.input(
+                        placeholder=LanguageState.tr["subject_placeholder"],
+                        value=NotificationsState.compose_subject,
+                        on_change=NotificationsState.set_compose_subject,
+                        size="2",
                         width="100%",
                     ),
+                    spacing="1",
+                    width="100%",
                 ),
                 # Body
                 rx.vstack(
@@ -297,6 +252,8 @@ def _compose_tab() -> rx.Component:
 def notifications_page() -> rx.Component:
     return main_component(
         page_layout(
+            account_picker_dialog(NotificationsState),
+            patient_picker_dialog(NotificationsState),
             rx.hstack(
                 rx.icon("bell", size=22, color="var(--accent-9)"),
                 rx.heading(LanguageState.tr["notifications_page_title"], size="6"),

@@ -13,7 +13,7 @@ class Account(ModelWithUser):
     """
 
     account_type: str = CharField(max_length=20, default="COMPANY", null=False)
-    name: str = CharField(max_length=255, null=False)
+    name: str = CharField(max_length=255, null=False, unique=True)
     registration_number: str = CharField(max_length=100, null=True)
     address: str = CharField(max_length=500, null=True)
     postal_code: str = CharField(max_length=20, null=True)

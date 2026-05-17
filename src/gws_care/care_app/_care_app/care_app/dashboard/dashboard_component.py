@@ -3,10 +3,10 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.account_picker_component import account_picker_button, account_picker_dialog
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .dashboard_state import (
-    AccountOptionDTO,
     AppointmentStatusStat,
     DashboardState,
     ExamTypeStat,
@@ -127,27 +127,15 @@ def _panel(title: str, icon: str, *content: rx.Component) -> rx.Component:
     )
 
 
-def _account_filter_option(account: AccountOptionDTO) -> rx.Component:
-    return rx.select.item(account.name, value=account.id)
-
-
 def dashboard_page() -> rx.Component:
     """Main dashboard with aggregated statistics."""
     return main_component(
         page_layout(
+            account_picker_dialog(DashboardState),
             rx.hstack(
                 rx.heading(LanguageState.tr["dashboard_title"], size="6"),
                 rx.spacer(),
-                rx.select.root(
-                    rx.select.trigger(placeholder=LanguageState.tr["all_accounts"]),
-                    rx.select.content(
-                        rx.select.item(LanguageState.tr["all_accounts"], value="ALL"),
-                        rx.foreach(DashboardState.companies, _account_filter_option),
-                    ),
-                    value=DashboardState.filter_account_id,
-                    on_change=DashboardState.set_filter_account,
-                    size="2",
-                ),
+                account_picker_button(DashboardState),
                 width="100%",
                 align="center",
             ),

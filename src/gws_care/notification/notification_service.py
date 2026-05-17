@@ -1,11 +1,10 @@
-"""Notification service: send emails, SMS, WhatsApp via Brevo or SMTP, store logs."""
+"""Notification service: send emails via SMTP, store logs."""
 
 from __future__ import annotations
 
 from gws_core import BadRequestException
 
 from gws_care.notification.notification_dto import (
-    BrevoConfigDTO,
     NotificationPreferenceDTO,
     SendCustomMessageDTO,
     SendManualNotificationDTO,
@@ -86,123 +85,74 @@ class NotificationService:
             print(f"[NotificationService] Email send failed to {to_email}: {exc}")
             return False
 
-    # ── Brevo helpers ─────────────────────────────────────────────────────────
-
     @classmethod
-    def _get_brevo_api_key(cls) -> str | None:
-        """Resolve the Brevo API key from Constellab Credentials. Returns None if not configured."""
-        from gws_care.notification.notification_models import BrevoConfig
-        config = BrevoConfig.get_or_none()
-        if config is None or not config.credentials_name:
-            return None
-        try:
-            from gws_core.credentials.credentials import Credentials
-            from gws_core.credentials.credentials_type import CredentialsType
-            creds = Credentials.find_by_name_and_check(config.credentials_name, CredentialsType.BASIC)
-            basic = creds.get_data_object()
-            return basic.password
-        except Exception as exc:
-            print(f"[NotificationService] Could not load Brevo credentials: {exc}")
-            return None
-
-    @classmethod
-    def _send_brevo_email(cls, to_email: str, to_name: str | None, subject: str, body: str) -> bool:
-        """Send a transactional email via the Brevo API."""
-        import json
-        import urllib.request
-
-        api_key = cls._get_brevo_api_key()
-        if not api_key:
-            print("[NotificationService] Brevo API key not configured — email not sent.")
-            return False
-
-        from gws_care.notification.notification_models import BrevoConfig
-        config = BrevoConfig.get_or_none()
-        from_email = (config.from_email if config else None) or "noreply@constellab.care"
-        from_name = (config.from_name if config else None) or "Constellab Care"
-
-        payload = json.dumps({
-            "sender": {"name": from_name, "email": from_email},
-            "to": [{"email": to_email, "name": to_name or ""}],
-            "subject": subject,
-            "textContent": body,
-        }).encode("utf-8")
+    def _send_email_with_attachment(
+        cls,
+        to_email: str,
+        subject: str,
+        body: str,
+        pdf_bytes: bytes,
+        filename: str,
+    ) -> bool:
+        """Send an email with a PDF attachment via the configured SMTP server."""
+        import smtplib
+        from email import encoders
+        from email.mime.base import MIMEBase
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
 
         try:
-            req = urllib.request.Request(
-                "https://api.brevo.com/v3/smtp/email",
-                data=payload,
-                headers={"api-key": api_key, "content-type": "application/json", "accept": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return resp.status < 300
+            from gws_care.notification.notification_models import SmtpConfig
+            config = SmtpConfig.get_or_none()
+            if config is None or not config.host:
+                print("[NotificationService] No SMTP host configured — email not sent.")
+                return False
+
+            from_addr = config.from_email or config.username or "noreply@constellab.care"
+            from_name = config.from_name or "Constellab Care"
+
+            msg = MIMEMultipart()
+            msg["Subject"] = subject
+            msg["From"] = f"{from_name} <{from_addr}>"
+            msg["To"] = to_email
+            msg.attach(MIMEText(body, "plain", "utf-8"))
+
+            part = MIMEBase("application", "pdf")
+            part.set_payload(pdf_bytes)
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", "attachment", filename=filename)
+            msg.attach(part)
+
+            port = config.port if config.port else 587
+            if config.use_tls:
+                server = smtplib.SMTP(config.host, port, timeout=15)
+                server.starttls()
+            else:
+                server = smtplib.SMTP(config.host, port, timeout=15)
+
+            smtp_username = config.username
+            smtp_password = None
+            if config.credentials_name:
+                try:
+                    from gws_core.credentials.credentials import Credentials
+                    from gws_core.credentials.credentials_type import CredentialsType
+                    creds = Credentials.find_by_name_and_check(
+                        config.credentials_name, CredentialsType.BASIC
+                    )
+                    basic = creds.get_data_object()
+                    smtp_username = basic.username or smtp_username
+                    smtp_password = basic.password
+                except Exception as cred_exc:
+                    print(f"[NotificationService] Could not load credentials '{config.credentials_name}': {cred_exc}")
+
+            if smtp_username and smtp_password:
+                server.login(smtp_username, smtp_password)
+
+            server.sendmail(from_addr, [to_email], msg.as_string())
+            server.quit()
+            return True
         except Exception as exc:
-            print(f"[NotificationService] Brevo email failed to {to_email}: {exc}")
-            return False
-
-    @classmethod
-    def _send_brevo_sms(cls, to_phone: str, body: str) -> bool:
-        """Send a transactional SMS via the Brevo API. to_phone must be E.164 (e.g. +33612345678)."""
-        import json
-        import urllib.request
-
-        api_key = cls._get_brevo_api_key()
-        if not api_key:
-            print("[NotificationService] Brevo API key not configured — SMS not sent.")
-            return False
-
-        from gws_care.notification.notification_models import BrevoConfig
-        config = BrevoConfig.get_or_none()
-        sender = (config.sms_sender if config else None) or "ConstellCare"
-
-        payload = json.dumps({
-            "sender": sender,
-            "recipient": to_phone,
-            "content": body,
-            "type": "transactional",
-        }).encode("utf-8")
-
-        try:
-            req = urllib.request.Request(
-                "https://api.brevo.com/v3/transactionalSMS/sms",
-                data=payload,
-                headers={"api-key": api_key, "content-type": "application/json", "accept": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return resp.status < 300
-        except Exception as exc:
-            print(f"[NotificationService] Brevo SMS failed to {to_phone}: {exc}")
-            return False
-
-    @classmethod
-    def _send_brevo_whatsapp(cls, to_phone: str, body: str) -> bool:
-        """Send a transactional WhatsApp message via the Brevo API. to_phone must be E.164."""
-        import json
-        import urllib.request
-
-        api_key = cls._get_brevo_api_key()
-        if not api_key:
-            print("[NotificationService] Brevo API key not configured — WhatsApp not sent.")
-            return False
-
-        payload = json.dumps({
-            "recipientPhoneNumber": to_phone,
-            "text": body,
-        }).encode("utf-8")
-
-        try:
-            req = urllib.request.Request(
-                "https://api.brevo.com/v3/whatsapp/sendMessage",
-                data=payload,
-                headers={"api-key": api_key, "content-type": "application/json", "accept": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return resp.status < 300
-        except Exception as exc:
-            print(f"[NotificationService] Brevo WhatsApp failed to {to_phone}: {exc}")
+            print(f"[NotificationService] Email (with attachment) send failed to {to_email}: {exc}")
             return False
 
     @classmethod
@@ -215,27 +165,26 @@ class NotificationService:
         subject: str,
         body: str,
     ) -> bool:
-        """Route a message to the appropriate transport based on channel."""
-        if channel == NotificationChannel.SMS.value:
-            if not to_phone:
-                print("[NotificationService] SMS requested but no phone number available.")
-                return False
-            return cls._send_brevo_sms(to_phone, body)
-        elif channel == NotificationChannel.WHATSAPP.value:
-            if not to_phone:
-                print("[NotificationService] WhatsApp requested but no phone number available.")
-                return False
-            return cls._send_brevo_whatsapp(to_phone, body)
+        """Route an email message via SMTP."""
+        # Only EMAIL channel is supported
+        if to_email:
+            return cls._send_email(to_email, subject, body)
         else:
-            # Default: email — try Brevo first, fall back to SMTP
-            brevo_key = cls._get_brevo_api_key()
-            if brevo_key and to_email:
-                return cls._send_brevo_email(to_email, to_name, subject, body)
-            elif to_email:
-                return cls._send_email(to_email, subject, body)
-            else:
-                print("[NotificationService] Email requested but no email address available.")
-                return False
+            print("[NotificationService] Email requested but no email address available.")
+            return False
+
+    @classmethod
+    def _dispatch_with_pdf(
+        cls,
+        to_email: str,
+        to_name: str | None,
+        subject: str,
+        body: str,
+        pdf_bytes: bytes,
+        filename: str,
+    ) -> bool:
+        """Send email with PDF attachment via SMTP."""
+        return cls._send_email_with_attachment(to_email, subject, body, pdf_bytes, filename)
 
     # ── Logging helpers ───────────────────────────────────────────────────────
 
@@ -282,7 +231,7 @@ class NotificationService:
 
     @classmethod
     def send_to_patient(cls, dto: SendCustomMessageDTO, sent_by: User) -> NotificationLog:
-        """Send a message to a single patient via the requested channel."""
+        """Send an email message to a single patient."""
         from gws_care.patient.patient_service import PatientService
 
         if not dto.subject.strip():
@@ -290,21 +239,16 @@ class NotificationService:
         if not dto.body.strip():
             raise BadRequestException("Message body is required")
 
-        channel = dto.channel or NotificationChannel.EMAIL.value
         patient = PatientService.get_patient(dto.patient_id)
 
-        if channel == NotificationChannel.EMAIL.value and not patient.email:
+        if not patient.email:
             raise BadRequestException(
                 f"Patient {patient.get_full_name()} has no email address configured."
-            )
-        if channel in (NotificationChannel.SMS.value, NotificationChannel.WHATSAPP.value) and not patient.phone:
-            raise BadRequestException(
-                f"Patient {patient.get_full_name()} has no phone number configured."
             )
 
         log = cls._create_log(
             notification_type=NotificationType.MANUAL_PATIENT,
-            channel=NotificationChannel(channel),
+            channel=NotificationChannel.EMAIL,
             subject=dto.subject,
             body=dto.body,
             recipient_email=patient.email,
@@ -313,13 +257,61 @@ class NotificationService:
             sent_by=sent_by,
             patient=patient,
         )
-        success = cls._dispatch(channel, patient.email, patient.phone, patient.get_full_name(), dto.subject, dto.body)
+        success = cls._dispatch(
+            NotificationChannel.EMAIL.value,
+            patient.email,
+            patient.phone,
+            patient.get_full_name(),
+            dto.subject,
+            dto.body,
+        )
+        cls._finalise_log(log, success)
+        return log
+
+    @classmethod
+    def send_pdf_to_patient(
+        cls,
+        patient_id: str,
+        subject: str,
+        body: str,
+        pdf_bytes: bytes,
+        filename: str,
+        sent_by: User | None = None,
+    ) -> NotificationLog:
+        """Send an email with a PDF attachment to a patient."""
+        from gws_care.patient.patient_service import PatientService
+
+        patient = PatientService.get_patient(patient_id)
+        if not patient.email:
+            raise BadRequestException(
+                f"Patient {patient.get_full_name()} has no email address configured."
+            )
+
+        log = cls._create_log(
+            notification_type=NotificationType.MANUAL_PATIENT,
+            channel=NotificationChannel.EMAIL,
+            subject=subject,
+            body=body,
+            recipient_email=patient.email,
+            recipient_phone=patient.phone,
+            recipient_name=patient.get_full_name(),
+            sent_by=sent_by,
+            patient=patient,
+        )
+        success = cls._dispatch_with_pdf(
+            patient.email,
+            patient.get_full_name(),
+            subject,
+            body,
+            pdf_bytes,
+            filename,
+        )
         cls._finalise_log(log, success)
         return log
 
     @classmethod
     def send_to_account(cls, dto: SendManualNotificationDTO, sent_by: User) -> list[NotificationLog]:
-        """Send a message to all patients linked to an account via the requested channel."""
+        """Send an email message to all patients linked to an account."""
         from gws_care.account.account_service import AccountService
         from gws_care.patient.patient_service import PatientService
 
@@ -330,21 +322,17 @@ class NotificationService:
         if not dto.account_id:
             raise BadRequestException("Account is required")
 
-        channel = dto.channel or NotificationChannel.EMAIL.value
         account = AccountService.get_account(dto.account_id)
         patients = PatientService.list_patients_for_account(dto.account_id)
         logs = []
 
         for patient in patients:
-            use_phone = channel in (NotificationChannel.SMS.value, NotificationChannel.WHATSAPP.value)
-            if use_phone and not patient.phone:
-                continue
-            if not use_phone and not patient.email:
+            if not patient.email:
                 continue
 
             log = cls._create_log(
                 notification_type=NotificationType.MANUAL_ACCOUNT,
-                channel=NotificationChannel(channel),
+                channel=NotificationChannel.EMAIL,
                 subject=dto.subject,
                 body=dto.body,
                 recipient_email=patient.email,
@@ -354,7 +342,14 @@ class NotificationService:
                 patient=patient,
                 account=account,
             )
-            success = cls._dispatch(channel, patient.email, patient.phone, patient.get_full_name(), dto.subject, dto.body)
+            success = cls._dispatch(
+                NotificationChannel.EMAIL.value,
+                patient.email,
+                patient.phone,
+                patient.get_full_name(),
+                dto.subject,
+                dto.body,
+            )
             cls._finalise_log(log, success)
             logs.append(log)
 
@@ -885,35 +880,5 @@ class NotificationService:
         record.from_name = dto.from_name
         record.save()
 
-    # ── Brevo Configuration ───────────────────────────────────────────────────
-
-    @classmethod
-    def get_brevo_config(cls) -> BrevoConfigDTO:
-        """Return the current Brevo configuration as a BrevoConfigDTO."""
-        from gws_care.notification.notification_models import BrevoConfig
-
-        record = BrevoConfig.get_or_none()
-        if record is None:
-            return BrevoConfigDTO()
-        return BrevoConfigDTO(
-            credentials_name=record.credentials_name or "",
-            from_email=record.from_email or "",
-            from_name=record.from_name or "",
-            sms_sender=record.sms_sender or "",
-        )
-
-    @classmethod
-    def save_brevo_config(cls, dto: BrevoConfigDTO) -> None:
-        """Persist the Brevo configuration (creates or updates the singleton record)."""
-        from gws_care.notification.notification_models import BrevoConfig
-
-        record = BrevoConfig.get_or_none()
-        if record is None:
-            record = BrevoConfig()
-        record.credentials_name = dto.credentials_name
-        record.from_email = dto.from_email
-        record.from_name = dto.from_name
-        record.sms_sender = dto.sms_sender
-        record.save()
 
 

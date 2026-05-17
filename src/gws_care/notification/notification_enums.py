@@ -5,8 +5,6 @@ from enum import Enum
 
 class NotificationChannel(str, Enum):
     EMAIL = "EMAIL"
-    SMS = "SMS"
-    WHATSAPP = "WHATSAPP"
     IN_APP = "IN_APP"
 
 

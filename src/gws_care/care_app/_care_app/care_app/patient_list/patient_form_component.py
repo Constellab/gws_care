@@ -4,7 +4,97 @@ import reflex as rx
 from gws_reflex_base import form_dialog_component
 
 from ..common.language_state import LanguageState
-from .patient_form_state import PatientFormState
+from .patient_form_state import AccountPickerRowDTO, PatientFormState
+
+
+def _account_picker_row(account: AccountPickerRowDTO) -> rx.Component:
+    """One row in the account picker table inside the patient form."""
+    return rx.table.row(
+        rx.table.cell(rx.text(account.name, size="2", weight="medium")),
+        rx.table.cell(
+            rx.cond(
+                account.city,
+                rx.text(account.city, size="2"),
+                rx.text("—", size="2", color="var(--gray-8)"),
+            )
+        ),
+        _hover={"background_color": "var(--accent-2)", "cursor": "pointer"},
+        on_click=lambda: PatientFormState.acct_picker_confirm(account.id, account.name),
+    )
+
+
+def _account_picker_dialog() -> rx.Component:
+    """Account picker dialog embedded in the patient form."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(LanguageState.tr["acct_picker_title"]),
+            rx.vstack(
+                rx.input(
+                    rx.input.slot(rx.icon("search", size=14)),
+                    placeholder=LanguageState.tr["acct_picker_filter_placeholder"],
+                    value=PatientFormState.acct_picker_filter,
+                    on_change=PatientFormState.acct_picker_set_filter,
+                    size="2",
+                    width="100%",
+                ),
+                rx.cond(
+                    PatientFormState.acct_picker_error != "",
+                    rx.callout(
+                        PatientFormState.acct_picker_error,
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
+                    ),
+                ),
+                rx.cond(
+                    PatientFormState.acct_picker_is_loading,
+                    rx.center(rx.spinner(size="2"), padding="1.5rem"),
+                    rx.cond(
+                        PatientFormState.acct_picker_accounts.length() > 0,
+                        rx.box(
+                            rx.table.root(
+                                rx.table.header(
+                                    rx.table.row(
+                                        rx.table.column_header_cell(LanguageState.tr["col_account_name"]),
+                                        rx.table.column_header_cell(LanguageState.tr["field_city"]),
+                                    )
+                                ),
+                                rx.table.body(
+                                    rx.foreach(PatientFormState.acct_picker_accounts, _account_picker_row)
+                                ),
+                                width="100%",
+                                variant="surface",
+                            ),
+                            max_height="320px",
+                            overflow_y="auto",
+                            width="100%",
+                        ),
+                        rx.center(
+                            rx.text(LanguageState.tr["no_accounts_found"], size="2", color="var(--gray-9)"),
+                            padding="1.5rem",
+                        ),
+                    ),
+                ),
+                rx.hstack(
+                    rx.button(
+                        LanguageState.tr["cancel_btn"],
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=PatientFormState.close_account_picker,
+                    ),
+                    justify="end",
+                    width="100%",
+                ),
+                spacing="3",
+                width="100%",
+            ),
+            on_interact_outside=PatientFormState.close_account_picker,
+            on_escape_key_down=PatientFormState.close_account_picker,
+            max_width="500px",
+        ),
+        open=PatientFormState.acct_picker_is_open,
+    )
+
 
 
 def _field(label: str, input_component: rx.Component) -> rx.Component:
@@ -20,6 +110,9 @@ def _field(label: str, input_component: rx.Component) -> rx.Component:
 def _form_fields() -> rx.Component:
     """Build the form content with all patient fields."""
     return rx.vstack(
+        # The account picker dialog is nested here so it lives inside the
+        # outer form dialog's DOM tree — required for Radix nested dialogs.
+        _account_picker_dialog(),
         rx.grid(
             _field(
                 LanguageState.tr["field_last_name"],
@@ -176,6 +269,38 @@ def _form_fields() -> rx.Component:
             width="100%",
         ),
         rx.separator(width="100%"),
+        rx.text(LanguageState.tr["section_account"], size="2", weight="bold", color="var(--gray-9)"),
+        _field(
+            LanguageState.tr["field_account_optional"],
+            rx.hstack(
+                rx.button(
+                    rx.icon("building-2", size=14),
+                    rx.cond(
+                        PatientFormState.form_account_id != "",
+                        rx.text(PatientFormState.form_account_name, size="2"),
+                        rx.text(LanguageState.tr["select_account_placeholder"], size="2"),
+                    ),
+                    on_click=PatientFormState.open_account_picker,
+                    variant=rx.cond(PatientFormState.form_account_id != "", "soft", "outline"),
+                    size="2",
+                    type="button",
+                ),
+                rx.cond(
+                    PatientFormState.form_account_id != "",
+                    rx.icon_button(
+                        rx.icon("x", size=12),
+                        on_click=PatientFormState.acct_picker_clear,
+                        variant="ghost",
+                        color_scheme="gray",
+                        size="2",
+                        type="button",
+                    ),
+                ),
+                spacing="2",
+                align="center",
+            ),
+        ),
+        rx.separator(width="100%"),
         rx.text(LanguageState.tr["section_medical_info"], size="2", weight="bold", color="var(--gray-9)"),
         _field(
             LanguageState.tr["field_ssn"],
@@ -210,22 +335,7 @@ def _form_fields() -> rx.Component:
                     width="100%",
                 ),
             ),
-            _field(
-                LanguageState.tr["field_sex"],
-                rx.select.root(
-                    rx.select.trigger(placeholder=LanguageState.tr["select_sex_placeholder"]),
-                    rx.select.content(
-                        rx.select.item(LanguageState.tr["sex_male"], value="M"),
-                        rx.select.item(LanguageState.tr["sex_female"], value="F"),
-                        rx.select.item(LanguageState.tr["sex_other"], value="Autre"),
-                    ),
-                    value=PatientFormState.form_sex,
-                    on_change=PatientFormState.set_form_sex,
-                    size="2",
-                    width="100%",
-                ),
-            ),
-            columns="3",
+            columns="2",
             spacing="3",
             width="100%",
         ),
@@ -238,48 +348,10 @@ def _form_fields() -> rx.Component:
                     on_change=PatientFormState.set_form_notif_email,
                     size="2",
                 ),
-                rx.checkbox(
-                    LanguageState.tr["notif_sms"],
-                    checked=PatientFormState.form_notif_sms,
-                    on_change=PatientFormState.set_form_notif_sms,
-                    size="2",
-                ),
-                rx.checkbox(
-                    LanguageState.tr["notif_whatsapp"],
-                    checked=PatientFormState.form_notif_whatsapp,
-                    on_change=PatientFormState.set_form_notif_whatsapp,
-                    size="2",
-                ),
                 spacing="4",
             ),
             width="100%",
             spacing="1",
-        ),
-        rx.hstack(
-            rx.button(
-                LanguageState.tr["cancel_btn"],
-                variant="soft",
-                color_scheme="gray",
-                on_click=PatientFormState.close_dialog,
-                disabled=PatientFormState.is_loading,
-            ),
-            rx.button(
-                rx.cond(
-                    PatientFormState.is_loading,
-                    rx.spinner(size="2"),
-                    rx.cond(
-                        PatientFormState.is_create_mode,
-                        rx.text(LanguageState.tr["create_patient_btn"]),
-                        rx.text(LanguageState.tr["save_changes_btn"]),
-                    ),
-                ),
-                type="submit",
-                disabled=PatientFormState.is_loading,
-            ),
-            spacing="3",
-            justify="end",
-            width="100%",
-            padding_top="0.5rem",
         ),
         width="100%",
         spacing="3",

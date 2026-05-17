@@ -5,26 +5,14 @@ from gws_reflex_main import main_component
 
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
+from ..common.patient_picker_component import patient_picker_widget
 from .program_detail_state import (
     ExamTypeOptionDTO,
     ExamTypeRowDTO,
-    PatientOptionDTO,
     PatientRowDTO,
     ProgramDetailState,
     VisitRowDTO,
 )
-
-
-def _patient_option_item(opt: PatientOptionDTO) -> rx.Component:
-    return rx.box(
-        rx.text(opt.label, size="2"),
-        padding="0.4rem 0.6rem",
-        cursor="pointer",
-        border_radius="var(--radius-2)",
-        width="100%",
-        on_click=lambda: ProgramDetailState.select_patient(opt.id, opt.label),
-        _hover={"background": "var(--accent-3)"},
-    )
 
 
 def _exam_type_option_item(opt: ExamTypeOptionDTO) -> rx.Component:
@@ -336,41 +324,7 @@ def _add_patient_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title(LanguageState.tr["add_patient_btn"]),
             rx.vstack(
-                rx.vstack(
-                    rx.input(
-                        placeholder=LanguageState.tr["select_patient_to_add"],
-                        value=ProgramDetailState.patient_search_query,
-                        on_change=ProgramDetailState.search_patients,
-                        width="100%",
-                        auto_focus=True,
-                    ),
-                    rx.cond(
-                        ProgramDetailState.patient_search_error != "",
-                        rx.callout(
-                            ProgramDetailState.patient_search_error,
-                            color_scheme="red",
-                            size="1",
-                        ),
-                    ),
-                    rx.cond(
-                        ProgramDetailState.patient_search_results.length() > 0,
-                        rx.box(
-                            rx.foreach(
-                                ProgramDetailState.patient_search_results,
-                                _patient_option_item,
-                            ),
-                            border="1px solid var(--gray-5)",
-                            border_radius="var(--radius-3)",
-                            max_height="200px",
-                            overflow_y="auto",
-                            width="100%",
-                            padding="0.25rem",
-                        ),
-                    ),
-                    spacing="1",
-                    width="100%",
-                    position="relative",
-                ),
+                patient_picker_widget(ProgramDetailState),
                 rx.hstack(
                     rx.dialog.close(
                         rx.button(
@@ -384,7 +338,7 @@ def _add_patient_dialog() -> rx.Component:
                         LanguageState.tr["add"],
                         on_click=ProgramDetailState.confirm_add_patient,
                         loading=ProgramDetailState.is_adding_patient,
-                        disabled=ProgramDetailState.selected_patient_id == "",
+                        disabled=ProgramDetailState.picker_selected_id == "",
                     ),
                     spacing="2",
                     justify="end",
@@ -395,7 +349,7 @@ def _add_patient_dialog() -> rx.Component:
             ),
             on_escape_key_down=ProgramDetailState.close_add_patient_dialog,
             on_interact_outside=ProgramDetailState.close_add_patient_dialog,
-            max_width="440px",
+            max_width="700px",
         ),
         open=ProgramDetailState.add_patient_dialog_open,
     )

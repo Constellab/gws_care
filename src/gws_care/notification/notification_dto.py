@@ -3,7 +3,6 @@
 from gws_core import BaseModelDTO, ModelDTO
 
 from gws_care.notification.notification_enums import (
-    NotificationChannel,
     NotificationStatus,
     NotificationType,
 )
@@ -30,7 +29,6 @@ class SendManualNotificationDTO(BaseModelDTO):
     account_id: str | None = None
     subject: str
     body: str
-    channel: str = NotificationChannel.EMAIL.value   # "EMAIL" | "SMS" | "WHATSAPP"
 
 
 class SendCustomMessageDTO(BaseModelDTO):
@@ -39,7 +37,6 @@ class SendCustomMessageDTO(BaseModelDTO):
     patient_id: str
     subject: str
     body: str
-    channel: str = NotificationChannel.EMAIL.value   # "EMAIL" | "SMS" | "WHATSAPP"
 
 
 class NotificationPreferenceDTO(BaseModelDTO):
@@ -73,16 +70,3 @@ class SmtpConfigDTO(BaseModelDTO):
     use_tls: bool = True
     from_email: str = ""
     from_name: str = ""
-
-
-class BrevoConfigDTO(BaseModelDTO):
-    """DTO for Brevo API configuration (email, SMS, WhatsApp).
-
-    credentials_name: name of a Constellab Credentials (type BASIC) whose password
-    field holds the Brevo API key. Never stored directly in the database.
-    """
-
-    credentials_name: str = ""
-    from_email: str = ""
-    from_name: str = ""
-    sms_sender: str = ""

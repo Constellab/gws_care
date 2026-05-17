@@ -1,10 +1,9 @@
 """State management for the patient list page."""
 
 import reflex as rx
-from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
 
-from ..common.role_state import RoleState
+from ..common.account_picker_state import AccountPickerRowDTO, AccountPickerState
 
 
 class PatientRowDTO(BaseModel):
@@ -21,20 +20,26 @@ class PatientRowDTO(BaseModel):
     account_name: str | None = None
 
 
-class AccountOptionDTO(BaseModel):
-    """Lightweight account option for filter dropdown."""
-
-    id: str
-    name: str
-
-
-class PatientListState(RoleState):
+class PatientListState(AccountPickerState):
     """State for the patient list page."""
 
+    # ── Account picker vars (declared here for independent state storage) ─────
+    acct_picker_is_open: bool = False
+    acct_picker_filter: str = ""
+    acct_picker_accounts: list[AccountPickerRowDTO] = []
+    acct_picker_is_loading: bool = False
+    acct_picker_error: str = ""
+    acct_picker_selected_id: str = ""
+    acct_picker_selected_name: str = ""
+
     patients: list[PatientRowDTO] = []
-    companies: list[AccountOptionDTO] = []
     is_loading: bool = False
+    is_loading_more: bool = False
+    has_more: bool = False
     error_message: str = ""
+
+    _page_offset: int = 0
+    _current_page_size: int = 50
 
     search_name: str = ""
     search_patient_number: str = ""
@@ -45,6 +50,28 @@ class PatientListState(RoleState):
     sort_column: str = "last_name"
     sort_ascending: bool = True
 
+    # ── Account picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_account_picker(self):
+        await self._open_account_picker()
+
+    @rx.event
+    def close_account_picker(self):
+        self.acct_picker_is_open = False
+
+    @rx.event
+    async def acct_picker_set_filter(self, value: str):
+        await self._acct_picker_set_filter(value)
+
+    @rx.event
+    async def acct_picker_confirm(self, account_id: str, name: str):
+        await self._acct_picker_confirm(account_id, name)
+
+    @rx.event
+    async def acct_picker_clear(self):
+        await self._acct_picker_clear()
+
     @rx.event
     async def on_load(self):
         """Load patients when the page is mounted."""
@@ -52,7 +79,10 @@ class PatientListState(RoleState):
         redirect = await self._require_any_of(self.is_operator, self.is_doctor)
         if redirect:
             return redirect
-        await self._load_companies()
+        await self._load_patients()
+
+    async def _on_account_picked(self, account_id: str) -> None:
+        self.filter_account_id = account_id
         await self._load_patients()
 
     @rx.event
@@ -117,25 +147,23 @@ class PatientListState(RoleState):
         """Navigate to the patient detail page."""
         return rx.redirect(f"/patient/{patient_id}")
 
-    async def _load_companies(self):
-        """Internal: load active accounts for the filter dropdown."""
-        try:
-            with await self.authenticate_user():
-                from gws_care.account.account_service import AccountService
-                comps = AccountService.list_accounts()
-                self.companies = [
-                    AccountOptionDTO(id=str(c.id), name=c.name) for c in comps
-                ]
-        except Exception:
-            self.companies = []
+    @rx.event
+    async def load_more_patients(self):
+        """Append the next page of patients to the current list."""
+        self.is_loading_more = True
+        await self._load_patients(reset=False)
 
-    async def _load_patients(self):
+    async def _load_patients(self, reset: bool = True):
         """Internal: load patients from DB with current filters."""
         if not await self.check_authentication():
             self.error_message = "Authentication required"
             return
 
-        self.is_loading = True
+        if reset:
+            self._page_offset = 0
+            self.is_loading = True
+            from gws_care.core.care_app_config_service import CareAppConfigService
+            self._current_page_size = CareAppConfigService.get_page_size()
         self.error_message = ""
 
         try:
@@ -154,8 +182,26 @@ class PatientListState(RoleState):
                     account_id=self.filter_account_id or None,
                     dob_from=self.filter_dob_from or None,
                     dob_to=self.filter_dob_to or None,
+                    limit=self._current_page_size + 1,
+                    offset=self._page_offset,
                 )
-                patient_rows = [
+                has_more = len(patients) > self._current_page_size
+                patients = patients[:self._current_page_size]
+                # Batch-fetch account names via join table
+                patient_ids = [p.id for p in patients]
+                account_names_by_patient: dict[str, list[str]] = {}
+                if patient_ids:
+                    from gws_care.account.account import Account
+                    from gws_care.patient.patient_account import PatientAccount
+                    links = (
+                        PatientAccount.select(PatientAccount, Account)
+                        .join(Account)
+                        .where(PatientAccount.patient_id.in_(patient_ids))
+                    )
+                    for link in links:
+                        pid = str(link.patient_id)
+                        account_names_by_patient.setdefault(pid, []).append(link.account.name)
+                new_rows = [
                     PatientRowDTO(
                         id=str(p.id),
                         patient_number=p.patient_number,
@@ -165,17 +211,21 @@ class PatientListState(RoleState):
                         gender=p.gender,
                         city=p.city,
                         phone=p.phone,
-                        account_name=p.billing_account.name if p.billing_account_id else None,
+                        account_name=", ".join(account_names_by_patient.get(str(p.id), [])) or None,
                     )
                     for p in patients
                 ]
                 sort_col = self.sort_column
+                all_rows = new_rows if reset else self.patients + new_rows
                 self.patients = sorted(
-                    patient_rows,
+                    all_rows,
                     key=lambda row: (getattr(row, sort_col) or "").lower(),
                     reverse=not self.sort_ascending,
                 )
+                self.has_more = has_more
+                self._page_offset += self._current_page_size
         except Exception as e:
             self.error_message = f"Error loading patients: {e}"
         finally:
             self.is_loading = False
+            self.is_loading_more = False

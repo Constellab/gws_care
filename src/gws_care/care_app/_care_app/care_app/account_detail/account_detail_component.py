@@ -5,6 +5,7 @@ from gws_reflex_main import main_component
 
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
+from ..common.patient_picker_component import patient_picker_widget
 from ..patient_list.patient_form_component import patient_form_dialog
 from ..patient_list.patient_form_state import PatientFormState
 from .account_detail_state import (
@@ -84,27 +85,30 @@ def _patient_row(p: AccountPatientRowDTO) -> rx.Component:
             rx.cond(p.phone, rx.text(p.phone, size="2"), rx.text("—", size="2", color="var(--gray-8)"))
         ),
         rx.table.cell(
-            rx.hstack(
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("chevron-right", size=14),
-                        variant="ghost",
-                        size="1",
-                        on_click=lambda: AccountDetailState.go_to_patient(p.id),
+            rx.box(
+                rx.hstack(
+                    rx.tooltip(
+                        rx.icon_button(
+                            rx.icon("chevron-right", size=14),
+                            variant="ghost",
+                            size="1",
+                            on_click=lambda: AccountDetailState.go_to_patient(p.id),
+                        ),
+                        content=LanguageState.tr["tooltip_view_patient"],
                     ),
-                    content=LanguageState.tr["tooltip_view_patient"],
-                ),
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("unlink", size=14),
-                        variant="ghost",
-                        size="1",
-                        color_scheme="red",
-                        on_click=lambda: AccountDetailState.remove_patient(p.id),
+                    rx.tooltip(
+                        rx.icon_button(
+                            rx.icon("unlink", size=14),
+                            variant="ghost",
+                            size="1",
+                            color_scheme="red",
+                            on_click=lambda: AccountDetailState.remove_patient(p.id),
+                        ),
+                        content=LanguageState.tr["tooltip_remove_from_account"],
                     ),
-                    content=LanguageState.tr["tooltip_remove_from_account"],
+                    spacing="1",
                 ),
-                spacing="1",
+                on_click=rx.stop_propagation,
             )
         ),
         style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
@@ -113,75 +117,45 @@ def _patient_row(p: AccountPatientRowDTO) -> rx.Component:
 
 
 def _assign_patient_dialog() -> rx.Component:
-    """Dialog to assign an existing unlinked patient to this account."""
+    """Dialog to assign an existing patient to this account."""
     return rx.dialog.root(
         rx.dialog.content(
             rx.dialog.title(LanguageState.tr["assign_patient_dialog_title"]),
             rx.dialog.description(
                 LanguageState.tr["assign_patient_dialog_desc"],
                 size="2",
-                margin_bottom="1rem",
+                margin_bottom="0.5rem",
             ),
-            rx.cond(
-                AccountDetailState.unassigned_patients.length() > 0,
-                rx.vstack(
-                    rx.select.root(
-                        rx.select.trigger(placeholder=LanguageState.tr["search_a_patient_placeholder"], width="100%"),
-                        rx.select.content(
-                            rx.foreach(
-                                AccountDetailState.unassigned_patients,
-                                lambda p: rx.select.item(p.label, value=p.id),
-                            )
-                        ),
-                        value=AccountDetailState.assign_patient_id,
-                        on_change=AccountDetailState.set_assign_patient_id,
-                        width="100%",
-                    ),
-                    rx.hstack(
-                        rx.button(
-                            LanguageState.tr["cancel_btn"],
-                            variant="soft",
-                            color_scheme="gray",
-                            on_click=AccountDetailState.close_assign_dialog,
-                            disabled=AccountDetailState.is_assigning,
-                        ),
-                        rx.button(
-                            rx.cond(
-                                AccountDetailState.is_assigning,
-                                rx.spinner(size="2"),
-                                rx.text(LanguageState.tr["assign_btn"]),
-                            ),
-                            on_click=AccountDetailState.confirm_assign,
-                            disabled=(AccountDetailState.assign_patient_id == "")
-                            | AccountDetailState.is_assigning,
-                        ),
-                        spacing="3",
-                        justify="end",
-                        width="100%",
-                    ),
-                    width="100%",
-                    spacing="4",
-                ),
-                rx.vstack(
-                    rx.text(
-                        LanguageState.tr["all_patients_assigned"],
-                        size="2",
-                        color="var(--gray-9)",
-                    ),
+            rx.vstack(
+                patient_picker_widget(AccountDetailState),
+                rx.hstack(
                     rx.button(
-                        LanguageState.tr["close_btn"],
+                        LanguageState.tr["cancel_btn"],
                         variant="soft",
                         color_scheme="gray",
                         on_click=AccountDetailState.close_assign_dialog,
+                        disabled=AccountDetailState.is_assigning,
+                    ),
+                    rx.button(
+                        rx.cond(
+                            AccountDetailState.is_assigning,
+                            rx.spinner(size="2"),
+                            rx.text(LanguageState.tr["assign_btn"]),
+                        ),
+                        on_click=AccountDetailState.confirm_assign,
+                        disabled=(AccountDetailState.picker_selected_id == "")
+                        | AccountDetailState.is_assigning,
                     ),
                     spacing="3",
-                    align_items="end",
+                    justify="end",
                     width="100%",
                 ),
+                spacing="4",
+                width="100%",
             ),
             on_interact_outside=AccountDetailState.close_assign_dialog,
             on_escape_key_down=AccountDetailState.close_assign_dialog,
-            max_width="480px",
+            max_width="700px",
         ),
         open=AccountDetailState.assign_dialog_open,
     )

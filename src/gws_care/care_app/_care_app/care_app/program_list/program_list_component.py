@@ -3,9 +3,14 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.account_picker_component import (
+    account_picker_button,
+    account_picker_dialog,
+    account_picker_widget,
+)
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
-from .program_list_state import AccountOptionDTO, ProgramListState, ProgramRowDTO
+from .program_list_state import ProgramFormPickerState, ProgramListState, ProgramRowDTO
 
 # ── Status color helper ────────────────────────────────────────────────────────
 
@@ -95,10 +100,6 @@ def _campaign_row(program: ProgramRowDTO) -> rx.Component:
     )
 
 
-def _account_option(option: AccountOptionDTO) -> rx.Component:
-    return rx.select.item(option.name, value=option.id)
-
-
 def _sortable_header(label: str, column: str) -> rx.Component:
     """Column header cell with a sort-direction arrow."""
     return rx.table.column_header_cell(
@@ -137,17 +138,7 @@ def _create_program_dialog() -> rx.Component:
                 ),
                 rx.form.field(
                     rx.form.label(LanguageState.tr["col_account"]),
-                    rx.select.root(
-                        rx.select.trigger(
-                            placeholder=LanguageState.tr["all_accounts"],
-                            width="100%",
-                        ),
-                        rx.select.content(
-                            rx.foreach(ProgramListState.account_options, _account_option),
-                        ),
-                        value=ProgramListState.form_account_id,
-                        on_change=ProgramListState.set_form_account_id,
-                    ),
+                    account_picker_widget(ProgramFormPickerState),
                     width="100%",
                 ),
                 rx.grid(
@@ -207,7 +198,7 @@ def _create_program_dialog() -> rx.Component:
             ),
             on_interact_outside=ProgramListState.close_create_dialog,
             on_escape_key_down=ProgramListState.close_create_dialog,
-            max_width="480px",
+            max_width="600px",
         ),
         open=ProgramListState.create_dialog_open,
     )
@@ -216,6 +207,7 @@ def _create_program_dialog() -> rx.Component:
 def program_list_page() -> rx.Component:
     return main_component(
         page_layout(
+            account_picker_dialog(ProgramListState),
             rx.hstack(
                 rx.heading(LanguageState.tr["campaigns_page_title"], size="6"),
                 rx.spacer(),
@@ -259,18 +251,7 @@ def program_list_page() -> rx.Component:
                     value=ProgramListState.filter_status,
                     on_change=ProgramListState.set_filter_status,
                 ),
-                rx.select.root(
-                    rx.select.trigger(
-                        placeholder=LanguageState.tr["all_accounts"],
-                        width="200px",
-                    ),
-                    rx.select.content(
-                        rx.select.item(LanguageState.tr["all_accounts"], value="ALL"),
-                        rx.foreach(ProgramListState.account_options, _account_option),
-                    ),
-                    value=rx.cond(ProgramListState.filter_account_id != "", ProgramListState.filter_account_id, "ALL"),
-                    on_change=ProgramListState.set_filter_account,
-                ),
+                account_picker_button(ProgramListState),
                 spacing="2",
                 wrap="wrap",
                 width="100%",
@@ -287,34 +268,56 @@ def program_list_page() -> rx.Component:
             rx.cond(
                 ProgramListState.is_loading,
                 rx.center(rx.spinner(size="3"), padding="2rem"),
-                rx.table.root(
-                    rx.table.header(
-                        rx.table.row(
-                            _sortable_header(LanguageState.tr["col_name"], "name"),
-                            _sortable_header(LanguageState.tr["col_account"], "account_name"),
-                            _sortable_header(LanguageState.tr["col_dates"], "start_date"),
-                            rx.table.column_header_cell(LanguageState.tr["col_patients"] + " / " + LanguageState.tr["col_exam_types"]),
-                            _sortable_header(LanguageState.tr["col_status"], "status_label"),
-                            rx.table.column_header_cell(LanguageState.tr["col_actions"]),
-                        )
-                    ),
-                    rx.table.body(
-                        rx.cond(
-                            ProgramListState.programs.length() == 0,
+                rx.vstack(
+                    rx.table.root(
+                        rx.table.header(
                             rx.table.row(
-                                rx.table.cell(
-                                    rx.center(
-                                        rx.text(LanguageState.tr["no_campaigns_found"], color="var(--gray-9)", size="2"),
-                                        padding="1.5rem",
-                                    ),
-                                    col_span=6,
-                                )
+                                _sortable_header(LanguageState.tr["col_name"], "name"),
+                                _sortable_header(LanguageState.tr["col_account"], "account_name"),
+                                _sortable_header(LanguageState.tr["col_dates"], "start_date"),
+                                rx.table.column_header_cell(LanguageState.tr["col_patients"] + " / " + LanguageState.tr["col_exam_types"]),
+                                _sortable_header(LanguageState.tr["col_status"], "status_label"),
+                                rx.table.column_header_cell(LanguageState.tr["col_actions"]),
+                            )
+                        ),
+                        rx.table.body(
+                            rx.cond(
+                                ProgramListState.programs.length() == 0,
+                                rx.table.row(
+                                    rx.table.cell(
+                                        rx.center(
+                                            rx.text(LanguageState.tr["no_campaigns_found"], color="var(--gray-9)", size="2"),
+                                            padding="1.5rem",
+                                        ),
+                                        col_span=6,
+                                    )
+                                ),
+                                rx.foreach(ProgramListState.programs, _campaign_row),
+                            )
+                        ),
+                        width="100%",
+                        variant="surface",
+                    ),
+                    rx.cond(
+                        ProgramListState.has_more,
+                        rx.center(
+                            rx.button(
+                                rx.cond(
+                                    ProgramListState.is_loading_more,
+                                    rx.hstack(rx.spinner(size="2"), rx.text("Loading..."), spacing="2"),
+                                    rx.hstack(rx.icon("chevron-down", size=16), rx.text("Load more"), spacing="2"),
+                                ),
+                                variant="soft",
+                                size="2",
+                                on_click=ProgramListState.load_more_programs,
+                                disabled=ProgramListState.is_loading_more,
                             ),
-                            rx.foreach(ProgramListState.programs, _campaign_row),
-                        )
+                            width="100%",
+                            padding="1rem",
+                        ),
                     ),
                     width="100%",
-                    variant="surface",
+                    spacing="0",
                 ),
             ),
             _create_program_dialog(),

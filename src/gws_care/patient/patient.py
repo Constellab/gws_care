@@ -1,9 +1,8 @@
 import json
 from datetime import date
 
-from peewee import CharField, DateField, DecimalField, ForeignKeyField, TextField
+from peewee import CharField, DateField, DecimalField, TextField
 
-from gws_care.account.account import Account
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
 
@@ -30,7 +29,6 @@ class Patient(ModelWithUser):
     email: str = CharField(max_length=255, null=True)
     primary_physician_name: str = CharField(max_length=255, null=True)
     primary_physician_phone: str = CharField(max_length=50, null=True)
-    billing_account: Account = ForeignKeyField(Account, null=True, backref="patients", on_delete="SET NULL")
     # QR code stored as base64 PNG string (data:image/png;base64,...)
     qr_code: str = TextField(null=True)
 
@@ -63,6 +61,11 @@ class Patient(ModelWithUser):
                 notif_prefs = json.loads(self.notification_preferences)
             except Exception:
                 notif_prefs = None
+        from gws_care.patient.patient_account import PatientAccount
+        account_ids = [
+            str(pa.account_id)
+            for pa in PatientAccount.select().where(PatientAccount.patient == self.id)
+        ]
         return PatientDTO(
             id=self.id,
             created_at=self.created_at,
@@ -81,7 +84,7 @@ class Patient(ModelWithUser):
             email=self.email,
             primary_physician_name=self.primary_physician_name,
             primary_physician_phone=self.primary_physician_phone,
-            account_id=str(self.billing_account_id) if self.billing_account_id else None,
+            account_ids=account_ids,
             social_security_number=self.social_security_number,
             weight=float(self.weight) if self.weight is not None else None,
             height=float(self.height) if self.height is not None else None,

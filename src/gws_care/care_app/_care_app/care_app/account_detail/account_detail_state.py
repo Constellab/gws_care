@@ -1,8 +1,9 @@
 """State management for the account detail page."""
 
 import reflex as rx
-from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
+
+from ..common.patient_picker_state import PatientPickerRowDTO, PatientPickerState
 
 
 class AccountDetailDTO(BaseModel):
@@ -33,15 +34,52 @@ class AccountPatientRowDTO(BaseModel):
     phone: str | None = None
 
 
-class UnassignedPatientOptionDTO(BaseModel):
-    """Patient option for the assign dialog (patients without an account)."""
-
-    id: str
-    label: str  # "LAST_NAME First (PAT-XXXXXX)"
-
-
-class AccountDetailState(ReflexMainState):
+class AccountDetailState(PatientPickerState):
     """State for the account detail page."""
+
+    # ── Patient picker vars (declared here for independent state storage) ─────
+    picker_patients: list[PatientPickerRowDTO] = []
+    picker_is_loading: bool = False
+    picker_error: str = ""
+    picker_filter_name: str = ""
+    picker_filter_number: str = ""
+    picker_account_id: str = ""
+    picker_is_open: bool = False
+    picker_selected_id: str = ""
+    picker_selected_label: str = ""
+
+    # ── Patient picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_patient_picker(self):
+        await self._open_patient_picker()
+
+    @rx.event
+    def close_patient_picker(self):
+        self.picker_is_open = False
+
+    @rx.event
+    async def picker_clear_selection(self):
+        self.picker_selected_id = ""
+        self.picker_selected_label = ""
+
+    @rx.event
+    async def picker_set_filter_name(self, value: str):
+        await self._picker_set_filter_name(value)
+
+    @rx.event
+    async def picker_set_filter_number(self, value: str):
+        await self._picker_set_filter_number(value)
+
+    @rx.event
+    async def picker_clear_filters(self):
+        await self._picker_clear_filters()
+
+    @rx.event
+    def picker_select_patient(self, patient_id: str, label: str):
+        self.picker_selected_id = patient_id
+        self.picker_selected_label = label
+        self.picker_is_open = False
 
     account: AccountDetailDTO | None = None
     patients: list[AccountPatientRowDTO] = []
@@ -50,8 +88,6 @@ class AccountDetailState(ReflexMainState):
 
     # Assign existing patient dialog
     assign_dialog_open: bool = False
-    unassigned_patients: list[UnassignedPatientOptionDTO] = []
-    assign_patient_id: str = ""
     is_assigning: bool = False
 
     @rx.event
@@ -73,46 +109,27 @@ class AccountDetailState(ReflexMainState):
 
     @rx.event
     async def open_assign_dialog(self):
-        """Open the assign-patient dialog and load unassigned patients."""
-        if not await self.check_authentication():
-            return
-        with await self.authenticate_user():
-            from gws_care.patient.patient_service import PatientService
-            all_patients = PatientService.search_patients()
-            # Keep only those without an account
-            self.unassigned_patients = [
-                UnassignedPatientOptionDTO(
-                    id=str(p.id),
-                    label=f"{p.last_name} {p.first_name} ({p.patient_number})",
-                )
-                for p in all_patients
-                if not p.billing_account_id
-            ]
-        self.assign_patient_id = ""
+        """Open the assign-patient dialog using the picker (shows all patients, no account filter)."""
+        # No account filter: allow assigning any patient (regardless of current account)
+        await self._open_picker(account_id="")
         self.assign_dialog_open = True
 
     @rx.event
     def close_assign_dialog(self):
         """Close the assign-patient dialog."""
         self.assign_dialog_open = False
-        self.assign_patient_id = ""
-
-    @rx.event
-    def set_assign_patient_id(self, value: str):
-        self.assign_patient_id = value
 
     @rx.event
     async def confirm_assign(self):
         """Assign the selected patient to this account."""
-        if not self.assign_patient_id or not self.account:
+        if not self.picker_selected_id or not self.account:
             return
         self.is_assigning = True
         try:
             with await self.authenticate_user():
                 from gws_care.patient.patient_service import PatientService
-                PatientService.assign_account(self.assign_patient_id, self.account.id)
+                PatientService.add_account(self.picker_selected_id, self.account.id)
             self.assign_dialog_open = False
-            self.assign_patient_id = ""
             await self._load_patients()
         except Exception as e:
             self.error_message = f"Error assigning patient: {e}"
@@ -121,11 +138,13 @@ class AccountDetailState(ReflexMainState):
 
     @rx.event
     async def remove_patient(self, patient_id: str):
-        """Remove a patient from this account (set account to None)."""
+        """Remove a patient from this account (unlink the account)."""
+        if not self.account:
+            return
         try:
             with await self.authenticate_user():
                 from gws_care.patient.patient_service import PatientService
-                PatientService.assign_account(patient_id, None)
+                PatientService.remove_account(patient_id, self.account.id)
             await self._load_patients()
         except Exception as e:
             self.error_message = f"Error removing patient: {e}"

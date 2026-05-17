@@ -39,6 +39,8 @@ class MedicalProgramService:
         account_id: str | None = None,
         status: ProgramStatus | None = None,
         search: str = "",
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[MedicalProgram]:
         query = MedicalProgram.select().order_by(MedicalProgram.start_date.desc())
         if account_id:
@@ -48,6 +50,10 @@ class MedicalProgramService:
         if search:
             term = f"%{search}%"
             query = query.where(MedicalProgram.name ** term)
+        if offset:
+            query = query.offset(offset)
+        if limit:
+            query = query.limit(limit)
         return list(query)
 
     @classmethod
@@ -317,10 +323,16 @@ class MedicalProgramService:
             raise BadRequestException(f"Patient '{patient_id}' not found")
 
         # Skip account check when the program has no account (individual program)
-        if program.account_id and str(patient.billing_account_id) != str(program.account_id):
-            raise BadRequestException(
-                "Patient does not belong to the program's billing account"
-            )
+        if program.account_id:
+            from gws_care.patient.patient_account import PatientAccount
+            has_link = PatientAccount.get_or_none(
+                (PatientAccount.patient_id == patient_id)
+                & (PatientAccount.account_id == str(program.account_id))
+            ) is not None
+            if not has_link:
+                raise BadRequestException(
+                    "Patient does not belong to the program's billing account"
+                )
 
         if ProgramPatient.get_or_none(
             (ProgramPatient.program == program_id) & (ProgramPatient.patient == patient_id)

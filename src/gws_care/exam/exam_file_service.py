@@ -248,46 +248,6 @@ class ExamFileService:
         return ef
 
     @classmethod
-    def attach_staged_file(
-        cls,
-        exam_id: str,
-        original_name: str,
-        stored_filename: str,
-        mime_type: str | None = None,
-        file_size: int | None = None,
-    ) -> ExamFile:
-        """Register an already-staged file (in Reflex upload dir) as a gws_core Resource
-        and create the ExamFile record. Used when the file was already written to
-        the upload dir during staging (exam form dialog flow).
-        """
-        from gws_core import Settings
-
-        upload_path = rx.get_upload_dir() / stored_filename
-
-        # Copy staged file to gws temp dir and register as Resource
-        resource_id = None
-        if upload_path.exists():
-            safe_name = "".join(
-                c for c in original_name
-                if c in "._-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-            )
-            temp_dir = Settings.make_temp_dir()
-            temp_path = os.path.join(temp_dir, safe_name or "file")
-            with open(temp_path, "wb") as fh:
-                fh.write(upload_path.read_bytes())
-            resource_id = cls._register_as_gws_resource(temp_path, original_name)
-
-        ef = ExamFile()
-        ef.exam_id = exam_id
-        ef.original_name = original_name
-        ef.stored_filename = stored_filename
-        ef.mime_type = mime_type
-        ef.file_size = file_size
-        ef.resource_id = resource_id
-        ef.save()
-        return ef
-
-    @classmethod
     def delete_file(cls, file_id: str) -> None:
         ef = ExamFile.get_or_none(ExamFile.id == file_id)
         if ef is None:

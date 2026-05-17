@@ -5,7 +5,16 @@ from typing import AsyncGenerator
 import reflex as rx
 from gws_reflex_base import FormDialogState
 from gws_reflex_main import ReflexMainState
+from pydantic import BaseModel
 
+
+class AccountPickerRowDTO(BaseModel):
+    """Lightweight account row for the account picker table in the patient form."""
+
+    id: str
+    name: str
+    account_type: str = ""
+    city: str | None = None
 
 class PatientFormState(FormDialogState, rx.State):
     """Manages the create / update patient dialog.
@@ -36,12 +45,17 @@ class PatientFormState(FormDialogState, rx.State):
     form_notif_sms: bool = False
     form_notif_whatsapp: bool = False
 
+    # Account assignment (inline picker)
+    form_account_id: str = ""
+    form_account_name: str = ""        # display label shown on the picker button
+    acct_picker_is_open: bool = False
+    acct_picker_filter: str = ""
+    acct_picker_accounts: list[AccountPickerRowDTO] = []
+    acct_picker_is_loading: bool = False
+    acct_picker_error: str = ""
+
     # Set when editing an existing patient
     _editing_patient_id: str = ""
-    # Account id of the patient being edited (preserved across updates)
-    _form_account_id: str = ""
-    # When creating from an account detail page, pre-link to this account
-    _context_account_id: str = ""
 
     # ── Setters ───────────────────────────────────────────────────────────────
 
@@ -121,14 +135,72 @@ class PatientFormState(FormDialogState, rx.State):
     def set_form_notif_whatsapp(self, value: bool):
         self.form_notif_whatsapp = value
 
-    # ── Dialog open helpers ───────────────────────────────────────────────────
+    @rx.event
+    def set_form_account_id(self, value: str):
+        self.form_account_id = "" if value == "__none__" else value
+
+    # ── Account picker ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_account_picker(self):
+        self.acct_picker_filter = ""
+        self.acct_picker_error = ""
+        self.acct_picker_is_open = True
+        await self._run_acct_search()
+
+    @rx.event
+    def close_account_picker(self):
+        self.acct_picker_is_open = False
+
+    @rx.event
+    async def acct_picker_set_filter(self, value: str):
+        self.acct_picker_filter = value
+        await self._run_acct_search()
+
+    @rx.event
+    def acct_picker_confirm(self, account_id: str, name: str):
+        """Select an account and close the picker."""
+        self.form_account_id = account_id
+        self.form_account_name = name
+        self.acct_picker_is_open = False
+
+    @rx.event
+    def acct_picker_clear(self):
+        """Clear the current account selection."""
+        self.form_account_id = ""
+        self.form_account_name = ""
+
+    async def _run_acct_search(self) -> None:
+        self.acct_picker_is_loading = True
+        self.acct_picker_error = ""
+        try:
+            _main = await self.get_state(ReflexMainState)
+            with await _main.authenticate_user():
+                from gws_care.account.account_service import AccountService
+                accounts = AccountService.list_accounts(active_only=False)
+                name_filter = self.acct_picker_filter.strip().lower()
+                if name_filter:
+                    accounts = [a for a in accounts if name_filter in a.name.lower()]
+                self.acct_picker_accounts = [
+                    AccountPickerRowDTO(
+                        id=str(a.id),
+                        name=a.name,
+                        account_type=a.account_type or "",
+                        city=a.city,
+                    )
+                    for a in accounts
+                ]
+        except Exception as e:
+            self.acct_picker_error = str(e)
+        finally:
+            self.acct_picker_is_loading = False
+
 
     @rx.event
     async def open_create_dialog(self):
         """Open the dialog in create mode with blank fields."""
         self.is_update_mode = False
         self._editing_patient_id = ""
-        self._context_account_id = ""
         await self._clear_form_state()
         self.dialog_opened = True
 
@@ -137,8 +209,17 @@ class PatientFormState(FormDialogState, rx.State):
         """Open the create dialog pre-linked to an account."""
         self.is_update_mode = False
         self._editing_patient_id = ""
-        self._context_account_id = account_id
         await self._clear_form_state()
+        # pre-populate account (look up name from DB for display label)
+        self.form_account_id = account_id
+        try:
+            _main = await self.get_state(ReflexMainState)
+            with await _main.authenticate_user():
+                from gws_care.account.account_service import AccountService
+                acc = AccountService.get_account(account_id)
+                self.form_account_name = acc.name
+        except Exception:
+            self.form_account_name = ""
         self.dialog_opened = True
 
     @rx.event
@@ -167,8 +248,9 @@ class PatientFormState(FormDialogState, rx.State):
             self.form_city = p.city or ""
             self.form_primary_physician_name = p.primary_physician_name or ""
             self.form_primary_physician_phone = p.primary_physician_phone or ""
-            self._form_account_id = str(p.billing_account_id) if p.billing_account_id else ""
-
+            from gws_care.patient.patient_account import PatientAccount
+            first_link = PatientAccount.select().where(PatientAccount.patient == patient_id).first()
+            self.form_account_id = str(first_link.account_id) if first_link else ""
             self.form_social_security_number = p.social_security_number or ""
             self.form_weight = str(p.weight) if p.weight is not None else ""
             self.form_height = str(p.height) if p.height is not None else ""
@@ -184,6 +266,18 @@ class PatientFormState(FormDialogState, rx.State):
             self.form_notif_sms = bool(notif.get("sms", False))
             self.form_notif_whatsapp = bool(notif.get("whatsapp", False))
 
+        # Resolve the account display name for the picker button
+        if self.form_account_id:
+            try:
+                _main2 = await self.get_state(ReflexMainState)
+                with await _main2.authenticate_user():
+                    from gws_care.account.account_service import AccountService
+                    acc = AccountService.get_account(self.form_account_id)
+                    self.form_account_name = acc.name
+            except Exception:
+                self.form_account_name = ""
+        else:
+            self.form_account_name = ""
         self.dialog_opened = True
 
     # ── FormDialogState abstract method implementations ───────────────────────
@@ -202,8 +296,6 @@ class PatientFormState(FormDialogState, rx.State):
         self.form_primary_physician_name = ""
         self.form_primary_physician_phone = ""
         self._editing_patient_id = ""
-        self._form_account_id = ""
-        self._context_account_id = ""
         self.is_update_mode = False
         self.form_social_security_number = ""
         self.form_weight = ""
@@ -212,6 +304,12 @@ class PatientFormState(FormDialogState, rx.State):
         self.form_notif_email = False
         self.form_notif_sms = False
         self.form_notif_whatsapp = False
+        self.form_account_id = ""
+        self.form_account_name = ""
+        self.acct_picker_is_open = False
+        self.acct_picker_filter = ""
+        self.acct_picker_accounts = []
+        self.acct_picker_error = ""
 
     async def _create(self, form_data: dict) -> AsyncGenerator:
         """Create a new patient from form data."""
@@ -246,7 +344,7 @@ class PatientFormState(FormDialogState, rx.State):
             city=self.form_city or None,
             primary_physician_name=self.form_primary_physician_name or None,
             primary_physician_phone=self.form_primary_physician_phone or None,
-            account_id=self._context_account_id or None,
+            account_id=self.form_account_id or None,
             social_security_number=self.form_social_security_number or None,
             weight=float(self.form_weight) if self.form_weight.strip() else None,
             height=float(self.form_height) if self.form_height.strip() else None,
@@ -265,7 +363,7 @@ class PatientFormState(FormDialogState, rx.State):
 
         yield rx.toast.success(f"Patient {patient.patient_number} created")
 
-        if self._context_account_id:
+        if self.form_account_id:
             from ..account_detail.account_detail_state import AccountDetailState
             yield AccountDetailState.on_load()
         else:
@@ -305,7 +403,7 @@ class PatientFormState(FormDialogState, rx.State):
             city=self.form_city or None,
             primary_physician_name=self.form_primary_physician_name or None,
             primary_physician_phone=self.form_primary_physician_phone or None,
-            account_id=self._form_account_id or None,
+            account_id=self.form_account_id or None,
             social_security_number=self.form_social_security_number or None,
             weight=float(self.form_weight) if self.form_weight.strip() else None,
             height=float(self.form_height) if self.form_height.strip() else None,

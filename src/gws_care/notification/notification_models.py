@@ -114,21 +114,3 @@ class SmtpConfig(Model):
         is_table = True
         db_manager = CareDbManager.get_instance()
 
-
-class BrevoConfig(Model):
-    """Singleton Brevo API configuration for email, SMS and WhatsApp delivery.
-
-    The API key is NOT stored here. Instead, 'credentials_name' references
-    a Constellab Credentials object of type BASIC whose password field holds it.
-    """
-
-    credentials_name: str = CharField(max_length=255, null=True)
-    from_email: str = CharField(max_length=255, null=True)
-    from_name: str = CharField(max_length=255, null=True)
-    sms_sender: str = CharField(max_length=11, null=True)   # alphanumeric, max 11 chars
-
-    class Meta:
-        table_name = "gws_care_brevo_config"
-        database = CareDbManager.get_instance().db
-        is_table = True
-        db_manager = CareDbManager.get_instance()

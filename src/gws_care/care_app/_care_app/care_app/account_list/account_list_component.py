@@ -66,39 +66,42 @@ def _account_row(account: AccountRowDTO) -> rx.Component:
             )
         ),
         rx.table.cell(
-            rx.hstack(
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("chevron-right", size=14),
-                        variant="ghost",
-                        size="1",
-                        on_click=lambda: AccountListState.go_to_account(account.id),
-                    ),
-                    content=LanguageState.tr["tooltip_view_account"],
-                ),
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("pencil", size=14),
-                        variant="ghost",
-                        size="1",
-                        on_click=lambda: AccountFormState.open_edit_dialog(account.id),
-                    ),
-                    content=LanguageState.tr["tooltip_edit_account"],
-                ),
-                rx.cond(
-                    account.is_active,
+            rx.box(
+                rx.hstack(
                     rx.tooltip(
                         rx.icon_button(
-                            rx.icon("ban", size=14),
+                            rx.icon("chevron-right", size=14),
                             variant="ghost",
                             size="1",
-                            color_scheme="red",
-                            on_click=lambda: AccountListState.deactivate_account(account.id),
+                            on_click=lambda: AccountListState.go_to_account(account.id),
                         ),
-                        content=LanguageState.tr["tooltip_deactivate_account"],
+                        content=LanguageState.tr["tooltip_view_account"],
                     ),
+                    rx.tooltip(
+                        rx.icon_button(
+                            rx.icon("pencil", size=14),
+                            variant="ghost",
+                            size="1",
+                            on_click=lambda: AccountFormState.open_edit_dialog(account.id),
+                        ),
+                        content=LanguageState.tr["tooltip_edit_account"],
+                    ),
+                    rx.cond(
+                        account.is_active,
+                        rx.tooltip(
+                            rx.icon_button(
+                                rx.icon("ban", size=14),
+                                variant="ghost",
+                                size="1",
+                                color_scheme="red",
+                                on_click=lambda: AccountListState.deactivate_account(account.id),
+                            ),
+                            content=LanguageState.tr["tooltip_deactivate_account"],
+                        ),
+                    ),
+                    spacing="1",
                 ),
-                spacing="1",
+                on_click=rx.stop_propagation,
             )
         ),
         style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
@@ -154,23 +157,45 @@ def account_list_page() -> rx.Component:
                 rx.center(rx.spinner(size="3"), padding="3rem"),
                 rx.cond(
                     AccountListState.accounts.length() > 0,
-                    rx.table.root(
-                        rx.table.header(
-                            rx.table.row(
-                                _sortable_header(LanguageState.tr["col_account_name"], "name"),
-                                _sortable_header(LanguageState.tr["col_city"], "city"),
-                                _sortable_header(LanguageState.tr["col_contact"], "contact_name"),
-                                _sortable_header(LanguageState.tr["col_phone"], "phone"),
-                                _sortable_header(LanguageState.tr["col_email"], "email"),
-                                _sortable_header(LanguageState.tr["col_status"], "is_active"),
-                                rx.table.column_header_cell(""),
-                            )
+                    rx.vstack(
+                        rx.table.root(
+                            rx.table.header(
+                                rx.table.row(
+                                    _sortable_header(LanguageState.tr["col_account_name"], "name"),
+                                    _sortable_header(LanguageState.tr["col_city"], "city"),
+                                    _sortable_header(LanguageState.tr["col_contact"], "contact_name"),
+                                    _sortable_header(LanguageState.tr["col_phone"], "phone"),
+                                    _sortable_header(LanguageState.tr["col_email"], "email"),
+                                    _sortable_header(LanguageState.tr["col_status"], "is_active"),
+                                    rx.table.column_header_cell(""),
+                                )
+                            ),
+                            rx.table.body(
+                                rx.foreach(AccountListState.accounts, _account_row)
+                            ),
+                            width="100%",
+                            variant="surface",
                         ),
-                        rx.table.body(
-                            rx.foreach(AccountListState.accounts, _account_row)
+                        rx.cond(
+                            AccountListState.has_more,
+                            rx.center(
+                                rx.button(
+                                    rx.cond(
+                                        AccountListState.is_loading_more,
+                                        rx.hstack(rx.spinner(size="2"), rx.text("Loading..."), spacing="2"),
+                                        rx.hstack(rx.icon("chevron-down", size=16), rx.text("Load more"), spacing="2"),
+                                    ),
+                                    variant="soft",
+                                    size="2",
+                                    on_click=AccountListState.load_more_accounts,
+                                    disabled=AccountListState.is_loading_more,
+                                ),
+                                width="100%",
+                                padding="1rem",
+                            ),
                         ),
                         width="100%",
-                        variant="surface",
+                        spacing="0",
                     ),
                     rx.center(
                         rx.vstack(

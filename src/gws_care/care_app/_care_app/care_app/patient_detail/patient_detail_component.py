@@ -7,14 +7,18 @@ from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..patient_list.patient_form_component import patient_form_dialog
 from ..patient_list.patient_form_state import PatientFormState
+from .certificate_form_component import certificate_form_dialog
 from .exam_form_component import exam_form_dialog
 from .exam_form_state import ExamFormState
 from .patient_detail_state import (
+    CertificateRowDTO,
     ExamRowDTO,
     PatientDetailDTO,
     PatientDetailState,
     PatientVisitRowDTO,
+    PrescriptionRowDTO,
 )
+from .prescription_form_component import prescription_form_dialog
 
 
 def _info_row(label: str, value: rx.Var) -> rx.Component:
@@ -50,6 +54,28 @@ def _exam_sortable_header(label: str, column: str) -> rx.Component:
             align="center",
         ),
         on_click=lambda: PatientDetailState.set_exam_sort(column),
+        style={"cursor": "pointer"},
+    )
+
+
+def _visit_sortable_header(label: str, column: str) -> rx.Component:
+    """Column header cell with sort-direction arrow for the visits table."""
+    return rx.table.column_header_cell(
+        rx.hstack(
+            rx.text(label, size="2"),
+            rx.cond(
+                PatientDetailState.visit_sort_column == column,
+                rx.cond(
+                    PatientDetailState.visit_sort_ascending,
+                    rx.icon("chevron-up", size=13, color="var(--accent-9)"),
+                    rx.icon("chevron-down", size=13, color="var(--accent-9)"),
+                ),
+                rx.icon("chevrons-up-down", size=13, color="var(--gray-7)"),
+            ),
+            spacing="1",
+            align="center",
+        ),
+        on_click=lambda: PatientDetailState.set_visit_sort(column),
         style={"cursor": "pointer"},
     )
 
@@ -424,18 +450,27 @@ def _create_visit_dialog() -> rx.Component:
                 ),
                 rx.vstack(
                     rx.text(LanguageState.tr["col_account"], size="2", weight="medium"),
-                    rx.select.root(
-                        rx.select.trigger(placeholder=LanguageState.tr["all_accounts"]),
-                        rx.select.content(
-                            rx.select.item(LanguageState.tr["all_accounts"], value="none"),
-                            rx.foreach(
-                                PatientDetailState.patient_accounts,
-                                lambda a: rx.select.item(a.name, value=a.id),
+                    rx.cond(
+                        PatientDetailState.patient_accounts.length() > 0,
+                        rx.select.root(
+                            rx.select.trigger(placeholder=LanguageState.tr["select_account_placeholder"]),
+                            rx.select.content(
+                                rx.foreach(
+                                    PatientDetailState.patient_accounts,
+                                    lambda a: rx.select.item(a.name, value=a.id),
+                                ),
                             ),
+                            value=PatientDetailState.create_visit_account_id,
+                            on_change=PatientDetailState.set_create_visit_account_id,
+                            size="2",
+                            width="100%",
                         ),
-                        value=PatientDetailState.create_visit_account_id,
-                        on_change=PatientDetailState.set_create_visit_account_id,
-                        size="2",
+                        rx.callout(
+                            LanguageState.tr["no_account_alert_desc"],
+                            icon="triangle-alert",
+                            color_scheme="orange",
+                            size="1",
+                        ),
                     ),
                     spacing="1",
                     width="100%",
@@ -453,6 +488,7 @@ def _create_visit_dialog() -> rx.Component:
                         LanguageState.tr["create_visit_btn"],
                         on_click=PatientDetailState.save_create_visit,
                         size="2",
+                        disabled=PatientDetailState.patient_accounts.length() == 0,
                     ),
                     spacing="2",
                     width="100%",
@@ -489,15 +525,15 @@ def _visits_section() -> rx.Component:
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
-                            rx.table.column_header_cell(LanguageState.tr["col_visit_number"]),
-                            rx.table.column_header_cell(LanguageState.tr["nav_campaigns"]),
-                            rx.table.column_header_cell(LanguageState.tr["col_scheduled"]),
-                            rx.table.column_header_cell(LanguageState.tr["col_status"]),
+                            _visit_sortable_header(LanguageState.tr["col_visit_number"], "visit_number"),
+                            _visit_sortable_header(LanguageState.tr["nav_campaigns"], "campaign_name"),
+                            _visit_sortable_header(LanguageState.tr["col_scheduled"], "scheduled_at"),
+                            _visit_sortable_header(LanguageState.tr["col_status"], "status"),
                             rx.table.column_header_cell(""),
                         )
                     ),
                     rx.table.body(
-                        rx.foreach(PatientDetailState.patient_visits, _patient_visit_row),
+                        rx.foreach(PatientDetailState.sorted_visits, _patient_visit_row),
                     ),
                     width="100%",
                     variant="surface",
@@ -560,8 +596,47 @@ def _exams_section() -> rx.Component:
             width="100%",
             align="center",
         ),
+        # Filter bar
+        rx.hstack(
+            rx.input(
+                type="date",
+                value=PatientDetailState.exam_filter_from,
+                on_change=PatientDetailState.set_exam_filter_from,
+                size="1",
+                width="130px",
+                placeholder="De",
+            ),
+            rx.text("→", size="2", color="var(--gray-8)"),
+            rx.input(
+                type="date",
+                value=PatientDetailState.exam_filter_to,
+                on_change=PatientDetailState.set_exam_filter_to,
+                size="1",
+                width="130px",
+                placeholder="à",
+            ),
+            rx.select.root(
+                rx.select.trigger(
+                    placeholder=LanguageState.tr["filter_by_type_placeholder"],
+                    size="1",
+                    width="180px",
+                ),
+                rx.select.content(
+                    rx.select.item(LanguageState.tr["all_types_option"], value="ALL"),
+                    rx.foreach(
+                        PatientDetailState.exam_type_options,
+                        lambda t: rx.select.item(t, value=t),
+                    ),
+                ),
+                value=rx.cond(PatientDetailState.exam_filter_type != "", PatientDetailState.exam_filter_type, "ALL"),
+                on_change=PatientDetailState.set_exam_filter_type,
+            ),
+            width="100%",
+            align="center",
+            spacing="2",
+        ),
         rx.cond(
-            PatientDetailState.exams,
+            PatientDetailState.filtered_sorted_exams,
             rx.box(
                 rx.table.root(
                     rx.table.header(
@@ -573,7 +648,7 @@ def _exams_section() -> rx.Component:
                         )
                     ),
                     rx.table.body(
-                        rx.foreach(PatientDetailState.sorted_exams, _exam_row),
+                        rx.foreach(PatientDetailState.filtered_sorted_exams, _exam_row),
                     ),
                     width="100%",
                     variant="surface",
@@ -596,12 +671,296 @@ def _exams_section() -> rx.Component:
 
 
 
+def _presc_sortable_header(label: str, column: str) -> rx.Component:
+    return rx.table.column_header_cell(
+        rx.hstack(
+            rx.text(label, size="2"),
+            rx.cond(
+                PatientDetailState.presc_sort_column == column,
+                rx.cond(
+                    PatientDetailState.presc_sort_ascending,
+                    rx.icon("chevron-up", size=13, color="var(--accent-9)"),
+                    rx.icon("chevron-down", size=13, color="var(--accent-9)"),
+                ),
+                rx.icon("chevrons-up-down", size=13, color="var(--gray-7)"),
+            ),
+            spacing="1",
+            align="center",
+        ),
+        on_click=lambda: PatientDetailState.set_presc_sort(column),
+        style={"cursor": "pointer"},
+    )
+
+
+def _prescription_row(presc: PrescriptionRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(presc.prescription_date, size="2")),
+        rx.table.cell(
+            rx.cond(
+                presc.diagnosis != "",
+                rx.text(presc.diagnosis, size="2"),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
+        rx.table.cell(rx.text(presc.drug_count.to_string(), size="2")),
+        rx.table.cell(rx.text(presc.prescribed_by_name, size="2", color="var(--gray-9)")),
+        rx.table.cell(
+            rx.hstack(
+                rx.cond(
+                    presc.is_archived,
+                    rx.badge("α", color_scheme="gray", variant="soft", size="1"),
+                ),
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("eye", size=14),
+                        variant="ghost",
+                        size="1",
+                        on_click=lambda: PatientDetailState.go_to_prescription(presc.id),
+                    ),
+                    content=LanguageState.tr["view_btn"],
+                ),
+                spacing="1",
+            )
+        ),
+        _hover={"background": "var(--gray-2)"},
+        style={"opacity": rx.cond(presc.is_archived, "0.6", "1")},
+    )
+
+
+def _prescriptions_tab() -> rx.Component:
+    return rx.vstack(
+        # Filter bar
+        rx.hstack(
+            rx.input(
+                type="date",
+                value=PatientDetailState.presc_filter_from,
+                on_change=PatientDetailState.set_presc_filter_from,
+                size="1",
+                width="130px",
+                placeholder="De",
+            ),
+            rx.text("→", size="2", color="var(--gray-8)"),
+            rx.input(
+                type="date",
+                value=PatientDetailState.presc_filter_to,
+                on_change=PatientDetailState.set_presc_filter_to,
+                size="1",
+                width="130px",
+                placeholder="à",
+            ),
+            rx.tooltip(
+                rx.icon_button(
+                    rx.icon(
+                        rx.cond(PatientDetailState.presc_show_archived, "archive", "archive-x"),
+                        size=14,
+                    ),
+                    on_click=PatientDetailState.toggle_presc_show_archived,
+                    variant=rx.cond(PatientDetailState.presc_show_archived, "soft", "ghost"),
+                    color_scheme=rx.cond(PatientDetailState.presc_show_archived, "accent", "gray"),
+                    size="1",
+                ),
+                content=LanguageState.tr["show_archived_tooltip"],
+            ),
+            rx.spacer(),
+            rx.button(
+                rx.icon("plus", size=15),
+                LanguageState.tr["new_prescription_btn"],
+                on_click=PatientDetailState.open_prescription_dialog,
+                size="2",
+            ),
+            width="100%",
+            align="center",
+            spacing="2",
+        ),
+        rx.cond(
+            PatientDetailState.filtered_sorted_prescriptions,
+            rx.box(
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            _presc_sortable_header(LanguageState.tr["prescription_date_label"], "prescription_date"),
+                            _presc_sortable_header(LanguageState.tr["prescription_diagnosis_label"], "diagnosis"),
+                            _presc_sortable_header(LanguageState.tr["prescription_drugs_count"], "drug_count"),
+                            _presc_sortable_header(LanguageState.tr["col_prescribed_by"], "prescribed_by_name"),
+                            rx.table.column_header_cell(""),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(PatientDetailState.filtered_sorted_prescriptions, _prescription_row),
+                    ),
+                    width="100%",
+                    variant="surface",
+                ),
+                overflow_x="auto",
+                width="100%",
+            ),
+            rx.center(
+                rx.vstack(
+                    rx.icon("file-text", size=36, color="var(--gray-6)"),
+                    rx.text(LanguageState.tr["no_prescriptions"], color="var(--gray-8)", size="2"),
+                    align="center",
+                    spacing="2",
+                ),
+                padding="2.5rem",
+                border="1px dashed var(--gray-5)",
+                border_radius="8px",
+                width="100%",
+            ),
+        ),
+        width="100%",
+        spacing="3",
+    )
+
+
+def _cert_sortable_header(label: str, column: str) -> rx.Component:
+    return rx.table.column_header_cell(
+        rx.hstack(
+            rx.text(label, size="2"),
+            rx.cond(
+                PatientDetailState.cert_sort_column == column,
+                rx.cond(
+                    PatientDetailState.cert_sort_ascending,
+                    rx.icon("chevron-up", size=13, color="var(--accent-9)"),
+                    rx.icon("chevron-down", size=13, color="var(--accent-9)"),
+                ),
+                rx.icon("chevrons-up-down", size=13, color="var(--gray-7)"),
+            ),
+            spacing="1",
+            align="center",
+        ),
+        on_click=lambda: PatientDetailState.set_cert_sort(column),
+        style={"cursor": "pointer"},
+    )
+
+
+def _certificate_row(cert: CertificateRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(cert.issue_date, size="2")),
+        rx.table.cell(rx.badge(cert.certificate_type_label, variant="soft", color_scheme="teal", size="1")),
+        rx.table.cell(
+            rx.cond(
+                cert.conclusion != "",
+                rx.text(cert.conclusion, size="2"),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
+        rx.table.cell(rx.text(cert.issued_by_name, size="2", color="var(--gray-9)")),
+        rx.table.cell(
+            rx.hstack(
+                rx.cond(
+                    cert.is_archived,
+                    rx.badge("α", color_scheme="gray", variant="soft", size="1"),
+                ),
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("eye", size=14),
+                        variant="ghost",
+                        size="1",
+                        on_click=lambda: PatientDetailState.go_to_certificate(cert.id),
+                    ),
+                    content=LanguageState.tr["view_btn"],
+                ),
+                spacing="1",
+            )
+        ),
+        _hover={"background": "var(--gray-2)"},
+        style={"opacity": rx.cond(cert.is_archived, "0.6", "1")},
+    )
+
+
+def _certificates_tab() -> rx.Component:
+    return rx.vstack(
+        # Filter bar
+        rx.hstack(
+            rx.input(
+                type="date",
+                value=PatientDetailState.cert_filter_from,
+                on_change=PatientDetailState.set_cert_filter_from,
+                size="1",
+                width="130px",
+                placeholder="De",
+            ),
+            rx.text("→", size="2", color="var(--gray-8)"),
+            rx.input(
+                type="date",
+                value=PatientDetailState.cert_filter_to,
+                on_change=PatientDetailState.set_cert_filter_to,
+                size="1",
+                width="130px",
+                placeholder="à",
+            ),
+            rx.tooltip(
+                rx.icon_button(
+                    rx.icon(
+                        rx.cond(PatientDetailState.cert_show_archived, "archive", "archive-x"),
+                        size=14,
+                    ),
+                    on_click=PatientDetailState.toggle_cert_show_archived,
+                    variant=rx.cond(PatientDetailState.cert_show_archived, "soft", "ghost"),
+                    color_scheme=rx.cond(PatientDetailState.cert_show_archived, "accent", "gray"),
+                    size="1",
+                ),
+                content=LanguageState.tr["show_archived_tooltip"],
+            ),
+            rx.spacer(),
+            rx.button(
+                rx.icon("plus", size=15),
+                LanguageState.tr["new_certificate_btn"],
+                on_click=PatientDetailState.open_certificate_dialog,
+                size="2",
+            ),
+            width="100%",
+            align="center",
+            spacing="2",
+        ),
+        rx.cond(
+            PatientDetailState.filtered_sorted_certificates,
+            rx.box(
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            _cert_sortable_header(LanguageState.tr["cert_form_date_label"], "issue_date"),
+                            _cert_sortable_header(LanguageState.tr["col_cert_type"], "certificate_type_label"),
+                            _cert_sortable_header(LanguageState.tr["cert_form_conclusion_label"], "conclusion"),
+                            _cert_sortable_header(LanguageState.tr["col_issued_by"], "issued_by_name"),
+                            rx.table.column_header_cell(""),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(PatientDetailState.filtered_sorted_certificates, _certificate_row),
+                    ),
+                    width="100%",
+                    variant="surface",
+                ),
+                overflow_x="auto",
+                width="100%",
+            ),
+            rx.center(
+                rx.vstack(
+                    rx.icon("award", size=36, color="var(--gray-6)"),
+                    rx.text(LanguageState.tr["no_certificates"], color="var(--gray-8)", size="2"),
+                    align="center",
+                    spacing="2",
+                ),
+                padding="2.5rem",
+                border="1px dashed var(--gray-5)",
+                border_radius="8px",
+                width="100%",
+            ),
+        ),
+        width="100%",
+        spacing="3",
+    )
+
+
 def patient_detail_page() -> rx.Component:
     """Patient detail page."""
     return main_component(
         page_layout(
             patient_form_dialog(),
             exam_form_dialog(),
+            prescription_form_dialog(),
+            certificate_form_dialog(),
             id_card_dialog(),
             _create_visit_dialog(),
             rx.button(
@@ -626,8 +985,52 @@ def patient_detail_page() -> rx.Component:
                     PatientDetailState.patient,
                     rx.vstack(
                         _patient_card(PatientDetailState.patient),
-                        _visits_section(),
-                        _exams_section(),
+                        rx.tabs.root(
+                            rx.tabs.list(
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("stethoscope", size=15),
+                                        rx.text(LanguageState.tr["tab_visits"]),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="visits",
+                                ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("flask-conical", size=15),
+                                        rx.text(LanguageState.tr["tab_exams"]),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="exams",
+                                ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("file-text", size=15),
+                                        rx.text(LanguageState.tr["tab_prescriptions"]),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="prescriptions",
+                                ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("award", size=15),
+                                        rx.text(LanguageState.tr["tab_certificates"]),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="certificates",
+                                ),
+                            ),
+                            rx.tabs.content(_visits_section(), value="visits", padding_top="1rem"),
+                            rx.tabs.content(_exams_section(), value="exams", padding_top="1rem"),
+                            rx.tabs.content(_prescriptions_tab(), value="prescriptions", padding_top="1rem"),
+                            rx.tabs.content(_certificates_tab(), value="certificates", padding_top="1rem"),
+                            default_value="visits",
+                            width="100%",
+                        ),
                         width="100%",
                         spacing="6",
                     ),

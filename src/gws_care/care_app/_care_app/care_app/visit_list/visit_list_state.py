@@ -3,7 +3,16 @@
 import reflex as rx
 from pydantic import BaseModel
 
-from ..common.role_state import RoleState
+from ..common.account_picker_state import AccountPickerRowDTO
+from ..common.combined_picker_state import CombinedPickerState
+from ..common.patient_picker_state import PatientPickerRowDTO
+
+
+class PatientAccountOption(BaseModel):
+    """One of the accounts linked to the selected patient."""
+
+    id: str
+    name: str
 
 
 class VisitRowDTO(BaseModel):
@@ -25,13 +34,6 @@ class AccountOptionDTO(BaseModel):
     name: str
 
 
-class PatientOptionDTO(BaseModel):
-    """Lightweight patient option for the new-visit dialog."""
-
-    id: str
-    label: str  # "Last, First (N° dossier)"
-
-
 class CalendarDayDTO(BaseModel):
     """One cell in the monthly calendar grid."""
 
@@ -42,12 +44,89 @@ class CalendarDayDTO(BaseModel):
     visits: list[VisitRowDTO] = []
 
 
-class VisitListState(RoleState):
+class VisitListState(CombinedPickerState):
     """State for the /visits page."""
+
+    # ── Patient picker vars (declared here for independent state storage) ─────
+    picker_patients: list[PatientPickerRowDTO] = []
+    picker_is_loading: bool = False
+    picker_error: str = ""
+    picker_filter_name: str = ""
+    picker_filter_number: str = ""
+    picker_account_id: str = ""
+    picker_is_open: bool = False
+    picker_selected_id: str = ""
+    picker_selected_label: str = ""
+
+    # ── Account picker vars (declared here for independent state storage) ─────
+    acct_picker_is_open: bool = False
+    acct_picker_filter: str = ""
+    acct_picker_accounts: list[AccountPickerRowDTO] = []
+    acct_picker_is_loading: bool = False
+    acct_picker_error: str = ""
+    acct_picker_selected_id: str = ""
+    acct_picker_selected_name: str = ""
+
+    # ── Patient picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_patient_picker(self):
+        await self._open_patient_picker()
+
+    @rx.event
+    def close_patient_picker(self):
+        self.picker_is_open = False
+
+    @rx.event
+    async def picker_clear_selection(self):
+        self.picker_selected_id = ""
+        self.picker_selected_label = ""
+
+    @rx.event
+    async def picker_set_filter_name(self, value: str):
+        await self._picker_set_filter_name(value)
+
+    @rx.event
+    async def picker_set_filter_number(self, value: str):
+        await self._picker_set_filter_number(value)
+
+    @rx.event
+    async def picker_clear_filters(self):
+        await self._picker_clear_filters()
+
+    @rx.event
+    def picker_select_patient(self, patient_id: str, label: str):
+        self.picker_selected_id = patient_id
+        self.picker_selected_label = label
+        self.picker_is_open = False
+
+    # ── Account picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_account_picker(self):
+        await self._open_account_picker()
+
+    @rx.event
+    def close_account_picker(self):
+        self.acct_picker_is_open = False
+
+    @rx.event
+    async def acct_picker_set_filter(self, value: str):
+        await self._acct_picker_set_filter(value)
+
+    @rx.event
+    async def acct_picker_confirm(self, account_id: str, name: str):
+        await self._acct_picker_confirm(account_id, name)
+
+    @rx.event
+    async def acct_picker_clear(self):
+        await self._acct_picker_clear()
 
     visits: list[VisitRowDTO] = []
     companies: list[AccountOptionDTO] = []
     is_loading: bool = False
+    is_loading_more: bool = False
+    has_more: bool = False
     error_message: str = ""
     search: str = ""
     filter_status: str = "ALL"
@@ -56,6 +135,9 @@ class VisitListState(RoleState):
     filter_date_to: str = ""
     sort_column: str = "scheduled_at"
     sort_ascending: bool = True
+
+    _page_offset: int = 0
+    _current_page_size: int = 50
 
     # View mode: "list" or "calendar"
     view_mode: str = "list"
@@ -66,14 +148,15 @@ class VisitListState(RoleState):
 
     # ── New Visit dialog ──────────────────────────────────────────────────────
     show_new_visit_dialog: bool = False
-    new_visit_patient_search: str = ""
-    new_visit_patient_results: list[PatientOptionDTO] = []
-    new_visit_patient_id: str = ""
-    new_visit_patient_label: str = ""
     new_visit_scheduled_at: str = ""
-    new_visit_account_id: str = ""
     new_visit_error: str = ""
-    new_visit_is_saving: bool = False
+    new_visit_is_saving: bool = False    # Accounts available for the selected patient
+    new_visit_patient_accounts: list[PatientAccountOption] = []
+    new_visit_account_id: str = ""
+    new_visit_account_name: str = ""
+    # ── No-account alert ──────────────────────────────────────────────────────────
+    show_no_account_alert: bool = False
+    no_account_patient_id: str = ""
 
     @rx.event
     async def on_load(self):
@@ -86,6 +169,10 @@ class VisitListState(RoleState):
         self.calendar_year = today.year
         self.calendar_month = today.month
         await self._load_companies()
+        await self._load_visits()
+
+    async def _on_account_picked(self, account_id: str) -> None:
+        self.filter_account_id = account_id
         await self._load_visits()
 
     @rx.event
@@ -185,18 +272,23 @@ class VisitListState(RoleState):
     def go_to_patient(self, patient_id: str):
         return rx.redirect(f"/patient/{patient_id}")
 
+    @rx.event
+    async def load_more_visits(self):
+        """Append the next page of visits to the current list."""
+        self.is_loading_more = True
+        await self._load_visits(reset=False)
+
     # ── New Visit dialog events ───────────────────────────────────────────────
 
     @rx.event
     async def open_new_visit_dialog(self):
-        self.new_visit_patient_search = ""
-        self.new_visit_patient_results = []
-        self.new_visit_patient_id = ""
-        self.new_visit_patient_label = ""
+        await self._open_picker(account_id="")
         self.new_visit_scheduled_at = ""
-        self.new_visit_account_id = ""
         self.new_visit_error = ""
         self.new_visit_is_saving = False
+        self.new_visit_patient_accounts = []
+        self.new_visit_account_id = ""
+        self.new_visit_account_name = ""
         self.show_new_visit_dialog = True
 
     @rx.event
@@ -204,49 +296,60 @@ class VisitListState(RoleState):
         self.show_new_visit_dialog = False
 
     @rx.event
-    async def search_new_visit_patient(self, query: str):
-        self.new_visit_patient_search = query
-        self.new_visit_patient_results = []
-        self.new_visit_patient_id = ""
-        self.new_visit_patient_label = ""
-        if len(query.strip()) < 2:
-            return
-        try:
-            with await self.authenticate_user():
-                from gws_care.patient.patient_service import PatientService
-                patients = PatientService.search_patients(search=query.strip(), limit=10)
-                self.new_visit_patient_results = [
-                    PatientOptionDTO(
-                        id=str(p.id),
-                        label=f"{p.last_name} {p.first_name} ({p.patient_number})",
-                    )
-                    for p in patients
-                ]
-        except Exception:
-            self.new_visit_patient_results = []
-
-    @rx.event
-    def select_new_visit_patient(self, patient_id: str, label: str):
-        self.new_visit_patient_id = patient_id
-        self.new_visit_patient_label = label
-        self.new_visit_patient_search = label
-        self.new_visit_patient_results = []
-
-    @rx.event
     def set_new_visit_scheduled_at(self, value: str):
         self.new_visit_scheduled_at = value
 
     @rx.event
     def set_new_visit_account_id(self, value: str):
-        self.new_visit_account_id = "" if value == "none" else value
+        """Called from the account select in the dialog."""
+        self.new_visit_account_id = value
+        matched = next((a for a in self.new_visit_patient_accounts if a.id == value), None)
+        self.new_visit_account_name = matched.name if matched else ""
+
+    @rx.event
+    def close_no_account_alert(self):
+        self.show_no_account_alert = False
+
+    @rx.event
+    async def picker_select_patient(self, patient_id: str, label: str):
+        """Override to also load the patient's accounts after selection."""
+        self.picker_selected_id = patient_id
+        self.picker_selected_label = label
+        self.picker_is_open = False
+        # Reset account selection
+        self.new_visit_patient_accounts = []
+        self.new_visit_account_id = ""
+        self.new_visit_account_name = ""
+        if not patient_id:
+            return
+        try:
+            with await self.authenticate_user():
+                from gws_care.patient.patient_account import PatientAccount
+                links = list(
+                    PatientAccount.select().where(PatientAccount.patient == patient_id)
+                )
+                options = [
+                    PatientAccountOption(id=str(link.account_id), name=link.account.name)
+                    for link in links
+                ]
+                self.new_visit_patient_accounts = options
+                # Auto-select when only one account
+                if len(options) == 1:
+                    self.new_visit_account_id = options[0].id
+                    self.new_visit_account_name = options[0].name
+        except Exception as e:
+            self.new_visit_error = str(e)
 
     @rx.event
     async def save_new_visit(self):
-        if not self.new_visit_patient_id:
+        if not self.picker_selected_id:
             self.new_visit_error = "Please select a patient."
             return
         if not self.new_visit_scheduled_at:
             self.new_visit_error = "Please select a date and time."
+            return
+        if not self.new_visit_account_id:
+            self.new_visit_error = "Please select a billing account."
             return
         self.new_visit_error = ""
         self.new_visit_is_saving = True
@@ -254,9 +357,9 @@ class VisitListState(RoleState):
             with await self.authenticate_user():
                 from gws_care.visit.visit_service import VisitService
                 _visit, program = VisitService.create_visit_with_default_program(
-                    patient_id=self.new_visit_patient_id,
+                    patient_id=self.picker_selected_id,
                     scheduled_at_str=self.new_visit_scheduled_at,
-                    billing_account_id=self.new_visit_account_id or None,
+                    billing_account_id=self.new_visit_account_id,
                 )
             self.show_new_visit_dialog = False
             return rx.redirect(f"/program/{program.id}")
@@ -327,11 +430,20 @@ class VisitListState(RoleState):
         except Exception:
             self.companies = []
 
-    async def _load_visits(self):
+    async def _load_visits(self, reset: bool = True):
         if not await self.check_authentication():
             return
 
-        self.is_loading = True
+        # In calendar mode always load all (no pagination)
+        is_calendar = self.view_mode == "calendar"
+        page_limit = None if is_calendar else self._current_page_size
+
+        if reset:
+            self._page_offset = 0
+            self.is_loading = True
+            if not is_calendar:
+                from gws_care.core.care_app_config_service import CareAppConfigService
+                self._current_page_size = CareAppConfigService.get_page_size()
         self.error_message = ""
         try:
             with await self.authenticate_user():
@@ -349,7 +461,14 @@ class VisitListState(RoleState):
                     account_id=self.filter_account_id or None,
                     date_from=self.filter_date_from or None,
                     date_to=self.filter_date_to or None,
+                    limit=(self._current_page_size + 1) if page_limit else None,
+                    offset=self._page_offset if not is_calendar else 0,
                 )
+                if page_limit:
+                    has_more = len(visits) > self._current_page_size
+                    visits = visits[:self._current_page_size]
+                else:
+                    has_more = False
                 visit_rows = []
                 for v in visits:
                     campaign_name = ""
@@ -370,14 +489,19 @@ class VisitListState(RoleState):
                         visit_number=v.visit_number or "",
                     ))
                 sort_col = self.sort_column
+                all_rows = visit_rows if reset else self.visits + visit_rows
                 self.visits = sorted(
-                    visit_rows,
+                    all_rows,
                     key=lambda row: (getattr(row, sort_col) or "").lower(),
                     reverse=not self.sort_ascending,
                 )
+                self.has_more = has_more
+                if not is_calendar:
+                    self._page_offset += self._current_page_size
                 if self.view_mode == "calendar":
                     self._build_calendar()
         except Exception as e:
             self.error_message = f"Error loading visits: {e}"
         finally:
             self.is_loading = False
+            self.is_loading_more = False

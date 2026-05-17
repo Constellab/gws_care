@@ -3,7 +3,7 @@
 import reflex as rx
 from pydantic import BaseModel
 
-from ..common.role_state import RoleState
+from ..common.account_picker_state import AccountPickerRowDTO, AccountPickerState
 
 
 class ExamTypeStat(BaseModel):
@@ -22,15 +22,17 @@ class MonthlyExamStat(BaseModel):
     count: int
 
 
-class AccountOptionDTO(BaseModel):
-    """Lightweight account option for filter dropdown."""
-
-    id: str
-    name: str
-
-
-class DashboardState(RoleState):
+class DashboardState(AccountPickerState):
     """State for the /dashboard statistics page."""
+
+    # ── Account picker vars (declared here for independent state storage) ─────
+    acct_picker_is_open: bool = False
+    acct_picker_filter: str = ""
+    acct_picker_accounts: list[AccountPickerRowDTO] = []
+    acct_picker_is_loading: bool = False
+    acct_picker_error: str = ""
+    acct_picker_selected_id: str = ""
+    acct_picker_selected_name: str = ""
 
     total_patients: int = 0
     total_exams: int = 0
@@ -41,16 +43,39 @@ class DashboardState(RoleState):
     appointments_by_status: list[AppointmentStatusStat] = []
     monthly_exams: list[MonthlyExamStat] = []
 
-    companies: list[AccountOptionDTO] = []
-    filter_account_id: str = ""
-
     is_loading: bool = False
     error_message: str = ""
+    filter_account_id: str = ""
+
+    # ── Account picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_account_picker(self):
+        await self._open_account_picker()
+
+    @rx.event
+    def close_account_picker(self):
+        self.acct_picker_is_open = False
+
+    @rx.event
+    async def acct_picker_set_filter(self, value: str):
+        await self._acct_picker_set_filter(value)
+
+    @rx.event
+    async def acct_picker_confirm(self, account_id: str, name: str):
+        await self._acct_picker_confirm(account_id, name)
+
+    @rx.event
+    async def acct_picker_clear(self):
+        await self._acct_picker_clear()
 
     @rx.event
     async def on_load(self):
         await self._load_roles()
-        await self._load_companies()
+        await self._load_stats()
+
+    async def _on_account_picked(self, account_id: str) -> None:
+        self.filter_account_id = account_id
         await self._load_stats()
 
     @rx.event
@@ -58,18 +83,6 @@ class DashboardState(RoleState):
         """Filter all dashboard stats by account."""
         self.filter_account_id = value if value != "ALL" else ""
         await self._load_stats()
-
-    async def _load_companies(self):
-        """Internal: load active accounts for the filter dropdown."""
-        try:
-            with await self.authenticate_user():
-                from gws_care.account.account_service import AccountService
-                comps = AccountService.list_accounts()
-                self.companies = [
-                    AccountOptionDTO(id=str(c.id), name=c.name) for c in comps
-                ]
-        except Exception:
-            self.companies = []
 
     async def _load_stats(self):
         if not await self.check_authentication():
@@ -83,8 +96,10 @@ class DashboardState(RoleState):
                 from gws_care.exam.exam import Exam
                 from gws_care.exam.exam_type import ExamType
                 from gws_care.patient.patient import Patient
+                from gws_care.patient.patient_account import PatientAccount
                 from gws_care.visit.visit import Visit
                 from gws_care.visit.visit_status import VisitStatus
+                from peewee import JOIN
 
                 cid = self.filter_account_id or None
 
@@ -94,10 +109,20 @@ class DashboardState(RoleState):
                 cert_q = MedicalCertificate.select()
 
                 if cid:
-                    patient_q = patient_q.where(Patient.billing_account == cid)
+                    patient_q = (
+                        patient_q
+                        .join(PatientAccount, JOIN.INNER, on=(PatientAccount.patient_id == Patient.id))
+                        .where(PatientAccount.account_id == cid)
+                    )
                     exam_q = exam_q.where(Exam.billing_account == cid)
                     visit_q = visit_q.where(Visit.billing_account == cid)
-                    cert_q = cert_q.join(Patient).where(Patient.billing_account == cid)
+                    cert_q = (
+                        cert_q
+                        .join(Patient)
+                        .switch(Patient)
+                        .join(PatientAccount, JOIN.INNER, on=(PatientAccount.patient_id == Patient.id))
+                        .where(PatientAccount.account_id == cid)
+                    )
 
                 self.total_patients = patient_q.count()
                 self.total_exams = exam_q.count()

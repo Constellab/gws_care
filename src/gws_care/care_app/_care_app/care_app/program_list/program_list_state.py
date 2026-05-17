@@ -3,7 +3,7 @@
 import reflex as rx
 from pydantic import BaseModel
 
-from ..common.role_state import RoleState
+from ..common.account_picker_state import AccountPickerRowDTO, AccountPickerState
 
 
 class ProgramRowDTO(BaseModel):
@@ -22,18 +22,98 @@ class ProgramRowDTO(BaseModel):
     exam_type_count: int = 0
 
 
-class AccountOptionDTO(BaseModel):
-    id: str
-    name: str
+class ProgramFormPickerState(AccountPickerState):
+    """Sibling account picker for the create-program form.
+
+    Fully self-contained: stores the confirmed form account in its own vars.
+    ProgramListState.save_program reads them via get_state(ProgramFormPickerState).
+    """
+
+    # ── Account picker vars (declared here for independent state storage) ─────
+    acct_picker_is_open: bool = False
+    acct_picker_filter: str = ""
+    acct_picker_accounts: list[AccountPickerRowDTO] = []
+    acct_picker_is_loading: bool = False
+    acct_picker_error: str = ""
+    acct_picker_selected_id: str = ""
+    acct_picker_selected_name: str = ""
+
+    # Form account result — written by _on_account_picked on self
+    form_account_id: str = ""
+    form_account_name: str = ""
+
+    async def _on_account_picked(self, account_id: str) -> None:
+        """Store confirmed selection in own vars — no cross-sibling write needed."""
+        self.form_account_id = account_id
+        self.form_account_name = self.acct_picker_selected_name
+
+    # ── Account picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_account_picker(self):
+        await self._open_account_picker()
+
+    @rx.event
+    def close_account_picker(self):
+        self.acct_picker_is_open = False
+
+    @rx.event
+    async def acct_picker_set_filter(self, value: str):
+        await self._acct_picker_set_filter(value)
+
+    @rx.event
+    async def acct_picker_confirm(self, account_id: str, name: str):
+        await self._acct_picker_confirm(account_id, name)
+
+    @rx.event
+    async def acct_picker_clear(self):
+        await self._acct_picker_clear()
+
+    @rx.event
+    def clear_form_account(self):
+        self.form_account_id = ""
+        self.form_account_name = ""
+        self.acct_picker_selected_id = ""
+        self.acct_picker_selected_name = ""
+
+    @rx.event
+    def reset_form_picker(self):
+        self.form_account_id = ""
+        self.form_account_name = ""
+        self.acct_picker_selected_id = ""
+        self.acct_picker_selected_name = ""
+        self.acct_picker_filter = ""
+        self.acct_picker_accounts = []
+        self.acct_picker_is_open = False
+
+    @rx.event
+    async def load_accounts(self):
+        """Load the account list into the inline picker without opening a dialog."""
+        self.acct_picker_filter = ""
+        self.acct_picker_error = ""
+        await self._run_acct_picker_search()
 
 
-class ProgramListState(RoleState):
+class ProgramListState(AccountPickerState):
     """State for the /programs page."""
 
+    # ── Account picker vars (declared here for independent state storage) ─────
+    acct_picker_is_open: bool = False
+    acct_picker_filter: str = ""
+    acct_picker_accounts: list[AccountPickerRowDTO] = []
+    acct_picker_is_loading: bool = False
+    acct_picker_error: str = ""
+    acct_picker_selected_id: str = ""
+    acct_picker_selected_name: str = ""
+
     programs: list[ProgramRowDTO] = []
-    account_options: list[AccountOptionDTO] = []
     is_loading: bool = False
+    is_loading_more: bool = False
+    has_more: bool = False
     error_message: str = ""
+
+    _page_offset: int = 0
+    _current_page_size: int = 50
 
     # Filters
     filter_account_id: str = ""
@@ -47,12 +127,33 @@ class ProgramListState(RoleState):
     # Create dialog
     create_dialog_open: bool = False
     form_name: str = ""
-    form_account_id: str = ""
     form_start_date: str = ""
     form_end_date: str = ""
     form_notes: str = ""
     is_saving: bool = False
     form_error: str = ""
+
+    # ── Account picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_account_picker(self):
+        await self._open_account_picker()
+
+    @rx.event
+    def close_account_picker(self):
+        self.acct_picker_is_open = False
+
+    @rx.event
+    async def acct_picker_set_filter(self, value: str):
+        await self._acct_picker_set_filter(value)
+
+    @rx.event
+    async def acct_picker_confirm(self, account_id: str, name: str):
+        await self._acct_picker_confirm(account_id, name)
+
+    @rx.event
+    async def acct_picker_clear(self):
+        await self._acct_picker_clear()
 
     @rx.event
     async def on_load(self):
@@ -60,7 +161,10 @@ class ProgramListState(RoleState):
         redirect = await self._require_any_of(self.is_operator, self.is_doctor, self.is_admin)
         if redirect:
             return redirect
-        await self._load_accounts()
+        await self._load_programs()
+
+    async def _on_account_picked(self, account_id: str) -> None:
+        self.filter_account_id = account_id
         await self._load_programs()
 
     @rx.event
@@ -102,17 +206,24 @@ class ProgramListState(RoleState):
         except Exception as e:
             self.error_message = str(e)
 
+    @rx.event
+    async def load_more_programs(self):
+        """Append the next page of programs to the current list."""
+        self.is_loading_more = True
+        await self._load_programs(reset=False)
+
     # ── Create dialog ─────────────────────────────────────────────────────────
 
     @rx.event
     def open_create_dialog(self):
         self.create_dialog_open = True
         self.form_name = ""
-        self.form_account_id = ""
         self.form_start_date = ""
         self.form_end_date = ""
         self.form_notes = ""
         self.form_error = ""
+        yield ProgramFormPickerState.reset_form_picker
+        yield ProgramFormPickerState.load_accounts
 
     @rx.event
     def close_create_dialog(self):
@@ -122,10 +233,6 @@ class ProgramListState(RoleState):
     @rx.event
     def set_form_name(self, value: str):
         self.form_name = value
-
-    @rx.event
-    def set_form_account_id(self, value: str):
-        self.form_account_id = value
 
     @rx.event
     def set_form_start_date(self, value: str):
@@ -141,7 +248,9 @@ class ProgramListState(RoleState):
 
     @rx.event
     async def save_program(self):
-        if not self.form_name.strip() or not self.form_account_id or not self.form_start_date or not self.form_end_date:
+        form_picker = await self.get_state(ProgramFormPickerState)
+        form_account_id = form_picker.form_account_id
+        if not self.form_name.strip() or not form_account_id or not self.form_start_date or not self.form_end_date:
             self.form_error = "Please fill in all required fields."
             return
         self.is_saving = True
@@ -152,7 +261,7 @@ class ProgramListState(RoleState):
                 from gws_care.medical_program.medical_program_service import MedicalProgramService
                 dto = SaveProgramDTO(
                     name=self.form_name.strip(),
-                    account_id=self.form_account_id,
+                    account_id=form_account_id,
                     start_date=self.form_start_date,
                     end_date=self.form_end_date,
                     notes=self.form_notes or None,
@@ -168,23 +277,14 @@ class ProgramListState(RoleState):
 
     # ── Internal loaders ──────────────────────────────────────────────────────
 
-    async def _load_accounts(self):
+    async def _load_programs(self, reset: bool = True):
         if not await self.check_authentication():
             return
-        try:
-            with await self.authenticate_user():
-                from gws_care.account.account_service import AccountService
-                accounts = AccountService.list_accounts(active_only=True)
-                self.account_options = [
-                    AccountOptionDTO(id=str(a.id), name=a.name) for a in accounts
-                ]
-        except Exception as e:
-            self.error_message = str(e)
-
-    async def _load_programs(self):
-        if not await self.check_authentication():
-            return
-        self.is_loading = True
+        if reset:
+            self._page_offset = 0
+            self.is_loading = True
+            from gws_care.core.care_app_config_service import CareAppConfigService
+            self._current_page_size = CareAppConfigService.get_page_size()
         self.error_message = ""
         try:
             with await self.authenticate_user():
@@ -202,8 +302,12 @@ class ProgramListState(RoleState):
                     account_id=self.filter_account_id or None,
                     status=status_filter,
                     search=self.search_name,
+                    limit=self._current_page_size + 1,
+                    offset=self._page_offset,
                 )
-                rows = [
+                has_more = len(programs) > self._current_page_size
+                programs = programs[:self._current_page_size]
+                new_rows = [
                     ProgramRowDTO(
                         id=str(c.id),
                         program_number=c.program_number,
@@ -220,12 +324,17 @@ class ProgramListState(RoleState):
                     for c in programs
                 ]
                 sort_col = self.sort_column
+                all_rows = new_rows if reset else self.programs + new_rows
                 self.programs = sorted(
-                    rows,
+                    all_rows,
                     key=lambda row: (getattr(row, sort_col) or "").lower(),
                     reverse=not self.sort_ascending,
                 )
+                self.has_more = has_more
+                self._page_offset += self._current_page_size
         except Exception as e:
             self.error_message = str(e)
         finally:
             self.is_loading = False
+            self.is_loading_more = False
+

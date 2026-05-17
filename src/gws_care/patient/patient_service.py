@@ -6,6 +6,7 @@ from gws_core import BadRequestException, NotFoundException
 
 from gws_care.account.account import Account
 from gws_care.patient.patient import Patient
+from gws_care.patient.patient_account import PatientAccount
 from gws_care.patient.patient_dto import SavePatientDTO
 
 
@@ -40,6 +41,7 @@ class PatientService:
         dob_from: str | None = None,
         dob_to: str | None = None,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[Patient]:
         query = Patient.select()
         if patient_number:
@@ -55,7 +57,12 @@ class PatientService:
                 | Patient.first_name.contains(term)
             )
         if account_id:
-            query = query.where(Patient.billing_account == account_id)
+            from peewee import JOIN
+            query = (
+                query
+                .join(PatientAccount, JOIN.INNER, on=(PatientAccount.patient_id == Patient.id))
+                .where(PatientAccount.account_id == account_id)
+            )
         if dob_from:
             from datetime import date as date_type
             query = query.where(Patient.date_of_birth >= date_type.fromisoformat(dob_from))
@@ -63,32 +70,40 @@ class PatientService:
             from datetime import date as date_type
             query = query.where(Patient.date_of_birth <= date_type.fromisoformat(dob_to))
         query = query.order_by(Patient.last_name, Patient.first_name)
+        if offset:
+            query = query.offset(offset)
         if limit:
             query = query.limit(limit)
         return list(query)
 
     @classmethod
     def list_patients_for_account(cls, account_id: str) -> list[Patient]:
-        """Return all patients belonging to the given account."""
+        """Return all patients linked to the given account."""
+        from peewee import JOIN
         return list(
             Patient.select()
-            .where(Patient.billing_account == account_id)
+            .join(PatientAccount, JOIN.INNER, on=(PatientAccount.patient_id == Patient.id))
+            .where(PatientAccount.account_id == account_id)
             .order_by(Patient.last_name, Patient.first_name)
         )
 
     @classmethod
-    def assign_account(cls, patient_id: str, account_id: str | None) -> Patient:
-        """Assign (or remove) an account from a patient."""
+    def add_account(cls, patient_id: str, account_id: str) -> None:
+        """Link a patient to a billing account (many-to-many)."""
         patient = cls.get_patient(patient_id)
-        if account_id:
-            account = Account.get_or_none(Account.id == account_id)
-            if account is None:
-                raise NotFoundException(f"Account '{account_id}' not found")
-            patient.billing_account = account
-        else:
-            patient.billing_account = None
-        patient.save()
-        return patient
+        account = Account.get_or_none(Account.id == account_id)
+        if account is None:
+            raise NotFoundException(f"Account '{account_id}' not found")
+        # get_or_create avoids duplicate-key error if already linked
+        PatientAccount.get_or_create(patient=patient, account=account)
+
+    @classmethod
+    def remove_account(cls, patient_id: str, account_id: str) -> None:
+        """Remove the link between a patient and a billing account."""
+        PatientAccount.delete().where(
+            (PatientAccount.patient_id == patient_id)
+            & (PatientAccount.account_id == account_id)
+        ).execute()
 
     @classmethod
     def create_patient(cls, dto: SavePatientDTO) -> Patient:
@@ -103,6 +118,11 @@ class PatientService:
         except Exception:
             patient.qr_code = None  # non-fatal
         patient.save()
+        # Link to account if provided
+        if dto.account_id:
+            account = Account.get_or_none(Account.id == dto.account_id)
+            if account is not None:
+                PatientAccount.get_or_create(patient=patient, account=account)
         return patient
 
     @classmethod
@@ -164,11 +184,6 @@ class PatientService:
         patient.notification_preferences = (
             json.dumps(dto.notification_preferences) if dto.notification_preferences else None
         )
-        if dto.account_id:
-            account = Account.get_or_none(Account.id == dto.account_id)
-            patient.billing_account = account
-        else:
-            patient.billing_account = None
 
     @classmethod
     def _generate_patient_number(cls) -> str:

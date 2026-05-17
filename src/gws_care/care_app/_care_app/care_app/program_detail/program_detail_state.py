@@ -3,7 +3,7 @@
 import reflex as rx
 from pydantic import BaseModel
 
-from ..common.role_state import RoleState
+from ..common.patient_picker_state import PatientPickerRowDTO, PatientPickerState
 
 
 class ProgramDetailDTO(BaseModel):
@@ -42,18 +42,57 @@ class VisitRowDTO(BaseModel):
     status_label: str
 
 
-class PatientOptionDTO(BaseModel):
-    id: str
-    label: str
-
-
 class ExamTypeOptionDTO(BaseModel):
     id: str
     label: str
 
 
-class ProgramDetailState(RoleState):
+class ProgramDetailState(PatientPickerState):
     """State for the /program/[id] detail page."""
+
+    # ── Patient picker vars (declared here for independent state storage) ─────
+    picker_patients: list[PatientPickerRowDTO] = []
+    picker_is_loading: bool = False
+    picker_error: str = ""
+    picker_filter_name: str = ""
+    picker_filter_number: str = ""
+    picker_account_id: str = ""
+    picker_is_open: bool = False
+    picker_selected_id: str = ""
+    picker_selected_label: str = ""
+
+    # ── Patient picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_patient_picker(self):
+        await self._open_patient_picker()
+
+    @rx.event
+    def close_patient_picker(self):
+        self.picker_is_open = False
+
+    @rx.event
+    async def picker_clear_selection(self):
+        self.picker_selected_id = ""
+        self.picker_selected_label = ""
+
+    @rx.event
+    async def picker_set_filter_name(self, value: str):
+        await self._picker_set_filter_name(value)
+
+    @rx.event
+    async def picker_set_filter_number(self, value: str):
+        await self._picker_set_filter_number(value)
+
+    @rx.event
+    async def picker_clear_filters(self):
+        await self._picker_clear_filters()
+
+    @rx.event
+    def picker_select_patient(self, patient_id: str, label: str):
+        self.picker_selected_id = patient_id
+        self.picker_selected_label = label
+        self.picker_is_open = False
 
     program: ProgramDetailDTO | None = None
     patients: list[PatientRowDTO] = []
@@ -65,11 +104,6 @@ class ProgramDetailState(RoleState):
 
     # Add patient dialog
     add_patient_dialog_open: bool = False
-    patient_search_query: str = ""
-    patient_search_results: list[PatientOptionDTO] = []
-    patient_search_error: str = ""
-    selected_patient_id: str = ""
-    selected_patient_label: str = ""
     is_adding_patient: bool = False
 
     # Add exam type dialog
@@ -245,11 +279,8 @@ class ProgramDetailState(RoleState):
     async def open_add_patient_dialog(self):
         if not self.program:
             return
-        self.patient_search_query = ""
-        self.patient_search_results = []
-        self.patient_search_error = ""
-        self.selected_patient_id = ""
-        self.selected_patient_label = ""
+        # Open the picker restricted to the program's billing account
+        await self._open_picker(account_id=self.program.account_id or "")
         self.add_patient_dialog_open = True
 
     @rx.event
@@ -257,59 +288,14 @@ class ProgramDetailState(RoleState):
         self.add_patient_dialog_open = False
 
     @rx.event
-    async def search_patients(self, query: str):
-        self.patient_search_query = query
-        self.patient_search_results = []
-        self.selected_patient_id = ""
-        self.selected_patient_label = ""
-        self.patient_search_error = ""
-        if len(query.strip()) < 2:
-            return
-        try:
-            with await self.authenticate_user():
-                from gws_care.patient.patient_service import PatientService
-                enrolled_ids = {p.id for p in self.patients}
-                patients = PatientService.search_patients(search=query.strip(), limit=20)
-                # Also search by patient number prefix
-                pn_term = query.strip().upper()
-                if not pn_term.startswith("PAT-"):
-                    pn_term = f"PAT-{pn_term}"
-                pn_patients = PatientService.search_patients(patient_number_prefix=pn_term, limit=20)
-                # Merge, deduplicate by id
-                seen = set()
-                merged = []
-                for p in list(patients) + list(pn_patients):
-                    pid = str(p.id)
-                    if pid not in seen:
-                        seen.add(pid)
-                        merged.append(p)
-                self.patient_search_results = [
-                    PatientOptionDTO(
-                        id=str(p.id),
-                        label=f"{p.last_name} {p.first_name} ({p.patient_number})",
-                    )
-                    for p in merged
-                    if str(p.id) not in enrolled_ids
-                ]
-        except Exception as e:
-            self.patient_search_error = str(e)
-
-    @rx.event
-    def select_patient(self, patient_id: str, label: str):
-        self.selected_patient_id = patient_id
-        self.selected_patient_label = label
-        self.patient_search_query = label
-        self.patient_search_results = []
-
-    @rx.event
     async def confirm_add_patient(self):
-        if not self.program or not self.selected_patient_id:
+        if not self.program or not self.picker_selected_id:
             return
         self.is_adding_patient = True
         try:
             with await self.authenticate_user():
                 from gws_care.medical_program.medical_program_service import MedicalProgramService
-                MedicalProgramService.add_patient(self.program.id, self.selected_patient_id)
+                MedicalProgramService.add_patient(self.program.id, self.picker_selected_id)
             self.add_patient_dialog_open = False
             await self._load_program()
         except Exception as e:

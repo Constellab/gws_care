@@ -42,7 +42,8 @@ def _format_requirements() -> rx.Component:
                 rx.text("Optional columns:", size="2", weight="medium"),
                 rx.code(
                     "birth_name, address, postal_code, city, phone, email, "
-                    "primary_physician_name, primary_physician_phone, account_name",
+                    "primary_physician_name, primary_physician_phone, account_name, "
+                    "social_security_number, weight (kg), height (cm)",
                     size="1",
                 ),
                 spacing="2",

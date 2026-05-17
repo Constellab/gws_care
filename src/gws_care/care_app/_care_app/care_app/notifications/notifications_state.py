@@ -1,8 +1,11 @@
 """State for the Notifications page (history + preferences + compose)."""
 
 import reflex as rx
-from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
+
+from ..common.account_picker_state import AccountPickerRowDTO
+from ..common.combined_picker_state import CombinedPickerState
+from ..common.patient_picker_state import PatientPickerRowDTO
 
 
 class NotificationLogRow(BaseModel):
@@ -17,19 +20,83 @@ class NotificationLogRow(BaseModel):
     sent_by_name: str
 
 
-class AccountOption(BaseModel):
-    id: str
-    name: str
-
-
-class PatientOption(BaseModel):
-    id: str
-    display: str   # "LAST First (PAT-XXXX)"
-    email: str
-
-
-class NotificationsState(ReflexMainState):
+class NotificationsState(CombinedPickerState):
     """State for the /notifications page."""
+
+    # ── Patient picker vars (declared here for independent state storage) ─────
+    picker_patients: list[PatientPickerRowDTO] = []
+    picker_is_loading: bool = False
+    picker_error: str = ""
+    picker_filter_name: str = ""
+    picker_filter_number: str = ""
+    picker_account_id: str = ""
+    picker_is_open: bool = False
+    picker_selected_id: str = ""
+    picker_selected_label: str = ""
+
+    # ── Account picker vars (declared here for independent state storage) ─────
+    acct_picker_is_open: bool = False
+    acct_picker_filter: str = ""
+    acct_picker_accounts: list[AccountPickerRowDTO] = []
+    acct_picker_is_loading: bool = False
+    acct_picker_error: str = ""
+    acct_picker_selected_id: str = ""
+    acct_picker_selected_name: str = ""
+
+    # ── Patient picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_patient_picker(self):
+        await self._open_patient_picker()
+
+    @rx.event
+    def close_patient_picker(self):
+        self.picker_is_open = False
+
+    @rx.event
+    async def picker_clear_selection(self):
+        self.picker_selected_id = ""
+        self.picker_selected_label = ""
+
+    @rx.event
+    async def picker_set_filter_name(self, value: str):
+        await self._picker_set_filter_name(value)
+
+    @rx.event
+    async def picker_set_filter_number(self, value: str):
+        await self._picker_set_filter_number(value)
+
+    @rx.event
+    async def picker_clear_filters(self):
+        await self._picker_clear_filters()
+
+    @rx.event
+    def picker_select_patient(self, patient_id: str, label: str):
+        self.picker_selected_id = patient_id
+        self.picker_selected_label = label
+        self.picker_is_open = False
+
+    # ── Account picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_account_picker(self):
+        await self._open_account_picker()
+
+    @rx.event
+    def close_account_picker(self):
+        self.acct_picker_is_open = False
+
+    @rx.event
+    async def acct_picker_set_filter(self, value: str):
+        await self._acct_picker_set_filter(value)
+
+    @rx.event
+    async def acct_picker_confirm(self, account_id: str, name: str):
+        await self._acct_picker_confirm(account_id, name)
+
+    @rx.event
+    async def acct_picker_clear(self):
+        await self._acct_picker_clear()
 
     # ── History tab ───────────────────────────────────────────────────────────
     logs: list[NotificationLogRow] = []
@@ -48,18 +115,12 @@ class NotificationsState(ReflexMainState):
 
     # ── Compose tab ───────────────────────────────────────────────────────────
     compose_mode: str = "patient"   # "patient" | "account"
-    compose_channel: str = "EMAIL"   # "EMAIL" | "SMS" | "WHATSAPP"
-    compose_patient_id: str = ""
-    compose_account_id: str = ""
+    compose_channel: str = "EMAIL"
     compose_subject: str = ""
     compose_body: str = ""
     is_sending: bool = False
     send_success: str = ""
     send_error: str = ""
-
-    # ── Selects ───────────────────────────────────────────────────────────────
-    patients: list[PatientOption] = []
-    accounts: list[AccountOption] = []
 
     # ── Reminders ─────────────────────────────────────────────────────────────
     reminder_result: str = ""
@@ -77,25 +138,15 @@ class NotificationsState(ReflexMainState):
     smtp_success: str = ""
     smtp_error: str = ""
 
-    # ── Brevo Configuration ───────────────────────────────────────────────────
-    brevo_credentials_name: str = ""
-    brevo_from_email: str = ""
-    brevo_from_name: str = ""
-    brevo_sms_sender: str = ""
-    is_saving_brevo: bool = False
-    brevo_success: str = ""
-    brevo_error: str = ""
 
     # ── Active tab ────────────────────────────────────────────────────────────
     active_tab: str = "history"
 
     @rx.event
     async def on_load(self):
-        await self._load_patients_and_accounts()
         await self._load_logs()
         await self._load_preferences()
         await self._load_smtp_config()
-        await self._load_brevo_config()
 
     @rx.event
     async def set_active_tab(self, tab: str):
@@ -257,8 +308,6 @@ class NotificationsState(ReflexMainState):
     @rx.event
     async def set_compose_mode(self, value: str | list[str]):
         self.compose_mode = value if isinstance(value, str) else value[0]
-        self.compose_patient_id = ""
-        self.compose_account_id = ""
         self.send_success = ""
         self.send_error = ""
 
@@ -268,13 +317,10 @@ class NotificationsState(ReflexMainState):
         self.send_success = ""
         self.send_error = ""
 
-    @rx.event
-    async def set_compose_patient(self, value: str):
-        self.compose_patient_id = value
-
-    @rx.event
-    async def set_compose_account(self, value: str):
-        self.compose_account_id = value
+    async def _on_account_picked(self, account_id: str) -> None:
+        """Account picker callback: store selected account for compose tab."""
+        # acct_picker_selected_id is already set by the base class; we just accept it.
+        pass
 
     @rx.event
     async def set_compose_subject(self, value: str):
@@ -302,10 +348,9 @@ class NotificationsState(ReflexMainState):
                     from gws_care.notification.notification_dto import SendCustomMessageDTO
                     NotificationService.send_to_patient(
                         SendCustomMessageDTO(
-                            patient_id=self.compose_patient_id,
+                            patient_id=self.picker_selected_id,
                             subject=self.compose_subject,
                             body=self.compose_body,
-                            channel=self.compose_channel,
                         ),
                         sent_by=user,
                     )
@@ -314,10 +359,9 @@ class NotificationsState(ReflexMainState):
                     from gws_care.notification.notification_dto import SendManualNotificationDTO
                     logs = NotificationService.send_to_account(
                         SendManualNotificationDTO(
-                            account_id=self.compose_account_id,
+                            account_id=self.acct_picker_selected_id,
                             subject=self.compose_subject,
                             body=self.compose_body,
-                            channel=self.compose_channel,
                         ),
                         sent_by=user,
                     )
@@ -403,72 +447,3 @@ class NotificationsState(ReflexMainState):
             self.smtp_error = f"Error: {e}"
         finally:
             self.is_saving_smtp = False
-
-    # ── Brevo config loaders / setters ────────────────────────────────────────
-
-    async def _load_brevo_config(self):
-        try:
-            from gws_care.notification.notification_service import NotificationService
-            cfg = NotificationService.get_brevo_config()
-            self.brevo_credentials_name = cfg.credentials_name
-            self.brevo_from_email = cfg.from_email
-            self.brevo_from_name = cfg.from_name
-            self.brevo_sms_sender = cfg.sms_sender
-        except Exception:
-            pass
-
-    @rx.event
-    async def set_brevo_credentials_name(self, value: str):
-        self.brevo_credentials_name = value
-
-    @rx.event
-    async def set_brevo_from_email(self, value: str):
-        self.brevo_from_email = value
-
-    @rx.event
-    async def set_brevo_from_name(self, value: str):
-        self.brevo_from_name = value
-
-    @rx.event
-    async def set_brevo_sms_sender(self, value: str):
-        self.brevo_sms_sender = value
-
-    @rx.event
-    async def save_brevo_config(self):
-        self.is_saving_brevo = True
-        self.brevo_success = ""
-        self.brevo_error = ""
-        try:
-            from gws_care.notification.notification_dto import BrevoConfigDTO
-            from gws_care.notification.notification_service import NotificationService
-            NotificationService.save_brevo_config(BrevoConfigDTO(
-                credentials_name=self.brevo_credentials_name,
-                from_email=self.brevo_from_email,
-                from_name=self.brevo_from_name,
-                sms_sender=self.brevo_sms_sender,
-            ))
-            self.brevo_success = "Brevo configuration saved."
-        except Exception as e:
-            self.brevo_error = f"Error: {e}"
-        finally:
-            self.is_saving_brevo = False
-
-    async def _load_patients_and_accounts(self):
-        try:
-            with await self.authenticate_user():
-                from gws_care.account.account_service import AccountService
-                from gws_care.patient.patient_service import PatientService
-                self.accounts = [
-                    AccountOption(id=str(a.id), name=a.name)
-                    for a in AccountService.list_accounts()
-                ]
-                self.patients = [
-                    PatientOption(
-                        id=str(p.id),
-                        display=f"{p.last_name} {p.first_name} ({p.patient_number})",
-                        email=p.email or "",
-                    )
-                    for p in PatientService.search_patients()
-                ]
-        except Exception:
-            pass
