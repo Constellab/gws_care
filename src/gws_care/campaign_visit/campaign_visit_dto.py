@@ -1,14 +1,14 @@
-"""DTOs for Visit (Visite Médicale)."""
+"""DTOs for CampaignVisit."""
 
 from datetime import datetime
 
 from gws_core import BaseModelDTO, ModelDTO
 
-from gws_care.visit.visit_status import VisitStatus
+from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
 
 
-class VisitDTO(ModelDTO):
-    """Full visit record returned to callers."""
+class CampaignVisitDTO(ModelDTO):
+    """Full campaign visit record returned to callers."""
 
     visit_number: str
     program_id: str | None = None
@@ -17,15 +17,15 @@ class VisitDTO(ModelDTO):
     billing_account_id: str | None = None
     account_name: str | None = None
     scheduled_at: datetime | None = None
-    status: VisitStatus
+    status: CampaignVisitStatus
 
-    # Interpretation text (authorship tracked in VisitValidationWorkflow)
+    # Interpretation text (authorship tracked in CampaignVisitValidationWorkflow)
     doctor_clinic_interpretation: str | None = None
     doctor_company_interpretation: str | None = None
     doctor_company_message: str | None = None
 
 
-class VisitRowDTO(BaseModelDTO):
+class CampaignVisitRowDTO(BaseModelDTO):
     """Lightweight row for list views."""
 
     id: str
@@ -59,7 +59,7 @@ class ValidateDoctorCompanyDTO(BaseModelDTO):
 
 
 class SaveStandaloneVisitDTO(BaseModelDTO):
-    """DTO for creating or updating a standalone scheduled visit (no program)."""
+    """DTO for creating or updating a standalone scheduled visit (no campaign)."""
 
     patient_id: str
     billing_account_id: str | None = None

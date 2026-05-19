@@ -149,6 +149,11 @@ class PatientService:
         patient = cls.get_patient(patient_id)
         cls._apply_dto(patient, dto)
         patient.save()
+        # Update account link if provided
+        if dto.account_id:
+            account = Account.get_or_none(Account.id == dto.account_id)
+            if account is not None:
+                PatientAccount.get_or_create(patient=patient, account=account)
         return patient
 
     @classmethod

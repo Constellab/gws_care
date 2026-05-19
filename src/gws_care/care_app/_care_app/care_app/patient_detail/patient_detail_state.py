@@ -27,6 +27,7 @@ class PatientDetailDTO(BaseModel):
     social_security_number: str | None = None
     sex: str | None = None
     qr_code: str | None = None
+    account_name: str = ""
 
 
 class ExamRowDTO(BaseModel):
@@ -486,12 +487,12 @@ class PatientDetailState(ReflexMainState):
     @rx.event
     def go_to_visit(self, visit_id: str):
         """Navigate to the visit detail page."""
-        return rx.redirect(f"/visit/{visit_id}")
+        return rx.redirect(f"/campaign-visit/{visit_id}")
 
     @rx.event
     def go_to_program(self, program_id: str):
         """Navigate to the program detail page."""
-        return rx.redirect(f"/program/{program_id}")
+        return rx.redirect(f"/campaign/{program_id}")
 
     @rx.event
     def go_to_visits(self):
@@ -533,20 +534,20 @@ class PatientDetailState(ReflexMainState):
         self.create_visit_error = ""
         try:
             with await self.authenticate_user():
-                from gws_care.visit.visit_dto import SaveStandaloneVisitDTO
-                from gws_care.visit.visit_service import VisitService
+                from gws_care.campaign_visit.campaign_visit_dto import SaveStandaloneVisitDTO
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 dto = SaveStandaloneVisitDTO(
                     patient_id=self.patient.id,
                     billing_account_id=self.create_visit_account_id or None,
                     scheduled_at=self.create_visit_scheduled_at,
                 )
-                _visit, program = VisitService.create_visit_with_default_program(
+                _visit, program = CampaignVisitService.create_visit_with_default_campaign(
                     patient_id=dto.patient_id,
                     scheduled_at_str=dto.scheduled_at,
                     billing_account_id=dto.billing_account_id,
                 )
             self.show_create_visit_dialog = False
-            return rx.redirect(f"/program/{program.id}")
+            return rx.redirect(f"/campaign/{program.id}")
         except Exception as e:
             self.create_visit_error = str(e)
 
@@ -581,9 +582,9 @@ class PatientDetailState(ReflexMainState):
 
         try:
             with await self.authenticate_user():
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.exam.exam_service import ExamService
                 from gws_care.patient.patient_service import PatientService
-                from gws_care.visit.visit_service import VisitService
                 p = PatientService.get_patient(patient_id)
                 self.patient = PatientDetailDTO(
                     id=str(p.id),
@@ -624,7 +625,7 @@ class PatientDetailState(ReflexMainState):
                         seen.add(lbl)
                         options.append(lbl)
                 self.exam_type_options = sorted(options)
-                visits = VisitService.list_for_patient(patient_id)
+                visits = CampaignVisitService.list_for_patient(patient_id)
                 self.patient_visits = [
                     PatientVisitRowDTO(
                         id=str(v.id),
@@ -643,6 +644,7 @@ class PatientDetailState(ReflexMainState):
                     AccountForVisitDTO(id=str(link.account_id), name=link.account.name)
                     for link in links
                 ]
+                self.patient.account_name = links[0].account.name if links else ""
             await self._load_prescriptions()
             await self._load_certificates()
         except Exception as e:
@@ -680,8 +682,8 @@ class PatientDetailState(ReflexMainState):
             return
         try:
             with await self.authenticate_user():
-                from gws_care.visit.visit_service import VisitService
-                visits = VisitService.list_for_patient(patient_id)
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+                visits = CampaignVisitService.list_for_patient(patient_id)
                 self.patient_visits = [
                     PatientVisitRowDTO(
                         id=str(v.id),

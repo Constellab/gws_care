@@ -97,15 +97,15 @@ class DashboardState(AccountPickerState):
                 from gws_care.exam.exam_type import ExamType
                 from gws_care.patient.patient import Patient
                 from gws_care.patient.patient_account import PatientAccount
-                from gws_care.visit.visit import Visit
-                from gws_care.visit.visit_status import VisitStatus
+                from gws_care.campaign_visit.campaign_visit import CampaignVisit
+                from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
                 from peewee import JOIN
 
                 cid = self.filter_account_id or None
 
                 patient_q = Patient.select()
                 exam_q = Exam.select()
-                visit_q = Visit.select().where(Visit.scheduled_at.is_null(False))
+                visit_q = CampaignVisit.select().where(CampaignVisit.scheduled_at.is_null(False))
                 cert_q = MedicalCertificate.select()
 
                 if cid:
@@ -115,7 +115,7 @@ class DashboardState(AccountPickerState):
                         .where(PatientAccount.account_id == cid)
                     )
                     exam_q = exam_q.where(Exam.billing_account == cid)
-                    visit_q = visit_q.where(Visit.billing_account == cid)
+                    visit_q = visit_q.where(CampaignVisit.billing_account == cid)
                     cert_q = (
                         cert_q
                         .join(Patient)
@@ -147,18 +147,18 @@ class DashboardState(AccountPickerState):
 
                 # Visits by status (scheduled visits only)
                 status_q = (
-                    Visit.select(
-                        Visit.status, fn.COUNT(Visit.id).alias("cnt")
+                    CampaignVisit.select(
+                        CampaignVisit.status, fn.COUNT(CampaignVisit.id).alias("cnt")
                     )
-                    .where(Visit.scheduled_at.is_null(False))
-                    .group_by(Visit.status)
+                    .where(CampaignVisit.scheduled_at.is_null(False))
+                    .group_by(CampaignVisit.status)
                 )
                 if cid:
-                    status_q = status_q.where(Visit.billing_account == cid)
+                    status_q = status_q.where(CampaignVisit.billing_account == cid)
                 self.appointments_by_status = [
                     AppointmentStatusStat(
                         status=row[0],
-                        label=VisitStatus(row[0]).get_label(),
+                        label=CampaignVisitStatus(row[0]).get_label(),
                         count=row[1],
                     )
                     for row in status_q.tuples()

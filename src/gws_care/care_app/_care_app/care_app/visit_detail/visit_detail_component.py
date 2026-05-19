@@ -5,12 +5,12 @@ from gws_reflex_main import main_component
 
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
-from .visit_detail_state import ExamResultRowDTO, VisitCertificateRowDTO, VisitDetailState
+from .visit_detail_state import CampaignVisitDetailState, ExamResultRowDTO, VisitCertificateRowDTO
 
 
 def _visit_lifeline_step(step_idx: int, value: str, label: str, color: str) -> rx.Component:
     """Single step node for the visit workflow lifeline."""
-    idx_var = VisitDetailState.visit_status_index
+    idx_var = CampaignVisitDetailState.visit_status_index
     return rx.vstack(
         rx.cond(
             idx_var > step_idx,
@@ -72,8 +72,6 @@ def _visit_lifeline_step(step_idx: int, value: str, label: str, color: str) -> r
         ),
         align="center",
         spacing="1",
-        cursor="pointer",
-        on_click=lambda: VisitDetailState.set_workflow_status(value),
         flex_shrink="0",
     )
 
@@ -82,11 +80,10 @@ def _workflow_lifeline_visit() -> rx.Component:
     """Horizontal workflow progress lifeline for the visit detail page."""
     steps = [
         (0, "pending",                  "Pending",           "gray"),
-        (1, "on-site_done",             "On-site Done",      "amber"),
-        (2, "results_entered",          "Results Entered",   "orange"),
-        (3, "lab_validated",            "Lab Validated",     "blue"),
-        (4, "doctor_clinic_validated",  "Clinic Validated",  "violet"),
-        (5, "doctor_company_validated", "Company Validated", "green"),
+        (1, "visit_done",               "Visit Done",        "amber"),
+        (2, "lab_done",                 "Lab Done",          "blue"),
+        (3, "doctor_clinic_validated",  "Clinic Validated",  "violet"),
+        (4, "doctor_company_validated", "Company Validated", "green"),
     ]
     nodes = []
     for i, (idx, value, label, color) in enumerate(steps):
@@ -133,18 +130,20 @@ def _appreciation_badge(row: ExamResultRowDTO) -> rx.Component:
 
 def _visit_status_badge() -> rx.Component:
     return rx.match(
-        VisitDetailState.visit.status,
-        ("pending", rx.badge(VisitDetailState.visit.status_label, color_scheme="gray", size="2")),
-        ("on-site_done", rx.badge(VisitDetailState.visit.status_label, color_scheme="amber", size="2")),
-        ("results_entered", rx.badge(VisitDetailState.visit.status_label, color_scheme="orange", size="2")),
-        ("lab_validated", rx.badge(VisitDetailState.visit.status_label, color_scheme="blue", size="2")),
-        ("doctor_clinic_validated", rx.badge(VisitDetailState.visit.status_label, color_scheme="violet", size="2")),
-        ("doctor_company_validated", rx.badge(VisitDetailState.visit.status_label, color_scheme="green", size="2")),
-        rx.badge(VisitDetailState.visit.status_label, color_scheme="gray", size="2"),
+        CampaignVisitDetailState.visit.status,
+        ("pending", rx.badge(CampaignVisitDetailState.visit.status_label, color_scheme="gray", size="2")),
+        ("visit_done", rx.badge(CampaignVisitDetailState.visit.status_label, color_scheme="amber", size="2")),
+        ("lab_done", rx.badge(CampaignVisitDetailState.visit.status_label, color_scheme="blue", size="2")),
+        ("doctor_clinic_validated", rx.badge(CampaignVisitDetailState.visit.status_label, color_scheme="violet", size="2")),
+        ("doctor_company_validated", rx.badge(CampaignVisitDetailState.visit.status_label, color_scheme="green", size="2")),
+        rx.badge(CampaignVisitDetailState.visit.status_label, color_scheme="gray", size="2"),
     )
 
 
 def _exam_result_row(row: ExamResultRowDTO) -> rx.Component:
+    can_edit = (CampaignVisitDetailState.visit.status == "visit_done") & (
+        CampaignVisitDetailState.is_operator | CampaignVisitDetailState.is_admin
+    )
     return rx.table.row(
         rx.table.cell(
             rx.vstack(
@@ -158,9 +157,31 @@ def _exam_result_row(row: ExamResultRowDTO) -> rx.Component:
         ),
         rx.table.cell(
             rx.cond(
-                row.primary_value != "",
-                rx.text(row.primary_value, size="2"),
-                rx.text("—", size="2", color="var(--gray-8)"),
+                can_edit,
+                rx.hstack(
+                    rx.input(
+                        value=row.edit_value,
+                        on_change=lambda v: CampaignVisitDetailState.set_exam_edit_value(row.exam_type_model_id, v),
+                        size="1",
+                        width="90px",
+                        placeholder="—",
+                    ),
+                    rx.icon_button(
+                        rx.icon("check", size=12),
+                        size="1",
+                        variant="soft",
+                        color_scheme="blue",
+                        on_click=lambda: CampaignVisitDetailState.save_exam_result(row.exam_type_model_id),
+                        loading=CampaignVisitDetailState.is_saving_exam,
+                    ),
+                    spacing="1",
+                    align="center",
+                ),
+                rx.cond(
+                    row.primary_value != "",
+                    rx.text(row.primary_value, size="2"),
+                    rx.text("—", size="2", color="var(--gray-8)"),
+                ),
             )
         ),
         rx.table.cell(
@@ -189,54 +210,44 @@ def _workflow_actions() -> rx.Component:
             variant="outline",
             size="2",
             color_scheme="gray",
-            on_click=VisitDetailState.download_results_pdf,
+            on_click=CampaignVisitDetailState.download_results_pdf,
         ),
         rx.cond(
-            (VisitDetailState.visit.status == "pending") & (VisitDetailState.is_operator | VisitDetailState.is_admin),
+            (CampaignVisitDetailState.visit.status == "pending") & (CampaignVisitDetailState.is_operator | CampaignVisitDetailState.is_admin),
             rx.button(
                 rx.icon("map-pin", size=16),
-                LanguageState.tr["btn_mark_on-site_done"],
-                on_click=VisitDetailState.mark_terrain_done,
+                LanguageState.tr["btn_mark_visit_done"],
+                on_click=CampaignVisitDetailState.mark_terrain_done,
                 color_scheme="amber",
                 size="2",
             ),
         ),
         rx.cond(
-            (VisitDetailState.visit.status == "on-site_done") & (VisitDetailState.is_operator | VisitDetailState.is_admin),
-            rx.button(
-                rx.icon("clipboard-pen", size=16),
-                LanguageState.tr["btn_mark_results_entered"],
-                on_click=VisitDetailState.mark_results_entered,
-                color_scheme="orange",
-                size="2",
-            ),
-        ),
-        rx.cond(
-            (VisitDetailState.visit.status == "results_entered") & (VisitDetailState.is_operator | VisitDetailState.is_admin),
+            (CampaignVisitDetailState.visit.status == "visit_done") & (CampaignVisitDetailState.is_operator | CampaignVisitDetailState.is_admin),
             rx.button(
                 rx.icon("flask-conical", size=16),
                 LanguageState.tr["btn_validate_lab_visit"],
-                on_click=VisitDetailState.validate_lab,
+                on_click=CampaignVisitDetailState.validate_lab,
                 color_scheme="blue",
                 size="2",
             ),
         ),
         rx.cond(
-            (VisitDetailState.visit.status == "lab_validated") & (VisitDetailState.is_doctor | VisitDetailState.is_admin),
+            (CampaignVisitDetailState.visit.status == "lab_done") & (CampaignVisitDetailState.is_doctor | CampaignVisitDetailState.is_admin),
             rx.button(
                 rx.icon("stethoscope", size=16),
                 LanguageState.tr["btn_validate_clinic_visit"],
-                on_click=VisitDetailState.validate_clinic,
+                on_click=CampaignVisitDetailState.validate_clinic,
                 color_scheme="violet",
                 size="2",
             ),
         ),
         rx.cond(
-            (VisitDetailState.visit.status == "doctor_clinic_validated") & (VisitDetailState.is_account_admin | VisitDetailState.is_admin),
+            (CampaignVisitDetailState.visit.status == "doctor_clinic_validated") & (CampaignVisitDetailState.is_account_admin | CampaignVisitDetailState.is_admin),
             rx.button(
                 rx.icon("building-2", size=16),
                 LanguageState.tr["btn_validate_company_visit"],
-                on_click=VisitDetailState.validate_company,
+                on_click=CampaignVisitDetailState.validate_company,
                 color_scheme="green",
                 size="2",
             ),
@@ -295,7 +306,7 @@ def _certificate_card(cert: VisitCertificateRowDTO) -> rx.Component:
             rx.spacer(),
             rx.button(
                 rx.icon("download", size=14),
-                on_click=VisitDetailState.download_certificate_pdf(cert.id),
+                on_click=CampaignVisitDetailState.download_certificate_pdf(cert.id),
                 variant="ghost",
                 size="1",
             ),
@@ -316,8 +327,8 @@ def _certificate_dialog() -> rx.Component:
                     rx.text(LanguageState.tr["cert_issue_date"], size="2", weight="medium"),
                     rx.input(
                         type="date",
-                        value=VisitDetailState.cert_form_issue_date,
-                        on_change=VisitDetailState.set_cert_form_issue_date,
+                        value=CampaignVisitDetailState.cert_form_issue_date,
+                        on_change=CampaignVisitDetailState.set_cert_form_issue_date,
                         width="100%",
                     ),
                     spacing="1",
@@ -327,8 +338,8 @@ def _certificate_dialog() -> rx.Component:
                     rx.text(LanguageState.tr["cert_conclusion"], size="2", weight="medium"),
                     rx.text_area(
                         placeholder=LanguageState.tr["cert_conclusion"] + "…",
-                        value=VisitDetailState.cert_form_conclusion,
-                        on_change=VisitDetailState.set_cert_form_conclusion,
+                        value=CampaignVisitDetailState.cert_form_conclusion,
+                        on_change=CampaignVisitDetailState.set_cert_form_conclusion,
                         rows="4",
                         width="100%",
                     ),
@@ -339,8 +350,8 @@ def _certificate_dialog() -> rx.Component:
                     rx.text(LanguageState.tr["cert_aptitude"], size="2", weight="medium"),
                     rx.radio_group(
                         ["Apte", "Inapte"],
-                        value=rx.cond(VisitDetailState.cert_form_is_fit_for_work, "Apte", "Inapte"),
-                        on_change=lambda v: VisitDetailState.set_cert_form_is_fit_for_work(v == "Apte"),
+                        value=rx.cond(CampaignVisitDetailState.cert_form_is_fit_for_work, "Apte", "Inapte"),
+                        on_change=lambda v: CampaignVisitDetailState.set_cert_form_is_fit_for_work(v == "Apte"),
                         direction="row",
                         spacing="4",
                     ),
@@ -351,8 +362,8 @@ def _certificate_dialog() -> rx.Component:
                     rx.text(LanguageState.tr["cert_restrictions"], size="2", weight="medium"),
                     rx.text_area(
                         placeholder=LanguageState.tr["cert_restrictions"] + "…",
-                        value=VisitDetailState.cert_form_restrictions,
-                        on_change=VisitDetailState.set_cert_form_restrictions,
+                        value=CampaignVisitDetailState.cert_form_restrictions,
+                        on_change=CampaignVisitDetailState.set_cert_form_restrictions,
                         rows="2",
                         width="100%",
                     ),
@@ -364,13 +375,13 @@ def _certificate_dialog() -> rx.Component:
                         rx.button(
                             "Annuler",
                             variant="ghost",
-                            on_click=VisitDetailState.close_certificate_dialog,
+                            on_click=CampaignVisitDetailState.close_certificate_dialog,
                         ),
                     ),
                     rx.button(
                         LanguageState.tr["btn_issue"],
-                        on_click=VisitDetailState.submit_certificate,
-                        loading=VisitDetailState.is_issuing_certificate,
+                        on_click=CampaignVisitDetailState.submit_certificate,
+                        loading=CampaignVisitDetailState.is_issuing_certificate,
                         color_scheme="purple",
                     ),
                     justify="end",
@@ -380,11 +391,11 @@ def _certificate_dialog() -> rx.Component:
                 spacing="4",
                 width="100%",
             ),
-            on_interact_outside=VisitDetailState.close_certificate_dialog,
-            on_escape_key_down=VisitDetailState.close_certificate_dialog,
+            on_interact_outside=CampaignVisitDetailState.close_certificate_dialog,
+            on_escape_key_down=CampaignVisitDetailState.close_certificate_dialog,
             max_width="520px",
         ),
-        open=VisitDetailState.cert_dialog_open,
+        open=CampaignVisitDetailState.cert_dialog_open,
     )
 
 
@@ -392,10 +403,10 @@ def visit_detail_page() -> rx.Component:
     return main_component(
         page_layout(
             rx.cond(
-                VisitDetailState.is_loading,
+                CampaignVisitDetailState.is_loading,
                 rx.center(rx.spinner(size="3"), padding="4rem"),
                 rx.cond(
-                    VisitDetailState.visit == None,  # noqa: E711
+                    CampaignVisitDetailState.visit == None,  # noqa: E711
                     rx.center(
                         rx.callout(
                             LanguageState.tr["visit_not_found"],
@@ -405,20 +416,27 @@ def visit_detail_page() -> rx.Component:
                         padding="4rem",
                     ),
                     rx.vstack(
-                        # Back + actions header
+                        # Back + download header
                         rx.hstack(
                             rx.cond(
-                                VisitDetailState.visit.program_id != "",
+                                CampaignVisitDetailState.visit.program_id != "",
                                 rx.button(
                                     rx.icon("arrow-left", size=14),
                                     LanguageState.tr["back_to_campaign"],
                                     variant="ghost",
                                     size="2",
-                                    on_click=VisitDetailState.go_back,
+                                    on_click=CampaignVisitDetailState.go_back,
                                 ),
                             ),
                             rx.spacer(),
-                            _workflow_actions(),
+                            rx.button(
+                                rx.icon("file-down", size=16),
+                                "Télécharger résultats PDF",
+                                variant="outline",
+                                size="2",
+                                color_scheme="gray",
+                                on_click=CampaignVisitDetailState.download_results_pdf,
+                            ),
                             width="100%",
                             align="center",
                         ),
@@ -428,15 +446,15 @@ def visit_detail_page() -> rx.Component:
                                 rx.vstack(
                                     rx.hstack(
                                         rx.icon("calendar", size=20, color="var(--accent-9)"),
-                                        rx.heading(VisitDetailState.visit.patient_name, size="5"),
+                                        rx.heading(CampaignVisitDetailState.visit.patient_name, size="5"),
                                         spacing="2",
                                         align="center",
                                     ),
                                     rx.hstack(
-                                        rx.text(VisitDetailState.visit.visit_number, size="2", color="var(--gray-9)"),
+                                        rx.text(CampaignVisitDetailState.visit.visit_number, size="2", color="var(--gray-9)"),
                                         rx.separator(orientation="vertical"),
                                         rx.icon("folder-open", size=13, color="var(--gray-9)"),
-                                        rx.text(VisitDetailState.visit.campaign_name, size="2", color="var(--gray-9)"),
+                                        rx.text(CampaignVisitDetailState.visit.campaign_name, size="2", color="var(--gray-9)"),
                                         spacing="2",
                                         align="center",
                                     ),
@@ -452,64 +470,101 @@ def visit_detail_page() -> rx.Component:
                         ),
                         # Workflow lifeline
                         _workflow_lifeline_visit(),
+                        # "Mark Visit Done" — only when pending
+                        rx.cond(
+                            (CampaignVisitDetailState.visit.status == "pending")
+                            & (CampaignVisitDetailState.is_operator | CampaignVisitDetailState.is_admin),
+                            rx.hstack(
+                                rx.button(
+                                    rx.icon("map-pin", size=16),
+                                    LanguageState.tr["btn_mark_visit_done"],
+                                    on_click=CampaignVisitDetailState.mark_terrain_done,
+                                    color_scheme="amber",
+                                    size="2",
+                                ),
+                                justify="end",
+                                width="100%",
+                            ),
+                        ),
                         # Alerts
                         rx.cond(
-                            VisitDetailState.error_message != "",
+                            CampaignVisitDetailState.error_message != "",
                             rx.callout(
-                                VisitDetailState.error_message,
+                                CampaignVisitDetailState.error_message,
                                 color_scheme="red",
                                 icon="triangle-alert",
                                 size="2",
                             ),
                         ),
                         rx.cond(
-                            VisitDetailState.success_message != "",
+                            CampaignVisitDetailState.success_message != "",
                             rx.callout(
-                                VisitDetailState.success_message,
+                                CampaignVisitDetailState.success_message,
                                 color_scheme="green",
                                 icon="circle_check",
                                 size="2",
                             ),
                         ),
                         # Exam Results section
-                        _section_card(
-                            LanguageState.tr["section_exam_results"],
-                            rx.cond(
-                                VisitDetailState.exam_results.length() == 0,
-                                rx.text(LanguageState.tr["no_results_entered"], size="2", color="var(--gray-9)"),
-                                rx.table.root(
-                                    rx.table.header(
-                                        rx.table.row(
-                                            rx.table.column_header_cell(LanguageState.tr["col_exam_name"]),
-                                            rx.table.column_header_cell(LanguageState.tr["col_value"]),
-                                            rx.table.column_header_cell(LanguageState.tr["col_appreciation"]),
-                                        )
+                        rx.card(
+                            rx.vstack(
+                                rx.heading(LanguageState.tr["section_exam_results"], size="4"),
+                                rx.cond(
+                                    CampaignVisitDetailState.exam_results.length() == 0,
+                                    rx.text(LanguageState.tr["no_results_entered"], size="2", color="var(--gray-9)"),
+                                    rx.table.root(
+                                        rx.table.header(
+                                            rx.table.row(
+                                                rx.table.column_header_cell(LanguageState.tr["col_exam_name"]),
+                                                rx.table.column_header_cell(LanguageState.tr["col_value"]),
+                                                rx.table.column_header_cell(LanguageState.tr["col_appreciation"]),
+                                            )
+                                        ),
+                                        rx.table.body(
+                                            rx.foreach(CampaignVisitDetailState.exam_results, _exam_result_row)
+                                        ),
+                                        width="100%",
                                     ),
-                                    rx.table.body(
-                                        rx.foreach(VisitDetailState.exam_results, _exam_result_row)
-                                    ),
-                                    width="100%",
                                 ),
+                                rx.cond(
+                                    (CampaignVisitDetailState.visit.status == "visit_done")
+                                    & (CampaignVisitDetailState.is_operator | CampaignVisitDetailState.is_admin),
+                                    rx.hstack(
+                                        rx.button(
+                                            rx.icon("flask-conical", size=16),
+                                            LanguageState.tr["btn_validate_lab_visit"],
+                                            on_click=CampaignVisitDetailState.validate_lab,
+                                            color_scheme="blue",
+                                            size="2",
+                                            disabled=~CampaignVisitDetailState.all_exams_have_values,
+                                        ),
+                                        justify="end",
+                                        width="100%",
+                                    ),
+                                ),
+                                width="100%",
+                                spacing="3",
                             ),
+                            width="100%",
                         ),
                         # Clinic interpretation section
                         rx.card(
                             rx.vstack(
                                 rx.heading(LanguageState.tr["section_clinic_interpretation"], size="4"),
                                 rx.cond(
-                                    VisitDetailState.visit.doctor_clinic_validated_at != "",
+                                    CampaignVisitDetailState.visit.doctor_clinic_validated_at != "",
                                     # Already validated — read only
                                     rx.vstack(
                                         rx.hstack(
                                             rx.text(LanguageState.tr["validated_by_label"] + ":", size="2", color="var(--gray-9)"),
-                                            rx.text(VisitDetailState.visit.doctor_clinic_validated_by, size="2"),
-                                            rx.text(VisitDetailState.visit.doctor_clinic_validated_at, size="2", color="var(--gray-8)"),
+                                            rx.text(CampaignVisitDetailState.visit.doctor_clinic_validated_by, size="2"),
+                                            rx.text(CampaignVisitDetailState.visit.doctor_clinic_validated_at, size="2", color="var(--gray-8)"),
                                             spacing="2",
                                         ),
                                         rx.cond(
-                                            VisitDetailState.visit.doctor_clinic_interpretation != "",
+                                            CampaignVisitDetailState.visit.doctor_clinic_interpretation != "",
                                             rx.box(
-                                                rx.text(VisitDetailState.visit.doctor_clinic_interpretation, size="2"),
+                                                rx.text(CampaignVisitDetailState.visit.doctor_clinic_interpretation, size="2"),
                                                 padding="0.75rem",
                                                 border_radius="var(--radius-2)",
                                                 background="var(--gray-2)",
@@ -521,16 +576,31 @@ def visit_detail_page() -> rx.Component:
                                     ),
                                     # Not yet validated — show editable if doctor/admin
                                     rx.cond(
-                                        VisitDetailState.is_doctor | VisitDetailState.is_admin,
+                                        CampaignVisitDetailState.is_doctor | CampaignVisitDetailState.is_admin,
                                         rx.vstack(
                                             rx.text(LanguageState.tr["clinic_interp_label"], size="2", color="var(--gray-9)"),
                                             rx.text_area(
                                                 placeholder=LanguageState.tr["interpretation_placeholder"],
-                                                value=VisitDetailState.clinic_interpretation,
-                                                on_change=VisitDetailState.set_clinic_interpretation,
+                                                value=CampaignVisitDetailState.clinic_interpretation,
+                                                on_change=CampaignVisitDetailState.set_clinic_interpretation,
                                                 rows="4",
                                                 width="100%",
-                                                disabled=(VisitDetailState.visit.status != "lab_validated"),
+                                                disabled=(CampaignVisitDetailState.visit.status != "lab_done"),
+                                            ),
+                                            rx.cond(
+                                                (CampaignVisitDetailState.visit.status == "lab_done")
+                                                & (CampaignVisitDetailState.is_doctor | CampaignVisitDetailState.is_admin),
+                                                rx.hstack(
+                                                    rx.button(
+                                                        rx.icon("stethoscope", size=16),
+                                                        LanguageState.tr["btn_validate_clinic_visit"],
+                                                        on_click=CampaignVisitDetailState.validate_clinic,
+                                                        color_scheme="violet",
+                                                        size="2",
+                                                    ),
+                                                    justify="end",
+                                                    width="100%",
+                                                ),
                                             ),
                                             spacing="2",
                                             width="100%",
@@ -552,19 +622,19 @@ def visit_detail_page() -> rx.Component:
                             rx.vstack(
                                 rx.heading(LanguageState.tr["section_company_interpretation"], size="4"),
                                 rx.cond(
-                                    VisitDetailState.visit.doctor_company_validated_at != "",
+                                    CampaignVisitDetailState.visit.doctor_company_validated_at != "",
                                     # Already validated — read only
                                     rx.vstack(
                                         rx.hstack(
                                             rx.text(LanguageState.tr["validated_by_label"] + ":", size="2", color="var(--gray-9)"),
-                                            rx.text(VisitDetailState.visit.doctor_company_validated_by, size="2"),
-                                            rx.text(VisitDetailState.visit.doctor_company_validated_at, size="2", color="var(--gray-8)"),
+                                            rx.text(CampaignVisitDetailState.visit.doctor_company_validated_by, size="2"),
+                                            rx.text(CampaignVisitDetailState.visit.doctor_company_validated_at, size="2", color="var(--gray-8)"),
                                             spacing="2",
                                         ),
                                         rx.cond(
-                                            VisitDetailState.visit.doctor_company_interpretation != "",
+                                            CampaignVisitDetailState.visit.doctor_company_interpretation != "",
                                             rx.box(
-                                                rx.text(VisitDetailState.visit.doctor_company_interpretation, size="2"),
+                                                rx.text(CampaignVisitDetailState.visit.doctor_company_interpretation, size="2"),
                                                 padding="0.75rem",
                                                 border_radius="var(--radius-2)",
                                                 background="var(--gray-2)",
@@ -572,11 +642,11 @@ def visit_detail_page() -> rx.Component:
                                             ),
                                         ),
                                         rx.cond(
-                                            VisitDetailState.visit.doctor_company_message != "",
+                                            CampaignVisitDetailState.visit.doctor_company_message != "",
                                             rx.vstack(
                                                 rx.text(LanguageState.tr["patient_message_label"] + ":", size="2", color="var(--gray-9)"),
                                                 rx.box(
-                                                    rx.text(VisitDetailState.visit.doctor_company_message, size="2"),
+                                                    rx.text(CampaignVisitDetailState.visit.doctor_company_message, size="2"),
                                                     padding="0.75rem",
                                                     border_radius="var(--radius-2)",
                                                     background="var(--accent-2)",
@@ -591,25 +661,40 @@ def visit_detail_page() -> rx.Component:
                                     ),
                                     # Not yet validated
                                     rx.cond(
-                                        VisitDetailState.is_account_admin | VisitDetailState.is_admin,
+                                        CampaignVisitDetailState.is_account_admin | CampaignVisitDetailState.is_admin,
                                         rx.vstack(
                                             rx.text(LanguageState.tr["company_interp_label"], size="2", color="var(--gray-9)"),
                                             rx.text_area(
                                                 placeholder=LanguageState.tr["interpretation_placeholder"],
-                                                value=VisitDetailState.company_interpretation,
-                                                on_change=VisitDetailState.set_company_interpretation,
+                                                value=CampaignVisitDetailState.company_interpretation,
+                                                on_change=CampaignVisitDetailState.set_company_interpretation,
                                                 rows="4",
                                                 width="100%",
-                                                disabled=(VisitDetailState.visit.status != "doctor_clinic_validated"),
+                                                disabled=(CampaignVisitDetailState.visit.status != "doctor_clinic_validated"),
                                             ),
                                             rx.text(LanguageState.tr["patient_message_label"], size="2", color="var(--gray-9)"),
                                             rx.text_area(
                                                 placeholder=LanguageState.tr["message_to_patient_placeholder"],
-                                                value=VisitDetailState.company_message,
-                                                on_change=VisitDetailState.set_company_message,
+                                                value=CampaignVisitDetailState.company_message,
+                                                on_change=CampaignVisitDetailState.set_company_message,
                                                 rows="3",
                                                 width="100%",
-                                                disabled=(VisitDetailState.visit.status != "doctor_clinic_validated"),
+                                                disabled=(CampaignVisitDetailState.visit.status != "doctor_clinic_validated"),
+                                            ),
+                                            rx.cond(
+                                                (CampaignVisitDetailState.visit.status == "doctor_clinic_validated")
+                                                & (CampaignVisitDetailState.is_account_admin | CampaignVisitDetailState.is_admin),
+                                                rx.hstack(
+                                                    rx.button(
+                                                        rx.icon("building-2", size=16),
+                                                        LanguageState.tr["btn_validate_company_visit"],
+                                                        on_click=CampaignVisitDetailState.validate_company,
+                                                        color_scheme="green",
+                                                        size="2",
+                                                    ),
+                                                    justify="end",
+                                                    width="100%",
+                                                ),
                                             ),
                                             spacing="2",
                                             width="100%",
@@ -631,26 +716,26 @@ def visit_detail_page() -> rx.Component:
                             LanguageState.tr["section_certificates"],
                             rx.vstack(
                                 rx.cond(
-                                    (VisitDetailState.is_account_admin | VisitDetailState.is_admin)
-                                    & (VisitDetailState.visit.lab_validated_at != ""),
+                                    (CampaignVisitDetailState.is_account_admin | CampaignVisitDetailState.is_admin)
+                                    & (CampaignVisitDetailState.visit.lab_validated_at != ""),
                                     rx.button(
                                         rx.icon("file-plus", size=14),
                                         LanguageState.tr["btn_issue_certificate"],
-                                        on_click=VisitDetailState.open_certificate_dialog,
+                                        on_click=CampaignVisitDetailState.open_certificate_dialog,
                                         size="2",
                                         color_scheme="purple",
                                         variant="soft",
                                     ),
                                 ),
                                 rx.cond(
-                                    VisitDetailState.certificates.length() == 0,
+                                    CampaignVisitDetailState.certificates.length() == 0,
                                     rx.text(
                                         LanguageState.tr["no_certificates_yet"],
                                         size="2",
                                         color="var(--gray-9)",
                                     ),
                                     rx.vstack(
-                                        rx.foreach(VisitDetailState.certificates, _certificate_card),
+                                        rx.foreach(CampaignVisitDetailState.certificates, _certificate_card),
                                         width="100%",
                                         spacing="2",
                                     ),

@@ -149,7 +149,7 @@ class ExamService:
         Returns None if not found.
         """
         from gws_care.patient.patient import Patient as PatientModel
-        from gws_care.visit.visit import Visit
+        from gws_care.campaign_visit.campaign_visit import CampaignVisit
 
         exam = Exam.get_or_none(Exam.tube_qr_code == qr_code)
         if exam is None:
@@ -174,13 +174,13 @@ class ExamService:
 
     @classmethod
     def list_exams_for_campaign_terrain(cls, program_id: str) -> list[Exam]:
-        """Return all exams (via Visit) for a program for on-site view.
+        """Return all exams (via CampaignVisit) for a program for on-site view.
 
         Falls back to patient-level exams if no visit FK is present.
         """
-        from gws_care.medical_program.medical_program_service import MedicalProgramService
-        from gws_care.visit.visit import Visit
-        patients = MedicalProgramService.get_patients(program_id)
+        from gws_care.campaign.campaign_service import CampaignService
+        from gws_care.campaign_visit.campaign_visit import CampaignVisit
+        patients = CampaignService.get_patients(program_id)
         if not patients:
             return []
         patient_ids = [str(p.id) for p in patients]

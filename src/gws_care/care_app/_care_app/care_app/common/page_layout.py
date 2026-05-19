@@ -9,6 +9,7 @@ from gws_reflex_main import (
 from .bell_state import BellEntryDTO, BellState
 from .language_state import LanguageState
 from .role_state import RoleState
+from .user_menu_component import user_menu_button
 
 
 def _bell_entry(entry: BellEntryDTO) -> rx.Component:
@@ -141,14 +142,14 @@ def _sidebar_content() -> rx.Component:
                 menu_item_component("calendar", LanguageState.tr["nav_visits"], "/visits"),
             ),
 
-            # MedicalPrograms — Operator, Doctor, Admin
+            # Campaigns — Operator, Doctor, Admin
             rx.cond(
                 RoleState.is_operator | RoleState.is_doctor | RoleState.is_admin,
                 menu_item_component(
                     "clipboard-list",
                     LanguageState.tr["nav_campaigns"],
-                    "/programs",
-                    additional_active_route_prefixes=["/program", "/visit/"],
+                    "/campaigns",
+                    additional_active_route_prefixes=["/campaign", "/campaign-visit/"],
                 ),
             ),
 
@@ -177,14 +178,20 @@ def _sidebar_content() -> rx.Component:
 
             rx.separator(width="100%", margin_y="0.25rem"),
             menu_item_component("bell", LanguageState.tr["nav_notifications"], "/notifications"),
-            rx.separator(width="100%", margin_y="0.25rem"),
-            menu_item_component("settings", LanguageState.tr["nav_settings"], "/settings"),
             width="100%",
             spacing="1",
             align_items="start",
             padding="0 1rem",
         ),
+        # Push user menu to the bottom
+        rx.spacer(),
+        rx.box(
+            user_menu_button(),
+            width="100%",
+            padding="0 1rem 0.75rem 1rem",
+        ),
         width="100%",
+        height="100%",
         align_items="start",
     )
 

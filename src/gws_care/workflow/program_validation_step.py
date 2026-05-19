@@ -1,9 +1,9 @@
-"""Enumeration of program validation steps."""
+"""Enumeration of campaign validation steps."""
 
 from enum import Enum
 
 
-class ProgramValidationStep(Enum):
+class CampaignValidationStep(Enum):
     """Each distinct validation step a program passes through.
 
     Rows in ProgramValidationWorkflow record who performed each step
@@ -24,9 +24,13 @@ class ProgramValidationStep(Enum):
 
     def get_label(self) -> str:
         labels = {
-            ProgramValidationStep.VALIDATED: "Validated",
-            ProgramValidationStep.LAB_DONE: "Lab Done",
-            ProgramValidationStep.DOCTOR_CLINIC_VALIDATED: "Clinic Doctor Validated",
-            ProgramValidationStep.DOCTOR_COMPANY_VALIDATED: "Company Doctor Validated",
+            CampaignValidationStep.VALIDATED: "Validated",
+            CampaignValidationStep.LAB_DONE: "Lab Done",
+            CampaignValidationStep.DOCTOR_CLINIC_VALIDATED: "Clinic Doctor Validated",
+            CampaignValidationStep.DOCTOR_COMPANY_VALIDATED: "Company Doctor Validated",
         }
         return labels.get(self, self.value)
+
+
+# Backward-compat alias
+ProgramValidationStep = CampaignValidationStep

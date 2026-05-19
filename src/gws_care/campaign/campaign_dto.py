@@ -1,14 +1,14 @@
-"""DTOs for MedicalProgram."""
+"""DTOs for Campaign."""
 
 from datetime import date
 
 from gws_core import BaseModelDTO, ModelDTO
 
-from gws_care.medical_program.program_status import ProgramStatus
+from gws_care.campaign.campaign_status import CampaignStatus
 
 
-class MedicalProgramDTO(ModelDTO):
-    """Full program record returned to callers."""
+class CampaignDTO(ModelDTO):
+    """Full campaign record returned to callers."""
 
     program_number: str
     name: str
@@ -16,12 +16,12 @@ class MedicalProgramDTO(ModelDTO):
     account_name: str | None = None
     start_date: date
     end_date: date
-    status: ProgramStatus
+    status: CampaignStatus
     notes: str | None = None
     is_individual: bool = False
 
 
-class ProgramRowDTO(BaseModelDTO):
+class CampaignRowDTO(BaseModelDTO):
     """Lightweight row for list views."""
 
     id: str
@@ -36,8 +36,8 @@ class ProgramRowDTO(BaseModelDTO):
     exam_type_count: int = 0
 
 
-class SaveProgramDTO(BaseModelDTO):
-    """DTO for creating or updating a program."""
+class SaveCampaignDTO(BaseModelDTO):
+    """DTO for creating or updating a campaign."""
 
     name: str
     account_id: str

@@ -26,8 +26,8 @@ from gws_care.role.user_care_role import UserCareRole
 from gws_care.role.user_role_service import UserRoleService
 from gws_care.user.care_user_sync_service import CareUserSyncService
 from gws_care.user.user import User
-from gws_care.visit.visit_dto import ValidateDoctorClinicDTO, ValidateDoctorCompanyDTO
-from gws_care.visit.visit_service import VisitService
+from gws_care.campaign_visit.campaign_visit_dto import ValidateDoctorClinicDTO, ValidateDoctorCompanyDTO
+from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
 from gws_core import BaseTestCase
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -66,10 +66,10 @@ def _get_admin_user() -> User:
 
 def _advance_to_visit_lab_validated(campaign, patient, user):
     """Create a visit and advance it to LAB_VALIDATED status."""
-    visit = VisitService.create_visit(str(campaign.id), str(patient.id))
-    VisitService.mark_terrain_done(str(visit.id))
-    VisitService.mark_results_entered(str(visit.id))
-    visit = VisitService.validate_lab(str(visit.id), user)
+    visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
+    CampaignVisitService.mark_terrain_done(str(visit.id))
+    CampaignVisitService.mark_results_entered(str(visit.id))
+    visit = CampaignVisitService.validate_lab(str(visit.id), user)
     return visit
 
 
@@ -213,7 +213,7 @@ class TestVisitResultsPdfGeneration(BaseTestCase):
         patient = _make_patient(account=account, email="visempty@example.com")
         campaign = _make_campaign(account)
         CampaignService.add_patient(str(campaign.id), str(patient.id))
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
 
         pdf_bytes = generate_visit_results_pdf(str(visit.id))
 
@@ -243,10 +243,10 @@ class TestVisitResultsPdfGeneration(BaseTestCase):
         CampaignService.add_patient(str(campaign.id), str(patient.id))
         user = _get_admin_user()
         visit = _advance_to_visit_lab_validated(campaign, patient, user)
-        visit = VisitService.validate_doctor_clinic(
+        visit = CampaignVisitService.validate_doctor_clinic(
             str(visit.id), user, ValidateDoctorClinicDTO(interpretation="RAS Clinic.")
         )
-        VisitService.validate_doctor_company(
+        CampaignVisitService.validate_doctor_company(
             str(visit.id),
             user,
             ValidateDoctorCompanyDTO(interpretation="Apte.", message="Bons résultats."),

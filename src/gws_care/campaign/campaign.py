@@ -1,4 +1,4 @@
-"""MedicalProgram model."""
+"""Campaign model."""
 
 import secrets
 import string
@@ -7,24 +7,23 @@ from gws_core import EnumField
 from peewee import BooleanField, CharField, DateField, ForeignKeyField, TextField
 
 from gws_care.account.account import Account
+from gws_care.campaign.campaign_dto import CampaignDTO
+from gws_care.campaign.campaign_status import CampaignStatus
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
-from gws_care.medical_program.program_status import ProgramStatus
-
-from .medical_program_dto import MedicalProgramDTO
 
 
 def _generate_program_number() -> str:
-    """Generate a unique program number like PRG-XXXXXXXX."""
+    """Generate a unique campaign number like PRG-XXXXXXXX."""
     chars = string.ascii_uppercase + string.digits
     suffix = "".join(secrets.choice(chars) for _ in range(8))
     return f"PRG-{suffix}"
 
 
-class MedicalProgram(ModelWithUser):
-    """An organised medical program planned for a billing account.
+class Campaign(ModelWithUser):
+    """An organised medical campaign planned for a billing account.
 
-    A program groups multiple visits (one per patient) of the same set
+    A campaign groups multiple visits (one per patient) of the same set
     of exam types, performed during a defined date range.
     """
 
@@ -33,7 +32,7 @@ class MedicalProgram(ModelWithUser):
     account: Account = ForeignKeyField(Account, null=True, backref="programs", on_delete="SET NULL")
     start_date = DateField(null=False)
     end_date = DateField(null=False)
-    status: ProgramStatus = EnumField(choices=ProgramStatus, default=ProgramStatus.DRAFT, null=False)
+    status: CampaignStatus = EnumField(choices=CampaignStatus, default=CampaignStatus.DRAFT, null=False)
     notes: str = TextField(null=True)
     is_individual: bool = BooleanField(default=False, null=False)
 
@@ -42,8 +41,13 @@ class MedicalProgram(ModelWithUser):
         if not self.program_number:
             self.program_number = _generate_program_number()
 
-    def to_dto(self) -> MedicalProgramDTO:
-        return MedicalProgramDTO(
+    @property
+    def campaign_number(self) -> str:
+        """Alias for program_number (backward-compat field name kept in DB)."""
+        return self.program_number
+
+    def to_dto(self) -> CampaignDTO:
+        return CampaignDTO(
             id=self.id,
             created_at=self.created_at,
             last_modified_at=self.last_modified_at,

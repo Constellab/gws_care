@@ -78,7 +78,7 @@ class TerrainState(RoleState):
 
     @rx.event
     def go_back(self):
-        return rx.redirect(f"/program/{self.program_id}")
+        return rx.redirect(f"/campaign/{self.program_id}")
 
     @rx.event
     def set_search_query(self, value: str):
@@ -167,26 +167,26 @@ class TerrainState(RoleState):
 
     @rx.event
     async def mark_exam_done(self, exam_id: str, patient_id: str, visit_id: str, exam_type_code: str):
-        """Mark a single exam as done on-site, creating Visit/Exam records if they don't exist yet."""
+        """Mark a single exam as done on-site, creating CampaignVisit/Exam records if they don't exist yet."""
         self.error_message = ""
         try:
             with await self.authenticate_user():
+                from gws_care.campaign_visit.campaign_visit import CampaignVisit
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.exam.exam import Exam
                 from gws_care.exam.exam_service import ExamService
                 from gws_care.exam.exam_type import ExamStatus, ExamType
                 from gws_care.patient.patient import Patient as PatientModel
-                from gws_care.visit.visit import Visit
-                from gws_care.visit.visit_service import VisitService
 
-                # Create a Visit for this patient if none exists yet
+                # Create a CampaignVisit for this patient if none exists yet
                 if not visit_id:
-                    existing_visit = Visit.get_or_none(
-                        (Visit.program == self.program_id) & (Visit.patient == patient_id)
+                    existing_visit = CampaignVisit.get_or_none(
+                        (CampaignVisit.program == self.program_id) & (CampaignVisit.patient == patient_id)
                     )
                     if existing_visit:
                         visit_id = str(existing_visit.id)
                     else:
-                        new_visit = VisitService.create_visit(self.program_id, patient_id)
+                        new_visit = CampaignVisitService.create_visit(self.program_id, patient_id)
                         visit_id = str(new_visit.id)
 
                 if not exam_id:
@@ -248,15 +248,15 @@ class TerrainState(RoleState):
         self.error_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.visit.visit import Visit
-                from gws_care.visit.visit_service import VisitService
-                from gws_care.visit.visit_status import VisitStatus
+                from gws_care.campaign_visit.campaign_visit import CampaignVisit
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+                from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
 
-                visit = Visit.get_or_none(
-                    (Visit.program == self.program_id) & (Visit.patient == patient_id)
+                visit = CampaignVisit.get_or_none(
+                    (CampaignVisit.program == self.program_id) & (CampaignVisit.patient == patient_id)
                 )
-                if visit and visit.status == VisitStatus.PENDING:
-                    VisitService.mark_terrain_done(str(visit.id))
+                if visit and visit.status == CampaignVisitStatus.PENDING:
+                    CampaignVisitService.mark_terrain_done(str(visit.id))
 
                     # Phase 5 — send on-site thank-you notification to the patient
                     try:
@@ -272,8 +272,8 @@ class TerrainState(RoleState):
                 TerrainPatientDTO(
                     **{
                         **p.dict(),
-                        "visit_status": "on-site_done",
-                        "visit_status_label": "On-site Done",
+                        "visit_status": "visit_done",
+                        "visit_status_label": "Visit Done",
                     }
                 ) if p.id == patient_id else p
                 for p in self.patients
@@ -326,13 +326,13 @@ class TerrainState(RoleState):
         self.error_message = ""
         try:
             with await self.authenticate_user():
+                from gws_care.campaign.campaign_exam_type import CampaignExamType
+                from gws_care.campaign.campaign_service import CampaignService
+                from gws_care.campaign_visit.campaign_visit import CampaignVisit
+                from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
                 from gws_care.exam.exam import Exam
-                from gws_care.medical_program.medical_program_exam_type import ProgramExamType
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
-                from gws_care.visit.visit import Visit
-                from gws_care.visit.visit_status import VisitStatus
 
-                program = MedicalProgramService.get_program(program_id)
+                program = CampaignService.get_campaign(program_id)
                 self.campaign_name = program.name
                 self.program_number = program.program_number
                 self.account_name = program.account.name if program.account_id else ""
@@ -341,11 +341,11 @@ class TerrainState(RoleState):
 
                 # Load the program's configured exam types once (source of truth)
                 program_exam_types = list(
-                    ProgramExamType.select()
-                    .where(ProgramExamType.program == program_id)
+                    CampaignExamType.select()
+                    .where(CampaignExamType.program == program_id)
                 )
 
-                patients = MedicalProgramService.get_patients(program_id)
+                patients = CampaignService.get_patients(program_id)
 
                 result = []
                 for patient in patients:
@@ -359,8 +359,8 @@ class TerrainState(RoleState):
                             pass
 
                     # Find the visit for this patient in this program
-                    visit = Visit.get_or_none(
-                        (Visit.program == program_id) & (Visit.patient == patient.id)
+                    visit = CampaignVisit.get_or_none(
+                        (CampaignVisit.program == program_id) & (CampaignVisit.patient == patient.id)
                     )
                     visit_id = str(visit.id) if visit else ""
                     visit_number = visit.visit_number if visit else ""

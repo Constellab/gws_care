@@ -10,7 +10,7 @@ from ..common.account_picker_component import (
 )
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
-from .program_list_state import ProgramFormPickerState, ProgramListState, ProgramRowDTO
+from .program_list_state import CampaignFormPickerState, CampaignListState, ProgramRowDTO
 
 # ── Status color helper ────────────────────────────────────────────────────────
 
@@ -21,6 +21,7 @@ _STATUS_COLORS: dict[str, str] = {
     "lab_done": "orange",
     "doctor_clinic_validated": "violet",
     "doctor_company_validated": "green",
+    "closed": "green",
     "archived": "gray",
 }
 
@@ -75,7 +76,7 @@ def _campaign_row(program: ProgramRowDTO) -> rx.Component:
                         rx.icon("chevron-right", size=14),
                         variant="ghost",
                         size="1",
-                        on_click=lambda: ProgramListState.go_to_program(program.id),
+                        on_click=lambda: CampaignListState.go_to_program(program.id),
                     ),
                     content=LanguageState.tr["tooltip_view_campaign"],
                 ),
@@ -87,7 +88,7 @@ def _campaign_row(program: ProgramRowDTO) -> rx.Component:
                             variant="ghost",
                             size="1",
                             color_scheme="gray",
-                            on_click=lambda: ProgramListState.archive_program(program.id),
+                            on_click=lambda: CampaignListState.archive_program(program.id),
                         ),
                         content=LanguageState.tr["tooltip_archive_program"],
                     ),
@@ -96,7 +97,7 @@ def _campaign_row(program: ProgramRowDTO) -> rx.Component:
             )
         ),
         style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
-        on_click=lambda: ProgramListState.go_to_program(program.id),
+        on_click=lambda: CampaignListState.go_to_program(program.id),
     )
 
 
@@ -106,9 +107,9 @@ def _sortable_header(label: str, column: str) -> rx.Component:
         rx.hstack(
             rx.text(label, size="2"),
             rx.cond(
-                ProgramListState.sort_column == column,
+                CampaignListState.sort_column == column,
                 rx.cond(
-                    ProgramListState.sort_ascending,
+                    CampaignListState.sort_ascending,
                     rx.icon("chevron-up", size=13, color="var(--accent-9)"),
                     rx.icon("chevron-down", size=13, color="var(--accent-9)"),
                 ),
@@ -117,7 +118,7 @@ def _sortable_header(label: str, column: str) -> rx.Component:
             spacing="1",
             align="center",
         ),
-        on_click=lambda: ProgramListState.set_sort(column),
+        on_click=lambda: CampaignListState.set_sort(column),
         style={"cursor": "pointer"},
     )
 
@@ -131,14 +132,14 @@ def _create_program_dialog() -> rx.Component:
                     rx.form.label(LanguageState.tr["field_campaign_name"]),
                     rx.input(
                         placeholder=LanguageState.tr["campaign_name_placeholder"],
-                        value=ProgramListState.form_name,
-                        on_change=ProgramListState.set_form_name,
+                        value=CampaignListState.form_name,
+                        on_change=CampaignListState.set_form_name,
                         size="2",
                     ),
                 ),
                 rx.form.field(
                     rx.form.label(LanguageState.tr["col_account"]),
-                    account_picker_widget(ProgramFormPickerState),
+                    account_picker_widget(CampaignFormPickerState),
                     width="100%",
                 ),
                 rx.grid(
@@ -146,8 +147,8 @@ def _create_program_dialog() -> rx.Component:
                         rx.form.label(LanguageState.tr["field_start_date"]),
                         rx.input(
                             type="date",
-                            value=ProgramListState.form_start_date,
-                            on_change=ProgramListState.set_form_start_date,
+                            value=CampaignListState.form_start_date,
+                            on_change=CampaignListState.set_form_start_date,
                             size="2",
                         ),
                     ),
@@ -155,8 +156,8 @@ def _create_program_dialog() -> rx.Component:
                         rx.form.label(LanguageState.tr["field_end_date"]),
                         rx.input(
                             type="date",
-                            value=ProgramListState.form_end_date,
-                            on_change=ProgramListState.set_form_end_date,
+                            value=CampaignListState.form_end_date,
+                            on_change=CampaignListState.set_form_end_date,
                             size="2",
                         ),
                     ),
@@ -165,9 +166,9 @@ def _create_program_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.cond(
-                    ProgramListState.form_error != "",
+                    CampaignListState.form_error != "",
                     rx.callout(
-                        ProgramListState.form_error,
+                        CampaignListState.form_error,
                         color_scheme="red",
                         size="1",
                         icon="triangle-alert",
@@ -179,13 +180,13 @@ def _create_program_dialog() -> rx.Component:
                             LanguageState.tr["cancel_btn"],
                             variant="soft",
                             color_scheme="gray",
-                            on_click=ProgramListState.close_create_dialog,
+                            on_click=CampaignListState.close_create_dialog,
                         )
                     ),
                     rx.button(
                         LanguageState.tr["create_program_btn"],
-                        on_click=ProgramListState.save_program,
-                        loading=ProgramListState.is_saving,
+                        on_click=CampaignListState.save_program,
+                        loading=CampaignListState.is_saving,
                     ),
                     spacing="2",
                     justify="end",
@@ -196,27 +197,27 @@ def _create_program_dialog() -> rx.Component:
                 gap="1rem",
                 width="100%",
             ),
-            on_interact_outside=ProgramListState.close_create_dialog,
-            on_escape_key_down=ProgramListState.close_create_dialog,
+            on_interact_outside=CampaignListState.close_create_dialog,
+            on_escape_key_down=CampaignListState.close_create_dialog,
             max_width="600px",
         ),
-        open=ProgramListState.create_dialog_open,
+        open=CampaignListState.create_dialog_open,
     )
 
 
 def program_list_page() -> rx.Component:
     return main_component(
         page_layout(
-            account_picker_dialog(ProgramListState),
+            account_picker_dialog(CampaignListState),
             rx.hstack(
                 rx.heading(LanguageState.tr["campaigns_page_title"], size="6"),
                 rx.spacer(),
                 rx.cond(
-                    ProgramListState.is_operator | ProgramListState.is_admin,
+                    CampaignListState.is_operator | CampaignListState.is_admin,
                     rx.button(
                         rx.icon("plus", size=16),
                         LanguageState.tr["new_campaign_btn"],
-                        on_click=ProgramListState.open_create_dialog,
+                        on_click=CampaignListState.open_create_dialog,
                         size="2",
                     ),
                 ),
@@ -228,8 +229,8 @@ def program_list_page() -> rx.Component:
                 rx.input(
                     rx.input.slot(rx.icon("search", size=14)),
                     placeholder=LanguageState.tr["search_by_name"],
-                    value=ProgramListState.search_name,
-                    on_change=ProgramListState.set_search_name,
+                    value=CampaignListState.search_name,
+                    on_change=CampaignListState.set_search_name,
                     size="2",
                     width="220px",
                 ),
@@ -246,27 +247,28 @@ def program_list_page() -> rx.Component:
                         rx.select.item(LanguageState.tr["status_lab_done"], value="lab_done"),
                         rx.select.item(LanguageState.tr["status_doctor_clinic_validated"], value="doctor_clinic_validated"),
                         rx.select.item(LanguageState.tr["status_doctor_company_validated"], value="doctor_company_validated"),
+                        rx.select.item(LanguageState.tr["status_closed"], value="closed"),
                         rx.select.item(LanguageState.tr["status_archived"], value="archived"),
                     ),
-                    value=ProgramListState.filter_status,
-                    on_change=ProgramListState.set_filter_status,
+                    value=CampaignListState.filter_status,
+                    on_change=CampaignListState.set_filter_status,
                 ),
-                account_picker_button(ProgramListState),
+                account_picker_button(CampaignListState),
                 spacing="2",
                 wrap="wrap",
                 width="100%",
             ),
             rx.cond(
-                ProgramListState.error_message != "",
+                CampaignListState.error_message != "",
                 rx.callout(
-                    ProgramListState.error_message,
+                    CampaignListState.error_message,
                     color_scheme="red",
                     size="2",
                     icon="triangle-alert",
                 ),
             ),
             rx.cond(
-                ProgramListState.is_loading,
+                CampaignListState.is_loading,
                 rx.center(rx.spinner(size="3"), padding="2rem"),
                 rx.vstack(
                     rx.table.root(
@@ -282,7 +284,7 @@ def program_list_page() -> rx.Component:
                         ),
                         rx.table.body(
                             rx.cond(
-                                ProgramListState.programs.length() == 0,
+                                CampaignListState.programs.length() == 0,
                                 rx.table.row(
                                     rx.table.cell(
                                         rx.center(
@@ -292,25 +294,25 @@ def program_list_page() -> rx.Component:
                                         col_span=6,
                                     )
                                 ),
-                                rx.foreach(ProgramListState.programs, _campaign_row),
+                                rx.foreach(CampaignListState.programs, _campaign_row),
                             )
                         ),
                         width="100%",
                         variant="surface",
                     ),
                     rx.cond(
-                        ProgramListState.has_more,
+                        CampaignListState.has_more,
                         rx.center(
                             rx.button(
                                 rx.cond(
-                                    ProgramListState.is_loading_more,
+                                    CampaignListState.is_loading_more,
                                     rx.hstack(rx.spinner(size="2"), rx.text("Loading..."), spacing="2"),
                                     rx.hstack(rx.icon("chevron-down", size=16), rx.text("Load more"), spacing="2"),
                                 ),
                                 variant="soft",
                                 size="2",
-                                on_click=ProgramListState.load_more_programs,
-                                disabled=ProgramListState.is_loading_more,
+                                on_click=CampaignListState.load_more_programs,
+                                disabled=CampaignListState.is_loading_more,
                             ),
                             width="100%",
                             padding="1rem",

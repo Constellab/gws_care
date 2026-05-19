@@ -1,4 +1,4 @@
-"""Visit (Visite Médicale) model."""
+"""CampaignVisit model."""
 
 import secrets
 import string
@@ -8,13 +8,12 @@ from gws_core import EnumField
 from peewee import CharField, DateTimeField, ForeignKeyField, TextField
 
 from gws_care.account.account import Account
-from gws_care.medical_program.medical_program import MedicalProgram
+from gws_care.campaign.campaign import Campaign
+from gws_care.campaign_visit.campaign_visit_dto import CampaignVisitDTO
+from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
 from gws_care.patient.patient import Patient
-from gws_care.visit.visit_status import VisitStatus
-
-from .visit_dto import VisitDTO
 
 
 def _generate_visit_number() -> str:
@@ -23,25 +22,25 @@ def _generate_visit_number() -> str:
     return f"VIS-{suffix}"
 
 
-class Visit(ModelWithUser):
-    """One medical visit — all exams for a single patient in a single program.
+class CampaignVisit(ModelWithUser):
+    """One medical visit — all exams for a single patient in a single campaign.
 
     Progresses through a sequential validation chain:
-    PENDING → TERRAIN_DONE → RESULTS_ENTERED → LAB_VALIDATED
+    PENDING → VISIT_DONE → LAB_DONE
            → DOCTOR_CLINIC_VALIDATED → DOCTOR_COMPANY_VALIDATED
 
     Validation steps (who validated and when) are tracked in
-    VisitValidationWorkflow — one row per step per visit.
+    CampaignVisitValidationWorkflow — one row per step per visit.
     """
 
     visit_number: str = CharField(max_length=50, unique=True, null=False, index=True)
-    program: MedicalProgram = ForeignKeyField(MedicalProgram, null=True, backref="visits", on_delete="CASCADE")
+    program: Campaign = ForeignKeyField(Campaign, null=True, backref="visits", on_delete="CASCADE")
     patient: Patient = ForeignKeyField(Patient, null=False, backref="visits", on_delete="CASCADE")
     billing_account: Account = ForeignKeyField(Account, null=True, backref="visits", on_delete="SET NULL")
     scheduled_at: datetime = DateTimeField(null=True)
-    status: VisitStatus = EnumField(choices=VisitStatus, default=VisitStatus.PENDING, null=False)
+    status: CampaignVisitStatus = EnumField(choices=CampaignVisitStatus, default=CampaignVisitStatus.PENDING, null=False)
 
-    # Interpretation text — kept on Visit for fast access; authorship is in VisitValidationWorkflow
+    # Interpretation text — kept on CampaignVisit for fast access; authorship is in CampaignVisitValidationWorkflow
     doctor_clinic_interpretation: str = TextField(null=True)
     doctor_company_interpretation: str = TextField(null=True)
     doctor_company_message: str = TextField(null=True)
@@ -51,10 +50,15 @@ class Visit(ModelWithUser):
         if not self.visit_number:
             self.visit_number = _generate_visit_number()
 
-    def to_dto(self) -> VisitDTO:
+    @property
+    def campaign_id(self):
+        """Alias for program_id (DB column kept for backward compatibility)."""
+        return self.program_id
+
+    def to_dto(self) -> CampaignVisitDTO:
         patient = self.patient
         account = self.billing_account if self.billing_account_id else None
-        return VisitDTO(
+        return CampaignVisitDTO(
             id=self.id,
             created_at=self.created_at,
             last_modified_at=self.last_modified_at,
@@ -76,4 +80,3 @@ class Visit(ModelWithUser):
         database = CareDbManager.get_instance().db
         is_table = True
         db_manager = CareDbManager.get_instance()
-

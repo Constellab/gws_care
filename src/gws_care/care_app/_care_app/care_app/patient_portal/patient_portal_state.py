@@ -140,9 +140,9 @@ class PatientPortalState(RoleState):
         self.visits_error = ""
         try:
             with await self.authenticate_user():
-                from gws_care.visit.visit_service import VisitService
-                from gws_care.visit.visit_status import VisitStatus
-                visits = VisitService.list_for_patient(patient_id)
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+                from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
+                visits = CampaignVisitService.list_for_patient(patient_id)
                 self.portal_visits = [
                     PortalVisitDTO(
                         id=str(v.id),
@@ -155,7 +155,7 @@ class PatientPortalState(RoleState):
                         interpretation=v.doctor_company_interpretation or "",
                     )
                     for v in visits
-                    if v.status == VisitStatus.DOCTOR_COMPANY_VALIDATED
+                    if v.status == CampaignVisitStatus.DOCTOR_COMPANY_VALIDATED
                 ]
         except Exception as e:
             self.visits_error = str(e)

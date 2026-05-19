@@ -149,7 +149,7 @@ def patient_picker_widget(state: type[PatientPickerState] = PatientPickerState) 
         rx.cond(
             state.picker_selected_id != "",
             rx.hstack(
-                rx.icon("check-circle", size=16, color="var(--green-9)"),
+                rx.icon("check", size=16, color="var(--green-9)"),
                 rx.text(
                     state.picker_selected_label,
                     size="2",

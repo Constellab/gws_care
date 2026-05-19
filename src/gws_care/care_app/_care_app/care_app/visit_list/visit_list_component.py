@@ -10,8 +10,8 @@ from ..common.patient_picker_component import patient_picker_widget
 from .visit_list_state import (
     AccountOptionDTO,
     CalendarDayDTO,
+    CampaignVisitListState,
     PatientAccountOption,
-    VisitListState,
     VisitRowDTO,
 )
 
@@ -20,9 +20,8 @@ def _status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
         ("pending", rx.badge(LanguageState.tr["status_pending"], color_scheme="gray", variant="soft", size="1")),
-        ("on-site_done", rx.badge(LanguageState.tr["status_on-site_done"], color_scheme="orange", variant="soft", size="1")),
-        ("results_entered", rx.badge(LanguageState.tr["status_results_entered"], color_scheme="blue", variant="soft", size="1")),
-        ("lab_validated", rx.badge(LanguageState.tr["status_lab_validated"], color_scheme="cyan", variant="soft", size="1")),
+        ("visit_done", rx.badge(LanguageState.tr["status_visit_done"], color_scheme="amber", variant="soft", size="1")),
+        ("lab_done", rx.badge(LanguageState.tr["status_lab_done"], color_scheme="blue", variant="soft", size="1")),
         ("doctor_clinic_validated", rx.badge(LanguageState.tr["status_doctor_clinic_validated"], color_scheme="purple", variant="soft", size="1")),
         ("doctor_company_validated", rx.badge(LanguageState.tr["status_doctor_company_validated"], color_scheme="green", variant="soft", size="1")),
         ("cancelled", rx.badge(LanguageState.tr["status_cancelled"], color_scheme="red", variant="soft", size="1")),
@@ -42,7 +41,7 @@ def _visit_row(visit: VisitRowDTO) -> rx.Component:
         rx.table.cell(
             rx.link(
                 visit.patient_name,
-                on_click=lambda: VisitListState.go_to_patient(visit.patient_id),
+                on_click=lambda: CampaignVisitListState.go_to_patient(visit.patient_id),
                 cursor="pointer",
                 size="2",
             )
@@ -67,7 +66,7 @@ def _visit_row(visit: VisitRowDTO) -> rx.Component:
         ),
         rx.table.cell(_status_badge(visit.status)),
         style={":hover": {"background_color": "var(--gray-2)", "cursor": "pointer"}},
-        on_click=lambda: VisitListState.go_to_visit(visit.id),
+        on_click=lambda: CampaignVisitListState.go_to_visit(visit.id),
     )
 
 
@@ -81,9 +80,9 @@ def _sortable_header(label: str, column: str) -> rx.Component:
         rx.hstack(
             rx.text(label, size="2"),
             rx.cond(
-                VisitListState.sort_column == column,
+                CampaignVisitListState.sort_column == column,
                 rx.cond(
-                    VisitListState.sort_ascending,
+                    CampaignVisitListState.sort_ascending,
                     rx.icon("chevron-up", size=13, color="var(--accent-9)"),
                     rx.icon("chevron-down", size=13, color="var(--accent-9)"),
                 ),
@@ -92,7 +91,7 @@ def _sortable_header(label: str, column: str) -> rx.Component:
             spacing="1",
             align="center",
         ),
-        on_click=lambda: VisitListState.set_sort(column),
+        on_click=lambda: CampaignVisitListState.set_sort(column),
         style={"cursor": "pointer"},
     )
 
@@ -104,9 +103,8 @@ def _cal_visit_pill(visit: VisitRowDTO) -> rx.Component:
     bg = rx.match(
         visit.status,
         ("pending", "var(--gray-3)"),
-        ("on-site_done", "var(--orange-3)"),
-        ("results_entered", "var(--blue-3)"),
-        ("lab_validated", "var(--cyan-3)"),
+        ("visit_done", "var(--amber-3)"),
+        ("lab_done", "var(--blue-3)"),
         ("doctor_clinic_validated", "var(--purple-3)"),
         ("doctor_company_validated", "var(--green-3)"),
         ("cancelled", "var(--red-3)"),
@@ -115,9 +113,8 @@ def _cal_visit_pill(visit: VisitRowDTO) -> rx.Component:
     color = rx.match(
         visit.status,
         ("pending", "var(--gray-11)"),
-        ("on-site_done", "var(--orange-11)"),
-        ("results_entered", "var(--blue-11)"),
-        ("lab_validated", "var(--cyan-11)"),
+        ("visit_done", "var(--amber-11)"),
+        ("lab_done", "var(--blue-11)"),
         ("doctor_clinic_validated", "var(--purple-11)"),
         ("doctor_company_validated", "var(--green-11)"),
         ("cancelled", "var(--red-11)"),
@@ -138,7 +135,7 @@ def _cal_visit_pill(visit: VisitRowDTO) -> rx.Component:
         width="100%",
         overflow="hidden",
         cursor="pointer",
-        on_click=lambda: VisitListState.go_to_visit(visit.id),
+        on_click=lambda: CampaignVisitListState.go_to_visit(visit.id),
     )
 
 
@@ -191,10 +188,10 @@ def _calendar_view() -> rx.Component:
                 rx.icon("chevron-left", size=16),
                 variant="ghost",
                 size="2",
-                on_click=VisitListState.calendar_prev_month,
+                on_click=CampaignVisitListState.calendar_prev_month,
             ),
             rx.text(
-                VisitListState.calendar_month_label,
+                CampaignVisitListState.calendar_month_label,
                 size="4",
                 weight="medium",
                 min_width="180px",
@@ -204,7 +201,7 @@ def _calendar_view() -> rx.Component:
                 rx.icon("chevron-right", size=16),
                 variant="ghost",
                 size="2",
-                on_click=VisitListState.calendar_next_month,
+                on_click=CampaignVisitListState.calendar_next_month,
             ),
             spacing="2",
             align="center",
@@ -225,7 +222,7 @@ def _calendar_view() -> rx.Component:
         ),
         # Day cells
         rx.grid(
-            rx.foreach(VisitListState.calendar_days, _cal_day_cell),
+            rx.foreach(CampaignVisitListState.calendar_days, _cal_day_cell),
             columns="7",
             width="100%",
         ),
@@ -248,7 +245,7 @@ def _new_visit_dialog() -> rx.Component:
                 # Patient picker table
                 rx.vstack(
                     rx.text(LanguageState.tr["field_patient_required"], size="2", weight="medium"),
-                    patient_picker_widget(VisitListState),
+                    patient_picker_widget(CampaignVisitListState),
                     spacing="1",
                     width="100%",
                 ),
@@ -257,8 +254,8 @@ def _new_visit_dialog() -> rx.Component:
                     rx.text(LanguageState.tr["field_scheduled_datetime"], size="2", weight="medium"),
                     rx.input(
                         type="datetime-local",
-                        value=VisitListState.new_visit_scheduled_at,
-                        on_change=VisitListState.set_new_visit_scheduled_at,
+                        value=CampaignVisitListState.new_visit_scheduled_at,
+                        on_change=CampaignVisitListState.set_new_visit_scheduled_at,
                         size="2",
                         width="100%",
                     ),
@@ -267,23 +264,23 @@ def _new_visit_dialog() -> rx.Component:
                 ),
                 # Account selector — only shown once a patient with accounts is selected
                 rx.cond(
-                    VisitListState.picker_selected_id != "",
+                    CampaignVisitListState.picker_selected_id != "",
                     rx.vstack(
                         rx.text(LanguageState.tr["col_account_name"], size="2", weight="medium"),
                         rx.cond(
-                            VisitListState.new_visit_patient_accounts.length() > 0,
+                            CampaignVisitListState.new_visit_patient_accounts.length() > 0,
                             rx.select.root(
                                 rx.select.trigger(
                                     placeholder=LanguageState.tr["select_account_placeholder"]
                                 ),
                                 rx.select.content(
                                     rx.foreach(
-                                        VisitListState.new_visit_patient_accounts,
+                                        CampaignVisitListState.new_visit_patient_accounts,
                                         _patient_account_option,
                                     )
                                 ),
-                                value=VisitListState.new_visit_account_id,
-                                on_change=VisitListState.set_new_visit_account_id,
+                                value=CampaignVisitListState.new_visit_account_id,
+                                on_change=CampaignVisitListState.set_new_visit_account_id,
                                 size="2",
                                 width="100%",
                             ),
@@ -301,9 +298,9 @@ def _new_visit_dialog() -> rx.Component:
                 ),
                 # Error
                 rx.cond(
-                    VisitListState.new_visit_error != "",
+                    CampaignVisitListState.new_visit_error != "",
                     rx.callout(
-                        VisitListState.new_visit_error,
+                        CampaignVisitListState.new_visit_error,
                         icon="triangle-alert",
                         color_scheme="red",
                         size="1",
@@ -315,15 +312,15 @@ def _new_visit_dialog() -> rx.Component:
                     rx.button(
                         LanguageState.tr["cancel_btn"],
                         variant="outline",
-                        on_click=VisitListState.close_new_visit_dialog,
+                        on_click=CampaignVisitListState.close_new_visit_dialog,
                     ),
                     rx.button(
                         LanguageState.tr["create_visit_btn"],
-                        on_click=VisitListState.save_new_visit,
-                        loading=VisitListState.new_visit_is_saving,
+                        on_click=CampaignVisitListState.save_new_visit,
+                        loading=CampaignVisitListState.new_visit_is_saving,
                         disabled=(
-                            (VisitListState.picker_selected_id == "")
-                            | (VisitListState.new_visit_account_id == "")
+                            (CampaignVisitListState.picker_selected_id == "")
+                            | (CampaignVisitListState.new_visit_account_id == "")
                         ),
                     ),
                     spacing="2",
@@ -333,11 +330,11 @@ def _new_visit_dialog() -> rx.Component:
                 width="100%",
                 padding_top="1rem",
             ),
-            on_interact_outside=VisitListState.close_new_visit_dialog,
-            on_escape_key_down=VisitListState.close_new_visit_dialog,
+            on_interact_outside=CampaignVisitListState.close_new_visit_dialog,
+            on_escape_key_down=CampaignVisitListState.close_new_visit_dialog,
             max_width="700px",
         ),
-        open=VisitListState.show_new_visit_dialog,
+        open=CampaignVisitListState.show_new_visit_dialog,
     )
 
 
@@ -356,21 +353,21 @@ def _no_account_alert() -> rx.Component:
                     LanguageState.tr["cancel_btn"],
                     variant="outline",
                     color_scheme="gray",
-                    on_click=VisitListState.close_no_account_alert,
+                    on_click=CampaignVisitListState.close_no_account_alert,
                 ),
                 rx.button(
                     LanguageState.tr["go_to_patient_btn"],
-                    on_click=lambda: VisitListState.go_to_patient(VisitListState.no_account_patient_id),
+                    on_click=lambda: CampaignVisitListState.go_to_patient(CampaignVisitListState.no_account_patient_id),
                 ),
                 spacing="2",
                 width="100%",
                 padding_top="1rem",
             ),
-            on_interact_outside=VisitListState.close_no_account_alert,
-            on_escape_key_down=VisitListState.close_no_account_alert,
+            on_interact_outside=CampaignVisitListState.close_no_account_alert,
+            on_escape_key_down=CampaignVisitListState.close_no_account_alert,
             max_width="480px",
         ),
-        open=VisitListState.show_no_account_alert,
+        open=CampaignVisitListState.show_no_account_alert,
     )
 
 
@@ -378,21 +375,21 @@ def visit_list_page() -> rx.Component:
     """Visit list page with filters, list and calendar views."""
     return main_component(
         page_layout(
-            account_picker_dialog(VisitListState),
+            account_picker_dialog(CampaignVisitListState),
             rx.hstack(
                 rx.heading(LanguageState.tr["visits_page_title"], size="6"),
                 rx.spacer(),
                 rx.button(
                     rx.icon("plus", size=16),
                     LanguageState.tr["new_visit_btn"],
-                    on_click=VisitListState.open_new_visit_dialog,
+                    on_click=CampaignVisitListState.open_new_visit_dialog,
                     size="2",
                 ),
                 rx.segmented_control.root(
                     rx.segmented_control.item(rx.icon("list", size=15), value="list"),
                     rx.segmented_control.item(rx.icon("calendar-days", size=15), value="calendar"),
-                    value=VisitListState.view_mode,
-                    on_change=VisitListState.set_view_mode,
+                    value=CampaignVisitListState.view_mode,
+                    on_change=CampaignVisitListState.set_view_mode,
                     size="1",
                 ),
                 width="100%",
@@ -406,8 +403,8 @@ def visit_list_page() -> rx.Component:
                 rx.hstack(
                     rx.input(
                         placeholder=LanguageState.tr["search_patient_placeholder"],
-                        value=VisitListState.search,
-                        on_change=VisitListState.set_search,
+                        value=CampaignVisitListState.search,
+                        on_change=CampaignVisitListState.set_search,
                         size="2",
                         max_width="260px",
                     ),
@@ -416,45 +413,44 @@ def visit_list_page() -> rx.Component:
                         rx.select.content(
                             rx.select.item(LanguageState.tr["all_statuses"], value="ALL"),
                             rx.select.item(LanguageState.tr["status_pending"], value="pending"),
-                            rx.select.item(LanguageState.tr["status_on-site_done"], value="on-site_done"),
-                            rx.select.item(LanguageState.tr["status_results_entered"], value="results_entered"),
-                            rx.select.item(LanguageState.tr["status_lab_validated"], value="lab_validated"),
+                            rx.select.item(LanguageState.tr["status_visit_done"], value="visit_done"),
+                            rx.select.item(LanguageState.tr["status_lab_done"], value="lab_done"),
                             rx.select.item(LanguageState.tr["status_doctor_clinic_validated"], value="doctor_clinic_validated"),
                             rx.select.item(LanguageState.tr["status_doctor_company_validated"], value="doctor_company_validated"),
                             rx.select.item(LanguageState.tr["status_cancelled"], value="cancelled"),
                         ),
-                        value=VisitListState.filter_status,
-                        on_change=VisitListState.set_filter_status,
+                        value=CampaignVisitListState.filter_status,
+                        on_change=CampaignVisitListState.set_filter_status,
                         size="2",
                     ),
-                    account_picker_button(VisitListState),
+                    account_picker_button(CampaignVisitListState),
                     spacing="3",
                     wrap="wrap",
                     width="100%",
                 ),
                 # Date range — only relevant in list mode
                 rx.cond(
-                    VisitListState.view_mode == "list",
+                    CampaignVisitListState.view_mode == "list",
                     rx.hstack(
                         rx.text(LanguageState.tr["date_filter_label"], size="2", color="var(--gray-9)", white_space="nowrap"),
                         rx.input(
                             type="date",
-                            value=VisitListState.filter_date_from,
-                            on_change=VisitListState.set_filter_date_from,
+                            value=CampaignVisitListState.filter_date_from,
+                            on_change=CampaignVisitListState.set_filter_date_from,
                             size="2",
                         ),
                         rx.text(LanguageState.tr["date_range_arrow"], size="2", color="var(--gray-9)"),
                         rx.input(
                             type="date",
-                            value=VisitListState.filter_date_to,
-                            on_change=VisitListState.set_filter_date_to,
+                            value=CampaignVisitListState.filter_date_to,
+                            on_change=CampaignVisitListState.set_filter_date_to,
                             size="2",
                         ),
                         rx.spacer(),
                         rx.button(
                             rx.icon("x", size=14),
                             LanguageState.tr["clear_btn"],
-                            on_click=VisitListState.clear_filters,
+                            on_click=CampaignVisitListState.clear_filters,
                             variant="outline",
                             size="2",
                         ),
@@ -469,7 +465,7 @@ def visit_list_page() -> rx.Component:
                         rx.button(
                             rx.icon("x", size=14),
                             LanguageState.tr["clear_btn"],
-                            on_click=VisitListState.clear_filters,
+                            on_click=CampaignVisitListState.clear_filters,
                             variant="outline",
                             size="2",
                         ),
@@ -481,22 +477,22 @@ def visit_list_page() -> rx.Component:
             ),
             # Error
             rx.cond(
-                VisitListState.error_message != "",
+                CampaignVisitListState.error_message != "",
                 rx.callout(
-                    VisitListState.error_message,
+                    CampaignVisitListState.error_message,
                     icon="triangle-alert",
                     color_scheme="red",
                 ),
             ),
             # List or Calendar
             rx.cond(
-                VisitListState.is_loading,
+                CampaignVisitListState.is_loading,
                 rx.center(rx.spinner(size="3"), padding="3rem"),
                 rx.cond(
-                    VisitListState.view_mode == "list",
+                    CampaignVisitListState.view_mode == "list",
                     # ── List view ──
                     rx.cond(
-                        VisitListState.visits,
+                        CampaignVisitListState.visits,
                         rx.vstack(
                             rx.table.root(
                                 rx.table.header(
@@ -509,24 +505,24 @@ def visit_list_page() -> rx.Component:
                                     )
                                 ),
                                 rx.table.body(
-                                    rx.foreach(VisitListState.visits, _visit_row),
+                                    rx.foreach(CampaignVisitListState.visits, _visit_row),
                                 ),
                                 width="100%",
                                 variant="surface",
                             ),
                             rx.cond(
-                                VisitListState.has_more,
+                                CampaignVisitListState.has_more,
                                 rx.center(
                                     rx.button(
                                         rx.cond(
-                                            VisitListState.is_loading_more,
+                                            CampaignVisitListState.is_loading_more,
                                             rx.hstack(rx.spinner(size="2"), rx.text("Loading..."), spacing="2"),
                                             rx.hstack(rx.icon("chevron-down", size=16), rx.text("Load more"), spacing="2"),
                                         ),
                                         variant="soft",
                                         size="2",
-                                        on_click=VisitListState.load_more_visits,
-                                        disabled=VisitListState.is_loading_more,
+                                        on_click=CampaignVisitListState.load_more_visits,
+                                        disabled=CampaignVisitListState.is_loading_more,
                                     ),
                                     width="100%",
                                     padding="1rem",

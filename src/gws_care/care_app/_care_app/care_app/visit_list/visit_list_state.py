@@ -44,7 +44,7 @@ class CalendarDayDTO(BaseModel):
     visits: list[VisitRowDTO] = []
 
 
-class VisitListState(CombinedPickerState):
+class CampaignVisitListState(CombinedPickerState):
     """State for the /visits page."""
 
     # ── Patient picker vars (declared here for independent state storage) ─────
@@ -146,7 +146,7 @@ class VisitListState(CombinedPickerState):
     calendar_month_label: str = ""
     calendar_days: list[CalendarDayDTO] = []
 
-    # ── New Visit dialog ──────────────────────────────────────────────────────
+    # ── New CampaignVisit dialog ──────────────────────────────────────────────────────
     show_new_visit_dialog: bool = False
     new_visit_scheduled_at: str = ""
     new_visit_error: str = ""
@@ -266,7 +266,7 @@ class VisitListState(CombinedPickerState):
 
     @rx.event
     def go_to_visit(self, visit_id: str):
-        return rx.redirect(f"/visit/{visit_id}")
+        return rx.redirect(f"/campaign-visit/{visit_id}")
 
     @rx.event
     def go_to_patient(self, patient_id: str):
@@ -278,7 +278,7 @@ class VisitListState(CombinedPickerState):
         self.is_loading_more = True
         await self._load_visits(reset=False)
 
-    # ── New Visit dialog events ───────────────────────────────────────────────
+    # ── New CampaignVisit dialog events ───────────────────────────────────────────────
 
     @rx.event
     async def open_new_visit_dialog(self):
@@ -355,14 +355,14 @@ class VisitListState(CombinedPickerState):
         self.new_visit_is_saving = True
         try:
             with await self.authenticate_user():
-                from gws_care.visit.visit_service import VisitService
-                _visit, program = VisitService.create_visit_with_default_program(
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+                _visit, program = CampaignVisitService.create_visit_with_default_campaign(
                     patient_id=self.picker_selected_id,
                     scheduled_at_str=self.new_visit_scheduled_at,
                     billing_account_id=self.new_visit_account_id,
                 )
             self.show_new_visit_dialog = False
-            return rx.redirect(f"/program/{program.id}")
+            return rx.redirect(f"/campaign/{program.id}")
         except Exception as e:
             self.new_visit_error = str(e)
         finally:
@@ -447,15 +447,15 @@ class VisitListState(CombinedPickerState):
         self.error_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.visit.visit_service import VisitService
-                from gws_care.visit.visit_status import VisitStatus
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+                from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
 
                 status_filter = (
-                    VisitStatus(self.filter_status)
+                    CampaignVisitStatus(self.filter_status)
                     if self.filter_status and self.filter_status != "ALL"
                     else None
                 )
-                visits = VisitService.list_all(
+                visits = CampaignVisitService.list_all(
                     status=status_filter,
                     search=self.search,
                     account_id=self.filter_account_id or None,

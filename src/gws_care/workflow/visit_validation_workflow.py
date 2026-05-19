@@ -1,32 +1,32 @@
-"""VisitValidationWorkflow model — audit trail of visit validation steps."""
+"""CampaignVisitValidationWorkflow model — audit trail of campaign visit validation steps."""
 
 from datetime import datetime
 
 from gws_core import EnumField, Model
 from peewee import CompositeKey, DateTimeField, ForeignKeyField, TextField
 
+from gws_care.campaign_visit.campaign_visit import CampaignVisit
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.user.user import User
-from gws_care.visit.visit import Visit
-from gws_care.workflow.visit_validation_step import VisitValidationStep
+from gws_care.workflow.visit_validation_step import CampaignVisitValidationStep
 
 
-class VisitValidationWorkflow(Model):
-    """One row per completed validation step for a visit.
+class CampaignVisitValidationWorkflow(Model):
+    """One row per completed validation step for a campaign visit.
 
     Uniqueness is enforced on (visit, step): each step can only be
     recorded once per visit, reflecting the sequential, non-reversible
     nature of the validation chain.
 
     Example query — full audit trail for a visit:
-        VisitValidationWorkflow
+        CampaignVisitValidationWorkflow
             .select()
-            .where(VisitValidationWorkflow.visit == visit_id)
-            .order_by(VisitValidationWorkflow.validated_at)
+            .where(CampaignVisitValidationWorkflow.visit == visit_id)
+            .order_by(CampaignVisitValidationWorkflow.validated_at)
     """
 
-    visit: Visit = ForeignKeyField(Visit, null=False, backref="validation_workflow", on_delete="CASCADE")
-    step: VisitValidationStep = EnumField(choices=VisitValidationStep, null=False)
+    visit: CampaignVisit = ForeignKeyField(CampaignVisit, null=False, backref="validation_workflow", on_delete="CASCADE")
+    step: CampaignVisitValidationStep = EnumField(choices=CampaignVisitValidationStep, null=False)
     validated_by: User = ForeignKeyField(User, null=True, backref="+")
     validated_at: datetime = DateTimeField(null=False)
     notes: str = TextField(null=True)
@@ -37,3 +37,8 @@ class VisitValidationWorkflow(Model):
         is_table = True
         db_manager = CareDbManager.get_instance()
         primary_key = CompositeKey("visit", "step")
+
+
+# Backward-compat aliases
+VisitValidationWorkflow = CampaignVisitValidationWorkflow
+VisitValidationStep = CampaignVisitValidationStep

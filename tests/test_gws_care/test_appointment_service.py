@@ -26,7 +26,8 @@ def _make_patient():
 
 
 def _make_account():
-    return AccountService.create_account(SaveAccountDTO(name="TestApptAcct"))
+    import uuid
+    return AccountService.create_account(SaveAccountDTO(name=f"TestApptAcct {uuid.uuid4().hex[:8]}"))
 
 
 def _make_appt_dto(patient_id: str, **kwargs) -> SaveAppointmentDTO:
@@ -291,7 +292,7 @@ class TestAppointmentService(BaseTestCase):
         self.assertEqual(dto.id, str(appt.id))
         self.assertEqual(dto.patient_id, str(patient.id))
         self.assertIn("TEST", dto.patient_name)   # last_name is uppercased
-        self.assertEqual(dto.account_name, "TestApptAcct")
+        self.assertEqual(dto.account_name, account.name)
         self.assertEqual(dto.exam_type_label, ExamType.CLINICAL.get_label())
         self.assertEqual(dto.status, AppointmentStatus.SCHEDULED.value)
 

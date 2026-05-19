@@ -35,7 +35,7 @@ from gws_care.role.user_care_role import UserCareRole
 from gws_care.role.user_role_service import UserRoleService
 from gws_care.user.care_user_sync_service import CareUserSyncService
 from gws_care.user.user import User
-from gws_care.visit.visit_service import VisitService
+from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
 from gws_core import BaseTestCase
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -54,7 +54,8 @@ def _make_patient_with_email(email: str = "patient@example.com"):
 
 
 def _make_account():
-    return AccountService.create_account(SaveAccountDTO(name="Scheduler Test Acct"))
+    import uuid
+    return AccountService.create_account(SaveAccountDTO(name=f"Scheduler Test Acct {uuid.uuid4().hex[:8]}"))
 
 
 def _make_scheduled_appointment(patient, days_from_now: int) -> Appointment:
@@ -307,11 +308,8 @@ class TestTerrainThankYou(BaseTestCase):
         """Returns (patient, visit) with email."""
         account = _make_account()
         patient = _make_patient_with_email("terrain@example.com")
-        # Reassign patient to account
-        from gws_care.patient.patient import Patient
-        p = Patient.get_by_id(str(patient.id))
-        p.billing_account = account
-        p.save()
+        p = patient
+        PatientService.add_account(str(p.id), str(account.id))
 
         campaign = CampaignService.create_campaign(
             SaveCampaignDTO(
@@ -322,7 +320,7 @@ class TestTerrainThankYou(BaseTestCase):
             )
         )
         CampaignService.add_patient(str(campaign.id), str(p.id))
-        visit = VisitService.create_visit(str(campaign.id), str(p.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(p.id))
         return p, visit
 
     def test_terrain_thank_you_creates_notification_log(self):
@@ -383,10 +381,8 @@ class TestTerrainThankYou(BaseTestCase):
                 gender="M",
             )
         )
-        from gws_care.patient.patient import Patient
-        p = Patient.get_by_id(str(patient_no_email.id))
-        p.billing_account = account
-        p.save()
+        p = patient_no_email
+        PatientService.add_account(str(p.id), str(account.id))
 
         campaign = CampaignService.create_campaign(
             SaveCampaignDTO(
@@ -397,7 +393,7 @@ class TestTerrainThankYou(BaseTestCase):
             )
         )
         CampaignService.add_patient(str(campaign.id), str(p.id))
-        visit = VisitService.create_visit(str(campaign.id), str(p.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(p.id))
 
         NotificationService.send_terrain_thank_you(p, visit)
 

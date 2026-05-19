@@ -1,4 +1,4 @@
-"""Unit tests for VisitService."""
+"""Unit tests for CampaignVisitService."""
 
 from datetime import date
 
@@ -13,14 +13,17 @@ from gws_care.role.user_care_role import UserCareRole
 from gws_care.role.user_role_service import UserRoleService
 from gws_care.user.care_user_sync_service import CareUserSyncService
 from gws_care.user.user import User
-from gws_care.visit.visit_dto import ValidateDoctorClinicDTO, ValidateDoctorCompanyDTO
-from gws_care.visit.visit_service import VisitService
-from gws_care.visit.visit_status import VisitStatus
+from gws_care.campaign_visit.campaign_visit_dto import ValidateDoctorClinicDTO, ValidateDoctorCompanyDTO
+from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
 from gws_core import BadRequestException, BaseTestCase, NotFoundException
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _make_account(name: str = "Visit Test Acct") -> "Account":
+def _make_account(name: str | None = None) -> "Account":
+    import uuid
+    if name is None:
+        name = f"CampaignVisit Test Acct {uuid.uuid4().hex[:8]}"
     return AccountService.create_account(SaveAccountDTO(name=name))
 
 
@@ -42,7 +45,7 @@ def _make_campaign_with_patient():
     patient = _make_patient(account=account)
     campaign = CampaignService.create_campaign(
         SaveCampaignDTO(
-            name="Visit Cam",
+            name="CampaignVisit Cam",
             account_id=str(account.id),
             start_date="2025-07-01",
             end_date="2025-07-31",
@@ -55,8 +58,8 @@ def _make_campaign_with_patient():
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
-class TestVisitService(BaseTestCase):
-    """Tests for VisitService: creation and full validation lifecycle."""
+class TestCampaignVisitService(BaseTestCase):
+    """Tests for CampaignVisitService: creation and full validation lifecycle."""
 
     @classmethod
     def init_before_test(cls):
@@ -74,22 +77,22 @@ class TestVisitService(BaseTestCase):
     # ── create ───────────────────────────────────────────────────────────────
 
     def test_create_visit_happy_path(self):
-        """Visit is created with PENDING status and auto visit_number."""
+        """CampaignVisit is created with PENDING status and auto visit_number."""
         campaign, patient, _ = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
 
         self.assertIsNotNone(visit.id)
         self.assertTrue(visit.visit_number.startswith("VIS-"))
-        self.assertEqual(visit.status, VisitStatus.PENDING)
+        self.assertEqual(visit.status, CampaignVisitStatus.PENDING)
         self.assertEqual(str(visit.campaign_id), str(campaign.id))
         self.assertEqual(str(visit.patient_id), str(patient.id))
 
     def test_create_visit_duplicate_raises(self):
         """A second visit for the same (campaign, patient) raises."""
         campaign, patient, _ = _make_campaign_with_patient()
-        VisitService.create_visit(str(campaign.id), str(patient.id))
+        CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
         with self.assertRaises(BadRequestException):
-            VisitService.create_visit(str(campaign.id), str(patient.id))
+            CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
 
     def test_create_visit_patient_not_in_campaign_raises(self):
         """Creating a visit for a patient not enrolled in the campaign raises."""
@@ -98,102 +101,102 @@ class TestVisitService(BaseTestCase):
         other_patient = _make_patient(account=None)  # no account, not enrolled
 
         with self.assertRaises((BadRequestException, NotFoundException)):
-            VisitService.create_visit(str(campaign.id), str(other_patient.id))
+            CampaignVisitService.create_visit(str(campaign.id), str(other_patient.id))
 
     def test_create_visit_unknown_campaign_raises(self):
         with self.assertRaises(NotFoundException):
-            VisitService.create_visit("00000000-0000-0000-0000-000000000000", "some-patient-id")
+            CampaignVisitService.create_visit("00000000-0000-0000-0000-000000000000", "some-patient-id")
 
     # ── get / list ────────────────────────────────────────────────────────────
 
     def test_get_visit_not_found_raises(self):
         with self.assertRaises(NotFoundException):
-            VisitService.get_visit("00000000-0000-0000-0000-000000000000")
+            CampaignVisitService.get_visit("00000000-0000-0000-0000-000000000000")
 
     def test_list_for_campaign(self):
         campaign, patient, _ = _make_campaign_with_patient()
-        VisitService.create_visit(str(campaign.id), str(patient.id))
-        visits = VisitService.list_for_campaign(str(campaign.id))
+        CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
+        visits = CampaignVisitService.list_for_campaign(str(campaign.id))
         self.assertEqual(len(visits), 1)
 
     def test_list_for_patient(self):
         campaign, patient, _ = _make_campaign_with_patient()
-        VisitService.create_visit(str(campaign.id), str(patient.id))
-        visits = VisitService.list_for_patient(str(patient.id))
+        CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
+        visits = CampaignVisitService.list_for_patient(str(patient.id))
         self.assertGreaterEqual(len(visits), 1)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
     def test_full_lifecycle(self):
-        """Visit progresses through PENDING → TERRAIN_DONE → RESULTS_ENTERED
+        """CampaignVisit progresses through PENDING → TERRAIN_DONE → RESULTS_ENTERED
         → LAB_VALIDATED → DOCTOR_CLINIC_VALIDATED → DOCTOR_COMPANY_VALIDATED."""
         campaign, patient, user = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
         vid = str(visit.id)
 
         # PENDING → TERRAIN_DONE
-        visit = VisitService.mark_terrain_done(vid)
-        self.assertEqual(visit.status, VisitStatus.TERRAIN_DONE)
+        visit = CampaignVisitService.mark_terrain_done(vid)
+        self.assertEqual(visit.status, CampaignVisitStatus.TERRAIN_DONE)
 
         # TERRAIN_DONE → RESULTS_ENTERED
-        visit = VisitService.mark_results_entered(vid)
-        self.assertEqual(visit.status, VisitStatus.RESULTS_ENTERED)
+        visit = CampaignVisitService.mark_results_entered(vid)
+        self.assertEqual(visit.status, CampaignVisitStatus.RESULTS_ENTERED)
 
         # RESULTS_ENTERED → LAB_VALIDATED
-        visit = VisitService.validate_lab(vid, user)
-        self.assertEqual(visit.status, VisitStatus.LAB_VALIDATED)
+        visit = CampaignVisitService.validate_lab(vid, user)
+        self.assertEqual(visit.status, CampaignVisitStatus.LAB_VALIDATED)
         self.assertIsNotNone(visit.lab_validated_by_id)
         self.assertIsNotNone(visit.lab_validated_at)
 
         # LAB_VALIDATED → DOCTOR_CLINIC_VALIDATED
-        visit = VisitService.validate_doctor_clinic(
+        visit = CampaignVisitService.validate_doctor_clinic(
             vid, user, ValidateDoctorClinicDTO(interpretation="All normal.")
         )
-        self.assertEqual(visit.status, VisitStatus.DOCTOR_CLINIC_VALIDATED)
+        self.assertEqual(visit.status, CampaignVisitStatus.DOCTOR_CLINIC_VALIDATED)
         self.assertEqual(visit.doctor_clinic_interpretation, "All normal.")
 
         # DOCTOR_CLINIC_VALIDATED → DOCTOR_COMPANY_VALIDATED
-        visit = VisitService.validate_doctor_company(
+        visit = CampaignVisitService.validate_doctor_company(
             vid,
             user,
             ValidateDoctorCompanyDTO(interpretation="Aptitude confirmée.", message="Résultats satisfaisants."),
         )
-        self.assertEqual(visit.status, VisitStatus.DOCTOR_COMPANY_VALIDATED)
+        self.assertEqual(visit.status, CampaignVisitStatus.DOCTOR_COMPANY_VALIDATED)
         self.assertEqual(visit.doctor_company_interpretation, "Aptitude confirmée.")
         self.assertEqual(visit.doctor_company_message, "Résultats satisfaisants.")
 
     def test_mark_terrain_done_wrong_status_raises(self):
         campaign, patient, _ = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
-        VisitService.mark_terrain_done(str(visit.id))  # now TERRAIN_DONE
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
+        CampaignVisitService.mark_terrain_done(str(visit.id))  # now TERRAIN_DONE
         with self.assertRaises(BadRequestException):
-            VisitService.mark_terrain_done(str(visit.id))  # not PENDING anymore
+            CampaignVisitService.mark_terrain_done(str(visit.id))  # not PENDING anymore
 
     def test_mark_results_entered_wrong_status_raises(self):
         campaign, patient, _ = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
         with self.assertRaises(BadRequestException):
-            VisitService.mark_results_entered(str(visit.id))  # must be TERRAIN_DONE first
+            CampaignVisitService.mark_results_entered(str(visit.id))  # must be TERRAIN_DONE first
 
     def test_validate_lab_wrong_status_raises(self):
         campaign, patient, user = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
         with self.assertRaises(BadRequestException):
-            VisitService.validate_lab(str(visit.id), user)  # must be RESULTS_ENTERED first
+            CampaignVisitService.validate_lab(str(visit.id), user)  # must be RESULTS_ENTERED first
 
     def test_validate_doctor_clinic_wrong_status_raises(self):
         campaign, patient, user = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
         with self.assertRaises(BadRequestException):
-            VisitService.validate_doctor_clinic(
+            CampaignVisitService.validate_doctor_clinic(
                 str(visit.id), user, ValidateDoctorClinicDTO()
             )  # must be LAB_VALIDATED first
 
     def test_validate_doctor_company_wrong_status_raises(self):
         campaign, patient, user = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
         with self.assertRaises(BadRequestException):
-            VisitService.validate_doctor_company(
+            CampaignVisitService.validate_doctor_company(
                 str(visit.id), user, ValidateDoctorCompanyDTO()
             )  # must be DOCTOR_CLINIC_VALIDATED first
 
@@ -201,10 +204,10 @@ class TestVisitService(BaseTestCase):
 
     def test_to_row_dto(self):
         campaign, patient, _ = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
-        row = VisitService.to_row_dto(visit)
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
+        row = CampaignVisitService.to_row_dto(visit)
         self.assertEqual(row.visit_number, visit.visit_number)
-        self.assertEqual(row.status, VisitStatus.PENDING.value)
+        self.assertEqual(row.status, CampaignVisitStatus.PENDING.value)
         self.assertIsNotNone(row.patient_name)
 
 
@@ -228,11 +231,11 @@ class TestVisitValidationMetadata(BaseTestCase):
     def test_lab_validation_stores_user_and_timestamp(self):
         """validate_lab stores lab_validated_by and lab_validated_at."""
         campaign, patient, user = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
         vid = str(visit.id)
-        VisitService.mark_terrain_done(vid)
-        VisitService.mark_results_entered(vid)
-        visit = VisitService.validate_lab(vid, user)
+        CampaignVisitService.mark_terrain_done(vid)
+        CampaignVisitService.mark_results_entered(vid)
+        visit = CampaignVisitService.validate_lab(vid, user)
 
         self.assertIsNotNone(visit.lab_validated_by_id)
         self.assertIsNotNone(visit.lab_validated_at)
@@ -241,12 +244,12 @@ class TestVisitValidationMetadata(BaseTestCase):
     def test_clinic_validation_stores_interpretation_and_metadata(self):
         """validate_doctor_clinic stores interpretation, validator and timestamp."""
         campaign, patient, user = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
         vid = str(visit.id)
-        VisitService.mark_terrain_done(vid)
-        VisitService.mark_results_entered(vid)
-        VisitService.validate_lab(vid, user)
-        visit = VisitService.validate_doctor_clinic(
+        CampaignVisitService.mark_terrain_done(vid)
+        CampaignVisitService.mark_results_entered(vid)
+        CampaignVisitService.validate_lab(vid, user)
+        visit = CampaignVisitService.validate_doctor_clinic(
             vid, user, ValidateDoctorClinicDTO(interpretation="Bilan normal.")
         )
 
@@ -257,15 +260,15 @@ class TestVisitValidationMetadata(BaseTestCase):
     def test_company_validation_stores_message_and_interpretation(self):
         """validate_doctor_company stores both interpretation and patient message."""
         campaign, patient, user = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
         vid = str(visit.id)
-        VisitService.mark_terrain_done(vid)
-        VisitService.mark_results_entered(vid)
-        VisitService.validate_lab(vid, user)
-        VisitService.validate_doctor_clinic(
+        CampaignVisitService.mark_terrain_done(vid)
+        CampaignVisitService.mark_results_entered(vid)
+        CampaignVisitService.validate_lab(vid, user)
+        CampaignVisitService.validate_doctor_clinic(
             vid, user, ValidateDoctorClinicDTO(interpretation="OK.")
         )
-        visit = VisitService.validate_doctor_company(
+        visit = CampaignVisitService.validate_doctor_company(
             vid,
             user,
             ValidateDoctorCompanyDTO(interpretation="Apte.", message="Aucune restriction."),
@@ -278,50 +281,50 @@ class TestVisitValidationMetadata(BaseTestCase):
     def test_clinic_validation_with_empty_interpretation(self):
         """validate_doctor_clinic accepts empty interpretation (optional field)."""
         campaign, patient, user = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
         vid = str(visit.id)
-        VisitService.mark_terrain_done(vid)
-        VisitService.mark_results_entered(vid)
-        VisitService.validate_lab(vid, user)
-        visit = VisitService.validate_doctor_clinic(
+        CampaignVisitService.mark_terrain_done(vid)
+        CampaignVisitService.mark_results_entered(vid)
+        CampaignVisitService.validate_lab(vid, user)
+        visit = CampaignVisitService.validate_doctor_clinic(
             vid, user, ValidateDoctorClinicDTO(interpretation="")
         )
 
-        self.assertEqual(visit.status, VisitStatus.DOCTOR_CLINIC_VALIDATED)
+        self.assertEqual(visit.status, CampaignVisitStatus.DOCTOR_CLINIC_VALIDATED)
 
     def test_cannot_skip_terrain_done_step(self):
         """Cannot go from PENDING directly to RESULTS_ENTERED."""
         campaign, patient, _ = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
         with self.assertRaises(BadRequestException):
-            VisitService.mark_results_entered(str(visit.id))
+            CampaignVisitService.mark_results_entered(str(visit.id))
 
     def test_cannot_skip_results_entered_step(self):
         """Cannot go from TERRAIN_DONE directly to LAB_VALIDATED."""
         campaign, patient, user = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
-        VisitService.mark_terrain_done(str(visit.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
+        CampaignVisitService.mark_terrain_done(str(visit.id))
         with self.assertRaises(BadRequestException):
-            VisitService.validate_lab(str(visit.id), user)
+            CampaignVisitService.validate_lab(str(visit.id), user)
 
     def test_cannot_skip_lab_validated_step(self):
         """Cannot go from RESULTS_ENTERED directly to DOCTOR_CLINIC_VALIDATED."""
         campaign, patient, user = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
-        VisitService.mark_terrain_done(str(visit.id))
-        VisitService.mark_results_entered(str(visit.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
+        CampaignVisitService.mark_terrain_done(str(visit.id))
+        CampaignVisitService.mark_results_entered(str(visit.id))
         with self.assertRaises(BadRequestException):
-            VisitService.validate_doctor_clinic(str(visit.id), user, ValidateDoctorClinicDTO())
+            CampaignVisitService.validate_doctor_clinic(str(visit.id), user, ValidateDoctorClinicDTO())
 
     def test_cannot_skip_clinic_validated_step(self):
         """Cannot go from LAB_VALIDATED directly to DOCTOR_COMPANY_VALIDATED."""
         campaign, patient, user = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
-        VisitService.mark_terrain_done(str(visit.id))
-        VisitService.mark_results_entered(str(visit.id))
-        VisitService.validate_lab(str(visit.id), user)
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
+        CampaignVisitService.mark_terrain_done(str(visit.id))
+        CampaignVisitService.mark_results_entered(str(visit.id))
+        CampaignVisitService.validate_lab(str(visit.id), user)
         with self.assertRaises(BadRequestException):
-            VisitService.validate_doctor_company(str(visit.id), user, ValidateDoctorCompanyDTO())
+            CampaignVisitService.validate_doctor_company(str(visit.id), user, ValidateDoctorCompanyDTO())
 
     def test_visit_number_is_unique_across_different_patients(self):
         """Each visit gets a unique visit_number even within the same campaign."""
@@ -339,15 +342,15 @@ class TestVisitValidationMetadata(BaseTestCase):
         CampaignService.add_patient(str(campaign.id), str(patient_a.id))
         CampaignService.add_patient(str(campaign.id), str(patient_b.id))
 
-        visit_a = VisitService.create_visit(str(campaign.id), str(patient_a.id))
-        visit_b = VisitService.create_visit(str(campaign.id), str(patient_b.id))
+        visit_a = CampaignVisitService.create_visit(str(campaign.id), str(patient_a.id))
+        visit_b = CampaignVisitService.create_visit(str(campaign.id), str(patient_b.id))
 
         self.assertNotEqual(visit_a.visit_number, visit_b.visit_number)
 
     def test_visit_number_format(self):
-        """Visit number starts with the VIS- prefix."""
+        """CampaignVisit number starts with the VIS- prefix."""
         campaign, patient, _ = _make_campaign_with_patient()
-        visit = VisitService.create_visit(str(campaign.id), str(patient.id))
+        visit = CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
         self.assertTrue(
             visit.visit_number.startswith("VIS-"),
             f"Expected 'VIS-…', got '{visit.visit_number}'"
@@ -377,11 +380,11 @@ class TestVisitValidationMetadata(BaseTestCase):
         CampaignService.add_patient(str(campaign_a.id), str(patient_a.id))
         CampaignService.add_patient(str(campaign_b.id), str(patient_b.id))
 
-        VisitService.create_visit(str(campaign_a.id), str(patient_a.id))
-        VisitService.create_visit(str(campaign_b.id), str(patient_b.id))
+        CampaignVisitService.create_visit(str(campaign_a.id), str(patient_a.id))
+        CampaignVisitService.create_visit(str(campaign_b.id), str(patient_b.id))
 
-        visits_a = VisitService.list_for_campaign(str(campaign_a.id))
-        visits_b = VisitService.list_for_campaign(str(campaign_b.id))
+        visits_a = CampaignVisitService.list_for_campaign(str(campaign_a.id))
+        visits_b = CampaignVisitService.list_for_campaign(str(campaign_b.id))
 
         self.assertEqual(len(visits_a), 1)
         self.assertEqual(len(visits_b), 1)

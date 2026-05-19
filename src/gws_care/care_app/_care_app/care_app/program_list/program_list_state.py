@@ -7,7 +7,7 @@ from ..common.account_picker_state import AccountPickerRowDTO, AccountPickerStat
 
 
 class ProgramRowDTO(BaseModel):
-    """MedicalProgram row for list display."""
+    """Campaign row for list display."""
 
     id: str
     program_number: str
@@ -22,7 +22,7 @@ class ProgramRowDTO(BaseModel):
     exam_type_count: int = 0
 
 
-class ProgramFormPickerState(AccountPickerState):
+class CampaignFormPickerState(AccountPickerState):
     """Sibling account picker for the create-program form.
 
     Fully self-contained: stores the confirmed form account in its own vars.
@@ -94,7 +94,7 @@ class ProgramFormPickerState(AccountPickerState):
         await self._run_acct_picker_search()
 
 
-class ProgramListState(AccountPickerState):
+class CampaignListState(AccountPickerState):
     """State for the /programs page."""
 
     # ── Account picker vars (declared here for independent state storage) ─────
@@ -194,14 +194,14 @@ class ProgramListState(AccountPickerState):
 
     @rx.event
     def go_to_program(self, program_id: str):
-        return rx.redirect(f"/program/{program_id}")
+        return rx.redirect(f"/campaign/{program_id}")
 
     @rx.event
     async def archive_program(self, program_id: str):
         try:
             with await self.authenticate_user():
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
-                MedicalProgramService.archive_program(program_id)
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.archive_campaign(program_id)
             await self._load_programs()
         except Exception as e:
             self.error_message = str(e)
@@ -222,8 +222,8 @@ class ProgramListState(AccountPickerState):
         self.form_end_date = ""
         self.form_notes = ""
         self.form_error = ""
-        yield ProgramFormPickerState.reset_form_picker
-        yield ProgramFormPickerState.load_accounts
+        yield CampaignFormPickerState.reset_form_picker
+        yield CampaignFormPickerState.load_accounts
 
     @rx.event
     def close_create_dialog(self):
@@ -248,7 +248,7 @@ class ProgramListState(AccountPickerState):
 
     @rx.event
     async def save_program(self):
-        form_picker = await self.get_state(ProgramFormPickerState)
+        form_picker = await self.get_state(CampaignFormPickerState)
         form_account_id = form_picker.form_account_id
         if not self.form_name.strip() or not form_account_id or not self.form_start_date or not self.form_end_date:
             self.form_error = "Please fill in all required fields."
@@ -257,19 +257,19 @@ class ProgramListState(AccountPickerState):
         self.form_error = ""
         try:
             with await self.authenticate_user():
-                from gws_care.medical_program.medical_program_dto import SaveProgramDTO
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
-                dto = SaveProgramDTO(
+                from gws_care.campaign.campaign_dto import SaveCampaignDTO
+                from gws_care.campaign.campaign_service import CampaignService
+                dto = SaveCampaignDTO(
                     name=self.form_name.strip(),
                     account_id=form_account_id,
                     start_date=self.form_start_date,
                     end_date=self.form_end_date,
                     notes=self.form_notes or None,
                 )
-                program = MedicalProgramService.create_program(dto)
+                program = CampaignService.create_campaign(dto)
             self.create_dialog_open = False
             await self._load_programs()
-            return rx.redirect(f"/program/{program.id}")
+            return rx.redirect(f"/campaign/{program.id}")
         except Exception as e:
             self.form_error = str(e)
         finally:
@@ -288,17 +288,17 @@ class ProgramListState(AccountPickerState):
         self.error_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
-                from gws_care.medical_program.program_status import ProgramStatus
+                from gws_care.campaign.campaign_service import CampaignService
+                from gws_care.campaign.campaign_status import CampaignStatus
 
                 status_filter = None
                 if self.filter_status != "ALL":
                     try:
-                        status_filter = ProgramStatus(self.filter_status)
+                        status_filter = CampaignStatus(self.filter_status)
                     except ValueError:
                         pass
 
-                programs = MedicalProgramService.list_programs(
+                programs = CampaignService.list_campaigns(
                     account_id=self.filter_account_id or None,
                     status=status_filter,
                     search=self.search_name,
@@ -318,8 +318,8 @@ class ProgramListState(AccountPickerState):
                         end_date=str(c.end_date),
                         status=c.status.value,
                         status_label=c.status.get_label(),
-                        patient_count=MedicalProgramService.to_row_dto(c).patient_count,
-                        exam_type_count=MedicalProgramService.to_row_dto(c).exam_type_count,
+                        patient_count=CampaignService.to_row_dto(c).patient_count,
+                        exam_type_count=CampaignService.to_row_dto(c).exam_type_count,
                     )
                     for c in programs
                 ]

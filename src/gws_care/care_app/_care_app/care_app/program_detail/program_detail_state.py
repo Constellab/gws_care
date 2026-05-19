@@ -5,6 +5,15 @@ from pydantic import BaseModel
 
 from ..common.patient_picker_state import PatientPickerRowDTO, PatientPickerState
 
+# Ordered visit statuses from earliest to latest (cancelled excluded — treated separately)
+_VISIT_STATUS_ORDER = [
+    "pending",
+    "visit_done",
+    "lab_done",
+    "doctor_clinic_validated",
+    "doctor_company_validated",
+]
+
 
 class ProgramDetailDTO(BaseModel):
     id: str
@@ -47,7 +56,7 @@ class ExamTypeOptionDTO(BaseModel):
     label: str
 
 
-class ProgramDetailState(PatientPickerState):
+class CampaignDetailState(PatientPickerState):
     """State for the /program/[id] detail page."""
 
     # ── Patient picker vars (declared here for independent state storage) ─────
@@ -112,12 +121,6 @@ class ProgramDetailState(PatientPickerState):
     selected_exam_type_id: str = ""
     is_adding_exam_type: bool = False
 
-    # Counts for progress bar
-    visits_pending: int = 0
-    visits_lab_validated: int = 0
-    visits_clinic_validated: int = 0
-    visits_company_validated: int = 0
-
     # PDF download
     is_downloading_pdf: bool = False
 
@@ -131,22 +134,59 @@ class ProgramDetailState(PatientPickerState):
 
     @rx.event
     def go_back(self):
-        return rx.redirect("/programs")
+        return rx.redirect("/campaigns")
 
     @rx.event
     def go_to_visit(self, visit_id: str):
-        return rx.redirect(f"/visit/{visit_id}")
+        return rx.redirect(f"/campaign-visit/{visit_id}")
 
     @rx.var
     def program_status_index(self) -> int:
         """Return the 0-based index of the current program status in the workflow order."""
-        order = ["draft", "validated", "in_progress", "lab_done", "doctor_clinic_validated", "doctor_company_validated"]
+        order = ["draft", "validated", "in_progress", "closed", "archived"]
         if not self.program:
             return 0
+        # Map doctor_company_validated to in_progress (same visual position)
+        status = self.program.status
+        if status == "doctor_company_validated":
+            status = "in_progress"
         try:
-            return order.index(self.program.status)
+            return order.index(status)
         except ValueError:
             return 0
+
+    @rx.var
+    def can_validate_program(self) -> bool:
+        """True if the program has at least one patient and one exam type."""
+        return len(self.patients) > 0 and len(self.exam_types) > 0
+
+    @rx.var
+    def all_visits_lab_ready(self) -> bool:
+        """True if every non-cancelled visit has reached at least LAB_VALIDATED."""
+        non_cancelled = [v for v in self.visits if v.status != "cancelled"]
+        if not non_cancelled:
+            return False
+        min_idx = _VISIT_STATUS_ORDER.index("lab_done")
+        compliant_statuses = set(_VISIT_STATUS_ORDER[min_idx:])
+        return all(v.status in compliant_statuses for v in non_cancelled)
+
+    @rx.var
+    def all_visits_clinic_ready(self) -> bool:
+        """True if every non-cancelled visit has reached at least DOCTOR_CLINIC_VALIDATED."""
+        non_cancelled = [v for v in self.visits if v.status != "cancelled"]
+        if not non_cancelled:
+            return False
+        min_idx = _VISIT_STATUS_ORDER.index("doctor_clinic_validated")
+        compliant_statuses = set(_VISIT_STATUS_ORDER[min_idx:])
+        return all(v.status in compliant_statuses for v in non_cancelled)
+
+    @rx.var
+    def all_visits_company_validated(self) -> bool:
+        """True if every non-cancelled visit has reached DOCTOR_COMPANY_VALIDATED."""
+        non_cancelled = [v for v in self.visits if v.status != "cancelled"]
+        if not non_cancelled:
+            return False
+        return all(v.status == "doctor_company_validated" for v in non_cancelled)
 
     @rx.event
     async def set_workflow_status(self, status: str):
@@ -157,8 +197,8 @@ class ProgramDetailState(PatientPickerState):
         self.success_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
-                MedicalProgramService.force_set_status(self.program.id, status)
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.force_set_status(self.program.id, status)
             await self._load_program()
         except Exception as e:
             self.error_message = str(e)
@@ -174,12 +214,12 @@ class ProgramDetailState(PatientPickerState):
         self.success_message = ""
         try:
             with await self.authenticate_user() as auth_user:
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
+                from gws_care.campaign.campaign_service import CampaignService
                 from gws_care.user.user import User
                 user = User.get_by_id(str(auth_user.id))
-                MedicalProgramService.validate_program(self.program.id, user)
+                CampaignService.validate_campaign(self.program.id, user)
             await self._load_program()
-            self.success_message = "MedicalProgram validated successfully."
+            self.success_message = "Campaign validated successfully."
         except Exception as e:
             self.error_message = str(e)
 
@@ -192,10 +232,10 @@ class ProgramDetailState(PatientPickerState):
         self.success_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
-                MedicalProgramService.start_campaign(self.program.id)
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.start_campaign(self.program.id)
             await self._load_program()
-            self.success_message = "MedicalProgram started."
+            self.success_message = "Campaign started."
         except Exception as e:
             self.error_message = str(e)
 
@@ -208,10 +248,10 @@ class ProgramDetailState(PatientPickerState):
         self.success_message = ""
         try:
             with await self.authenticate_user() as auth_user:
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
+                from gws_care.campaign.campaign_service import CampaignService
                 from gws_care.user.user import User
                 user = User.get_by_id(str(auth_user.id))
-                MedicalProgramService.validate_lab_campaign(self.program.id, user)
+                CampaignService.validate_lab_campaign(self.program.id, user)
             await self._load_program()
             self.success_message = "Lab validation completed."
         except Exception as e:
@@ -226,12 +266,44 @@ class ProgramDetailState(PatientPickerState):
         self.success_message = ""
         try:
             with await self.authenticate_user() as auth_user:
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
+                from gws_care.campaign.campaign_service import CampaignService
                 from gws_care.user.user import User
                 user = User.get_by_id(str(auth_user.id))
-                MedicalProgramService.validate_doctor_clinic_campaign(self.program.id, user)
+                CampaignService.validate_doctor_clinic_campaign(self.program.id, user)
             await self._load_program()
             self.success_message = "Clinic validation completed."
+        except Exception as e:
+            self.error_message = str(e)
+
+    @rx.event
+    async def close_campaign(self):
+        """Close the campaign (→ CLOSED)."""
+        if not self.program:
+            return
+        self.error_message = ""
+        self.success_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.close_campaign(self.program.id)
+            await self._load_program()
+            self.success_message = "Campaign closed successfully."
+        except Exception as e:
+            self.error_message = str(e)
+
+    @rx.event
+    async def archive_campaign(self):
+        """Archive the campaign (CLOSED → ARCHIVED)."""
+        if not self.program:
+            return
+        self.error_message = ""
+        self.success_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.archive_campaign(self.program.id)
+            await self._load_program()
+            self.success_message = "Campaign archived successfully."
         except Exception as e:
             self.error_message = str(e)
 
@@ -294,8 +366,8 @@ class ProgramDetailState(PatientPickerState):
         self.is_adding_patient = True
         try:
             with await self.authenticate_user():
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
-                MedicalProgramService.add_patient(self.program.id, self.picker_selected_id)
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.add_patient(self.program.id, self.picker_selected_id)
             self.add_patient_dialog_open = False
             await self._load_program()
         except Exception as e:
@@ -309,8 +381,8 @@ class ProgramDetailState(PatientPickerState):
             return
         try:
             with await self.authenticate_user():
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
-                MedicalProgramService.remove_patient(self.program.id, patient_id)
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.remove_patient(self.program.id, patient_id)
             await self._load_program()
         except Exception as e:
             self.error_message = str(e)
@@ -359,8 +431,8 @@ class ProgramDetailState(PatientPickerState):
         self.is_adding_exam_type = True
         try:
             with await self.authenticate_user():
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
-                MedicalProgramService.add_exam_type(self.program.id, self.selected_exam_type_id)
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.add_exam_type(self.program.id, self.selected_exam_type_id)
             self.add_exam_type_dialog_open = False
             await self._load_program()
         except Exception as e:
@@ -374,8 +446,8 @@ class ProgramDetailState(PatientPickerState):
             return
         try:
             with await self.authenticate_user():
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
-                MedicalProgramService.remove_exam_type(self.program.id, exam_type_id)
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.remove_exam_type(self.program.id, exam_type_id)
             await self._load_program()
         except Exception as e:
             self.error_message = str(e)
@@ -388,17 +460,16 @@ class ProgramDetailState(PatientPickerState):
         self.is_loading = True
         self.error_message = ""
         try:
-            page_id = self.router.page.params.get("program_id_param", "")
+            page_id = self.router.page.params.get("campaign_id_param", "")
             if not page_id:
                 self.program = None
                 return
 
             with await self.authenticate_user():
-                from gws_care.medical_program.medical_program_service import MedicalProgramService
-                from gws_care.visit.visit_service import VisitService
-                from gws_care.visit.visit_status import VisitStatus
+                from gws_care.campaign.campaign_service import CampaignService
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
 
-                program = MedicalProgramService.get_program(page_id)
+                program = CampaignService.get_campaign(page_id)
                 self.program = ProgramDetailDTO(
                     id=str(program.id),
                     program_number=program.program_number,
@@ -414,7 +485,7 @@ class ProgramDetailState(PatientPickerState):
                 )
 
                 # Patients
-                patients = MedicalProgramService.get_patients(page_id)
+                patients = CampaignService.get_patients(page_id)
                 self.patients = [
                     PatientRowDTO(
                         id=str(p.id),
@@ -425,7 +496,7 @@ class ProgramDetailState(PatientPickerState):
                 ]
 
                 # ExamTypes
-                exam_types = MedicalProgramService.get_exam_types(page_id)
+                exam_types = CampaignService.get_exam_types(page_id)
                 self.exam_types = [
                     ExamTypeRowDTO(
                         id=str(et.id),
@@ -437,7 +508,7 @@ class ProgramDetailState(PatientPickerState):
                 ]
 
                 # Visits
-                visits = VisitService.list_for_campaign(page_id)
+                visits = CampaignVisitService.list_for_campaign(page_id)
                 self.visits = [
                     VisitRowDTO(
                         id=str(v.id),
@@ -449,12 +520,6 @@ class ProgramDetailState(PatientPickerState):
                     )
                     for v in visits
                 ]
-
-                # Progress counters
-                self.visits_pending = sum(1 for v in visits if v.status == VisitStatus.PENDING)
-                self.visits_lab_validated = sum(1 for v in visits if v.status == VisitStatus.LAB_VALIDATED)
-                self.visits_clinic_validated = sum(1 for v in visits if v.status == VisitStatus.DOCTOR_CLINIC_VALIDATED)
-                self.visits_company_validated = sum(1 for v in visits if v.status == VisitStatus.DOCTOR_COMPANY_VALIDATED)
 
         except Exception as e:
             self.error_message = str(e)

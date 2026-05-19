@@ -1,22 +1,19 @@
-"""Enumeration of visit validation steps."""
+"""Enumeration of campaign visit validation steps."""
 
 from enum import Enum
 
 
-class VisitValidationStep(Enum):
+class CampaignVisitValidationStep(Enum):
     """Each distinct validation step a visit passes through.
 
     Rows in VisitValidationWorkflow record who performed each step
     and when, providing a complete audit trail of the visit lifecycle.
     """
 
-    TERRAIN_DONE = "on-site_done"
-    """Patient seen on on-site — samples collected. Marked by Opérateur Terrain."""
+    VISIT_DONE = "visit_done"
+    """Patient seen on-site — samples collected. Marked by Opérateur Terrain."""
 
-    RESULTS_ENTERED = "results_entered"
-    """All exam results entered by HQ Operator (not yet lab-validated)."""
-
-    LAB_VALIDATED = "lab_validated"
+    LAB_DONE = "lab_done"
     """Results locked by HQ Operator (Lab Validation)."""
 
     DOCTOR_CLINIC_VALIDATED = "doctor_clinic_validated"
@@ -27,10 +24,13 @@ class VisitValidationStep(Enum):
 
     def get_label(self) -> str:
         labels = {
-            VisitValidationStep.TERRAIN_DONE: "On-site Done",
-            VisitValidationStep.RESULTS_ENTERED: "Results Entered",
-            VisitValidationStep.LAB_VALIDATED: "Lab Validated",
-            VisitValidationStep.DOCTOR_CLINIC_VALIDATED: "Clinic Doctor Validated",
-            VisitValidationStep.DOCTOR_COMPANY_VALIDATED: "Company Doctor Validated",
+            CampaignVisitValidationStep.VISIT_DONE: "Visit Done",
+            CampaignVisitValidationStep.LAB_DONE: "Lab Done",
+            CampaignVisitValidationStep.DOCTOR_CLINIC_VALIDATED: "Clinic Doctor Validated",
+            CampaignVisitValidationStep.DOCTOR_COMPANY_VALIDATED: "Company Doctor Validated",
         }
         return labels.get(self, self.value)
+
+
+# Backward-compat alias
+VisitValidationStep = CampaignVisitValidationStep

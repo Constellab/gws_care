@@ -98,11 +98,11 @@ class QrCodeService:
         from reportlab.platypus import Image as RLImage
         from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-        from gws_care.medical_program.medical_program_service import MedicalProgramService
+        from gws_care.campaign.campaign_service import CampaignService
 
-        program = MedicalProgramService.get_program(program_id)
-        patients = MedicalProgramService.get_patients(program_id)
-        exam_types = MedicalProgramService.get_exam_types(program_id)
+        program = CampaignService.get_campaign(program_id)
+        patients = CampaignService.get_patients(program_id)
+        exam_types = CampaignService.get_exam_types(program_id)
 
         buf = _io.BytesIO()
         doc = SimpleDocTemplate(

@@ -1,32 +1,32 @@
-"""ProgramValidationWorkflow model — audit trail of program validation steps."""
+"""CampaignValidationWorkflow model — audit trail of campaign validation steps."""
 
 from datetime import datetime
 
 from gws_core import EnumField, Model
 from peewee import CompositeKey, DateTimeField, ForeignKeyField, TextField
 
-from gws_care.medical_program.medical_program import MedicalProgram
+from gws_care.campaign.campaign import Campaign
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.user.user import User
-from gws_care.workflow.program_validation_step import ProgramValidationStep
+from gws_care.workflow.program_validation_step import CampaignValidationStep
 
 
-class ProgramValidationWorkflow(Model):
-    """One row per completed validation step for a program.
+class CampaignValidationWorkflow(Model):
+    """One row per completed validation step for a campaign.
 
     Uniqueness is enforced on (program, step): each step can only be
-    recorded once per program, reflecting the sequential, non-reversible
+    recorded once per campaign, reflecting the sequential, non-reversible
     nature of the validation chain.
 
-    Example query — full audit trail for a program:
-        ProgramValidationWorkflow
+    Example query — full audit trail for a campaign:
+        CampaignValidationWorkflow
             .select()
-            .where(ProgramValidationWorkflow.program == program_id)
-            .order_by(ProgramValidationWorkflow.validated_at)
+            .where(CampaignValidationWorkflow.program == campaign_id)
+            .order_by(CampaignValidationWorkflow.validated_at)
     """
 
-    program: MedicalProgram = ForeignKeyField(MedicalProgram, null=False, backref="validation_workflow", on_delete="CASCADE")
-    step: ProgramValidationStep = EnumField(choices=ProgramValidationStep, null=False)
+    program: Campaign = ForeignKeyField(Campaign, null=False, backref="validation_workflow", on_delete="CASCADE")
+    step: CampaignValidationStep = EnumField(choices=CampaignValidationStep, null=False)
     validated_by: User = ForeignKeyField(User, null=True, backref="+")
     validated_at: datetime = DateTimeField(null=False)
     notes: str = TextField(null=True)
@@ -37,3 +37,7 @@ class ProgramValidationWorkflow(Model):
         is_table = True
         db_manager = CareDbManager.get_instance()
         primary_key = CompositeKey("program", "step")
+
+
+# Backward-compat alias
+ProgramValidationWorkflow = CampaignValidationWorkflow

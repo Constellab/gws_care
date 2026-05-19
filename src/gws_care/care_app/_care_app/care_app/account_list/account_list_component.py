@@ -134,6 +134,20 @@ def account_list_page() -> rx.Component:
                     min_width="260px",
                     size="2",
                 ),
+                rx.select.root(
+                    rx.select.trigger(
+                        placeholder=LanguageState.tr["all_account_types"],
+                        width="180px",
+                    ),
+                    rx.select.content(
+                        rx.select.item(LanguageState.tr["all_account_types"], value="ALL"),
+                        rx.select.item(LanguageState.tr["account_company_badge"], value="COMPANY"),
+                        rx.select.item(LanguageState.tr["account_individual_badge"], value="INDIVIDUAL"),
+                    ),
+                    value=AccountListState.filter_account_type,
+                    on_change=AccountListState.set_filter_account_type,
+                    size="2",
+                ),
                 rx.button(
                     rx.icon("x", size=14),
                     LanguageState.tr["clear_btn"],

@@ -43,8 +43,35 @@ def _type_selector() -> rx.Component:
     )
 
 
+def _patient_fill_row(patient) -> rx.Component:
+    is_selected = AccountFormState.selected_patient_fill == patient.id
+    return rx.table.row(
+        rx.table.cell(rx.text(patient.patient_number, size="2", weight="medium")),
+        rx.table.cell(rx.text(patient.display, size="2")),
+        rx.table.cell(rx.text(patient.date_of_birth, size="2")),
+        rx.table.cell(
+            rx.match(
+                patient.gender,
+                ("M", rx.badge("M", color_scheme="blue", variant="soft", size="1")),
+                ("F", rx.badge("F", color_scheme="pink", variant="soft", size="1")),
+                rx.text("", size="2"),
+            )
+        ),
+        style=rx.cond(
+            is_selected,
+            {"background_color": "var(--accent-3)", "cursor": "pointer"},
+            {"cursor": "pointer"},
+        ),
+        _hover={"background_color": "var(--accent-2)"},
+        on_click=lambda: AccountFormState.select_patient_fill(
+            patient.id,
+            patient.display + " (" + patient.patient_number + ")",
+        ),
+    )
+
+
 def _fill_from_patient_section() -> rx.Component:
-    """Patient picker to pre-fill the form (shown for Individual accounts)."""
+    """Searchable patient picker to pre-fill the form (shown for Individual accounts)."""
     return rx.cond(
         AccountFormState.form_account_type == "INDIVIDUAL",
         rx.card(
@@ -55,20 +82,101 @@ def _fill_from_patient_section() -> rx.Component:
                     spacing="2",
                     align="center",
                 ),
-                rx.select.root(
-                    rx.select.trigger(
-                        placeholder=LanguageState.tr["select_patient_fill_placeholder"],
+                # Filter bar
+                rx.hstack(
+                    rx.input(
+                        placeholder=LanguageState.tr["search_patient_number"],
+                        value=AccountFormState.patient_fill_filter_number,
+                        on_change=AccountFormState.set_patient_fill_filter_number,
+                        size="2",
+                        min_width="140px",
+                        flex="1",
+                    ),
+                    rx.input(
+                        placeholder=LanguageState.tr["search_name_placeholder"],
+                        value=AccountFormState.patient_fill_filter_name,
+                        on_change=AccountFormState.set_patient_fill_filter_name,
+                        size="2",
+                        min_width="160px",
+                        flex="2",
+                    ),
+                    rx.button(
+                        rx.icon("x", size=14),
+                        on_click=AccountFormState.clear_patient_fill_filters,
+                        variant="ghost",
+                        size="2",
+                        color_scheme="gray",
+                        title="Clear filters",
+                    ),
+                    spacing="2",
+                    width="100%",
+                    align="center",
+                ),
+                # Patient table
+                rx.cond(
+                    AccountFormState.patient_fill_is_loading,
+                    rx.center(rx.spinner(size="2"), padding="1rem"),
+                    rx.cond(
+                        AccountFormState.patient_fill_options.length() > 0,
+                        rx.box(
+                            rx.table.root(
+                                rx.table.header(
+                                    rx.table.row(
+                                        rx.table.column_header_cell(
+                                            rx.text(LanguageState.tr["col_patient_number"], size="1")
+                                        ),
+                                        rx.table.column_header_cell(
+                                            rx.text(LanguageState.tr["col_name"], size="1")
+                                        ),
+                                        rx.table.column_header_cell(
+                                            rx.text(LanguageState.tr["col_dob"], size="1")
+                                        ),
+                                        rx.table.column_header_cell(
+                                            rx.text(LanguageState.tr["col_gender"], size="1")
+                                        ),
+                                    )
+                                ),
+                                rx.table.body(
+                                    rx.foreach(AccountFormState.patient_fill_options, _patient_fill_row)
+                                ),
+                                width="100%",
+                                size="1",
+                                variant="surface",
+                            ),
+                            max_height="240px",
+                            overflow_y="auto",
+                            width="100%",
+                            border_radius="var(--radius-2)",
+                        ),
+                        rx.center(
+                            rx.text(
+                                LanguageState.tr["no_patients_found"],
+                                size="2",
+                                color="var(--gray-9)",
+                            ),
+                            padding="1rem",
+                        ),
+                    ),
+                ),
+                # Selected patient confirmation banner
+                rx.cond(
+                    AccountFormState.selected_patient_fill != "",
+                    rx.hstack(
+                        rx.icon("check", size=16, color="var(--green-9)"),
+                        rx.text(
+                            AccountFormState.patient_fill_selected_label,
+                            size="2",
+                            color="var(--green-11)",
+                            weight="medium",
+                        ),
+                        spacing="2",
+                        align="center",
+                        padding="0.4rem 0.6rem",
+                        border="1px solid var(--green-6)",
+                        border_radius="var(--radius-2)",
+                        background="var(--green-2)",
                         width="100%",
                     ),
-                    rx.select.content(
-                        rx.foreach(
-                            AccountFormState.patient_fill_options,
-                            lambda p: rx.select.item(p.display, value=p.id),
-                        )
-                    ),
-                    value=AccountFormState.selected_patient_fill,
-                    on_change=AccountFormState.set_selected_patient_fill,
-                    width="100%",
                 ),
                 spacing="2",
                 width="100%",

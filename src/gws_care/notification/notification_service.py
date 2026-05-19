@@ -727,7 +727,7 @@ class NotificationService:
 
         campaign_name = program.name
         message = f"La campagne « {campaign_name} » est prête pour validation Clinic Doctor."
-        subject = f"[Constellab Care] Program pending validation — {program_name}"
+        subject = f"[Constellab Care] Program pending validation — {campaign_name}"
         body = (
             f"Bonjour,\n\n"
             f"La campagne « {campaign_name} » a été validée par le laboratoire.\n"

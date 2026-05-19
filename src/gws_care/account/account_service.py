@@ -19,6 +19,7 @@ class AccountService:
         cls,
         active_only: bool = True,
         name: str | None = None,
+        account_type: str | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Account]:
@@ -27,6 +28,8 @@ class AccountService:
             query = query.where(Account.is_active == True)
         if name:
             query = query.where(Account.name.contains(name))
+        if account_type:
+            query = query.where(Account.account_type == account_type)
         query = query.order_by(Account.name)
         if offset:
             query = query.offset(offset)

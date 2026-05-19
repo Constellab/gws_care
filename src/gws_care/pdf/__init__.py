@@ -2,8 +2,8 @@
 
 Three PDF generators:
   8.1 — Medical certificate (CertificateService.generate_pdf)
-  8.2 — MedicalProgram report    (MedicalProgramService.generate_report)
-  8.3 — Visit results      (VisitService.generate_results_pdf)
+  8.2 — Campaign report    (CampaignService.generate_report)
+  8.3 — CampaignVisit results      (CampaignVisitService.generate_results_pdf)
 
 All methods return raw PDF bytes.
 """
@@ -260,14 +260,14 @@ def generate_certificate_pdf(certificate_id: str) -> bytes:
     return buf.getvalue()
 
 
-# ── 8.2 — MedicalProgram report PDF ─────────────────────────────────────────────────
+# ── 8.2 — Campaign report PDF ─────────────────────────────────────────────────
 
 def generate_campaign_report_pdf(program_id: str) -> bytes:
     """Generate an aggregated program presence/absence report.
 
     Contains NO individual medical data (RGPD-compliant for RH access).
     Content:
-    - MedicalProgram header (name, dates, account)
+    - Campaign header (name, dates, account)
     - Presence statistics (present / absent / total)
     - Patient attendance table (name, status only)
     - Exam type coverage table (total done per type)
@@ -285,14 +285,14 @@ def generate_campaign_report_pdf(program_id: str) -> bytes:
         TableStyle,
     )
 
-    from gws_care.medical_program.medical_program_service import MedicalProgramService
-    from gws_care.visit.visit import Visit
-    from gws_care.visit.visit_status import VisitStatus
+    from gws_care.campaign.campaign_service import CampaignService
+    from gws_care.campaign_visit.campaign_visit import CampaignVisit
+    from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
 
-    program = MedicalProgramService.get_program(program_id)
-    visits = list(Visit.select().where(Visit.program == program_id))
-    patients = MedicalProgramService.get_patients(program_id)
-    exam_types = MedicalProgramService.get_exam_types(program_id)
+    program = CampaignService.get_campaign(program_id)
+    visits = list(CampaignVisit.select().where(CampaignVisit.program == program_id))
+    patients = CampaignService.get_patients(program_id)
+    exam_types = CampaignService.get_exam_types(program_id)
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -343,7 +343,7 @@ def generate_campaign_report_pdf(program_id: str) -> bytes:
     story.append(Paragraph("Statistiques de présence", h2))
     total = len(patients)
     present = sum(
-        1 for v in visits if v.status != VisitStatus.PENDING
+        1 for v in visits if v.status != CampaignVisitStatus.PENDING
     )
     absent = total - present
     pct = round(present / total * 100) if total else 0
@@ -383,7 +383,7 @@ def generate_campaign_report_pdf(program_id: str) -> bytes:
     attendance_rows = [attendance_header]
     for p in patients:
         visit = visit_map.get(str(p.id))
-        if visit and visit.status != VisitStatus.PENDING:
+        if visit and visit.status != CampaignVisitStatus.PENDING:
             status_cell = Paragraph("<font color='green'>✓ Présent</font>", body)
         else:
             status_cell = Paragraph("<font color='red'>✗ Absent</font>", body)
@@ -441,7 +441,7 @@ def generate_campaign_report_pdf(program_id: str) -> bytes:
     return buf.getvalue()
 
 
-# ── 8.3 — Visit results PDF ───────────────────────────────────────────────────
+# ── 8.3 — CampaignVisit results PDF ───────────────────────────────────────────────────
 
 def generate_visit_results_pdf(visit_id: str) -> bytes:
     """Generate a patient-readable PDF of their visit results.
@@ -468,10 +468,10 @@ def generate_visit_results_pdf(visit_id: str) -> bytes:
     from gws_care.exam.exam import Exam
     from gws_care.exam.exam_result import ExamResult
     from gws_care.exam.exam_result_service import ExamResultService
-    from gws_care.visit.visit import Visit
-    from gws_care.visit.visit_service import VisitService
+    from gws_care.campaign_visit.campaign_visit import CampaignVisit
+    from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
 
-    visit: Visit = VisitService.get_visit(visit_id)
+    visit: CampaignVisit = CampaignVisitService.get_visit(visit_id)
     patient = visit.patient
     program = visit.program
 

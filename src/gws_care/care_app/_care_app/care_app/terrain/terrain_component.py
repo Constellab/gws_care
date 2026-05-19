@@ -19,9 +19,8 @@ def _terrain_status_badge(p: TerrainPatientDTO) -> rx.Component:
     return rx.match(
         p.visit_status,
         ("pending", rx.badge("Pending", color_scheme="gray", variant="soft", size="1")),
-        ("on-site_done", rx.badge("Terrain ✓", color_scheme="green", variant="solid", size="1")),
-        ("results_entered", rx.badge("Results Entered", color_scheme="orange", variant="soft", size="1")),
-        ("lab_validated", rx.badge("Lab Validated", color_scheme="blue", variant="soft", size="1")),
+        ("visit_done", rx.badge("Visit Done ✓", color_scheme="green", variant="solid", size="1")),
+        ("lab_done", rx.badge("Lab Done", color_scheme="blue", variant="soft", size="1")),
         ("doctor_clinic_validated", rx.badge("Clinic Doctor Validated", color_scheme="violet", variant="soft", size="1")),
         ("doctor_company_validated", rx.badge("Company Doctor Validated", color_scheme="green", variant="soft", size="1")),
         rx.badge(p.visit_status_label, color_scheme="gray", variant="soft", size="1"),

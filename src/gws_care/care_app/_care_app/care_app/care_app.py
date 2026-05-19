@@ -32,15 +32,17 @@ from .patient_portal.patient_portal_state import PatientPortalState
 from .prescription_detail.prescription_detail_component import prescription_detail_page
 from .prescription_detail.prescription_detail_state import PrescriptionDetailState
 from .program_detail.program_detail_component import program_detail_page
-from .program_detail.program_detail_state import ProgramDetailState
+from .program_detail.program_detail_state import CampaignDetailState
 from .program_list.program_list_component import program_list_page
-from .program_list.program_list_state import ProgramListState
+from .program_list.program_list_state import CampaignListState
+from .switch_role.switch_role_component import switch_role_page
+from .switch_role.switch_role_state import SwitchRoleState
 from .terrain.terrain_component import terrain_page
 from .terrain.terrain_state import TerrainState
 from .visit_detail.visit_detail_component import visit_detail_page
-from .visit_detail.visit_detail_state import VisitDetailState
+from .visit_detail.visit_detail_state import CampaignVisitDetailState
 from .visit_list.visit_list_component import visit_list_page
-from .visit_list.visit_list_state import VisitListState
+from .visit_list.visit_list_state import CampaignVisitListState
 
 
 def _ensure_care_db_tables() -> None:
@@ -188,30 +190,30 @@ def _ensure_care_db_tables() -> None:
             )
 
         # Migration 1.5.0 — program_id, billing_account_id and interpretation fields on visit
-        from gws_care.visit.visit import Visit
-        if not Visit.column_exists("program_id"):
+        from gws_care.campaign_visit.campaign_visit import CampaignVisit
+        if not CampaignVisit.column_exists("program_id"):
             db_manager.db.execute_sql(
                 "ALTER TABLE gws_care_visit ADD COLUMN program_id VARCHAR(36) NULL DEFAULT NULL"
             )
-        if not Visit.column_exists("billing_account_id"):
+        if not CampaignVisit.column_exists("billing_account_id"):
             db_manager.db.execute_sql(
                 "ALTER TABLE gws_care_visit ADD COLUMN billing_account_id VARCHAR(36) NULL DEFAULT NULL"
             )
-        if not Visit.column_exists("doctor_clinic_interpretation"):
+        if not CampaignVisit.column_exists("doctor_clinic_interpretation"):
             db_manager.db.execute_sql(
                 "ALTER TABLE gws_care_visit ADD COLUMN doctor_clinic_interpretation LONGTEXT NULL DEFAULT NULL"
             )
-        if not Visit.column_exists("doctor_company_interpretation"):
+        if not CampaignVisit.column_exists("doctor_company_interpretation"):
             db_manager.db.execute_sql(
                 "ALTER TABLE gws_care_visit ADD COLUMN doctor_company_interpretation LONGTEXT NULL DEFAULT NULL"
             )
-        if not Visit.column_exists("doctor_company_message"):
+        if not CampaignVisit.column_exists("doctor_company_message"):
             db_manager.db.execute_sql(
                 "ALTER TABLE gws_care_visit ADD COLUMN doctor_company_message LONGTEXT NULL DEFAULT NULL"
             )
 
         # Migration 1.6.0 — make account_id nullable on medical_program (individual programs)
-        from gws_care.medical_program.medical_program import MedicalProgram
+        from gws_care.campaign.campaign import Campaign
         try:
             db_manager.db.execute_sql(
                 "ALTER TABLE gws_care_medical_program MODIFY COLUMN account_id VARCHAR(36) NULL DEFAULT NULL"
@@ -221,7 +223,7 @@ def _ensure_care_db_tables() -> None:
 
         # Migration 1.7.0 — add is_individual flag to medical_program
         try:
-            if not MedicalProgram.column_exists("is_individual"):
+            if not Campaign.column_exists("is_individual"):
                 db_manager.db.execute_sql(
                     "ALTER TABLE gws_care_medical_program ADD COLUMN is_individual TINYINT(1) NOT NULL DEFAULT 0"
                 )
@@ -380,7 +382,7 @@ def exam_detail():
     return exam_detail_page()
 
 
-@rx.page(route="/visits", on_load=[VisitListState.on_load, LanguageState.on_load])
+@rx.page(route="/visits", on_load=[CampaignVisitListState.on_load, LanguageState.on_load])
 def visits():
     """Scheduled visits page — list and calendar view."""
     return visit_list_page()
@@ -404,21 +406,21 @@ def notifications():
     return notifications_page()
 
 
-@rx.page(route="/programs", on_load=[ProgramListState.on_load, LanguageState.on_load])
-def programs():
-    """MedicalProgram list page."""
+@rx.page(route="/campaigns", on_load=[CampaignListState.on_load, LanguageState.on_load])
+def campaigns():
+    """Campaign list page."""
     return program_list_page()
 
 
-@rx.page(route="/program/[program_id_param]", on_load=[ProgramDetailState.on_load, LanguageState.on_load])
-def program_detail():
-    """MedicalProgram detail page with patients, exam types and visits."""
+@rx.page(route="/campaign/[campaign_id_param]", on_load=[CampaignDetailState.on_load, LanguageState.on_load])
+def campaign_detail():
+    """Campaign detail page with patients, exam types and visits."""
     return program_detail_page()
 
 
-@rx.page(route="/visit/[visit_id_param]", on_load=[VisitDetailState.on_load, LanguageState.on_load])
-def visit_detail():
-    """Visit detail page with exam results and interpretation workflow."""
+@rx.page(route="/campaign-visit/[campaign_visit_id_param]", on_load=[CampaignVisitDetailState.on_load, LanguageState.on_load])
+def campaign_visit_detail():
+    """Campaign visit detail page with exam results and interpretation workflow."""
     return visit_detail_page()
 
 
@@ -462,4 +464,10 @@ def prescription_detail():
 def certificate_detail():
     """Certificate detail page."""
     return certificate_detail_page()
+
+
+@rx.page(route="/switch_role", on_load=[SwitchRoleState.on_load, LanguageState.on_load])
+def switch_role():
+    """Role selection page — choose which role to view the app as."""
+    return switch_role_page()
 

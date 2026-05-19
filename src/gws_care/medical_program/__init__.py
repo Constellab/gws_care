@@ -1,1 +1,0 @@
-"""MedicalProgram package."""

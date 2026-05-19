@@ -27,6 +27,13 @@ class ExamTypeService:
         return record
 
     @classmethod
+    def get_exam_type_model_for_exam(cls, exam) -> "ExamTypeModel | None":
+        """Return the ExamTypeModel whose category matches the exam's exam_type enum value."""
+        if exam is None or not exam.exam_type:
+            return None
+        return ExamTypeModel.get_or_none(ExamTypeModel.category == exam.exam_type)
+
+    @classmethod
     def list_exam_types(cls, active_only: bool = True) -> list[ExamTypeModel]:
         query = ExamTypeModel.select().order_by(ExamTypeModel.name)
         if active_only:

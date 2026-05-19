@@ -11,7 +11,7 @@ from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
 from gws_care.exam.exam_type import ExamType
 from gws_care.patient.patient import Patient
-from gws_care.visit.visit import Visit
+from gws_care.campaign_visit.campaign_visit import CampaignVisit
 
 
 class Appointment(ModelWithUser):
@@ -32,8 +32,8 @@ class Appointment(ModelWithUser):
         choices=AppointmentStatus, default=AppointmentStatus.SCHEDULED, null=False
     )
     notes: str = TextField(null=True)
-    visit: Visit = ForeignKeyField(
-        Visit, null=True, backref="appointments", on_delete="SET NULL"
+    visit: CampaignVisit = ForeignKeyField(
+        CampaignVisit, null=True, backref="appointments", on_delete="SET NULL"
     )
 
     class Meta:

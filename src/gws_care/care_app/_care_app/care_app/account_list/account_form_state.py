@@ -10,7 +10,10 @@ from pydantic import BaseModel
 
 class PatientFillOption(BaseModel):
     id: str
-    display: str   # "First Last"
+    display: str        # "First Last"
+    patient_number: str = ""
+    date_of_birth: str = ""
+    gender: str = ""
 
 
 class AccountFormState(FormDialogState, rx.State):
@@ -32,6 +35,10 @@ class AccountFormState(FormDialogState, rx.State):
     # Fill-from-patient
     patient_fill_options: list[PatientFillOption] = []
     selected_patient_fill: str = ""
+    patient_fill_selected_label: str = ""
+    patient_fill_filter_name: str = ""
+    patient_fill_filter_number: str = ""
+    patient_fill_is_loading: bool = False
 
     # Set when editing an existing account
     _editing_account_id: str = ""
@@ -75,14 +82,15 @@ class AccountFormState(FormDialogState, rx.State):
         self.form_contact_name = value
 
     @rx.event
-    def set_selected_patient_fill(self, value: str):
-        """Select a patient and immediately fill the form with their contact details."""
-        self.selected_patient_fill = value
-        if not value:
+    def select_patient_fill(self, patient_id: str, label: str):
+        """Select a patient from the table and pre-fill the form with their contact details."""
+        self.selected_patient_fill = patient_id
+        self.patient_fill_selected_label = label
+        if not patient_id:
             return
         try:
             from gws_care.patient.patient_service import PatientService
-            patient = PatientService.get_patient(value)
+            patient = PatientService.get_patient(patient_id)
             self.form_name = patient.get_full_name()
             self.form_address = patient.address or ""
             self.form_postal_code = patient.postal_code or ""
@@ -92,14 +100,51 @@ class AccountFormState(FormDialogState, rx.State):
         except Exception:
             pass
 
+    @rx.event
+    async def set_patient_fill_filter_name(self, value: str):
+        self.patient_fill_filter_name = value
+        await self._load_patient_fill_options()
+
+    @rx.event
+    async def set_patient_fill_filter_number(self, value: str):
+        self.patient_fill_filter_number = value
+        await self._load_patient_fill_options()
+
+    @rx.event
+    async def clear_patient_fill_filters(self):
+        self.patient_fill_filter_name = ""
+        self.patient_fill_filter_number = ""
+        await self._load_patient_fill_options()
+
     async def _load_patient_fill_options(self) -> None:
-        """Load all patients into the fill selector."""
-        from gws_care.patient.patient_service import PatientService
-        patients = PatientService.search_patients()
-        self.patient_fill_options = [
-            PatientFillOption(id=str(p.id), display=p.get_full_name())
-            for p in patients
-        ]
+        """Load patients into the fill selector, applying current filters."""
+        self.patient_fill_is_loading = True
+        try:
+            from gws_care.patient.patient_service import PatientService
+            name_term = self.patient_fill_filter_name.strip() or None
+            raw_pn = self.patient_fill_filter_number.strip()
+            if raw_pn.upper().startswith("PAT-"):
+                raw_pn = raw_pn[4:]
+            pn_prefix = f"PAT-{raw_pn}" if raw_pn else None
+            patients = PatientService.search_patients(
+                search=name_term,
+                patient_number_prefix=pn_prefix,
+                limit=50,
+            )
+            self.patient_fill_options = [
+                PatientFillOption(
+                    id=str(p.id),
+                    display=p.get_full_name(),
+                    patient_number=p.patient_number,
+                    date_of_birth=p.date_of_birth.isoformat() if p.date_of_birth else "",
+                    gender=p.gender or "",
+                )
+                for p in patients
+            ]
+        except Exception:
+            pass
+        finally:
+            self.patient_fill_is_loading = False
 
     # ── Dialog open helpers ───────────────────────────────────────────────────
 
@@ -148,6 +193,9 @@ class AccountFormState(FormDialogState, rx.State):
         self.form_email = ""
         self.form_contact_name = ""
         self.selected_patient_fill = ""
+        self.patient_fill_selected_label = ""
+        self.patient_fill_filter_name = ""
+        self.patient_fill_filter_number = ""
         self._editing_account_id = ""
         self.is_update_mode = False
 

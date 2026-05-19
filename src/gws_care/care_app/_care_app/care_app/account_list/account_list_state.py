@@ -29,6 +29,7 @@ class AccountListState(RoleState):
     has_more: bool = False
     error_message: str = ""
     search_name: str = ""
+    filter_account_type: str = "ALL"
     sort_column: str = "name"
     sort_ascending: bool = True
 
@@ -51,9 +52,16 @@ class AccountListState(RoleState):
         await self._load_accounts()
 
     @rx.event
+    async def set_filter_account_type(self, value: str):
+        """Filter accounts by type (ALL, COMPANY, INDIVIDUAL)."""
+        self.filter_account_type = value
+        await self._load_accounts()
+
+    @rx.event
     async def clear_filters(self):
         """Reset filters."""
         self.search_name = ""
+        self.filter_account_type = "ALL"
         await self._load_accounts()
 
     @rx.event
@@ -111,6 +119,7 @@ class AccountListState(RoleState):
                 accounts = AccountService.list_accounts(
                     active_only=False,
                     name=self.search_name or None,
+                    account_type=self.filter_account_type if self.filter_account_type != "ALL" else None,
                     limit=self._current_page_size + 1,
                     offset=self._page_offset,
                 )

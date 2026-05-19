@@ -7,12 +7,14 @@ from ..common.role_state import RoleState
 
 
 class ExamResultRowDTO(BaseModel):
-    exam_id: str
+    exam_id: str = ""          # empty when the Exam record hasn't been created yet
+    exam_type_model_id: str = ""  # ExamTypeModel PK — always populated for campaign exams
     exam_type_name: str
     exam_type_code: str
-    status: str
+    status: str = ""
     result_data: dict = {}
     primary_value: str = ""
+    edit_value: str = ""  # draft value while editing
     appreciation: str = ""
     appreciation_label: str = ""
     appreciation_override: bool = False
@@ -59,7 +61,7 @@ _APPRECIATION_LABELS = {
 }
 
 
-class VisitDetailState(RoleState):
+class CampaignVisitDetailState(RoleState):
     """State for the /visit/[id] page."""
 
     visit: VisitDetailDTO | None = None
@@ -73,6 +75,7 @@ class VisitDetailState(RoleState):
     company_interpretation: str = ""
     company_message: str = ""
     is_saving_interpretation: bool = False
+    is_saving_exam: bool = False
 
     # Certificates
     certificates: list[VisitCertificateRowDTO] = []
@@ -97,13 +100,13 @@ class VisitDetailState(RoleState):
     @rx.event
     def go_back(self):
         if self.visit and self.visit.program_id:
-            return rx.redirect(f"/program/{self.visit.program_id}")
-        return rx.redirect("/programs")
+            return rx.redirect(f"/campaign/{self.visit.program_id}")
+        return rx.redirect("/campaigns")
 
     @rx.var
     def visit_status_index(self) -> int:
         """Return the 0-based index of the current visit status in the workflow order."""
-        order = ["pending", "on-site_done", "results_entered", "lab_validated", "doctor_clinic_validated", "doctor_company_validated"]
+        order = ["pending", "visit_done", "lab_done", "doctor_clinic_validated", "doctor_company_validated"]
         if not self.visit:
             return 0
         try:
@@ -120,11 +123,83 @@ class VisitDetailState(RoleState):
         self.success_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.visit.visit_service import VisitService
-                VisitService.force_set_status(self.visit.id, status)
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+                CampaignVisitService.force_set_status(self.visit.id, status)
             await self._load_visit()
         except Exception as e:
             self.error_message = str(e)
+
+    @rx.var
+    def all_exams_have_values(self) -> bool:
+        """True only if there is at least one exam and every exam has a primary_value."""
+        if not self.exam_results:
+            return False
+        return all(r.primary_value != "" for r in self.exam_results)
+
+    @rx.event
+    def set_exam_edit_value(self, etm_id: str, value: str):
+        """Update the draft edit value for a row identified by exam_type_model_id."""
+        self.exam_results = [
+            ExamResultRowDTO(**{**r.dict(), "edit_value": value})
+            if r.exam_type_model_id == etm_id
+            else r
+            for r in self.exam_results
+        ]
+
+    @rx.event
+    async def save_exam_result(self, etm_id: str):
+        """Save the exam result for the row identified by exam_type_model_id.
+
+        Creates an Exam record if none exists yet for this visit + exam type.
+        """
+        if not self.visit:
+            return
+        target = next((r for r in self.exam_results if r.exam_type_model_id == etm_id), None)
+        if target is None:
+            return
+        value_str = target.edit_value.strip()
+        if not value_str:
+            return
+        self.error_message = ""
+        self.is_saving_exam = True
+        try:
+            with await self.authenticate_user():
+                from datetime import date
+
+                from gws_care.exam.exam import Exam
+                from gws_care.exam.exam_result_dto import SaveExamResultDTO
+                from gws_care.exam.exam_result_service import ExamResultService
+                from gws_care.exam.exam_type_service import ExamTypeService
+
+                exam_id = target.exam_id
+                if not exam_id:
+                    # No Exam record yet — create it from the ExamTypeModel
+                    et_model = ExamTypeService.get_exam_type(etm_id)
+                    exam = Exam()
+                    exam.patient_id = self.visit.patient_id
+                    exam.exam_type = et_model.category
+                    exam.exam_date = date.today()
+                    exam.visit_id = self.visit.id
+                    exam.save()
+                    exam_id = str(exam.id)
+
+                try:
+                    primary_value = float(value_str.replace(",", "."))
+                except ValueError:
+                    primary_value = None
+                ExamResultService.save_result(
+                    exam_id,
+                    SaveExamResultDTO(
+                        result_data={"value": primary_value if primary_value is not None else value_str},
+                        primary_value=primary_value,
+                        exam_type_model_id=etm_id,
+                    ),
+                )
+            await self._load_visit()
+        except Exception as e:
+            self.error_message = str(e)
+        finally:
+            self.is_saving_exam = False
 
     @rx.event
     def set_clinic_interpretation(self, value: str):
@@ -224,33 +299,20 @@ class VisitDetailState(RoleState):
         self.error_message = ""
         try:
             with await self.authenticate_user():
+                from gws_care.campaign_visit.campaign_visit import CampaignVisit
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.patient.patient import Patient
-                from gws_care.visit.visit import Visit
-                from gws_care.visit.visit_service import VisitService
-                VisitService.mark_terrain_done(self.visit.id)
+                CampaignVisitService.mark_terrain_done(self.visit.id)
 
                 # Phase 5 — send on-site thank-you notification
                 try:
                     from gws_care.notification.notification_service import NotificationService
-                    visit_obj = Visit.get_by_id(self.visit.id)
+                    visit_obj = CampaignVisit.get_by_id(self.visit.id)
                     patient_obj = Patient.get_by_id(str(visit_obj.patient_id))
                     NotificationService.send_terrain_thank_you(patient_obj, visit_obj)
                 except Exception:
                     pass  # Notification failure must never block the workflow
 
-            await self._load_visit()
-        except Exception as e:
-            self.error_message = str(e)
-
-    @rx.event
-    async def mark_results_entered(self):
-        if not self.visit:
-            return
-        self.error_message = ""
-        try:
-            with await self.authenticate_user():
-                from gws_care.visit.visit_service import VisitService
-                VisitService.mark_results_entered(self.visit.id)
             await self._load_visit()
         except Exception as e:
             self.error_message = str(e)
@@ -263,10 +325,10 @@ class VisitDetailState(RoleState):
         self.success_message = ""
         try:
             with await self.authenticate_user() as auth_user:
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.user.user import User
-                from gws_care.visit.visit_service import VisitService
                 user = User.get_by_id(str(auth_user.id))
-                VisitService.validate_lab(self.visit.id, user)
+                CampaignVisitService.validate_lab(self.visit.id, user)
             await self._load_visit()
             self.success_message = "Lab validation completed."
         except Exception as e:
@@ -280,12 +342,12 @@ class VisitDetailState(RoleState):
         self.success_message = ""
         try:
             with await self.authenticate_user() as auth_user:
+                from gws_care.campaign_visit.campaign_visit_dto import ValidateDoctorClinicDTO
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.user.user import User
-                from gws_care.visit.visit_dto import ValidateDoctorClinicDTO
-                from gws_care.visit.visit_service import VisitService
                 user = User.get_by_id(str(auth_user.id))
                 dto = ValidateDoctorClinicDTO(interpretation=self.clinic_interpretation)
-                VisitService.validate_doctor_clinic(self.visit.id, user, dto)
+                CampaignVisitService.validate_doctor_clinic(self.visit.id, user, dto)
             await self._load_visit()
             self.success_message = "Clinic validation completed."
         except Exception as e:
@@ -299,15 +361,15 @@ class VisitDetailState(RoleState):
         self.success_message = ""
         try:
             with await self.authenticate_user() as auth_user:
+                from gws_care.campaign_visit.campaign_visit_dto import ValidateDoctorCompanyDTO
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.user.user import User
-                from gws_care.visit.visit_dto import ValidateDoctorCompanyDTO
-                from gws_care.visit.visit_service import VisitService
                 user = User.get_by_id(str(auth_user.id))
                 dto = ValidateDoctorCompanyDTO(
                     interpretation=self.company_interpretation,
                     message=self.company_message,
                 )
-                VisitService.validate_doctor_company(self.visit.id, user, dto)
+                CampaignVisitService.validate_doctor_company(self.visit.id, user, dto)
             await self._load_visit()
             self.success_message = "Company validation completed."
         except Exception as e:
@@ -336,21 +398,21 @@ class VisitDetailState(RoleState):
         self.is_loading = True
         self.error_message = ""
         try:
-            visit_id = self.router.page.params.get("visit_id_param", "")
+            visit_id = self.router.page.params.get("campaign_visit_id_param", "")
             if not visit_id:
                 self.visit = None
                 return
 
             with await self.authenticate_user():
+                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.exam.exam_result_service import ExamResultService
                 from gws_care.exam.exam_service import ExamService
-                from gws_care.visit.visit_service import VisitService
                 from gws_care.workflow.visit_validation_workflow import (
                     VisitValidationStep,
                     VisitValidationWorkflow,
                 )
 
-                visit = VisitService.get_visit(visit_id)
+                visit = CampaignVisitService.get_visit(visit_id)
 
                 # Load validation audit rows from workflow table
                 def _workflow_row(step: VisitValidationStep):
@@ -372,7 +434,7 @@ class VisitDetailState(RoleState):
                     except Exception:
                         return ""
 
-                lab_row = _workflow_row(VisitValidationStep.LAB_VALIDATED)
+                lab_row = _workflow_row(VisitValidationStep.LAB_DONE)
                 clinic_row = _workflow_row(VisitValidationStep.DOCTOR_CLINIC_VALIDATED)
                 company_row = _workflow_row(VisitValidationStep.DOCTOR_COMPANY_VALIDATED)
 
@@ -400,55 +462,57 @@ class VisitDetailState(RoleState):
                 self.company_interpretation = visit.doctor_company_interpretation or ""
                 self.company_message = visit.doctor_company_message or ""
 
-                # Load exam results via exams linked to this visit
+                # Load exam results from campaign exam types (creates rows for all
+                # configured exam types, even those without a result yet).
                 try:
+                    from gws_care.campaign.campaign_service import CampaignService
                     from gws_care.exam.exam import Exam
-                    from gws_care.exam.exam_result import ExamResult
-                    from gws_care.exam.exam_type_model import ExamTypeModel
-                    exams = list(Exam.select().where(Exam.visit == visit_id))
+
                     rows = []
-                    for exam in exams:
-                        result = ExamResultService.get_result_for_exam(str(exam.id))
-                        appr = ""
-                        appr_label = ""
-                        appr_override = False
-                        primary_val = ""
-                        result_data = {}
-                        if result:
-                            appr = result.appreciation.value if result.appreciation else ""
-                            appr_label = _APPRECIATION_LABELS.get(appr, appr)
-                            appr_override = result.appreciation_override or False
-                            result_data = result.result_data or {}
-                            # Try to find a primary numeric value
-                            if isinstance(result_data, dict) and result_data.get("primary_value") is not None:
-                                primary_val = str(result_data["primary_value"])
-                            elif isinstance(result_data, dict) and result_data.get("value") is not None:
-                                primary_val = str(result_data["value"])
+                    if visit.program_id:
+                        campaign_exam_types = CampaignService.get_exam_types(str(visit.program_id))
 
-                        # Get exam type info
-                        exam_type_name = str(exam.exam_type.value) if exam.exam_type else ""
-                        exam_type_code = ""
-                        if exam.exam_type:
-                            try:
-                                from gws_care.exam.exam_type_service import ExamTypeService
-                                et_model = ExamTypeService.get_exam_type_model_for_exam(exam)
-                                if et_model:
-                                    exam_type_name = et_model.name
-                                    exam_type_code = et_model.code
-                            except Exception:
-                                pass
+                        # Index existing exam records by their exam_type category
+                        existing_exams = list(Exam.select().where(Exam.visit_id == str(visit_id)))
+                        exams_by_category: dict = {}
+                        for ex in existing_exams:
+                            if ex.exam_type:
+                                exams_by_category[ex.exam_type.value] = ex
 
-                        rows.append(ExamResultRowDTO(
-                            exam_id=str(exam.id),
-                            exam_type_name=exam_type_name,
-                            exam_type_code=exam_type_code,
-                            status=exam.status.value if exam.status else "",
-                            result_data=result_data,
-                            primary_value=primary_val,
-                            appreciation=appr,
-                            appreciation_label=appr_label,
-                            appreciation_override=appr_override,
-                        ))
+                        for et_model in campaign_exam_types:
+                            cat_key = et_model.category.value if et_model.category else ""
+                            exam = exams_by_category.get(cat_key)
+
+                            result = ExamResultService.get_result_for_exam(str(exam.id)) if exam else None
+                            appr = ""
+                            appr_label = ""
+                            appr_override = False
+                            primary_val = ""
+                            result_data = {}
+                            if result:
+                                appr = result.appreciation.value if result.appreciation else ""
+                                appr_label = _APPRECIATION_LABELS.get(appr, appr)
+                                appr_override = result.appreciation_override or False
+                                result_data = result.result_data or {}
+                                if isinstance(result_data, dict) and result_data.get("primary_value") is not None:
+                                    primary_val = str(result_data["primary_value"])
+                                elif isinstance(result_data, dict) and result_data.get("value") is not None:
+                                    primary_val = str(result_data["value"])
+
+                            rows.append(ExamResultRowDTO(
+                                exam_id=str(exam.id) if exam else "",
+                                exam_type_model_id=str(et_model.id),
+                                exam_type_name=et_model.name,
+                                exam_type_code=et_model.code,
+                                status=exam.status.value if exam else "",
+                                result_data=result_data,
+                                primary_value=primary_val,
+                                edit_value=primary_val,
+                                appreciation=appr,
+                                appreciation_label=appr_label,
+                                appreciation_override=appr_override,
+                            ))
+
                     self.exam_results = rows
                 except Exception as ex:
                     # Non-fatal: visit loads even without exam results
