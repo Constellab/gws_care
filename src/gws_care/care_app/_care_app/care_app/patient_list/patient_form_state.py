@@ -7,6 +7,12 @@ from gws_reflex_base import FormDialogState
 from gws_reflex_main import ReflexMainState
 
 
+class CompanyOption(rx.Base):
+    """Lightweight company option for dropdown."""
+    id: str
+    name: str
+
+
 class PatientFormState(FormDialogState, rx.State):
     """Manages the create / update patient dialog.
 
@@ -33,6 +39,12 @@ class PatientFormState(FormDialogState, rx.State):
     _form_account_id: str = ""
     # When creating from an account detail page, pre-link to this account
     _context_account_id: str = ""
+    # When creating from a company detail page, pre-link to this company
+    _context_company_id: str = ""
+
+    # Company dropdown (shown in standalone create dialog)
+    form_company_id: str = ""
+    company_options: list[CompanyOption] = []
 
     # ── Setters ───────────────────────────────────────────────────────────────
 
@@ -83,7 +95,9 @@ class PatientFormState(FormDialogState, rx.State):
     @rx.event
     def set_form_primary_physician_phone(self, value: str):
         self.form_primary_physician_phone = value
-
+    @rx.event
+    def set_form_company_id(self, value: str):
+        self.form_company_id = "" if value == "__none__" else value
     # ── Dialog open helpers ───────────────────────────────────────────────────
 
     @rx.event
@@ -93,6 +107,15 @@ class PatientFormState(FormDialogState, rx.State):
         self._editing_patient_id = ""
         self._context_account_id = ""
         await self._clear_form_state()
+        # Load company options
+        _main = await self.get_state(ReflexMainState)
+        with await _main.authenticate_user():
+            from gws_care.company.company_service import CompanyService
+            companies = CompanyService.list_companies(active_only=True)
+            self.company_options = [
+                CompanyOption(id=str(c.id), name=c.name)
+                for c in sorted(companies, key=lambda c: c.name)
+            ]
         self.dialog_opened = True
 
     @rx.event
@@ -100,8 +123,21 @@ class PatientFormState(FormDialogState, rx.State):
         """Open the create dialog pre-linked to an account."""
         self.is_update_mode = False
         self._editing_patient_id = ""
-        self._context_account_id = account_id
+        self._context_company_id = ""
         await self._clear_form_state()
+        # Set AFTER _clear_form_state so it is not wiped
+        self._context_account_id = account_id
+        self.dialog_opened = True
+
+    @rx.event
+    async def open_create_for_company(self, company_id: str):
+        """Open the create dialog pre-linked to a company."""
+        self.is_update_mode = False
+        self._editing_patient_id = ""
+        self._context_account_id = ""
+        await self._clear_form_state()
+        # Set AFTER _clear_form_state so it is not wiped
+        self._context_company_id = company_id
         self.dialog_opened = True
 
     @rx.event
@@ -151,8 +187,10 @@ class PatientFormState(FormDialogState, rx.State):
         self.form_primary_physician_phone = ""
         self._editing_patient_id = ""
         self._form_account_id = ""
-        self._context_account_id = ""
+        self.form_company_id = ""
         self.is_update_mode = False
+        # Note: _context_account_id and _context_company_id are NOT cleared here
+        # — they are set by the open_create_for_* methods and must survive until _create runs.
 
     async def _create(self, form_data: dict) -> AsyncGenerator:
         """Create a new patient from form data."""
@@ -173,6 +211,9 @@ class PatientFormState(FormDialogState, rx.State):
         if not self.form_date_of_birth:
             yield rx.toast.error("Date of birth is required")
             return
+        if not self.form_email.strip():
+            yield rx.toast.error("L'adresse email est obligatoire")
+            return
 
         dto = SavePatientDTO(
             last_name=last_name,
@@ -181,7 +222,7 @@ class PatientFormState(FormDialogState, rx.State):
             date_of_birth=date_type.fromisoformat(self.form_date_of_birth),
             gender=self.form_gender,
             phone=self.form_phone or None,
-            email=self.form_email or None,
+            email=self.form_email.strip(),
             address=self.form_address or None,
             postal_code=self.form_postal_code or None,
             city=self.form_city or None,
@@ -190,14 +231,25 @@ class PatientFormState(FormDialogState, rx.State):
             account_id=self._context_account_id or None,
         )
 
+        # Capture context IDs into locals before any yield (state may be
+        # cleared by _clear_form_state before the post-yield refresh logic).
+        ctx_company_id = self._context_company_id
+        ctx_account_id = self._context_account_id
+
         async with self:
             _main = await self.get_state(ReflexMainState)
         with await _main.authenticate_user():
             patient = PatientService.create_patient(dto)
+            company_id = ctx_company_id or self.form_company_id or None
+            if company_id:
+                PatientService.assign_company(str(patient.id), company_id)
 
         yield rx.toast.success(f"Patient {patient.patient_number} created")
 
-        if self._context_account_id:
+        if ctx_company_id:
+            from ..company_detail.company_detail_state import CompanyDetailState
+            yield CompanyDetailState.on_load()
+        elif ctx_account_id:
             from ..account_detail.account_detail_state import AccountDetailState
             yield AccountDetailState.on_load()
         else:
@@ -223,6 +275,9 @@ class PatientFormState(FormDialogState, rx.State):
         if not self.form_date_of_birth:
             yield rx.toast.error("Date of birth is required")
             return
+        if not self.form_email.strip():
+            yield rx.toast.error("L'adresse email est obligatoire")
+            return
 
         dto = SavePatientDTO(
             last_name=last_name,
@@ -231,7 +286,7 @@ class PatientFormState(FormDialogState, rx.State):
             date_of_birth=date_type.fromisoformat(self.form_date_of_birth),
             gender=self.form_gender,
             phone=self.form_phone or None,
-            email=self.form_email or None,
+            email=self.form_email.strip(),
             address=self.form_address or None,
             postal_code=self.form_postal_code or None,
             city=self.form_city or None,

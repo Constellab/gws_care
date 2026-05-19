@@ -4,7 +4,7 @@ import reflex as rx
 from gws_reflex_base import form_dialog_component
 
 from ..common.language_state import LanguageState
-from .patient_form_state import PatientFormState
+from .patient_form_state import CompanyOption, PatientFormState
 
 
 def _field(label: str, input_component: rx.Component) -> rx.Component:
@@ -99,7 +99,7 @@ def _form_fields() -> rx.Component:
                 ),
             ),
             _field(
-                LanguageState.tr["field_email"],
+                "Email *",
                 rx.input(
                     value=PatientFormState.form_email,
                     on_change=PatientFormState.set_form_email,
@@ -147,6 +147,31 @@ def _form_fields() -> rx.Component:
             columns="2",
             spacing="3",
             width="100%",
+        ),
+        rx.separator(width="100%"),
+        # Company dropdown — shown when creating from general list (not pre-linked)
+        rx.cond(
+            PatientFormState.company_options.length() > 0,
+            rx.vstack(
+                rx.text("Entreprise employeur", size="2", weight="bold", color="var(--gray-9)"),
+                rx.select.root(
+                    rx.select.trigger(placeholder="Sélectionner une entreprise (optionnel)"),
+                    rx.select.content(
+                        rx.select.item("— Aucune —", value="__none__"),
+                        rx.foreach(
+                            PatientFormState.company_options,
+                            lambda c: rx.select.item(c.name, value=c.id),
+                        ),
+                    ),
+                    value=PatientFormState.form_company_id,
+                    on_change=PatientFormState.set_form_company_id,
+                    size="2",
+                    width="100%",
+                ),
+                width="100%",
+                spacing="1",
+            ),
+            rx.fragment(),
         ),
         rx.separator(width="100%"),
         rx.text(LanguageState.tr["section_primary_physician"], size="2", weight="bold", color="var(--gray-9)"),

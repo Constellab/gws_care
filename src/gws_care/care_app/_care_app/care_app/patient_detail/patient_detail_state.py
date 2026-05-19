@@ -44,12 +44,24 @@ class AppointmentRowDTO(BaseModel):
     account_name: str | None = None
 
 
+class CampaignEnrollmentDTO(BaseModel):
+    """Lightweight campaign participation row for the patient detail page."""
+
+    campaign_id: str
+    campaign_name: str
+    status: str
+    status_label: str
+    start_date: str
+    account_name: str
+
+
 class PatientDetailState(ReflexMainState):
     """State for the patient detail page."""
 
     patient: PatientDetailDTO | None = None
     exams: list[ExamRowDTO] = []
     appointments: list[AppointmentRowDTO] = []
+    campaign_enrollments: list[CampaignEnrollmentDTO] = []
     is_loading: bool = False
     error_message: str = ""
 
@@ -146,6 +158,30 @@ class PatientDetailState(ReflexMainState):
                     )
                     for a in appointments
                 ]
+                from gws_care.campaign.campaign import Campaign
+                from gws_care.campaign.campaign_patient import CampaignPatient, MedicalRecordStatus
+                cp_rows = list(
+                    CampaignPatient.select(CampaignPatient, Campaign)
+                    .join(Campaign)
+                    .where(CampaignPatient.patient == patient_id)
+                    .order_by(Campaign.start_date.desc())
+                )
+                campaign_enrollments = []
+                for cp in cp_rows:
+                    try:
+                        ms = MedicalRecordStatus(cp.medical_status)
+                        ms_label = ms.get_label()
+                    except ValueError:
+                        ms_label = cp.medical_status
+                    campaign_enrollments.append(CampaignEnrollmentDTO(
+                        campaign_id=str(cp.campaign_id),
+                        campaign_name=cp.campaign.name,
+                        status=cp.medical_status,
+                        status_label=ms_label,
+                        start_date=cp.campaign.start_date.isoformat() if cp.campaign.start_date else "",
+                        account_name=cp.campaign.account.name if cp.campaign.account_id else "",
+                    ))
+                self.campaign_enrollments = campaign_enrollments
         except Exception as e:
             self.error_message = f"Error loading patient: {e}"
         finally:

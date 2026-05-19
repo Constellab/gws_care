@@ -25,6 +25,11 @@ class CompanyListState(ReflexMainState):
     error_message: str = ""
     search_name: str = ""
 
+    # Confirm désactivation
+    confirm_deactivate_open: bool = False
+    confirm_deactivate_id: str = ""
+    confirm_deactivate_name: str = ""
+
     @rx.event
     async def on_load(self):
         """Load companies when the page is mounted."""
@@ -49,11 +54,7 @@ class CompanyListState(ReflexMainState):
 
     @rx.event
     async def deactivate_company(self, company_id: str):
-        """Mark a company as inactive.
-
-        :param company_id: DB id of the company to deactivate
-        :type company_id: str
-        """
+        """Mark a company as inactive."""
         try:
             with await self.authenticate_user():
                 from gws_care.company.company_service import CompanyService
@@ -61,6 +62,26 @@ class CompanyListState(ReflexMainState):
             await self._load_companies()
         except Exception as e:
             self.error_message = f"Error deactivating company: {e}"
+
+    @rx.event
+    def open_confirm_deactivate(self, company_id: str, company_name: str):
+        self.confirm_deactivate_id = company_id
+        self.confirm_deactivate_name = company_name
+        self.confirm_deactivate_open = True
+
+    @rx.event
+    def dismiss_confirm_deactivate(self):
+        self.confirm_deactivate_open = False
+        self.confirm_deactivate_id = ""
+        self.confirm_deactivate_name = ""
+
+    @rx.event
+    async def confirmed_deactivate(self):
+        company_id = self.confirm_deactivate_id
+        self.confirm_deactivate_open = False
+        self.confirm_deactivate_id = ""
+        self.confirm_deactivate_name = ""
+        await self.deactivate_company(company_id)
 
     async def _load_companies(self):
         """Internal: fetch companies from DB."""

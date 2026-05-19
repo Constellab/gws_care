@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .exam_detail_state import (
     PREDEFINED_LAB_PARAMS,
@@ -12,30 +13,30 @@ from .exam_detail_state import (
     LabResultRowDTO,
 )
 
-# Predefined parameter groups for the select dropdown
-_PREDEFINED_GROUPS: list[tuple[str, list[str]]] = [
-    ("Complete Blood Count (CBC)", ["WBC", "RBC", "Hemoglobin", "Hematocrit", "MCV", "MCH", "MCHC", "Platelets"]),
-    ("Metabolic Panel", ["Glucose", "BUN", "Creatinine", "eGFR", "Sodium", "Potassium", "Chloride", "Bicarbonate", "Calcium"]),
-    ("Liver Function (LFT)", ["ALT", "AST", "ALP", "GGT", "Total Bilirubin", "Direct Bilirubin", "Total Protein", "Albumin"]),
-    ("Lipid Panel", ["Total Cholesterol", "LDL", "HDL", "Triglycerides"]),
-    ("Diabetes", ["HbA1c", "Fasting Glucose", "Insulin"]),
-    ("Thyroid", ["TSH", "fT4", "fT3"]),
-    ("Inflammation", ["CRP", "ESR", "Ferritin"]),
-    ("Coagulation", ["PT", "INR", "aPTT"]),
+# Predefined parameter groups: (english_name, translation_key, [param_names])
+_PREDEFINED_GROUPS: list[tuple[str, str, list[str]]] = [
+    ("Complete Blood Count (CBC)", "lab_group_cbc", ["WBC", "RBC", "Hemoglobin", "Hematocrit", "MCV", "MCH", "MCHC", "Platelets"]),
+    ("Metabolic Panel", "lab_group_metabolic", ["Glucose", "BUN", "Creatinine", "eGFR", "Sodium", "Potassium", "Chloride", "Bicarbonate", "Calcium"]),
+    ("Liver Function (LFT)", "lab_group_lft", ["ALT", "AST", "ALP", "GGT", "Total Bilirubin", "Direct Bilirubin", "Total Protein", "Albumin"]),
+    ("Lipid Panel", "lab_group_lipid", ["Total Cholesterol", "LDL", "HDL", "Triglycerides"]),
+    ("Diabetes", "lab_group_diabetes", ["HbA1c", "Fasting Glucose", "Insulin"]),
+    ("Thyroid", "lab_group_thyroid", ["TSH", "fT4", "fT3"]),
+    ("Inflammation", "lab_group_inflammation", ["CRP", "ESR", "Ferritin"]),
+    ("Coagulation", "lab_group_coagulation", ["PT", "INR", "aPTT"]),
 ]
 
-# ── Document type options (value, label) ─────────────────────────────────────
+# ── Document type options (value, translation_key) ───────────────────────────
 _DOC_TYPE_OPTIONS = [
-    ("medical_certificate", "Medical Certificate"),
-    ("medical_report", "Medical Report"),
-    ("letter", "Letter"),
-    ("medical_analysis", "Medical Analysis"),
-    ("prescription", "Prescription"),
-    ("mri", "MRI"),
-    ("ct_scan", "CT Scan"),
-    ("xray", "X-Ray"),
-    ("ultrasound", "Ultrasound"),
-    ("other", "Other"),
+    ("medical_certificate", "doc_type_medical_certificate"),
+    ("medical_report", "doc_type_medical_report"),
+    ("letter", "doc_type_letter"),
+    ("medical_analysis", "doc_type_medical_analysis"),
+    ("prescription", "doc_type_prescription"),
+    ("mri", "doc_type_mri"),
+    ("ct_scan", "doc_type_ct_scan"),
+    ("xray", "doc_type_xray"),
+    ("ultrasound", "doc_type_ultrasound"),
+    ("other", "doc_type_other"),
 ]
 
 
@@ -43,9 +44,9 @@ _DOC_TYPE_OPTIONS = [
 def _status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
-        ("draft", rx.badge("Draft", color_scheme="gray", variant="soft", size="2")),
-        ("pending", rx.badge("Pending", color_scheme="orange", variant="soft", size="2")),
-        ("interpreted", rx.badge("Interpreted", color_scheme="green", variant="soft", size="2")),
+        ("draft", rx.badge(LanguageState.tr["exam_status_draft"], color_scheme="gray", variant="soft", size="2")),
+        ("pending", rx.badge(LanguageState.tr["exam_status_pending"], color_scheme="orange", variant="soft", size="2")),
+        ("interpreted", rx.badge(LanguageState.tr["exam_status_interpreted"], color_scheme="green", variant="soft", size="2")),
         rx.badge(status, color_scheme="gray", variant="soft", size="2"),
     )
 
@@ -58,7 +59,7 @@ def _mode_toggle() -> rx.Component:
         rx.segmented_control.item(
             rx.hstack(
                 rx.icon("eye", size=13),
-                rx.text("View", size="1"),
+                rx.text(LanguageState.tr["mode_view"], size="1"),
                 spacing="1",
                 align="center",
             ),
@@ -67,7 +68,7 @@ def _mode_toggle() -> rx.Component:
         rx.segmented_control.item(
             rx.hstack(
                 rx.icon("pencil", size=13),
-                rx.text("Edit", size="1"),
+                rx.text(LanguageState.tr["mode_edit"], size="1"),
                 spacing="1",
                 align="center",
             ),
@@ -94,7 +95,7 @@ def _exam_header(exam: ExamDetailDTO) -> rx.Component:
         ),
         rx.spacer(),
         rx.text(
-            "Patient: ",
+            LanguageState.tr["exam_patient_label"],
             exam.patient_name,
             size="2",
             color="var(--gray-9)",
@@ -217,7 +218,7 @@ def _save_sections_button() -> rx.Component:
                 rx.spinner(size="2"),
                 rx.icon("check", size=15),
             ),
-            "Save",
+            LanguageState.tr["save"],
             on_click=ExamDetailState.save_sections,
             disabled=ExamDetailState.is_saving_sections,
             size="2",
@@ -230,15 +231,15 @@ def _save_sections_button() -> rx.Component:
 def _reasons_and_history_section() -> rx.Component:
     return rx.vstack(
         _section_card(
-            "Reason for visit",
+            LanguageState.tr["exam_section_reason"],
             rx.cond(
                 ExamDetailState.is_edit_mode,
                 rx.vstack(
                     _text_field_edit(
-                        "Reason for visit",
+                        LanguageState.tr["exam_section_reason"],
                         ExamDetailState.form_reason_for_visit,
                         ExamDetailState.set_form_reason_for_visit,
-                        "Reason for visit...",
+                        LanguageState.tr["exam_reason_placeholder"],
                         rows="2",
                     ),
                     width="100%",
@@ -246,24 +247,24 @@ def _reasons_and_history_section() -> rx.Component:
                 ),
                 _text_field_view(
                     ExamDetailState.exam.reason_for_visit,
-                    "No reason for visit recorded.",
+                    LanguageState.tr["exam_no_reason"],
                 ),
             ),
         ),
         _section_card(
-            "Medical history",
+            LanguageState.tr["exam_section_history"],
             rx.cond(
                 ExamDetailState.is_edit_mode,
                 _text_field_edit(
-                    "Medical history",
+                    LanguageState.tr["exam_section_history"],
                     ExamDetailState.form_medical_history,
                     ExamDetailState.set_form_medical_history,
-                    "Relevant medical history...",
+                    LanguageState.tr["exam_history_placeholder"],
                     rows="3",
                 ),
                 _text_field_view(
                     ExamDetailState.exam.medical_history,
-                    "No medical history recorded.",
+                    LanguageState.tr["exam_no_history"],
                 ),
             ),
         ),
@@ -274,17 +275,17 @@ def _reasons_and_history_section() -> rx.Component:
 
 def _physical_exam_section() -> rx.Component:
     return _section_card(
-        "Physical examination",
+        LanguageState.tr["exam_section_physical"],
         rx.cond(
             ExamDetailState.is_edit_mode,
             rx.vstack(
                 rx.grid(
-                    _num_field_edit("Weight (kg)", ExamDetailState.form_weight, ExamDetailState.set_form_weight, "e.g. 70"),
-                    _num_field_edit("Height (cm)", ExamDetailState.form_height, ExamDetailState.set_form_height, "e.g. 175"),
-                    _num_field_edit("BMI", ExamDetailState.form_bmi, ExamDetailState.set_form_bmi, "e.g. 22.9"),
-                    _str_field_edit("Blood pressure", ExamDetailState.form_blood_pressure, ExamDetailState.set_form_blood_pressure, "e.g. 120/80"),
-                    _num_field_edit("Heart rate (bpm)", ExamDetailState.form_heart_rate, ExamDetailState.set_form_heart_rate, "e.g. 72"),
-                    _num_field_edit("Temperature (°C)", ExamDetailState.form_temperature, ExamDetailState.set_form_temperature, "e.g. 37.0"),
+                    _num_field_edit(LanguageState.tr["exam_weight"], ExamDetailState.form_weight, ExamDetailState.set_form_weight, "e.g. 70"),
+                    _num_field_edit(LanguageState.tr["exam_height"], ExamDetailState.form_height, ExamDetailState.set_form_height, "e.g. 175"),
+                    _num_field_edit(LanguageState.tr["exam_bmi"], ExamDetailState.form_bmi, ExamDetailState.set_form_bmi, "e.g. 22.9"),
+                    _str_field_edit(LanguageState.tr["exam_blood_pressure"], ExamDetailState.form_blood_pressure, ExamDetailState.set_form_blood_pressure, "e.g. 120/80"),
+                    _num_field_edit(LanguageState.tr["exam_heart_rate"], ExamDetailState.form_heart_rate, ExamDetailState.set_form_heart_rate, "e.g. 72"),
+                    _num_field_edit(LanguageState.tr["exam_temperature"], ExamDetailState.form_temperature, ExamDetailState.set_form_temperature, "e.g. 37.0"),
                     columns="3",
                     spacing="3",
                     width="100%",
@@ -293,12 +294,12 @@ def _physical_exam_section() -> rx.Component:
                 spacing="3",
             ),
             rx.grid(
-                _num_field_view("Weight", ExamDetailState.exam.weight, "kg"),
-                _num_field_view("Height", ExamDetailState.exam.height, "cm"),
-                _num_field_view("BMI", ExamDetailState.exam.bmi),
-                _str_field_view("Blood pressure", ExamDetailState.exam.blood_pressure),
-                _num_field_view("Heart rate", ExamDetailState.exam.heart_rate, "bpm"),
-                _num_field_view("Temperature", ExamDetailState.exam.temperature, "°C"),
+                _num_field_view(LanguageState.tr["exam_weight_view"], ExamDetailState.exam.weight, "kg"),
+                _num_field_view(LanguageState.tr["exam_height_view"], ExamDetailState.exam.height, "cm"),
+                _num_field_view(LanguageState.tr["exam_bmi"], ExamDetailState.exam.bmi),
+                _str_field_view(LanguageState.tr["exam_blood_pressure"], ExamDetailState.exam.blood_pressure),
+                _num_field_view(LanguageState.tr["exam_heart_rate_view"], ExamDetailState.exam.heart_rate, "bpm"),
+                _num_field_view(LanguageState.tr["exam_temperature_view"], ExamDetailState.exam.temperature, "°C"),
                 columns="3",
                 spacing="4",
                 width="100%",
@@ -309,15 +310,15 @@ def _physical_exam_section() -> rx.Component:
 
 def _conclusion_section() -> rx.Component:
     return _section_card(
-        "Conclusion and recommendations",
+        LanguageState.tr["exam_section_conclusion"],
         rx.cond(
             ExamDetailState.is_edit_mode,
             rx.vstack(
                 _text_field_edit(
-                    "Conclusion and recommendations",
+                    LanguageState.tr["exam_section_conclusion"],
                     ExamDetailState.form_conclusion,
                     ExamDetailState.set_form_conclusion,
-                    "Conclusion and recommendations...",
+                    LanguageState.tr["exam_conclusion_placeholder"],
                     rows="3",
                 ),
                 _save_sections_button(),
@@ -326,7 +327,7 @@ def _conclusion_section() -> rx.Component:
             ),
             _text_field_view(
                 ExamDetailState.exam.conclusion,
-                "No conclusion recorded.",
+                LanguageState.tr["exam_no_conclusion"],
             ),
         ),
     )
@@ -334,41 +335,84 @@ def _conclusion_section() -> rx.Component:
 
 # ── Section: Laboratory results ───────────────────────────────────────────────
 
-_LAB_STATUS_OPTIONS = [
-    ("normal", "Normal"),
-    ("high", "High"),
-    ("low", "Low"),
-    ("critical", "Critical"),
+_LAB_STATUS_OPTIONS: list[tuple[str, str]] = [
+    ("normal", "exam_lab_status_normal"),
+    ("high", "exam_lab_status_high"),
+    ("low", "exam_lab_status_low"),
+    ("critical", "exam_lab_status_critical"),
 ]
 
 
 def _lab_status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
-        ("normal", rx.badge("Normal", color_scheme="green", variant="soft", size="1")),
-        ("high", rx.badge("High", color_scheme="orange", variant="soft", size="1")),
-        ("low", rx.badge("Low", color_scheme="blue", variant="soft", size="1")),
-        ("critical", rx.badge("Critical", color_scheme="red", variant="soft", size="1")),
+        ("normal", rx.badge(
+            rx.icon("check", size=11), LanguageState.tr["exam_lab_status_normal"],
+            color_scheme="green", variant="soft", size="1",
+        )),
+        ("high", rx.badge(
+            rx.icon("arrow-up", size=11), LanguageState.tr["exam_lab_status_high"],
+            color_scheme="orange", variant="surface", size="1",
+        )),
+        ("low", rx.badge(
+            rx.icon("arrow-down", size=11), LanguageState.tr["exam_lab_status_low"],
+            color_scheme="blue", variant="surface", size="1",
+        )),
+        ("critical", rx.badge(
+            rx.icon("triangle-alert", size=11), LanguageState.tr["exam_lab_status_critical"],
+            color_scheme="red", variant="solid", size="1",
+        )),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
+    )
+
+
+def _lab_value_cell(row: LabResultRowDTO) -> rx.Component:
+    """Display the result value with a color + arrow indicator if anomalous."""
+    return rx.match(
+        row.status,
+        ("high", rx.hstack(
+            rx.icon("triangle-alert", size=13, color="var(--orange-9)"),
+            rx.text(row.value, size="2", weight="bold", color="var(--orange-9)"),
+            spacing="1", align="center",
+        )),
+        ("low", rx.hstack(
+            rx.icon("triangle-alert", size=13, color="var(--blue-9)"),
+            rx.text(row.value, size="2", weight="bold", color="var(--blue-9)"),
+            spacing="1", align="center",
+        )),
+        ("critical", rx.hstack(
+            rx.icon("siren", size=13, color="var(--red-9)"),
+            rx.text(row.value, size="2", weight="bold", color="var(--red-9)"),
+            spacing="1", align="center",
+        )),
+        # normal or unknown — plain text
+        rx.text(row.value, size="2"),
     )
 
 
 def _lab_row_view(row: LabResultRowDTO) -> rx.Component:
     return rx.table.row(
-        rx.table.cell(rx.text(row.parameter, size="2")),
+        rx.table.cell(rx.text(row.parameter, size="2", weight="medium")),
         rx.table.cell(rx.text(row.unit, size="2", color="var(--gray-9)")),
-        rx.table.cell(rx.text(row.value, size="2")),
-        rx.table.cell(rx.text(row.reference_range, size="2")),
+        rx.table.cell(_lab_value_cell(row)),
+        rx.table.cell(rx.text(row.reference_range, size="2", color="var(--gray-10)")),
         rx.table.cell(_lab_status_badge(row.status)),
+        background=rx.match(
+            row.status,
+            ("high", "var(--orange-1)"),
+            ("low", "var(--blue-1)"),
+            ("critical", "var(--red-2)"),
+            "transparent",
+        ),
     )
 
 
 def _lab_row_edit(row: LabResultRowDTO) -> rx.Component:
     return rx.table.row(
-        rx.table.cell(rx.text(row.parameter, size="2")),
+        rx.table.cell(rx.text(row.parameter, size="2", weight="medium")),
         rx.table.cell(rx.text(row.unit, size="2", color="var(--gray-9)")),
-        rx.table.cell(rx.text(row.value, size="2")),
-        rx.table.cell(rx.text(row.reference_range, size="2")),
+        rx.table.cell(_lab_value_cell(row)),
+        rx.table.cell(rx.text(row.reference_range, size="2", color="var(--gray-10)")),
         rx.table.cell(_lab_status_badge(row.status)),
         rx.table.cell(
             rx.icon_button(
@@ -386,13 +430,13 @@ def _lab_row_edit(row: LabResultRowDTO) -> rx.Component:
 def _predefined_param_select() -> rx.Component:
     """Dropdown to quickly select a predefined lab parameter."""
     groups = []
-    for group_name, param_names in _PREDEFINED_GROUPS:
+    for _group_name, tr_key, param_names in _PREDEFINED_GROUPS:
         items = [rx.select.item(name, value=name) for name in param_names]
-        groups.append(rx.select.group(rx.select.label(group_name), *items))
+        groups.append(rx.select.group(rx.select.label(LanguageState.tr[tr_key]), *items))
     return rx.select.root(
-        rx.select.trigger(placeholder="Select predefined parameter...", size="2"),
+        rx.select.trigger(placeholder=LanguageState.tr["exam_lab_select_preset"], size="2"),
         rx.select.content(
-            rx.select.item("Custom entry", value="CUSTOM"),
+            rx.select.item(LanguageState.tr["exam_lab_custom_entry"], value="CUSTOM"),
             rx.select.separator(),
             *groups,
         ),
@@ -412,35 +456,35 @@ def _lab_add_row_form() -> rx.Component:
             rx.input(
                 value=ExamDetailState.new_lab_parameter,
                 on_change=ExamDetailState.set_new_lab_parameter,
-                placeholder="Parameter name *",
+                placeholder=LanguageState.tr["exam_lab_param_name"],
                 size="2",
                 flex="3",
             ),
             rx.input(
                 value=ExamDetailState.new_lab_unit,
                 on_change=ExamDetailState.set_new_lab_unit,
-                placeholder="Unit",
+                placeholder=LanguageState.tr["exam_lab_col_unit"],
                 size="2",
                 flex="1",
             ),
             rx.input(
                 value=ExamDetailState.new_lab_value,
                 on_change=ExamDetailState.set_new_lab_value,
-                placeholder="Value",
+                placeholder=LanguageState.tr["exam_lab_col_value"],
                 size="2",
                 flex="2",
             ),
             rx.input(
                 value=ExamDetailState.new_lab_reference_range,
                 on_change=ExamDetailState.set_new_lab_reference_range,
-                placeholder="Reference range",
+                placeholder=LanguageState.tr["exam_lab_col_ref"],
                 size="2",
                 flex="2",
             ),
             rx.select.root(
                 rx.select.trigger(size="2"),
                 rx.select.content(
-                    *[rx.select.item(label, value=value) for value, label in _LAB_STATUS_OPTIONS],
+                    *[rx.select.item(LanguageState.tr[tr_key], value=value) for value, tr_key in _LAB_STATUS_OPTIONS],
                 ),
                 value=ExamDetailState.new_lab_status,
                 on_change=ExamDetailState.set_new_lab_status,
@@ -467,7 +511,7 @@ def _lab_add_row_form() -> rx.Component:
 
 def _lab_results_section() -> rx.Component:
     return _section_card(
-        "Laboratory results",
+        LanguageState.tr["exam_section_lab"],
         rx.cond(
             ExamDetailState.is_edit_mode,
             rx.vstack(
@@ -476,11 +520,11 @@ def _lab_results_section() -> rx.Component:
                     rx.table.root(
                         rx.table.header(
                             rx.table.row(
-                                rx.table.column_header_cell("Parameter"),
-                                rx.table.column_header_cell("Unit"),
-                                rx.table.column_header_cell("Value"),
-                                rx.table.column_header_cell("Reference range"),
-                                rx.table.column_header_cell("Status"),
+                                rx.table.column_header_cell(LanguageState.tr["exam_lab_col_param"]),
+                                rx.table.column_header_cell(LanguageState.tr["exam_lab_col_unit"]),
+                                rx.table.column_header_cell(LanguageState.tr["exam_lab_col_value"]),
+                                rx.table.column_header_cell(LanguageState.tr["exam_lab_col_ref"]),
+                                rx.table.column_header_cell(LanguageState.tr["col_status"]),
                                 rx.table.column_header_cell(""),
                             ),
                         ),
@@ -501,11 +545,11 @@ def _lab_results_section() -> rx.Component:
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
-                            rx.table.column_header_cell("Parameter"),
-                            rx.table.column_header_cell("Unit"),
-                            rx.table.column_header_cell("Value"),
-                            rx.table.column_header_cell("Reference range"),
-                            rx.table.column_header_cell("Status"),
+                            rx.table.column_header_cell(LanguageState.tr["exam_lab_col_param"]),
+                            rx.table.column_header_cell(LanguageState.tr["exam_lab_col_unit"]),
+                            rx.table.column_header_cell(LanguageState.tr["exam_lab_col_value"]),
+                            rx.table.column_header_cell(LanguageState.tr["exam_lab_col_ref"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_status"]),
                         ),
                     ),
                     rx.table.body(
@@ -514,7 +558,7 @@ def _lab_results_section() -> rx.Component:
                     width="100%",
                     size="2",
                 ),
-                rx.text("No laboratory results recorded.", size="2", color="var(--gray-7)"),
+                rx.text(LanguageState.tr["exam_lab_no_results"], size="2", color="var(--gray-7)"),
             ),
         ),
     )
@@ -525,9 +569,9 @@ def _lab_results_section() -> rx.Component:
 def _doc_type_selector(ef: ExamFileRowDTO) -> rx.Component:
     """Compact document-type selector for a single file row."""
     return rx.select.root(
-        rx.select.trigger(placeholder="Set type…", size="1"),
+        rx.select.trigger(placeholder=LanguageState.tr["exam_docs_set_type"], size="1"),
         rx.select.content(
-            *[rx.select.item(label, value=value) for value, label in _DOC_TYPE_OPTIONS],
+            *[rx.select.item(LanguageState.tr[tr_key], value=value) for value, tr_key in _DOC_TYPE_OPTIONS],
         ),
         value=ef.document_type,
         on_change=lambda v: ExamDetailState.set_file_document_type(ef.id, v),
@@ -571,7 +615,7 @@ def _file_row(ef: ExamFileRowDTO) -> rx.Component:
                 rx.badge(
                     rx.match(
                         ef.document_type,
-                        *[(value, label) for value, label in _DOC_TYPE_OPTIONS],
+                        *[(value, LanguageState.tr[tr_key]) for value, tr_key in _DOC_TYPE_OPTIONS],
                         ef.document_type,
                     ),
                     variant="soft",
@@ -591,7 +635,7 @@ def _file_row(ef: ExamFileRowDTO) -> rx.Component:
                     color_scheme="red",
                     on_click=lambda: ExamDetailState.delete_file(ef.id),
                 ),
-                content="Delete file",
+                content=LanguageState.tr["exam_docs_delete_file"],
             ),
         ),
         padding_x="0.6rem",
@@ -606,7 +650,7 @@ def _file_row(ef: ExamFileRowDTO) -> rx.Component:
 
 def _documents_section() -> rx.Component:
     return rx.vstack(
-        rx.heading("Medical Documents", size="4"),
+        rx.heading(LanguageState.tr["exam_section_docs"], size="4"),
         rx.separator(width="100%"),
         rx.cond(
             ExamDetailState.exam_files,
@@ -615,7 +659,7 @@ def _documents_section() -> rx.Component:
                 width="100%",
                 spacing="1",
             ),
-            rx.text("No documents attached yet.", size="2", color="var(--gray-7)"),
+            rx.text(LanguageState.tr["exam_docs_no_docs"], size="2", color="var(--gray-7)"),
         ),
         # Upload drop zone — only in edit mode
         rx.cond(
@@ -626,14 +670,14 @@ def _documents_section() -> rx.Component:
                         ExamDetailState.is_uploading_file,
                         rx.hstack(
                             rx.spinner(size="2"),
-                            rx.text("Uploading…", size="2", color="var(--gray-9)"),
+                            rx.text(LanguageState.tr["exam_docs_uploading"], size="2", color="var(--gray-9)"),
                             spacing="2",
                             align="center",
                         ),
                         rx.vstack(
                             rx.icon("upload", size=18, color="var(--gray-7)"),
                             rx.text(
-                                "Drop files here or click to add",
+                                LanguageState.tr["exam_docs_drop_files"],
                                 size="2",
                                 color="var(--gray-7)",
                             ),
@@ -682,7 +726,7 @@ def exam_detail_page() -> rx.Component:
         page_layout(
             rx.button(
                 rx.icon("arrow-left", size=16),
-                "Back to patient",
+                LanguageState.tr["back_to_patient_btn"],
                 on_click=ExamDetailState.go_back,
                 variant="ghost",
                 size="2",
@@ -711,7 +755,7 @@ def exam_detail_page() -> rx.Component:
                         spacing="6",
                     ),
                     rx.center(
-                        rx.text("Exam not found.", color="var(--gray-9)"), padding="3rem"
+                        rx.text(LanguageState.tr["exam_not_found"], color="var(--gray-9)"), padding="3rem"
                     ),
                 ),
             ),

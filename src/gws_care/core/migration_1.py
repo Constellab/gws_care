@@ -16,7 +16,5 @@ class Migration020(BrickMigration):
     def migrate(
         cls, sql_migrator: SqlMigrator, from_version: Version, to_version: Version
     ) -> None:
-        sql_migrator.create_table_if_not_exists(Exam)
-        sql_migrator.create_table_if_not_exists(ExamResult)
-        sql_migrator.create_table_if_not_exists(MedicalCertificate)
-        sql_migrator.migrate()
+        db = sql_migrator.migrator.database
+        db.create_tables([Exam, ExamResult, MedicalCertificate], safe=True)

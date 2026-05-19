@@ -53,7 +53,17 @@ class UserRoleService:
 
     @classmethod
     def get_linked_account_id(cls, user_id: str) -> str | None:
-        """Return the linked account ID for an ACCOUNT_ADMIN user, or None."""
+        """Return the linked account ID for a company role user, or None."""
+        company_roles = (CareRole.RH_ENTREPRISE, CareRole.MEDECIN_ENTREPRISE)
+        for role in company_roles:
+            row = (
+                UserCareRole.select()
+                .where(UserCareRole.user == user_id, UserCareRole.role == role)
+                .first()
+            )
+            if row and row.linked_account_id:
+                return row.linked_account_id
+        # Backward compat: legacy ACCOUNT_ADMIN row
         row = (
             UserCareRole.select()
             .where(UserCareRole.user == user_id, UserCareRole.role == CareRole.ACCOUNT_ADMIN)

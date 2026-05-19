@@ -16,4 +16,4 @@ class Migration090(BrickMigration):
         cls, sql_migrator: SqlMigrator, from_version: Version, to_version: Version
     ) -> None:
         db = sql_migrator.migrator.database
-        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN lab_results LONGTEXT NULL DEFAULT NULL")
+        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN IF NOT EXISTS lab_results LONGTEXT NULL DEFAULT NULL")

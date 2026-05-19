@@ -13,9 +13,16 @@ from .exam_form_component import exam_form_dialog
 from .exam_form_state import ExamFormState
 from .patient_detail_state import (
     AppointmentRowDTO,
+    CampaignEnrollmentDTO,
     ExamRowDTO,
     PatientDetailDTO,
     PatientDetailState,
+)
+from .patient_dossier_state import (
+    PATIENT_DOC_TYPE_OPTIONS,
+    PatientDocRowDTO,
+    PatientDossierState,
+    PatientNoteRowDTO,
 )
 
 
@@ -213,6 +220,78 @@ def _appointment_row(appt: AppointmentRowDTO) -> rx.Component:
     )
 
 
+def _campaigns_section() -> rx.Component:
+    return rx.vstack(
+        rx.hstack(
+            rx.heading("Campagnes de santé", size="4"),
+            rx.spacer(),
+            width="100%",
+            align="center",
+        ),
+        rx.cond(
+            PatientDetailState.campaign_enrollments,
+            rx.table.root(
+                rx.table.header(
+                    rx.table.row(
+                        rx.table.column_header_cell("Campagne"),
+                        rx.table.column_header_cell("Compte"),
+                        rx.table.column_header_cell("Date"),
+                        rx.table.column_header_cell("Statut médical"),
+                        rx.table.column_header_cell(""),
+                    )
+                ),
+                rx.table.body(
+                    rx.foreach(PatientDetailState.campaign_enrollments, _campaign_enrollment_row),
+                ),
+                width="100%",
+                variant="surface",
+            ),
+            rx.center(
+                rx.text("Ce patient ne participe à aucune campagne.",
+                        color="var(--gray-8)", size="2"),
+                padding="2rem",
+                border="1px dashed var(--gray-5)",
+                border_radius="8px",
+                width="100%",
+            ),
+        ),
+        width="100%",
+        spacing="3",
+    )
+
+
+def _campaign_enrollment_row(e: CampaignEnrollmentDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(e.campaign_name, size="2", weight="medium")),
+        rx.table.cell(
+            rx.cond(
+                e.account_name != "",
+                rx.text(e.account_name, size="2"),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
+        rx.table.cell(
+            rx.cond(
+                e.start_date != "",
+                rx.text(e.start_date, size="2"),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
+        rx.table.cell(
+            rx.badge(e.status_label, color_scheme="blue", variant="soft", size="1"),
+        ),
+        rx.table.cell(
+            rx.button(
+                rx.icon("chevron-right", size=14),
+                variant="ghost",
+                size="1",
+                on_click=rx.redirect("/campaign/" + e.campaign_id),
+            )
+        ),
+        _hover={"background": "var(--gray-2)"},
+    )
+
+
 def _appointments_section() -> rx.Component:
     return rx.vstack(
         rx.hstack(
@@ -267,6 +346,244 @@ def _appointments_section() -> rx.Component:
     )
 
 
+# ── Document types dropdown options ──────────────────────────────────────────
+_DOC_TYPE_ITEMS = [rx.select.item(label, value=value) for value, label in PATIENT_DOC_TYPE_OPTIONS]
+
+
+def _doc_row(doc: PatientDocRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(
+            rx.hstack(
+                rx.icon("file", size=14, color="var(--gray-8)"),
+                rx.link(
+                    doc.original_name,
+                    href=rx.get_upload_url(doc.stored_filename),
+                    target="_blank",
+                    size="2",
+                ),
+                spacing="2",
+                align="center",
+            )
+        ),
+        rx.table.cell(rx.badge(doc.type_label, variant="soft", size="1")),
+        rx.table.cell(rx.text(doc.uploaded_by_name, size="2", color="var(--gray-9)")),
+        rx.table.cell(rx.text(doc.created_at, size="2", color="var(--gray-8)")),
+        rx.table.cell(rx.text(doc.file_size_kb, size="2", color="var(--gray-7)")),
+        rx.table.cell(
+            rx.icon_button(
+                rx.icon("trash-2", size=13),
+                color_scheme="red",
+                variant="ghost",
+                size="1",
+                on_click=PatientDossierState.delete_patient_doc(doc.id),
+            )
+        ),
+        _hover={"background": "var(--gray-2)"},
+    )
+
+
+def _documents_section() -> rx.Component:
+    """Document upload and list section for the patient dossier."""
+    return rx.vstack(
+        rx.hstack(
+            rx.icon("folder-open", size=18, color="var(--blue-9)"),
+            rx.heading("Documents du dossier", size="4"),
+            rx.spacer(),
+            width="100%",
+            align="center",
+        ),
+        # Upload bar
+        rx.hstack(
+            rx.select.root(
+                rx.select.trigger(size="2", width="200px"),
+                rx.select.content(
+                    *_DOC_TYPE_ITEMS,
+                ),
+                value=PatientDossierState.selected_doc_type,
+                on_change=PatientDossierState.set_selected_doc_type,
+                size="2",
+            ),
+            rx.upload(
+                rx.button(
+                    rx.cond(
+                        PatientDossierState.is_uploading_doc,
+                        rx.spinner(size="2"),
+                        rx.icon("upload", size=15),
+                    ),
+                    "Ajouter un document",
+                    size="2",
+                    variant="outline",
+                    disabled=PatientDossierState.is_uploading_doc,
+                ),
+                id="patient_doc_upload",
+                accept={
+                    "application/pdf": [".pdf"],
+                    "image/jpeg": [".jpg", ".jpeg"],
+                    "image/png": [".png"],
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+                },
+                multiple=True,
+                on_drop=PatientDossierState.handle_doc_upload(
+                    rx.upload_files(upload_id="patient_doc_upload")
+                ),
+            ),
+            spacing="3",
+            align="center",
+            width="100%",
+        ),
+        # Document list
+        rx.cond(
+            PatientDossierState.patient_docs,
+            rx.table.root(
+                rx.table.header(
+                    rx.table.row(
+                        rx.table.column_header_cell("Fichier"),
+                        rx.table.column_header_cell("Type"),
+                        rx.table.column_header_cell("Ajouté par"),
+                        rx.table.column_header_cell("Date"),
+                        rx.table.column_header_cell("Taille"),
+                        rx.table.column_header_cell(""),
+                    )
+                ),
+                rx.table.body(
+                    rx.foreach(PatientDossierState.patient_docs, _doc_row),
+                ),
+                width="100%",
+                variant="surface",
+            ),
+            rx.center(
+                rx.text(
+                    "Aucun document dans le dossier.",
+                    size="2", color="var(--gray-7)",
+                ),
+                padding="2rem",
+                border="1px dashed var(--gray-5)",
+                border_radius="8px",
+                width="100%",
+            ),
+        ),
+        width="100%",
+        spacing="3",
+    )
+
+
+def _note_card(note: PatientNoteRowDTO) -> rx.Component:
+    return rx.box(
+        rx.hstack(
+            rx.hstack(
+                rx.icon("user-round", size=14, color="var(--blue-9)"),
+                rx.text(note.author_name, size="2", weight="medium"),
+                spacing="1",
+                align="center",
+            ),
+            rx.spacer(),
+            rx.text(note.created_at, size="1", color="var(--gray-7)"),
+            rx.icon_button(
+                rx.icon("trash-2", size=12),
+                color_scheme="red",
+                variant="ghost",
+                size="1",
+                on_click=PatientDossierState.delete_patient_note(note.id),
+            ),
+            width="100%",
+            align="center",
+        ),
+        rx.separator(width="100%", my="2"),
+        rx.text(note.content, size="2", color="var(--gray-12)", white_space="pre-wrap"),
+        padding="0.75rem 1rem",
+        border="1px solid var(--gray-4)",
+        border_radius="8px",
+        background="var(--gray-1)",
+        width="100%",
+    )
+
+
+def _notes_section() -> rx.Component:
+    """Doctor notes section for the patient dossier."""
+    return rx.vstack(
+        rx.hstack(
+            rx.icon("notebook-pen", size=18, color="var(--green-9)"),
+            rx.heading("Notes médicales", size="4"),
+            rx.spacer(),
+            rx.button(
+                rx.icon("plus", size=15),
+                "Ajouter une note",
+                on_click=PatientDossierState.toggle_note_input,
+                size="2",
+                variant="outline",
+                color_scheme="green",
+            ),
+            width="100%",
+            align="center",
+        ),
+        # Inline note input (toggled)
+        rx.cond(
+            PatientDossierState.show_note_input,
+            rx.vstack(
+                rx.text_area(
+                    value=PatientDossierState.new_note_text,
+                    on_change=PatientDossierState.set_new_note_text,
+                    placeholder="Rédigez votre note médicale ici…",
+                    rows="5",
+                    width="100%",
+                    resize="vertical",
+                ),
+                rx.hstack(
+                    rx.button(
+                        rx.cond(
+                            PatientDossierState.is_saving_note,
+                            rx.spinner(size="2"),
+                            rx.icon("save", size=14),
+                        ),
+                        "Enregistrer la note",
+                        on_click=PatientDossierState.add_patient_note,
+                        disabled=PatientDossierState.is_saving_note,
+                        size="2",
+                        color_scheme="green",
+                    ),
+                    rx.button(
+                        "Annuler",
+                        on_click=PatientDossierState.toggle_note_input,
+                        variant="ghost",
+                        size="2",
+                    ),
+                    spacing="2",
+                ),
+                width="100%",
+                spacing="2",
+                padding="1rem",
+                border="1px solid var(--green-6)",
+                border_radius="8px",
+                background="var(--green-1)",
+            ),
+        ),
+        # Notes list
+        rx.cond(
+            PatientDossierState.patient_notes,
+            rx.vstack(
+                rx.foreach(PatientDossierState.patient_notes, _note_card),
+                width="100%",
+                spacing="2",
+            ),
+            rx.cond(
+                ~PatientDossierState.show_note_input,
+                rx.center(
+                    rx.text(
+                        "Aucune note médicale pour ce patient.",
+                        size="2", color="var(--gray-7)",
+                    ),
+                    padding="2rem",
+                    border="1px dashed var(--gray-5)",
+                    border_radius="8px",
+                    width="100%",
+                ),
+            ),
+        ),
+        width="100%",
+        spacing="3",
+    )
+
+
 def patient_detail_page() -> rx.Component:
     """Patient detail page."""
     return main_component(
@@ -296,8 +613,11 @@ def patient_detail_page() -> rx.Component:
                     PatientDetailState.patient,
                     rx.vstack(
                         _patient_card(PatientDetailState.patient),
+                        _campaigns_section(),
                         _appointments_section(),
                         _exams_section(),
+                        _documents_section(),
+                        _notes_section(),
                         width="100%",
                         spacing="6",
                     ),

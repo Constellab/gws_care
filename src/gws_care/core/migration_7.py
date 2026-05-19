@@ -17,12 +17,12 @@ class Migration080(BrickMigration):
     ) -> None:
         db = sql_migrator.migrator.database
 
-        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN reason_for_visit TEXT NULL DEFAULT NULL")
-        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN medical_history TEXT NULL DEFAULT NULL")
-        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN weight DOUBLE NULL DEFAULT NULL")
-        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN height DOUBLE NULL DEFAULT NULL")
-        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN bmi DOUBLE NULL DEFAULT NULL")
-        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN blood_pressure VARCHAR(50) NULL DEFAULT NULL")
-        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN heart_rate DOUBLE NULL DEFAULT NULL")
-        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN temperature DOUBLE NULL DEFAULT NULL")
-        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN conclusion TEXT NULL DEFAULT NULL")
+        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN IF NOT EXISTS reason_for_visit TEXT NULL DEFAULT NULL")
+        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN IF NOT EXISTS medical_history TEXT NULL DEFAULT NULL")
+        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN IF NOT EXISTS weight DOUBLE NULL DEFAULT NULL")
+        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN IF NOT EXISTS height DOUBLE NULL DEFAULT NULL")
+        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN IF NOT EXISTS bmi DOUBLE NULL DEFAULT NULL")
+        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN IF NOT EXISTS blood_pressure VARCHAR(50) NULL DEFAULT NULL")
+        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN IF NOT EXISTS heart_rate DOUBLE NULL DEFAULT NULL")
+        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN IF NOT EXISTS temperature DOUBLE NULL DEFAULT NULL")
+        db.execute_sql("ALTER TABLE gws_care_exam ADD COLUMN IF NOT EXISTS conclusion TEXT NULL DEFAULT NULL")

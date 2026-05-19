@@ -28,6 +28,11 @@ class AccountListState(ReflexMainState):
     sort_column: str = "name"
     sort_ascending: bool = True
 
+    # Confirm désactivation
+    confirm_deactivate_open: bool = False
+    confirm_deactivate_id: str = ""
+    confirm_deactivate_name: str = ""
+
     @rx.event
     async def on_load(self):
         """Load accounts when the page is mounted."""
@@ -62,11 +67,7 @@ class AccountListState(ReflexMainState):
 
     @rx.event
     async def deactivate_account(self, account_id: str):
-        """Mark an account as inactive.
-
-        :param account_id: DB id of the account to deactivate
-        :type account_id: str
-        """
+        """Mark an account as inactive."""
         try:
             with await self.authenticate_user():
                 from gws_care.account.account_service import AccountService
@@ -74,6 +75,26 @@ class AccountListState(ReflexMainState):
             await self._load_accounts()
         except Exception as e:
             self.error_message = f"Error deactivating account: {e}"
+
+    @rx.event
+    def open_confirm_deactivate(self, account_id: str, account_name: str):
+        self.confirm_deactivate_id = account_id
+        self.confirm_deactivate_name = account_name
+        self.confirm_deactivate_open = True
+
+    @rx.event
+    def dismiss_confirm_deactivate(self):
+        self.confirm_deactivate_open = False
+        self.confirm_deactivate_id = ""
+        self.confirm_deactivate_name = ""
+
+    @rx.event
+    async def confirmed_deactivate(self):
+        account_id = self.confirm_deactivate_id
+        self.confirm_deactivate_open = False
+        self.confirm_deactivate_id = ""
+        self.confirm_deactivate_name = ""
+        await self.deactivate_account(account_id)
 
     async def _load_accounts(self):
         """Internal: fetch accounts from DB."""

@@ -16,5 +16,5 @@ class Migration040(BrickMigration):
     def migrate(
         cls, sql_migrator: SqlMigrator, from_version: Version, to_version: Version
     ) -> None:
-        sql_migrator.create_table_if_not_exists(UserCareRole)
-        sql_migrator.migrate()
+        db = sql_migrator.migrator.database
+        db.create_tables([UserCareRole], safe=True)

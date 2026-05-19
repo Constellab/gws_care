@@ -30,6 +30,8 @@ class Patient(ModelWithUser):
     primary_physician_name: str = CharField(max_length=255, null=True)
     primary_physician_phone: str = CharField(max_length=50, null=True)
     billing_account: Account = ForeignKeyField(Account, null=True, backref="patients", on_delete="SET NULL")
+    # company_id: plain string FK — column managed via migration, not a Peewee FK constraint
+    company_id: str = CharField(max_length=36, null=True)
 
     def get_full_name(self) -> str:
         return f"{self.first_name} {self.last_name}"
@@ -65,6 +67,7 @@ class Patient(ModelWithUser):
             primary_physician_name=self.primary_physician_name,
             primary_physician_phone=self.primary_physician_phone,
             account_id=str(self.billing_account_id) if self.billing_account_id else None,
+            company_id=self.company_id or None,
         )
 
     class Meta:

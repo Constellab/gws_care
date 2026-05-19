@@ -48,7 +48,16 @@ class PatientService:
                 | Patient.first_name.contains(name)
             )
         if account_id:
-            query = query.where(Patient.billing_account == account_id)
+            # Include patients directly linked to account OR linked via company
+            from gws_care.company.company_service import CompanyService
+            company_id = CompanyService.get_company_id_for_account(account_id)
+            if company_id:
+                query = query.where(
+                    (Patient.billing_account == account_id)
+                    | (Patient.company_id == company_id)
+                )
+            else:
+                query = query.where(Patient.billing_account == account_id)
         if dob_from:
             from datetime import date as date_type
             query = query.where(Patient.date_of_birth >= date_type.fromisoformat(dob_from))
@@ -67,6 +76,15 @@ class PatientService:
         )
 
     @classmethod
+    def list_patients_for_company(cls, company_id: str) -> list[Patient]:
+        """Return all patients linked to the given company."""
+        return list(
+            Patient.select()
+            .where(Patient.company_id == company_id)
+            .order_by(Patient.last_name, Patient.first_name)
+        )
+
+    @classmethod
     def assign_account(cls, patient_id: str, account_id: str | None) -> Patient:
         """Assign (or remove) an account from a patient."""
         patient = cls.get_patient(patient_id)
@@ -77,6 +95,14 @@ class PatientService:
             patient.billing_account = account
         else:
             patient.billing_account = None
+        patient.save()
+        return patient
+
+    @classmethod
+    def assign_company(cls, patient_id: str, company_id: str | None) -> Patient:
+        """Assign (or remove) a company from a patient."""
+        patient = cls.get_patient(patient_id)
+        patient.company_id = company_id
         patient.save()
         return patient
 
@@ -136,3 +162,13 @@ class PatientService:
             number = f"PAT-{uuid.uuid4().hex[:8].upper()}"
             if not Patient.get_or_none(Patient.patient_number == number):
                 return number
+
+    @classmethod
+    def delete_patient(cls, patient_id: str) -> None:
+        """Delete a patient record. Also removes related CampaignPatient rows."""
+        from gws_core import NotFoundException
+        patient = Patient.get_or_none(Patient.id == patient_id)
+        if patient is None:
+            raise NotFoundException(f"Patient '{patient_id}' not found")
+        # CampaignPatient rows are CASCADE-deleted by the DB FK constraint.
+        patient.delete_instance()

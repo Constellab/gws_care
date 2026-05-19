@@ -1,27 +1,94 @@
-"""Care-specific user role enum."""
+"""Care-specific user role enum — V2 extended roles."""
 
 from enum import Enum
 
 
 class CareRole(str, Enum):
-    """Application-level roles for gws_care.
+    """Application-level roles for gws_care (V2).
 
-    These roles are independent of gws_core's UserGroup (ADMIN/USER).
+    Roles are independent of gws_core's UserGroup.
     A user can hold multiple CareRoles simultaneously.
+
+    PSC internal roles
+    ------------------
+    SUPER_ADMIN_PSC  : Full access — user management, configuration, all data
+    ADMIN_PSC        : Operational management of PSC, can validate campaigns
+    OPERATEUR_TERRAIN: Field operator — campaigns, QR codes, presence, samples
+    OPERATEUR_LABO   : Lab operator — result entry and lab validation
+    MEDECIN_PSC      : PSC doctor — interpretation and medical validation
+
+    External / company roles
+    ------------------------
+    MEDECIN_ENTREPRISE: Company doctor — sees validated results for their company
+    RH_ENTREPRISE     : HR — administrative tracking only (no medical data)
+    PATIENT           : Patient/employee — own appointments and published results
+
+    System
+    ------
+    SYSTEME          : Automated notifications, status transitions, audit
+
+    Backward-compatible aliases
+    ---------------------------
+    ADMIN        → SUPER_ADMIN_PSC
+    DOCTOR       → MEDECIN_PSC
+    OPERATOR     → OPERATEUR_TERRAIN
+    ACCOUNT_ADMIN→ RH_ENTREPRISE
     """
 
-    ADMIN = "ADMIN"                  # Full access: user management, all data
-    DOCTOR = "DOCTOR"                # Can enter/validate exam interpretations
-    OPERATOR = "OPERATOR"            # Scheduling and patient/account management
-    ACCOUNT_ADMIN = "ACCOUNT_ADMIN"  # Administrator for a single account (company)
-    PATIENT = "PATIENT"              # Linked to a single patient record
+    # PSC staff
+    SUPER_ADMIN_PSC = "SUPER_ADMIN_PSC"
+    DIRECTEUR_PSC = "DIRECTEUR_PSC"
+    ADMIN_PSC = "ADMIN_PSC"
+    OPERATEUR_TERRAIN = "OPERATEUR_TERRAIN"
+    OPERATEUR_LABO = "OPERATEUR_LABO"
+    MEDECIN_PSC = "MEDECIN_PSC"
+
+    # Company / external
+    MEDECIN_ENTREPRISE = "MEDECIN_ENTREPRISE"
+    RH_ENTREPRISE = "RH_ENTREPRISE"
+    PATIENT = "PATIENT"
+
+    # System
+    SYSTEME = "SYSTEME"
+
+    # ── Backward-compatible aliases kept for migration safety ─────────────────
+    ADMIN = "SUPER_ADMIN_PSC"
+    DOCTOR = "MEDECIN_PSC"
+    OPERATOR = "OPERATEUR_TERRAIN"
+    ACCOUNT_ADMIN = "RH_ENTREPRISE"
 
     def get_label(self) -> str:
         labels = {
-            CareRole.ADMIN: "Administrator",
-            CareRole.DOCTOR: "Doctor",
-            CareRole.OPERATOR: "Operator",
-            CareRole.ACCOUNT_ADMIN: "Account Administrator",
-            CareRole.PATIENT: "Patient",
+            CareRole.SUPER_ADMIN_PSC: "Super Admin PSC",
+            CareRole.DIRECTEUR_PSC: "Directeur PSC",
+            CareRole.ADMIN_PSC: "Admin PSC",
+            CareRole.OPERATEUR_TERRAIN: "Opérateur terrain PSC",
+            CareRole.OPERATEUR_LABO: "Opérateur labo PSC",
+            CareRole.MEDECIN_PSC: "Médecin PSC",
+            CareRole.MEDECIN_ENTREPRISE: "Médecin entreprise",
+            CareRole.RH_ENTREPRISE: "RH entreprise",
+            CareRole.PATIENT: "Patient / Employé",
+            CareRole.SYSTEME: "Système",
         }
-        return labels[self]
+        return labels.get(self, self.value)
+
+    def is_psc_staff(self) -> bool:
+        """True for PSC internal roles that have broad data access."""
+        return self in (
+            CareRole.SUPER_ADMIN_PSC,
+            CareRole.DIRECTEUR_PSC,
+            CareRole.ADMIN_PSC,
+            CareRole.OPERATEUR_TERRAIN,
+            CareRole.OPERATEUR_LABO,
+            CareRole.MEDECIN_PSC,
+        )
+
+    def can_see_medical_data(self) -> bool:
+        """True for roles authorised to see individual medical results."""
+        return self in (
+            CareRole.SUPER_ADMIN_PSC,
+            CareRole.ADMIN_PSC,
+            CareRole.OPERATEUR_LABO,
+            CareRole.MEDECIN_PSC,
+            CareRole.MEDECIN_ENTREPRISE,
+        )

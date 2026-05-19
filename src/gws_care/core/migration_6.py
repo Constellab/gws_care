@@ -17,21 +17,23 @@ class Migration070(BrickMigration):
     ) -> None:
         db = sql_migrator.migrator.database
 
-        # Rename table
-        db.execute_sql("RENAME TABLE gws_care_company TO gws_care_account")
+        # Rename table only if old name exists (fresh installs skip this)
+        row = db.execute_sql("SHOW TABLES LIKE 'gws_care_company'").fetchone()
+        if row:
+            db.execute_sql("RENAME TABLE gws_care_company TO gws_care_account")
 
         # Add billing_account_id to appointment (copy from company_id)
         db.execute_sql(
-            "ALTER TABLE gws_care_appointment ADD COLUMN billing_account_id VARCHAR(36) NULL DEFAULT NULL"
+            "ALTER TABLE gws_care_appointment ADD COLUMN IF NOT EXISTS billing_account_id VARCHAR(36) NULL DEFAULT NULL"
         )
         db.execute_sql(
-            "UPDATE gws_care_appointment SET billing_account_id = company_id WHERE company_id IS NOT NULL"
+            "UPDATE gws_care_appointment SET billing_account_id = company_id WHERE company_id IS NOT NULL AND billing_account_id IS NULL"
         )
 
         # Add billing_account_id to exam (copy from company_id)
         db.execute_sql(
-            "ALTER TABLE gws_care_exam ADD COLUMN billing_account_id VARCHAR(36) NULL DEFAULT NULL"
+            "ALTER TABLE gws_care_exam ADD COLUMN IF NOT EXISTS billing_account_id VARCHAR(36) NULL DEFAULT NULL"
         )
         db.execute_sql(
-            "UPDATE gws_care_exam SET billing_account_id = company_id WHERE company_id IS NOT NULL"
+            "UPDATE gws_care_exam SET billing_account_id = company_id WHERE company_id IS NOT NULL AND billing_account_id IS NULL"
         )

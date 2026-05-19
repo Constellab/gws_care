@@ -1,4 +1,4 @@
-"""Account detail page — shows account info and its patients."""
+"""Account detail page — shows account info, its patients and its campaigns."""
 
 import reflex as rx
 from gws_reflex_main import main_component
@@ -11,6 +11,8 @@ from .account_detail_state import (
     AccountDetailDTO,
     AccountDetailState,
     AccountPatientRowDTO,
+    CampaignRowDTO,
+    DoctorOptionDTO,
 )
 
 
@@ -245,6 +247,253 @@ def _patients_section() -> rx.Component:
     )
 
 
+def _campaign_row(c: CampaignRowDTO) -> rx.Component:
+    color = c.status_color
+    return rx.table.row(
+        rx.table.cell(rx.text(c.name, size="2", weight="medium")),
+        rx.table.cell(
+            rx.badge(c.status_label, color_scheme=color, variant="soft", size="1")
+        ),
+        rx.table.cell(rx.text(c.patient_count, size="2")),
+        rx.table.cell(rx.text(c.start_date, size="2", color="var(--gray-9)")),
+        rx.table.cell(rx.text(c.end_date, size="2", color="var(--gray-9)")),
+        rx.table.cell(rx.text(c.location, size="2", color="var(--gray-9)")),
+        rx.table.cell(
+            rx.icon_button(
+                rx.icon("chevron-right", size=14),
+                variant="ghost",
+                size="1",
+                on_click=AccountDetailState.go_to_campaign(c.id),
+            )
+        ),
+        style={":hover": {"background_color": "var(--gray-2)"},
+               "cursor": "pointer"},
+        on_click=AccountDetailState.go_to_campaign(c.id),
+    )
+
+
+def _campaign_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Nouvelle campagne"),
+            rx.dialog.description(
+                "Créer une campagne médicale pour ce compte.",
+                size="2",
+                margin_bottom="1rem",
+            ),
+            rx.vstack(
+                rx.cond(
+                    AccountDetailState.campaign_error != "",
+                    rx.callout(
+                        AccountDetailState.campaign_error,
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
+                    ),
+                    rx.fragment(),
+                ),
+                rx.vstack(
+                    rx.text("Nom *", size="2", weight="medium"),
+                    rx.input(
+                        placeholder="Ex: Bilan santé annuel 2026",
+                        value=AccountDetailState.new_campaign_name,
+                        on_change=AccountDetailState.set_new_campaign_name,
+                        width="100%",
+                    ),
+                    spacing="1",
+                    width="100%",
+                ),
+                rx.grid(
+                    rx.vstack(
+                        rx.text("Date de début", size="2", weight="medium"),
+                        rx.input(
+                            type="date",
+                            value=AccountDetailState.new_campaign_start,
+                            on_change=AccountDetailState.set_new_campaign_start,
+                            width="100%",
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text("Date de fin", size="2", weight="medium"),
+                        rx.input(
+                            type="date",
+                            value=AccountDetailState.new_campaign_end,
+                            on_change=AccountDetailState.set_new_campaign_end,
+                            width="100%",
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                    columns="2",
+                    spacing="3",
+                    width="100%",
+                ),
+                rx.vstack(
+                    rx.text("Lieu", size="2", weight="medium"),
+                    rx.input(
+                        placeholder="Ex: Salle de réunion A",
+                        value=AccountDetailState.new_campaign_location,
+                        on_change=AccountDetailState.set_new_campaign_location,
+                        width="100%",
+                    ),
+                    spacing="1",
+                    width="100%",
+                ),
+                # ── Médecins ────────────────────────────────────────────
+                rx.grid(
+                    rx.vstack(
+                        rx.hstack(
+                            rx.icon("stethoscope", size=13, color="var(--blue-9)"),
+                            rx.text("Médecin PSC", size="2", weight="medium"),
+                            spacing="1", align="center",
+                        ),
+                        rx.cond(
+                            AccountDetailState.psc_doctor_options.length() > 0,
+                            rx.select.root(
+                                rx.select.trigger(
+                                    placeholder="Sélectionner un médecin PSC",
+                                    width="100%",
+                                ),
+                                rx.select.content(
+                                    rx.select.item("— Aucun —", value="__none__"),
+                                    rx.foreach(
+                                        AccountDetailState.psc_doctor_options,
+                                        lambda d: rx.select.item(d.label, value=d.id),
+                                    ),
+                                ),
+                                value=AccountDetailState.new_campaign_psc_doctor_id,
+                                on_change=AccountDetailState.set_new_campaign_psc_doctor,
+                                width="100%",
+                            ),
+                            rx.callout(
+                                "Aucun médecin PSC trouvé. Créez un utilisateur avec le rôle Médecin PSC dans l'administration.",
+                                icon="info",
+                                color_scheme="blue",
+                                size="1",
+                            ),
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                    rx.vstack(
+                        rx.hstack(
+                            rx.icon("briefcase-medical", size=13, color="var(--indigo-9)"),
+                            rx.text("Médecin Entreprise", size="2", weight="medium"),
+                            spacing="1", align="center",
+                        ),
+                        rx.cond(
+                            AccountDetailState.enterprise_doctor_options.length() > 0,
+                            rx.select.root(
+                                rx.select.trigger(
+                                    placeholder="Sélectionner un méd. entreprise",
+                                    width="100%",
+                                ),
+                                rx.select.content(
+                                    rx.select.item("— Aucun —", value="__none__"),
+                                    rx.foreach(
+                                        AccountDetailState.enterprise_doctor_options,
+                                        lambda d: rx.select.item(d.label, value=d.id),
+                                    ),
+                                ),
+                                value=AccountDetailState.new_campaign_enterprise_doctor_id,
+                                on_change=AccountDetailState.set_new_campaign_enterprise_doctor,
+                                width="100%",
+                            ),
+                            rx.callout(
+                                "Aucun médecin entreprise trouvé. Créez un utilisateur avec ce rôle.",
+                                icon="info",
+                                color_scheme="amber",
+                                size="1",
+                            ),
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                    columns="2",
+                    spacing="3",
+                    width="100%",
+                ),
+                rx.hstack(
+                    rx.button(
+                        "Annuler",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=AccountDetailState.close_campaign_dialog,
+                        disabled=AccountDetailState.is_creating_campaign,
+                    ),
+                    rx.button(
+                        rx.cond(
+                            AccountDetailState.is_creating_campaign,
+                            rx.spinner(size="2"),
+                            rx.text("Créer la campagne"),
+                        ),
+                        on_click=AccountDetailState.create_campaign,
+                        disabled=(AccountDetailState.new_campaign_name == "")
+                        | AccountDetailState.is_creating_campaign,
+                    ),
+                    spacing="3",
+                    justify="end",
+                    width="100%",
+                ),
+                spacing="4",
+                width="100%",
+            ),
+            on_interact_outside=AccountDetailState.close_campaign_dialog,
+            on_escape_key_down=AccountDetailState.close_campaign_dialog,
+            max_width="520px",
+        ),
+        open=AccountDetailState.campaign_dialog_open,
+    )
+
+
+def _campaigns_section() -> rx.Component:
+    return rx.vstack(
+        rx.hstack(
+            rx.heading("Campagnes", size="4"),
+            rx.spacer(),
+            rx.button(
+                rx.icon("plus", size=14),
+                "Nouvelle campagne",
+                size="2",
+                on_click=AccountDetailState.open_campaign_dialog,
+            ),
+            width="100%",
+            align="center",
+        ),
+        rx.separator(width="100%"),
+        rx.cond(
+            AccountDetailState.campaigns.length() > 0,
+            rx.table.root(
+                rx.table.header(
+                    rx.table.row(
+                        rx.table.column_header_cell("Nom"),
+                        rx.table.column_header_cell("Statut"),
+                        rx.table.column_header_cell("Patients"),
+                        rx.table.column_header_cell("Début"),
+                        rx.table.column_header_cell("Fin"),
+                        rx.table.column_header_cell("Lieu"),
+                        rx.table.column_header_cell(""),
+                    )
+                ),
+                rx.table.body(
+                    rx.foreach(AccountDetailState.campaigns, _campaign_row)
+                ),
+                width="100%",
+                variant="surface",
+                size="1",
+            ),
+            rx.center(
+                rx.text("Aucune campagne pour ce compte.", size="2", color="var(--gray-9)"),
+                padding="2rem",
+            ),
+        ),
+        width="100%",
+        spacing="3",
+    )
+
+
 def account_detail_page() -> rx.Component:
     """Account detail page."""
     return main_component(
@@ -271,6 +520,7 @@ def account_detail_page() -> rx.Component:
                     AccountDetailState.account,
                     rx.vstack(
                         _account_info_card(AccountDetailState.account),
+                        _campaigns_section(),
                         _patients_section(),
                         width="100%",
                         spacing="5",
@@ -282,6 +532,7 @@ def account_detail_page() -> rx.Component:
                 ),
             ),
             _assign_patient_dialog(),
+            _campaign_dialog(),
             patient_form_dialog(),
         )
     )

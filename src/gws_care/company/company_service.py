@@ -54,3 +54,22 @@ class CompanyService:
         company.phone = dto.phone
         company.email = dto.email
         company.contact_name = dto.contact_name
+
+    @classmethod
+    def get_company_id_for_account(cls, account_id: str) -> str | None:
+        """Find the company linked to an account via its patients.
+
+        Looks for a patient already linked to this account that has a company_id set,
+        and returns that company_id. Returns None if no link is found.
+        """
+        from gws_care.patient.patient import Patient
+        p = (
+            Patient.select(Patient.company_id)
+            .where(
+                (Patient.billing_account == account_id)
+                & Patient.company_id.is_null(False)
+                & (Patient.company_id != "")
+            )
+            .first()
+        )
+        return p.company_id if p else None

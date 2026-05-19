@@ -18,19 +18,19 @@ class UserRoleRowDTO(BaseModel):
 
     @property
     def is_admin(self) -> bool:
-        return "ADMIN" in self.roles
+        return "SUPER_ADMIN_PSC" in self.roles or "ADMIN_PSC" in self.roles
 
     @property
     def is_doctor(self) -> bool:
-        return "DOCTOR" in self.roles
+        return "MEDECIN_PSC" in self.roles
 
     @property
     def is_operator(self) -> bool:
-        return "OPERATOR" in self.roles
+        return "OPERATEUR_TERRAIN" in self.roles or "OPERATEUR_LABO" in self.roles
 
     @property
     def is_account_admin(self) -> bool:
-        return "ACCOUNT_ADMIN" in self.roles
+        return "RH_ENTREPRISE" in self.roles or "MEDECIN_ENTREPRISE" in self.roles
 
     @property
     def is_patient_user(self) -> bool:
@@ -42,10 +42,22 @@ class EntityOption(BaseModel):
     label: str
 
 
+class StaffContactDTO(BaseModel):
+    """One staff member shown in the Annuaire directory tab."""
+
+    id: str
+    full_name: str
+    email: str
+    role: str
+    role_label: str
+    linked_account_name: str = ""
+
+
 class AdminState(RoleState):
     """State for the /admin page."""
 
     users: list[UserRoleRowDTO] = []
+    staff_contacts: list[StaffContactDTO] = []
     is_loading: bool = False
     error_message: str = ""
     success_message: str = ""
@@ -63,6 +75,7 @@ class AdminState(RoleState):
         await self._load_roles()
         await self._load_users()
         await self._load_entity_options()
+        await self._load_staff_contacts()
 
     @rx.event
     async def toggle_role(self, user_id: str, role: str):
@@ -89,20 +102,24 @@ class AdminState(RoleState):
 
     @rx.event
     async def set_account_link(self, user_id: str, account_id: str):
-        """Save the linked account for an ACCOUNT_ADMIN user."""
+        """Save the linked account for a RH_ENTREPRISE or MEDECIN_ENTREPRISE user."""
         self.error_message = ""
         self.success_message = ""
         try:
             with await self.authenticate_user():
                 from gws_care.role.care_role import CareRole
                 from gws_care.role.user_role_service import UserRoleService
-                UserRoleService.assign_role_with_link(
-                    user_id, CareRole.ACCOUNT_ADMIN, linked_account_id=account_id or None
-                )
-                self.success_message = "Account link saved."
+                roles = UserRoleService.get_roles_for_user(user_id)
+                # Link for whichever company role the user has
+                for role in (CareRole.RH_ENTREPRISE, CareRole.MEDECIN_ENTREPRISE):
+                    if role in roles:
+                        UserRoleService.assign_role_with_link(
+                            user_id, role, linked_account_id=account_id or None
+                        )
+                self.success_message = "Compte lié enregistré."
             await self._load_users()
         except Exception as e:
-            self.error_message = f"Error saving account link: {e}"
+            self.error_message = f"Erreur lors de la liaison compte : {e}"
 
     @rx.event
     async def set_patient_link(self, user_id: str, patient_id: str):
@@ -165,5 +182,56 @@ class AdminState(RoleState):
                     )
                     for p in patients
                 ]
+        except Exception:
+            pass
+
+    async def _load_staff_contacts(self):
+        """Load all staff members with medical/HR roles, grouped for the Annuaire tab."""
+        try:
+            with await self.authenticate_user():
+                from gws_care.role.care_role import CareRole
+                from gws_care.role.user_role_service import UserRoleService
+                from gws_care.account.account_service import AccountService
+                from gws_care.user.user import User
+                from gws_care.role.user_care_role import UserCareRole
+
+                _role_labels = {
+                    CareRole.MEDECIN_PSC: "Médecin PSC",
+                    CareRole.MEDECIN_ENTREPRISE: "Médecin Entreprise",
+                    CareRole.RH_ENTREPRISE: "RH Entreprise",
+                }
+
+                contacts: list[StaffContactDTO] = []
+                # Get all UserCareRole rows for the staff roles we care about
+                rows = list(
+                    UserCareRole.select(UserCareRole, User)
+                    .join(User)
+                    .where(UserCareRole.role.in_(list(_role_labels.keys())))
+                    .order_by(User.last_name)
+                )
+
+                for row in rows:
+                    user = row.user
+                    role_label = _role_labels.get(row.role, row.role)
+                    acct_name = ""
+                    if row.linked_account_id:
+                        try:
+                            a = AccountService.get_account(row.linked_account_id)
+                            acct_name = a.name
+                        except Exception:
+                            pass
+                    # role may be a CareRole enum or a plain string depending on Peewee version
+                    raw_role = row.role
+                    role_key = raw_role if isinstance(raw_role, CareRole) else CareRole(raw_role)
+                    role_label = _role_labels.get(role_key, str(raw_role))
+                    contacts.append(StaffContactDTO(
+                        id=str(user.id),
+                        full_name=f"{user.first_name} {user.last_name}",
+                        email=user.email,
+                        role=role_key.value,
+                        role_label=role_label,
+                        linked_account_name=acct_name,
+                    ))
+                self.staff_contacts = contacts
         except Exception:
             pass

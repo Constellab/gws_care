@@ -146,6 +146,60 @@ def _filter_bar() -> rx.Component:
     )
 
 
+def _confirm_delete_dialog() -> rx.Component:
+    """Double-confirmation dialog before deleting a patient."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.vstack(
+                rx.hstack(
+                    rx.icon("trash-2", size=20, color="var(--red-9)"),
+                    rx.dialog.title("Supprimer le patient"),
+                    spacing="2",
+                    align="center",
+                ),
+                rx.callout(
+                    rx.vstack(
+                        rx.text.strong("Cette action est irréversible."),
+                        rx.text(
+                            "Le patient ",
+                            rx.text.strong(PatientListState.confirm_delete_patient_name),
+                            " sera définitivement supprimé.",
+                        ),
+                        spacing="1",
+                    ),
+                    icon="triangle-alert",
+                    color_scheme="red",
+                    variant="soft",
+                ),
+                rx.hstack(
+                    rx.dialog.close(
+                        rx.button(
+                            "Annuler",
+                            variant="outline",
+                            on_click=PatientListState.dismiss_confirm_delete,
+                        ),
+                    ),
+                    rx.button(
+                        rx.icon("trash-2", size=14),
+                        "Supprimer définitivement",
+                        color_scheme="red",
+                        on_click=PatientListState.confirmed_delete_patient,
+                        loading=PatientListState.is_deleting,
+                    ),
+                    justify="end",
+                    spacing="3",
+                    width="100%",
+                ),
+                spacing="4",
+                width="100%",
+            ),
+            max_width="420px",
+        ),
+        open=PatientListState.confirm_delete_patient_open,
+        on_open_change=lambda _: PatientListState.dismiss_confirm_delete(),
+    )
+
+
 def patient_list_page() -> rx.Component:
     """Patient list page."""
     return main_component(
@@ -163,6 +217,7 @@ def patient_list_page() -> rx.Component:
                 align="center",
             ),
             patient_form_dialog(),
+            _confirm_delete_dialog(),
             _filter_bar(),
             rx.cond(
                 PatientListState.error_message != "",

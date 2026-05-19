@@ -7,6 +7,7 @@ from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .notifications_state import (
     AccountOption,
+    CampaignOption,
     NotificationLogRow,
     NotificationsState,
     PatientOption,
@@ -158,6 +159,54 @@ def _account_option(a: AccountOption) -> rx.Component:
     return rx.select.item(a.name, value=a.id)
 
 
+def _campaign_option(c: CampaignOption) -> rx.Component:
+    return rx.select.item(c.name, value=c.id)
+
+
+def _channel_checkbox(label: str, value: str, color: str) -> rx.Component:
+    """Checkbox pour sélectionner un canal d'envoi."""
+    return rx.box(
+        rx.hstack(
+            rx.checkbox(
+                checked=NotificationsState.compose_channels.contains(value),
+                on_change=lambda _: NotificationsState.toggle_compose_channel(value),
+                size="2",
+            ),
+            rx.badge(label, color_scheme=color, variant="soft", size="2"),
+            spacing="2",
+            align="center",
+            cursor="pointer",
+            on_click=NotificationsState.toggle_compose_channel(value),
+        ),
+        padding="0.4rem 0.75rem",
+        border="1px solid var(--gray-4)",
+        border_radius="var(--radius-2)",
+        _hover={"background": "var(--gray-2)"},
+    )
+
+
+def _patient_multiselect_row(p: PatientOption) -> rx.Component:
+    """Ligne patient avec checkbox pour la multi-sélection."""
+    is_selected = NotificationsState.compose_patient_ids.contains(p.id)
+    return rx.hstack(
+        rx.checkbox(
+            checked=is_selected,
+            on_change=lambda _: NotificationsState.toggle_compose_patient(p.id),
+            size="2",
+        ),
+        rx.text(p.display, size="2"),
+        spacing="2",
+        align="center",
+        width="100%",
+        padding="0.3rem 0.5rem",
+        border_radius="var(--radius-1)",
+        background=rx.cond(is_selected, "var(--accent-3)", "transparent"),
+        _hover={"background": rx.cond(is_selected, "var(--accent-4)", "var(--gray-2)")},
+        cursor="pointer",
+        on_click=NotificationsState.toggle_compose_patient(p.id),
+    )
+
+
 def _compose_tab() -> rx.Component:
     return rx.vstack(
         rx.card(
@@ -182,36 +231,86 @@ def _compose_tab() -> rx.Component:
                     spacing="3",
                     align="center",
                 ),
-                # Channel selector
-                rx.hstack(
+                # ── Multi-canal : checkboxes ──────────────────────────────
+                rx.vstack(
                     rx.text(LanguageState.tr["channel_label"], size="2", weight="medium"),
-                    rx.segmented_control.root(
-                        rx.segmented_control.item(LanguageState.tr["channel_email"], value="EMAIL"),
-                        rx.segmented_control.item(LanguageState.tr["channel_sms"], value="SMS"),
-                        rx.segmented_control.item(LanguageState.tr["channel_whatsapp"], value="WHATSAPP"),
-                        value=NotificationsState.compose_channel,
-                        on_change=NotificationsState.set_compose_channel,
-                        size="2",
+                    rx.hstack(
+                        _channel_checkbox(LanguageState.tr["channel_email"], "EMAIL", "blue"),
+                        _channel_checkbox(LanguageState.tr["channel_sms"], "SMS", "orange"),
+                        _channel_checkbox(LanguageState.tr["channel_whatsapp"], "WHATSAPP", "green"),
+                        spacing="2",
+                        flex_wrap="wrap",
                     ),
-                    spacing="3",
-                    align="center",
+                    rx.text(
+                        "Vous pouvez sélectionner plusieurs canaux simultanément.",
+                        size="1",
+                        color="var(--gray-9)",
+                    ),
+                    spacing="2",
+                    width="100%",
                 ),
-                # Recipient selector
+                # ── Destinataires ─────────────────────────────────────────
                 rx.cond(
                     NotificationsState.compose_mode == "patient",
                     rx.vstack(
-                        rx.text(LanguageState.tr["send_to_patient"], size="2", weight="medium"),
-                        rx.select.root(
-                            rx.select.trigger(placeholder=LanguageState.tr["select_patient_notif"]),
-                            rx.select.content(
-                                rx.foreach(NotificationsState.patients, _patient_option)
+                        rx.hstack(
+                            rx.text("Patients destinataires", size="2", weight="medium"),
+                            rx.cond(
+                                NotificationsState.compose_patient_ids.length() > 0,
+                                rx.badge(
+                                    NotificationsState.compose_patient_ids.length(),
+                                    color_scheme="blue",
+                                    size="1",
+                                ),
                             ),
-                            value=NotificationsState.compose_patient_id,
-                            on_change=NotificationsState.set_compose_patient,
-                            size="2",
+                            spacing="2",
+                            align="center",
+                        ),
+                        # ── Filtres ────────────────────────────────────────
+                        rx.hstack(
+                            rx.input(
+                                placeholder="Chercher par nom ou numéro…",
+                                value=NotificationsState.compose_patient_search,
+                                on_change=NotificationsState.set_compose_patient_search,
+                                size="2",
+                                width="100%",
+                            ),
+                            rx.select.root(
+                                rx.select.trigger(placeholder="Filtrer par campagne"),
+                                rx.select.content(
+                                    rx.select.item("— Toutes les campagnes —", value="__all__"),
+                                    rx.foreach(
+                                        NotificationsState.campaigns,
+                                        _campaign_option,
+                                    ),
+                                ),
+                                value=NotificationsState.compose_campaign_filter_id,
+                                on_change=NotificationsState.set_compose_campaign_filter,
+                                size="2",
+                                width="180px",
+                            ),
+                            spacing="2",
+                            align="center",
                             width="100%",
                         ),
-                        spacing="1",
+                        rx.box(
+                            rx.foreach(
+                                NotificationsState.patients_filtered,
+                                _patient_multiselect_row,
+                            ),
+                            max_height="220px",
+                            overflow_y="auto",
+                            border="1px solid var(--gray-4)",
+                            border_radius="var(--radius-2)",
+                            padding="0.25rem",
+                            width="100%",
+                        ),
+                        rx.text(
+                            "Cliquez sur les patients pour les sélectionner / désélectionner.",
+                            size="1",
+                            color="var(--gray-9)",
+                        ),
+                        spacing="2",
                         width="100%",
                     ),
                     rx.vstack(
@@ -235,9 +334,9 @@ def _compose_tab() -> rx.Component:
                         width="100%",
                     ),
                 ),
-                # Subject (email only)
+                # Subject (si EMAIL sélectionné)
                 rx.cond(
-                    NotificationsState.compose_channel == "EMAIL",
+                    NotificationsState.compose_channels.contains("EMAIL"),
                     rx.vstack(
                         rx.text(LanguageState.tr["subject_label"], size="2", weight="medium"),
                         rx.input(

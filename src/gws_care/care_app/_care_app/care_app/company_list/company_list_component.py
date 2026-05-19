@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .company_form_component import company_form_dialog
 from .company_form_state import CompanyFormState
@@ -27,8 +28,8 @@ def _company_row(company: CompanyRowDTO) -> rx.Component:
         rx.table.cell(
             rx.cond(
                 company.is_active,
-                rx.badge("Active", color_scheme="green", variant="soft", size="1"),
-                rx.badge("Inactive", color_scheme="gray", variant="soft", size="1"),
+                rx.badge(LanguageState.tr["active_badge"], color_scheme="green", variant="soft", size="1"),
+                rx.badge(LanguageState.tr["inactive_badge"], color_scheme="gray", variant="soft", size="1"),
             )
         ),
         rx.table.cell(
@@ -40,7 +41,7 @@ def _company_row(company: CompanyRowDTO) -> rx.Component:
                         size="1",
                         on_click=lambda: CompanyListState.go_to_company(company.id),
                     ),
-                    content="View company",
+                    content=LanguageState.tr["tooltip_view_company"],
                 ),
                 rx.tooltip(
                     rx.icon_button(
@@ -49,7 +50,7 @@ def _company_row(company: CompanyRowDTO) -> rx.Component:
                         size="1",
                         on_click=lambda: CompanyFormState.open_edit_dialog(company.id),
                     ),
-                    content="Edit company",
+                    content=LanguageState.tr["tooltip_edit_company"],
                 ),
                 rx.cond(
                     company.is_active,
@@ -59,9 +60,9 @@ def _company_row(company: CompanyRowDTO) -> rx.Component:
                             variant="ghost",
                             size="1",
                             color_scheme="red",
-                            on_click=lambda: CompanyListState.deactivate_company(company.id),
+                            on_click=CompanyListState.open_confirm_deactivate(company.id, company.name),
                         ),
-                        content="Deactivate company",
+                        content=LanguageState.tr["tooltip_deactivate_company"],
                     ),
                 ),
                 spacing="1",
@@ -77,11 +78,11 @@ def company_list_page() -> rx.Component:
     return main_component(
         page_layout(
             rx.hstack(
-                rx.heading("Companies", size="6"),
+                rx.heading(LanguageState.tr["companies_page_title"], size="6"),
                 rx.spacer(),
                 rx.button(
                     rx.icon("plus", size=16),
-                    "New Company",
+                    LanguageState.tr["new_company_btn"],
                     on_click=CompanyFormState.open_create_dialog,
                     size="2",
                 ),
@@ -89,9 +90,43 @@ def company_list_page() -> rx.Component:
                 align="center",
             ),
             company_form_dialog(),
+            # ── Confirm désactivation entreprise ──────────────────────────────
+            rx.dialog.root(
+                rx.dialog.content(
+                    rx.dialog.title(
+                        rx.hstack(rx.icon("ban", size=18, color="var(--red-9)"),
+                                  rx.text(LanguageState.tr["company_deactivate_title"]), spacing="2"),
+                    ),
+                    rx.dialog.description(
+                        rx.vstack(
+                            rx.text(
+                                LanguageState.tr["company_deactivate_confirm_prefix"],
+                                rx.text.strong(CompanyListState.confirm_deactivate_name),
+                                LanguageState.tr["company_deactivate_confirm_suffix"],
+                                size="2",
+                            ),
+                            rx.text(LanguageState.tr["company_deactivate_employees_note"],
+                                    size="2", color="var(--gray-9)"),
+                            spacing="2",
+                        ),
+                    ),
+                    rx.hstack(
+                        rx.dialog.close(
+                            rx.button(LanguageState.tr["cancel_btn"], variant="soft", color_scheme="gray",
+                                      on_click=CompanyListState.dismiss_confirm_deactivate),
+                        ),
+                        rx.button(LanguageState.tr["company_deactivate_btn"], color_scheme="red",
+                                  on_click=CompanyListState.confirmed_deactivate),
+                        justify="end", spacing="2", margin_top="1rem", width="100%",
+                    ),
+                    max_width="440px",
+                ),
+                open=CompanyListState.confirm_deactivate_open,
+                on_open_change=lambda _: CompanyListState.dismiss_confirm_deactivate(),
+            ),
             rx.hstack(
                 rx.input(
-                    placeholder="Search by name…",
+                    placeholder=LanguageState.tr["search_by_name"],
                     value=CompanyListState.search_name,
                     on_change=CompanyListState.handle_name_change,
                     min_width="260px",
@@ -99,7 +134,7 @@ def company_list_page() -> rx.Component:
                 ),
                 rx.button(
                     rx.icon("x", size=14),
-                    "Clear",
+                    LanguageState.tr["clear_btn"],
                     on_click=CompanyListState.clear_filters,
                     variant="outline",
                     size="2",
@@ -123,12 +158,12 @@ def company_list_page() -> rx.Component:
                     rx.table.root(
                         rx.table.header(
                             rx.table.row(
-                                rx.table.column_header_cell("Company Name"),
-                                rx.table.column_header_cell("City"),
-                                rx.table.column_header_cell("Contact"),
-                                rx.table.column_header_cell("Phone"),
-                                rx.table.column_header_cell("Email"),
-                                rx.table.column_header_cell("Status"),
+                                rx.table.column_header_cell(LanguageState.tr["col_company_name"]),
+                                rx.table.column_header_cell(LanguageState.tr["col_city"]),
+                                rx.table.column_header_cell(LanguageState.tr["col_contact"]),
+                                rx.table.column_header_cell(LanguageState.tr["col_phone"]),
+                                rx.table.column_header_cell(LanguageState.tr["col_email"]),
+                                rx.table.column_header_cell(LanguageState.tr["col_status"]),
                                 rx.table.column_header_cell(""),
                             )
                         ),
@@ -141,7 +176,7 @@ def company_list_page() -> rx.Component:
                     rx.center(
                         rx.vstack(
                             rx.icon("building-2", size=40, color="var(--gray-7)"),
-                            rx.text("No companies found", color="var(--gray-9)"),
+                            rx.text(LanguageState.tr["no_companies_found"], color="var(--gray-9)"),
                             align="center",
                             spacing="2",
                         ),

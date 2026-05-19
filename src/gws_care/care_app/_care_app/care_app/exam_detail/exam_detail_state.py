@@ -1,5 +1,6 @@
 """State management for the exam detail page."""
 
+import re
 import uuid
 from typing import Any
 
@@ -7,6 +8,39 @@ import reflex as rx
 from pydantic import BaseModel
 
 from ..common.role_state import RoleState
+
+
+def _auto_detect_status(value_str: str, ref_range: str) -> str | None:
+    """Parse reference_range and return 'normal'|'high'|'low' for a numeric value.
+
+    Supported formats: '4.5–11.0', '4.5-11.0', '<200', '>40'.
+    Returns None if value or range cannot be parsed numerically.
+    """
+    if not value_str.strip() or not ref_range.strip():
+        return None
+    try:
+        val = float(value_str.replace(",", ".").strip())
+    except ValueError:
+        return None
+    ref = ref_range.strip()
+    # Range: X–Y  (en-dash, em-dash, or plain hyphen)
+    m = re.match(r'^([0-9.]+)\s*[\u2013\u2014\-]\s*([0-9.]+)$', ref)
+    if m:
+        low, high = float(m.group(1)), float(m.group(2))
+        if val < low:
+            return "low"
+        if val > high:
+            return "high"
+        return "normal"
+    # Upper bound only: <X
+    m = re.match(r'^<\s*([0-9.]+)$', ref)
+    if m:
+        return "high" if val > float(m.group(1)) else "normal"
+    # Lower bound only: >X
+    m = re.match(r'^>\s*([0-9.]+)$', ref)
+    if m:
+        return "low" if val < float(m.group(1)) else "normal"
+    return None
 
 
 class ExamDetailDTO(BaseModel):
@@ -252,9 +286,18 @@ class ExamDetailState(RoleState):
 
     @rx.event
     def add_lab_row(self):
-        """Add a new row to lab results (parameter name is required)."""
+        """Add a new row to lab results (parameter name is required).
+
+        Status is auto-detected from the numeric value vs. reference_range.
+        Falls back to the manually selected status if auto-detection fails.
+        """
         if not self.new_lab_parameter.strip():
             return
+        auto = _auto_detect_status(
+            self.new_lab_value,
+            self.new_lab_reference_range,
+        )
+        final_status = auto if auto is not None else (self.new_lab_status or "normal")
         self.lab_results = self.lab_results + [
             LabResultRowDTO(
                 id=str(uuid.uuid4()),
@@ -262,7 +305,7 @@ class ExamDetailState(RoleState):
                 unit=self.new_lab_unit.strip(),
                 value=self.new_lab_value.strip(),
                 reference_range=self.new_lab_reference_range.strip(),
-                status=self.new_lab_status or "normal",
+                status=final_status,
             )
         ]
         self.new_lab_selected_preset = ""

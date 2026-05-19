@@ -43,6 +43,44 @@ class PatientListState(ReflexMainState):
     sort_column: str = "last_name"
     sort_ascending: bool = True
 
+    # ── Suppression avec double confirmation ──────────────────────────────
+    confirm_delete_patient_open: bool = False
+    confirm_delete_patient_id: str = ""
+    confirm_delete_patient_name: str = ""
+    is_deleting: bool = False
+
+    @rx.event
+    def open_confirm_delete(self, patient_id: str, patient_name: str):
+        self.confirm_delete_patient_id = patient_id
+        self.confirm_delete_patient_name = patient_name
+        self.confirm_delete_patient_open = True
+
+    @rx.event
+    def dismiss_confirm_delete(self):
+        self.confirm_delete_patient_open = False
+        self.confirm_delete_patient_id = ""
+        self.confirm_delete_patient_name = ""
+
+    @rx.event
+    async def confirmed_delete_patient(self):
+        """Deuxième clic : suppression effective du patient."""
+        patient_id = self.confirm_delete_patient_id
+        if not patient_id:
+            return
+        self.is_deleting = True
+        self.confirm_delete_patient_open = False
+        try:
+            with await self.authenticate_user():
+                from gws_care.patient.patient_service import PatientService
+                PatientService.delete_patient(patient_id)
+            await self._load_patients()
+        except Exception as e:
+            self.error_message = f"Erreur lors de la suppression : {e}"
+        finally:
+            self.is_deleting = False
+            self.confirm_delete_patient_id = ""
+            self.confirm_delete_patient_name = ""
+
     @rx.event
     async def on_load(self):
         """Load patients when the page is mounted."""

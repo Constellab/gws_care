@@ -93,7 +93,7 @@ def _account_row(account: AccountRowDTO) -> rx.Component:
                             variant="ghost",
                             size="1",
                             color_scheme="red",
-                            on_click=lambda: AccountListState.deactivate_account(account.id),
+                            on_click=AccountListState.open_confirm_deactivate(account.id, account.name),
                         ),
                         content=LanguageState.tr["tooltip_deactivate_account"],
                     ),
@@ -123,6 +123,40 @@ def account_list_page() -> rx.Component:
                 align="center",
             ),
             account_form_dialog(),
+            # ── Confirm désactivation compte ──────────────────────────────────
+            rx.dialog.root(
+                rx.dialog.content(
+                    rx.dialog.title(
+                        rx.hstack(rx.icon("ban", size=18, color="var(--red-9)"),
+                                  rx.text("Désactiver ce compte ?"), spacing="2"),
+                    ),
+                    rx.dialog.description(
+                        rx.vstack(
+                            rx.text(
+                                "Le compte « ",
+                                rx.text.strong(AccountListState.confirm_deactivate_name),
+                                " » sera marqué comme inactif.",
+                                size="2",
+                            ),
+                            rx.text("Les campagnes et patients associés restent accessibles.",
+                                    size="2", color="var(--gray-9)"),
+                            spacing="2",
+                        ),
+                    ),
+                    rx.hstack(
+                        rx.dialog.close(
+                            rx.button("Annuler", variant="soft", color_scheme="gray",
+                                      on_click=AccountListState.dismiss_confirm_deactivate),
+                        ),
+                        rx.button("Désactiver", color_scheme="red",
+                                  on_click=AccountListState.confirmed_deactivate),
+                        justify="end", spacing="2", margin_top="1rem", width="100%",
+                    ),
+                    max_width="440px",
+                ),
+                open=AccountListState.confirm_deactivate_open,
+                on_open_change=lambda _: AccountListState.dismiss_confirm_deactivate(),
+            ),
             rx.hstack(
                 rx.input(
                     placeholder=LanguageState.tr["search_by_name"],

@@ -3,10 +3,11 @@
 import reflex as rx
 from gws_reflex_base import form_dialog_component
 
+from ..common.language_state import LanguageState
 from .company_form_state import CompanyFormState
 
 
-def _field(label: str, input_component: rx.Component) -> rx.Component:
+def _field(label: rx.Component | str, input_component: rx.Component) -> rx.Component:
     """Render a labeled form field."""
     return rx.vstack(
         rx.text(label, size="2", weight="medium"),
@@ -20,7 +21,7 @@ def _form_fields() -> rx.Component:
     """Build the form content with all company fields."""
     return rx.vstack(
         _field(
-            "Company Name *",
+            LanguageState.tr["field_company_name"],
             rx.input(
                 value=CompanyFormState.form_name,
                 on_change=CompanyFormState.set_form_name,
@@ -30,7 +31,7 @@ def _form_fields() -> rx.Component:
             ),
         ),
         _field(
-            "Registration Number",
+            LanguageState.tr["field_registration_number"],
             rx.input(
                 value=CompanyFormState.form_registration_number,
                 on_change=CompanyFormState.set_form_registration_number,
@@ -40,9 +41,9 @@ def _form_fields() -> rx.Component:
             ),
         ),
         rx.separator(width="100%"),
-        rx.text("Address", size="2", weight="bold", color="var(--gray-9)"),
+        rx.text(LanguageState.tr["section_address"], size="2", weight="bold", color="var(--gray-9)"),
         _field(
-            "Street Address",
+            LanguageState.tr["field_street_address"],
             rx.input(
                 value=CompanyFormState.form_address,
                 on_change=CompanyFormState.set_form_address,
@@ -53,7 +54,7 @@ def _form_fields() -> rx.Component:
         ),
         rx.grid(
             _field(
-                "Postal Code",
+                LanguageState.tr["field_postal_code"],
                 rx.input(
                     value=CompanyFormState.form_postal_code,
                     on_change=CompanyFormState.set_form_postal_code,
@@ -63,7 +64,7 @@ def _form_fields() -> rx.Component:
                 ),
             ),
             _field(
-                "City",
+                LanguageState.tr["field_city"],
                 rx.input(
                     value=CompanyFormState.form_city,
                     on_change=CompanyFormState.set_form_city,
@@ -77,9 +78,9 @@ def _form_fields() -> rx.Component:
             width="100%",
         ),
         rx.separator(width="100%"),
-        rx.text("Contact", size="2", weight="bold", color="var(--gray-9)"),
+        rx.text(LanguageState.tr["section_contact"], size="2", weight="bold", color="var(--gray-9)"),
         _field(
-            "Contact Name",
+            LanguageState.tr["field_contact_name"],
             rx.input(
                 value=CompanyFormState.form_contact_name,
                 on_change=CompanyFormState.set_form_contact_name,
@@ -90,7 +91,7 @@ def _form_fields() -> rx.Component:
         ),
         rx.grid(
             _field(
-                "Phone",
+                LanguageState.tr["field_phone"],
                 rx.input(
                     value=CompanyFormState.form_phone,
                     on_change=CompanyFormState.set_form_phone,
@@ -100,7 +101,7 @@ def _form_fields() -> rx.Component:
                 ),
             ),
             _field(
-                "Email",
+                LanguageState.tr["field_email"],
                 rx.input(
                     value=CompanyFormState.form_email,
                     on_change=CompanyFormState.set_form_email,
@@ -116,7 +117,7 @@ def _form_fields() -> rx.Component:
         ),
         rx.hstack(
             rx.button(
-                "Cancel",
+                LanguageState.tr["cancel_btn"],
                 variant="soft",
                 color_scheme="gray",
                 on_click=CompanyFormState.close_dialog,
@@ -128,8 +129,8 @@ def _form_fields() -> rx.Component:
                     rx.spinner(size="2"),
                     rx.cond(
                         CompanyFormState.is_create_mode,
-                        rx.text("Create Company"),
-                        rx.text("Save Changes"),
+                        rx.text(LanguageState.tr["create_company_btn"]),
+                        rx.text(LanguageState.tr["save_changes_btn"]),
                     ),
                 ),
                 type="submit",
@@ -151,13 +152,13 @@ def company_form_dialog() -> rx.Component:
         state=CompanyFormState,
         title=rx.cond(
             CompanyFormState.is_create_mode,
-            "New Company",
-            "Edit Company",
+            LanguageState.tr["new_company_form_title"],
+            LanguageState.tr["edit_company_form_title"],
         ),
         description=rx.cond(
             CompanyFormState.is_create_mode,
-            "Register a new client company.",
-            "Update the company's information.",
+            LanguageState.tr["new_company_desc"],
+            LanguageState.tr["edit_company_desc"],
         ),
         form_content=_form_fields(),
         max_width="600px",

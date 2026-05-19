@@ -19,6 +19,7 @@ class PatientDTO(ModelDTO):
     primary_physician_name: str | None
     primary_physician_phone: str | None
     account_id: str | None = None
+    company_id: str | None = None
 
 
 class SavePatientDTO(BaseModelDTO):

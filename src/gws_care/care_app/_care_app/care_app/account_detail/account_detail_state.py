@@ -40,6 +40,26 @@ class UnassignedPatientOptionDTO(BaseModel):
     label: str  # "LAST_NAME First (PAT-XXXXXX)"
 
 
+class DoctorOptionDTO(BaseModel):
+    """One doctor option for the campaign creation dropdown."""
+
+    id: str
+    label: str  # "Dr. Dupont Jean"
+
+
+class CampaignRowDTO(BaseModel):
+    """One campaign row for the account detail campaigns list."""
+    id: str
+    name: str
+    status: str
+    status_label: str
+    status_color: str
+    start_date: str
+    end_date: str
+    patient_count: int
+    location: str
+
+
 class AccountDetailState(ReflexMainState):
     """State for the account detail page."""
 
@@ -53,6 +73,20 @@ class AccountDetailState(ReflexMainState):
     unassigned_patients: list[UnassignedPatientOptionDTO] = []
     assign_patient_id: str = ""
     is_assigning: bool = False
+
+    # ── Campaigns ─────────────────────────────────────────────────────────
+    campaigns: list[CampaignRowDTO] = []
+    campaign_dialog_open: bool = False
+    new_campaign_name: str = ""
+    new_campaign_start: str = ""
+    new_campaign_end: str = ""
+    new_campaign_location: str = ""
+    new_campaign_psc_doctor_id: str = ""
+    new_campaign_enterprise_doctor_id: str = ""
+    psc_doctor_options: list[DoctorOptionDTO] = []
+    enterprise_doctor_options: list[DoctorOptionDTO] = []
+    is_creating_campaign: bool = False
+    campaign_error: str = ""
 
     @rx.event
     async def on_load(self):
@@ -164,6 +198,7 @@ class AccountDetailState(ReflexMainState):
                 )
 
             await self._load_patients()
+            await self._load_campaigns()
         except Exception as e:
             self.error_message = f"Error loading account: {e}"
         finally:
@@ -189,3 +224,131 @@ class AccountDetailState(ReflexMainState):
                 )
                 for p in patients
             ]
+
+    async def _load_campaigns(self):
+        """Reload campaigns for this account."""
+        if not self.account:
+            return
+        with await self.authenticate_user():
+            from gws_care.campaign.campaign_service import CampaignService
+            from gws_care.campaign.campaign_status import CampaignStatus
+            campaigns = CampaignService.list_campaigns_for_account(self.account.id)
+            self.campaigns = [
+                CampaignRowDTO(
+                    id=str(c.id),
+                    name=c.name,
+                    status=c.status,
+                    status_label=CampaignStatus(c.status).get_label(),
+                    status_color=CampaignStatus(c.status).get_color(),
+                    start_date=c.start_date.isoformat() if c.start_date else "-",
+                    end_date=c.end_date.isoformat() if c.end_date else "-",
+                    patient_count=CampaignService.patient_count(str(c.id)),
+                    location=c.location or "",
+                )
+                for c in campaigns
+            ]
+
+    # ── Campaign dialog events ─────────────────────────────────────────────
+
+    @rx.event
+    async def open_campaign_dialog(self):
+        self.new_campaign_name = ""
+        self.new_campaign_start = ""
+        self.new_campaign_end = ""
+        self.new_campaign_location = ""
+        self.new_campaign_psc_doctor_id = ""
+        self.new_campaign_enterprise_doctor_id = ""
+        self.campaign_error = ""
+        self.campaign_dialog_open = True
+        # Load doctor options
+        try:
+            with await self.authenticate_user():
+                from gws_care.role.care_role import CareRole
+                from gws_care.role.user_care_role import UserCareRole
+                from gws_care.user.user import User
+
+                psc_rows = list(
+                    UserCareRole.select(UserCareRole, User).join(User)
+                    .where(UserCareRole.role == CareRole.MEDECIN_PSC.value)
+                    .order_by(User.last_name)
+                )
+                self.psc_doctor_options = [
+                    DoctorOptionDTO(id=str(r.user.id), label=f"{r.user.last_name} {r.user.first_name}")
+                    for r in psc_rows
+                ]
+
+                ent_rows = list(
+                    UserCareRole.select(UserCareRole, User).join(User)
+                    .where(UserCareRole.role == CareRole.MEDECIN_ENTREPRISE.value)
+                    .order_by(User.last_name)
+                )
+                self.enterprise_doctor_options = [
+                    DoctorOptionDTO(id=str(r.user.id), label=f"{r.user.last_name} {r.user.first_name}")
+                    for r in ent_rows
+                ]
+        except Exception:
+            self.psc_doctor_options = []
+            self.enterprise_doctor_options = []
+
+    @rx.event
+    def close_campaign_dialog(self):
+        self.campaign_dialog_open = False
+
+    @rx.event
+    def set_new_campaign_name(self, value: str):
+        self.new_campaign_name = value
+
+    @rx.event
+    def set_new_campaign_start(self, value: str):
+        self.new_campaign_start = value
+
+    @rx.event
+    def set_new_campaign_end(self, value: str):
+        self.new_campaign_end = value
+
+    @rx.event
+    def set_new_campaign_location(self, value: str):
+        self.new_campaign_location = value
+
+    @rx.event
+    def set_new_campaign_psc_doctor(self, value: str):
+        self.new_campaign_psc_doctor_id = "" if value == "__none__" else value
+
+    @rx.event
+    def set_new_campaign_enterprise_doctor(self, value: str):
+        self.new_campaign_enterprise_doctor_id = "" if value == "__none__" else value
+
+    @rx.event
+    async def create_campaign(self):
+        if not self.new_campaign_name.strip():
+            self.campaign_error = "Le nom de la campagne est obligatoire."
+            return
+        if not self.account:
+            return
+        self.is_creating_campaign = True
+        self.campaign_error = ""
+        try:
+            with await self.authenticate_user():
+                from datetime import date
+                from gws_care.campaign.campaign_service import CampaignService
+                start = date.fromisoformat(self.new_campaign_start) if self.new_campaign_start else None
+                end = date.fromisoformat(self.new_campaign_end) if self.new_campaign_end else None
+                CampaignService.create_campaign(
+                    account_id=self.account.id,
+                    name=self.new_campaign_name.strip(),
+                    start_date=start,
+                    end_date=end,
+                    location=self.new_campaign_location.strip() or None,
+                    psc_doctor_id=self.new_campaign_psc_doctor_id or None,
+                    enterprise_doctor_id=self.new_campaign_enterprise_doctor_id or None,
+                )
+            self.campaign_dialog_open = False
+            await self._load_campaigns()
+        except Exception as e:
+            self.campaign_error = f"Erreur : {e}"
+        finally:
+            self.is_creating_campaign = False
+
+    @rx.event
+    def go_to_campaign(self, campaign_id: str):
+        return rx.redirect(f"/campaign/{campaign_id}")

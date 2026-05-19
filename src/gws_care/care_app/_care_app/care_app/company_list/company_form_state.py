@@ -115,6 +115,9 @@ class CompanyFormState(FormDialogState, rx.State):
         if not name:
             yield rx.toast.error("Company name is required")
             return
+        if not self.form_email.strip():
+            yield rx.toast.error("L'email du responsable est obligatoire")
+            return
 
         dto = SaveCompanyDTO(
             name=name,
@@ -123,7 +126,7 @@ class CompanyFormState(FormDialogState, rx.State):
             postal_code=self.form_postal_code or None,
             city=self.form_city or None,
             phone=self.form_phone or None,
-            email=self.form_email or None,
+            email=self.form_email.strip(),
             contact_name=self.form_contact_name or None,
         )
 
@@ -146,6 +149,9 @@ class CompanyFormState(FormDialogState, rx.State):
         if not name:
             yield rx.toast.error("Company name is required")
             return
+        if not self.form_email.strip():
+            yield rx.toast.error("L'email du responsable est obligatoire")
+            return
 
         dto = SaveCompanyDTO(
             name=name,
@@ -154,7 +160,7 @@ class CompanyFormState(FormDialogState, rx.State):
             postal_code=self.form_postal_code or None,
             city=self.form_city or None,
             phone=self.form_phone or None,
-            email=self.form_email or None,
+            email=self.form_email.strip(),
             contact_name=self.form_contact_name or None,
         )
 
@@ -163,7 +169,9 @@ class CompanyFormState(FormDialogState, rx.State):
         with await _main.authenticate_user():
             CompanyService.update_company(self._editing_company_id, dto)
 
-        yield rx.toast.success("Company updated successfully")
+        yield rx.toast.success("Entreprise mise à jour avec succès")
 
         from ..company_list.company_list_state import CompanyListState
+        from ..company_detail.company_detail_state import CompanyDetailState
         yield CompanyListState.on_load()
+        yield CompanyDetailState.on_load()
