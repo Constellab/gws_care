@@ -150,11 +150,21 @@ class CampaignService:
 
     @classmethod
     def start_campaign(cls, campaign_id: str) -> Campaign:
-        """Mark a campaign as IN_PROGRESS."""
+        """Mark a campaign as TERRAIN_EXAM (field operations started)."""
         campaign = cls.get_campaign(campaign_id)
         if campaign.status != CampaignStatus.VALIDATED:
             raise BadRequestException("Only VALIDATED campaigns can be started")
-        campaign.status = CampaignStatus.IN_PROGRESS
+        campaign.status = CampaignStatus.TERRAIN_EXAM
+        campaign.save()
+        return campaign
+
+    @classmethod
+    def complete_terrain_phase(cls, campaign_id: str) -> Campaign:
+        """Transition TERRAIN_EXAM → SAMPLE_ANALYSIS (terrain work done, start lab entry)."""
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status != CampaignStatus.TERRAIN_EXAM:
+            raise BadRequestException("Seules les campagnes en phase Terrain Exam peuvent passer en Analyse.")
+        campaign.status = CampaignStatus.SAMPLE_ANALYSIS
         campaign.save()
         return campaign
 
@@ -162,8 +172,8 @@ class CampaignService:
     def mark_lab_done(cls, campaign_id: str) -> Campaign:
         """Mark a campaign as LAB_DONE (Lab Validation)."""
         campaign = cls.get_campaign(campaign_id)
-        if campaign.status != CampaignStatus.IN_PROGRESS:
-            raise BadRequestException("Only IN_PROGRESS campaigns can be marked as lab done")
+        if campaign.status not in (CampaignStatus.TERRAIN_EXAM, CampaignStatus.SAMPLE_ANALYSIS):
+            raise BadRequestException("Only TERRAIN_EXAM or SAMPLE_ANALYSIS campaigns can be marked as lab done")
         campaign.status = CampaignStatus.LAB_DONE
         campaign.save()
         return campaign
@@ -178,8 +188,8 @@ class CampaignService:
         """
         PermissionService.require(user, CareAction.CAMPAIGN_VALIDATE_LAB)
         campaign = cls.get_campaign(campaign_id)
-        if campaign.status != CampaignStatus.IN_PROGRESS:
-            raise BadRequestException("Only IN_PROGRESS campaigns can be lab-validated")
+        if campaign.status not in (CampaignStatus.TERRAIN_EXAM, CampaignStatus.SAMPLE_ANALYSIS):
+            raise BadRequestException("Only TERRAIN_EXAM or SAMPLE_ANALYSIS campaigns can be lab-validated")
 
         from gws_care.visit.campaign_visit_status import CampaignVisitStatus
         cls._assert_all_visits_at_least_status(campaign_id, CampaignVisitStatus.LAB_DONE)
@@ -319,10 +329,10 @@ class CampaignService:
         """
         campaign = cls.get_campaign(campaign_id)
         if campaign.status not in (CampaignStatus.DRAFT, CampaignStatus.VALIDATED):
-            raise BadRequestException("Patients can only be added to DRAFT or VALIDATED campaigns")
+            raise BadRequestException("Les patients ne peuvent être ajoutés qu'aux campagnes en statut Brouillon ou Validée.")
 
         if campaign.is_individual:
-            raise BadRequestException("This campaign is for a single patient and cannot accept additional patients")
+            raise BadRequestException("Cette campagne est destinée à un seul patient et n'accepte pas de patients supplémentaires.")
 
         patient = Patient.get_or_none(Patient.id == patient_id)
         if patient is None:
@@ -337,13 +347,13 @@ class CampaignService:
             ) is not None
             if not has_link:
                 raise BadRequestException(
-                    "Patient does not belong to the campaign's billing account"
+                    "Ce patient n'est pas rattaché au compte de facturation de cette campagne."
                 )
 
         if CampaignPatient.get_or_none(
             (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
         ) is not None:
-            raise BadRequestException("Patient is already in this campaign")
+            raise BadRequestException("Ce patient est déjà dans cette campagne.")
 
         CampaignPatient.create(campaign=campaign, patient=patient)
 
@@ -378,7 +388,7 @@ class CampaignService:
         if CampaignExamType.get_or_none(
             (CampaignExamType.campaign == campaign_id) & (CampaignExamType.exam_type == exam_type_id)
         ) is not None:
-            raise BadRequestException("ExamType is already in this campaign")
+            raise BadRequestException("Ce type d'examen est déjà dans cette campagne.")
 
         CampaignExamType.create(campaign=campaign, exam_type=exam_type)
 

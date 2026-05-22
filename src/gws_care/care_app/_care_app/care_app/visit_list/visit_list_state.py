@@ -151,6 +151,7 @@ class VisitListState(CombinedPickerState):
     # ── New CampaignVisit dialog ──────────────────────────────────────────────────────
     show_new_visit_dialog: bool = False
     new_visit_type: str = ""  # "" = not yet selected, "campaign" or "consultation"
+    new_visit_type_locked: bool = False  # True when type is forced by page context
     new_visit_scheduled_at: str = ""
     new_visit_error: str = ""
     new_visit_is_saving: bool = False
@@ -326,7 +327,12 @@ class VisitListState(CombinedPickerState):
     @rx.event
     async def open_new_visit_dialog(self):
         await self._open_picker(account_id="")
-        self.new_visit_type = ""
+        if self.filter_visit_type in ("consultation", "campaign"):
+            self.new_visit_type = self.filter_visit_type
+            self.new_visit_type_locked = True
+        else:
+            self.new_visit_type = ""
+            self.new_visit_type_locked = False
         self.new_visit_scheduled_at = ""
         self.new_visit_error = ""
         self.new_visit_is_saving = False

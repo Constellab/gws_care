@@ -45,6 +45,8 @@ from .visit_detail.visit_detail_component import visit_detail_page
 from .visit_detail.visit_detail_state import VisitDetailState
 from .visit_list.visit_list_component import visit_list_page
 from .visit_list.visit_list_state import VisitListState
+from .doctor_list.doctor_list_component import doctor_list_page
+from .doctor_list.doctor_list_state import DoctorListState
 
 
 def _ensure_care_db_tables() -> None:
@@ -484,6 +486,53 @@ def _ensure_care_db_tables() -> None:
         except Exception as mig_exc:
             print(f"[gws_care] Warning: migration 3.8.0 (campaign_visit_status rename) failed: {mig_exc}")
 
+        # ── migration 4.0.0 — gws_care_medical_doctor table ─────────────────
+        try:
+            from gws_care.doctor.medical_doctor import MedicalDoctor
+            db_manager.db.create_tables([MedicalDoctor], safe=True)
+        except Exception as mig_exc:
+            print(f"[gws_care] Warning: migration 4.0.0 (medical_doctor table) failed: {mig_exc}")
+
+        # ── migration 4.1.0 — primary_physician_id FK on patient ─────────────
+        try:
+            if not Patient.column_exists("primary_physician_id"):
+                db_manager.db.execute_sql(
+                    "ALTER TABLE gws_care_patient"
+                    " ADD COLUMN primary_physician_id VARCHAR(36) NULL DEFAULT NULL"
+                )
+        except Exception as mig_exc:
+            print(f"[gws_care] Warning: migration 4.1.0 (patient.primary_physician_id) failed: {mig_exc}")
+
+        # ── migration 4.2.0 — linked_doctor_id on user_role ──────────────────
+        try:
+            from gws_care.role.user_care_role import UserCareRole
+            if not UserCareRole.column_exists("linked_doctor_id"):
+                db_manager.db.execute_sql(
+                    "ALTER TABLE gws_care_user_role"
+                    " ADD COLUMN linked_doctor_id VARCHAR(36) NULL DEFAULT NULL"
+                )
+        except Exception as mig_exc:
+            print(f"[gws_care] Warning: migration 4.2.0 (user_role.linked_doctor_id) failed: {mig_exc}")
+
+        # ── migration 4.3.0 — address on medical_doctor ───────────────────────
+        try:
+            from gws_care.doctor.medical_doctor import MedicalDoctor
+            if not MedicalDoctor.column_exists("address"):
+                db_manager.db.execute_sql(
+                    "ALTER TABLE gws_care_medical_doctor"
+                    " ADD COLUMN address VARCHAR(500) NULL DEFAULT NULL"
+                )
+        except Exception as mig_exc:
+            print(f"[gws_care] Warning: migration 4.3.0 (medical_doctor.address) failed: {mig_exc}")
+
+        # ── migration 4.4.0 — rename campaign status in_progress → terrain_exam ─
+        try:
+            db_manager.db.execute_sql(
+                "UPDATE gws_care_campaign SET status = 'terrain_exam' WHERE status = 'in_progress'"
+            )
+        except Exception as mig_exc:
+            print(f"[gws_care] Warning: migration 4.4.0 (campaign in_progress→terrain_exam) failed: {mig_exc}")
+
         # Seed ExamTypeModel from enum (idempotent — skips existing codes)
         # seed_from_enum() uses ModelWithUser which requires an auth context;
         # find the first admin user to provide one.
@@ -558,6 +607,12 @@ def consultations():
 def campaign_visits():
     """Campaign visits page — visit list pre-filtered to campaign type."""
     return visit_list_page()
+
+
+@rx.page(route="/doctors", on_load=[DoctorListState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def doctors():
+    """Medical doctors registry page."""
+    return doctor_list_page()
 
 
 @rx.page(route="/settings", on_load=[AdminState.on_load, GeneralSettingsState.load_color_theme])

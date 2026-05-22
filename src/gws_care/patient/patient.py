@@ -29,6 +29,8 @@ class Patient(ModelWithUser):
     email: str = CharField(max_length=255, null=True)
     primary_physician_name: str = CharField(max_length=255, null=True)
     primary_physician_phone: str = CharField(max_length=50, null=True)
+    # FK to registered MedicalDoctor (replaces free-text fields for new patients)
+    primary_physician_id: str = CharField(max_length=36, null=True)
     # QR code stored as base64 PNG string (data:image/png;base64,...)
     qr_code: str = TextField(null=True)
 
@@ -84,6 +86,7 @@ class Patient(ModelWithUser):
             email=self.email,
             primary_physician_name=self.primary_physician_name,
             primary_physician_phone=self.primary_physician_phone,
+            primary_physician_id=str(self.primary_physician_id) if self.primary_physician_id else None,
             account_ids=account_ids,
             social_security_number=self.social_security_number,
             weight=float(self.weight) if self.weight is not None else None,

@@ -18,8 +18,7 @@ class UserRoleRowDTO(rx.Base):
     email: str
     roles: list[str]   # list of CareRole values
     linked_patient_id: str = ""
-    doctor_all_patients: bool = True
-    doctor_patients: list[EntityOption] = []
+    linked_doctor_id: str = ""
     account_admin_accounts: list[EntityOption] = []
 
 
@@ -37,6 +36,7 @@ class AdminState(RoleState):
     # Options for the linked-entity selectors
     account_options: list[EntityOption] = []
     patient_options: list[EntityOption] = []
+    doctor_options: list[EntityOption] = []
 
     @rx.event
     def set_user_name_filter(self, value: str):
@@ -126,18 +126,19 @@ class AdminState(RoleState):
             self.error_message = f"Error removing account: {e}"
 
     @rx.event
-    async def set_doctor_all_patients(self, user_id: str, value: bool):
-        """Toggle the 'all patients' flag for a DOCTOR user."""
+    async def set_doctor_link(self, user_id: str, doctor_id: str):
+        """Link a user with the DOCTOR role to a registered MedicalDoctor profile."""
         self.error_message = ""
         self.success_message = ""
+        effective_id = None if (not doctor_id or doctor_id == "__none__") else doctor_id
         try:
             with await self.authenticate_user():
                 from gws_care.role.user_role_service import UserRoleService
-                UserRoleService.set_doctor_all_patients(user_id, value)
-                self.success_message = "Doctor patient scope updated."
+                UserRoleService.set_doctor_link(user_id, effective_id)
+                self.success_message = "Doctor link updated."
             await self._load_users()
         except Exception as e:
-            self.error_message = f"Error updating doctor scope: {e}"
+            self.error_message = f"Error updating doctor link: {e}"
 
     async def _add_account_link(self, user_id: str, role: str, account_id: str):
         try:
@@ -184,11 +185,7 @@ class AdminState(RoleState):
                         email=r["email"],
                         roles=r["roles"],
                         linked_patient_id=r.get("linked_patient_id") or "",
-                        doctor_all_patients=r.get("doctor_all_patients", True),
-                        doctor_patients=[
-                            EntityOption(id=pid, label=patient_map.get(pid, pid))
-                            for pid in (r.get("doctor_patient_ids") or [])
-                        ],
+                        linked_doctor_id=r.get("linked_doctor_id") or "",
                         account_admin_accounts=[
                             EntityOption(id=aid, label=account_map.get(aid, aid))
                             for aid in (r.get("account_admin_account_ids") or [])
@@ -202,10 +199,11 @@ class AdminState(RoleState):
             self.is_loading = False
 
     async def _load_entity_options(self):
-        """Load account and patient lists for the link selectors."""
+        """Load account, patient and doctor lists for the link selectors."""
         try:
             with await self.authenticate_user():
                 from gws_care.account.account_service import AccountService
+                from gws_care.doctor.medical_doctor_service import MedicalDoctorService
                 from gws_care.patient.patient_service import PatientService
 
                 accounts = AccountService.list_accounts()
@@ -220,6 +218,11 @@ class AdminState(RoleState):
                         label=f"{p.last_name} {p.first_name} ({p.patient_number})",
                     )
                     for p in patients
+                ]
+                doctors = MedicalDoctorService.list_doctors(active_only=True)
+                self.doctor_options = [
+                    EntityOption(id=d.id, label=d.full_name)
+                    for d in doctors
                 ]
         except Exception:
             pass

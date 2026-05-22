@@ -4,7 +4,7 @@ import reflex as rx
 from gws_reflex_base import form_dialog_component
 
 from ..common.language_state import LanguageState
-from .patient_form_state import AccountPickerRowDTO, PatientFormState
+from .patient_form_state import AccountPickerRowDTO, DoctorPickerRowDTO, PatientFormState
 
 
 def _account_picker_row(account: AccountPickerRowDTO) -> rx.Component:
@@ -97,6 +97,95 @@ def _account_picker_dialog() -> rx.Component:
 
 
 
+def _doctor_picker_row(doctor: DoctorPickerRowDTO) -> rx.Component:
+    """One row in the doctor picker table inside the patient form."""
+    return rx.table.row(
+        rx.table.cell(rx.text(doctor.full_name, size="2", weight="medium")),
+        rx.table.cell(
+            rx.cond(
+                doctor.specialization != "",
+                rx.text(doctor.specialization, size="2"),
+                rx.text("—", size="2", color="var(--gray-8)"),
+            )
+        ),
+        _hover={"background_color": "var(--accent-2)", "cursor": "pointer"},
+        on_click=lambda: PatientFormState.doc_picker_confirm(doctor.id, doctor.full_name),
+    )
+
+
+def _doctor_picker_dialog() -> rx.Component:
+    """Doctor picker dialog embedded in the patient form."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(LanguageState.tr["select_doctor_placeholder"]),
+            rx.vstack(
+                rx.input(
+                    rx.input.slot(rx.icon("search", size=14)),
+                    placeholder=LanguageState.tr["select_doctor_placeholder"],
+                    value=PatientFormState.doc_picker_filter,
+                    on_change=PatientFormState.doc_picker_set_filter,
+                    size="2",
+                    width="100%",
+                ),
+                rx.cond(
+                    PatientFormState.doc_picker_error != "",
+                    rx.callout(
+                        PatientFormState.doc_picker_error,
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
+                    ),
+                ),
+                rx.cond(
+                    PatientFormState.doc_picker_is_loading,
+                    rx.center(rx.spinner(size="2"), padding="1.5rem"),
+                    rx.cond(
+                        PatientFormState.doc_picker_rows.length() > 0,
+                        rx.box(
+                            rx.table.root(
+                                rx.table.header(
+                                    rx.table.row(
+                                        rx.table.column_header_cell(LanguageState.tr["field_physician_name"]),
+                                        rx.table.column_header_cell(LanguageState.tr["col_specialization"]),
+                                    )
+                                ),
+                                rx.table.body(
+                                    rx.foreach(PatientFormState.doc_picker_rows, _doctor_picker_row)
+                                ),
+                                width="100%",
+                                variant="surface",
+                            ),
+                            max_height="320px",
+                            overflow_y="auto",
+                            width="100%",
+                        ),
+                        rx.center(
+                            rx.text(LanguageState.tr["no_doctors_found"], size="2", color="var(--gray-9)"),
+                            padding="1.5rem",
+                        ),
+                    ),
+                ),
+                rx.hstack(
+                    rx.button(
+                        LanguageState.tr["cancel_btn"],
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=PatientFormState.close_doctor_picker,
+                    ),
+                    justify="end",
+                    width="100%",
+                ),
+                spacing="3",
+                width="100%",
+            ),
+            on_interact_outside=PatientFormState.close_doctor_picker,
+            on_escape_key_down=PatientFormState.close_doctor_picker,
+            max_width="500px",
+        ),
+        open=PatientFormState.doc_picker_is_open,
+    )
+
+
 def _field(label: str, input_component: rx.Component) -> rx.Component:
     """Render a labeled form field."""
     return rx.vstack(
@@ -110,9 +199,10 @@ def _field(label: str, input_component: rx.Component) -> rx.Component:
 def _form_fields() -> rx.Component:
     """Build the form content with all patient fields."""
     return rx.vstack(
-        # The account picker dialog is nested here so it lives inside the
-        # outer form dialog's DOM tree — required for Radix nested dialogs.
+        # Picker dialogs nested here so they live inside the outer form dialog's
+        # DOM tree — required for Radix nested dialogs.
         _account_picker_dialog(),
+        _doctor_picker_dialog(),
         rx.grid(
             _field(
                 LanguageState.tr["field_last_name"],
@@ -243,30 +333,35 @@ def _form_fields() -> rx.Component:
         ),
         rx.separator(width="100%"),
         rx.text(LanguageState.tr["section_primary_physician"], size="2", weight="bold", color="var(--gray-9)"),
-        rx.grid(
-            _field(
-                LanguageState.tr["field_physician_name"],
-                rx.input(
-                    value=PatientFormState.form_primary_physician_name,
-                    on_change=PatientFormState.set_form_primary_physician_name,
-                    placeholder="Dr. Martin",
+        _field(
+            LanguageState.tr["field_physician_name"],
+            rx.hstack(
+                rx.button(
+                    rx.icon("user-round-check", size=14),
+                    rx.cond(
+                        PatientFormState.form_physician_id != "",
+                        rx.text(PatientFormState.form_physician_name, size="2"),
+                        rx.text(LanguageState.tr["select_doctor_placeholder"], size="2"),
+                    ),
+                    on_click=PatientFormState.open_doctor_picker,
+                    variant=rx.cond(PatientFormState.form_physician_id != "", "soft", "outline"),
                     size="2",
-                    width="100%",
+                    type="button",
                 ),
-            ),
-            _field(
-                LanguageState.tr["field_physician_phone"],
-                rx.input(
-                    value=PatientFormState.form_primary_physician_phone,
-                    on_change=PatientFormState.set_form_primary_physician_phone,
-                    placeholder="+33 1 00 00 00 00",
-                    size="2",
-                    width="100%",
+                rx.cond(
+                    PatientFormState.form_physician_id != "",
+                    rx.icon_button(
+                        rx.icon("x", size=12),
+                        on_click=PatientFormState.doc_picker_clear,
+                        variant="ghost",
+                        color_scheme="gray",
+                        size="2",
+                        type="button",
+                    ),
                 ),
+                spacing="2",
+                align="center",
             ),
-            columns="2",
-            spacing="3",
-            width="100%",
         ),
         rx.separator(width="100%"),
         rx.text(LanguageState.tr["section_account"], size="2", weight="bold", color="var(--gray-9)"),
@@ -338,20 +433,6 @@ def _form_fields() -> rx.Component:
             columns="2",
             spacing="3",
             width="100%",
-        ),
-        rx.vstack(
-            rx.text(LanguageState.tr["field_notif_prefs"], size="2", weight="medium"),
-            rx.hstack(
-                rx.checkbox(
-                    LanguageState.tr["notif_email"],
-                    checked=PatientFormState.form_notif_email,
-                    on_change=PatientFormState.set_form_notif_email,
-                    size="2",
-                ),
-                spacing="4",
-            ),
-            width="100%",
-            spacing="1",
         ),
         width="100%",
         spacing="3",

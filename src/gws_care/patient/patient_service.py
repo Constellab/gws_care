@@ -182,6 +182,7 @@ class PatientService:
         patient.email = dto.email
         patient.primary_physician_name = dto.primary_physician_name
         patient.primary_physician_phone = dto.primary_physician_phone
+        patient.primary_physician_id = dto.primary_physician_id or None
         patient.social_security_number = dto.social_security_number
         patient.weight = dto.weight
         patient.height = dto.height

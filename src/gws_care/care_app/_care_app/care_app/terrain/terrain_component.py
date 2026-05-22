@@ -138,9 +138,11 @@ def _patient_card(p: TerrainPatientDTO) -> rx.Component:
                     spacing="1",
                 ),
             ),
-            # Mark all on-site done (if visit is still pending)
+            # Mark visit done — only shown once every exam is ticked off
             rx.cond(
-                p.visit_status == "pending",
+                (p.exams_total > 0)
+                & (p.exams_done == p.exams_total)
+                & ((p.visit_status == "pending") | (p.visit_status == "")),
                 rx.button(
                     rx.icon("check-check", size=14),
                     LanguageState.tr["terrain_mark_visit_done_btn"],
@@ -199,10 +201,12 @@ def terrain_page() -> rx.Component:
                         ),
                         spacing="2",
                         align="center",
+                        flex_wrap="wrap",
                     ),
                     width="100%",
                     spacing="1",
-                )
+                ),
+                width="100%",
             ),
             # Scanner section
             rx.card(
@@ -291,7 +295,8 @@ def terrain_page() -> rx.Component:
                     ),
                     width="100%",
                     spacing="3",
-                )
+                ),
+                width="100%",
             ),
             # Alerts
             rx.cond(

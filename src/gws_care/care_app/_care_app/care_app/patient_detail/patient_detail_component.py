@@ -110,16 +110,56 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
                     ),
                     rx.cond(
                         patient.account_name != "",
-                        rx.badge(
-                            rx.icon("building-2", size=12),
-                            patient.account_name,
-                            color_scheme="teal",
-                            variant="soft",
-                            size="2",
+                        rx.link(
+                            rx.badge(
+                                rx.icon("building-2", size=12),
+                                patient.account_name,
+                                color_scheme="teal",
+                                variant="soft",
+                                size="2",
+                                style={"cursor": "pointer"},
+                            ),
+                            href="/account/" + patient.account_id,
                         ),
                     ),
                     spacing="2",
                     align="center",
+                    flex_wrap="wrap",
+                ),
+                rx.cond(
+                    patient.primary_physician_full_name != "",
+                    rx.hstack(
+                        rx.link(
+                            rx.badge(
+                                rx.icon("user-round-check", size=12),
+                                patient.primary_physician_full_name,
+                                color_scheme="purple",
+                                variant="soft",
+                                size="2",
+                                style={"cursor": "pointer"},
+                            ),
+                            href="/doctors",
+                        ),
+                        rx.cond(
+                            patient.primary_physician_specialization != "",
+                            rx.text("·", size="2", color="var(--gray-7)"),
+                        ),
+                        rx.cond(
+                            patient.primary_physician_specialization != "",
+                            rx.text(patient.primary_physician_specialization, size="2", color="var(--gray-9)"),
+                        ),
+                        rx.cond(
+                            patient.primary_physician_phone != "",
+                            rx.text("·", size="2", color="var(--gray-7)"),
+                        ),
+                        rx.cond(
+                            patient.primary_physician_phone != "",
+                            rx.text(patient.primary_physician_phone, size="2", color="var(--gray-9)"),
+                        ),
+                        spacing="2",
+                        align="center",
+                        flex_wrap="wrap",
+                    ),
                 ),
                 spacing="2",
                 align_items="start",
@@ -169,11 +209,6 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
                 _info_row(LanguageState.tr["info_address"], patient.address),
                 _info_row(LanguageState.tr["info_postal_code"], patient.postal_code),
                 _info_row(LanguageState.tr["info_city"], patient.city),
-            ),
-            _section(
-                LanguageState.tr["section_primary_physician"],
-                _info_row(LanguageState.tr["info_physician_name"], patient.primary_physician_name),
-                _info_row(LanguageState.tr["info_physician_phone"], patient.primary_physician_phone),
             ),
             columns="2",
             spacing="4",

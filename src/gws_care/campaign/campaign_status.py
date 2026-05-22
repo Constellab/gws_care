@@ -8,7 +8,8 @@ class CampaignStatus(Enum):
 
     DRAFT = "draft"                             # Created, not yet validated
     VALIDATED = "validated"                     # Validated by clinic doctor or admin — ready for field
-    IN_PROGRESS = "in_progress"                 # Field operations started
+    TERRAIN_EXAM = "terrain_exam"               # On-site: exams are collected and validated on terrain
+    SAMPLE_ANALYSIS = "sample_analysis"         # Lab: exam results are entered and analysed
     LAB_DONE = "lab_done"                       # All lab results entered and lab-validated
     DOCTOR_CLINIC_VALIDATED = "doctor_clinic_validated"     # Clinic doctor has interpreted all visits
     DOCTOR_COMPANY_VALIDATED = "doctor_company_validated"   # Company doctor has validated all visits
@@ -19,7 +20,8 @@ class CampaignStatus(Enum):
         labels = {
             CampaignStatus.DRAFT: "Draft",
             CampaignStatus.VALIDATED: "Validated",
-            CampaignStatus.IN_PROGRESS: "In Progress",
+            CampaignStatus.TERRAIN_EXAM: "Terrain Exam",
+            CampaignStatus.SAMPLE_ANALYSIS: "Sample Analysis",
             CampaignStatus.LAB_DONE: "Lab Done",
             CampaignStatus.DOCTOR_CLINIC_VALIDATED: "Clinic Doctor Validated",
             CampaignStatus.DOCTOR_COMPANY_VALIDATED: "Company Doctor Validated",

@@ -210,6 +210,11 @@ def _sidebar_content() -> rx.Component:
                         "/accounts",
                         additional_active_route_prefixes=["/account"],
                     ),
+                    menu_item_component(
+                        "user-round-check",
+                        LanguageState.tr["nav_doctors"],
+                        "/doctors",
+                    ),
                     width="100%",
                     spacing="1",
                     align_items="start",
@@ -241,7 +246,10 @@ def page_layout(*children: rx.Component, **kwargs) -> rx.Component:
     :return: Laid-out page
     :rtype: rx.Component
     """
-    vstack_props = {"width": "100%", "spacing": "4", "padding": "1.5rem", "min_width": "0", "overflow_x": "hidden"}
+    # flex_shrink="0" prevents the vstack from being compressed by its flex parent
+    # (_create_content_wrapper has height:100vh and flex-direction:column; without
+    # flex-shrink:0 the browser squishes all children to fit within the viewport).
+    vstack_props = {"width": "100%", "spacing": "4", "padding": "1.5rem", "min_width": "0", "overflow_x": "hidden", "flex_shrink": "0"}
     vstack_props.update(kwargs)
     return rx.box(
         rx.el.style(GeneralSettingsState.theme_css),

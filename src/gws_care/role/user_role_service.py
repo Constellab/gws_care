@@ -99,6 +99,15 @@ class UserRoleService:
             .execute()
         )
 
+    @classmethod
+    def set_doctor_link(cls, user_id: str, doctor_id: str | None) -> None:
+        """Link or unlink a registered MedicalDoctor profile for a DOCTOR user."""
+        (
+            UserCareRole.update(linked_doctor_id=doctor_id)
+            .where(UserCareRole.user == user_id, UserCareRole.role == CareRole.DOCTOR)
+            .execute()
+        )
+
     # ── Patient link (PATIENT role) ───────────────────────────────────────────
 
     @classmethod
@@ -139,18 +148,14 @@ class UserRoleService:
                 (r.linked_patient_id for r in rows if r.role == CareRole.PATIENT),
                 None,
             )
-            doctor_all_patients = next(
-                (r.all_patients for r in rows if r.role == CareRole.DOCTOR),
-                True,
+            linked_doctor_id = next(
+                (r.linked_doctor_id for r in rows if r.role == CareRole.DOCTOR),
+                None,
             )
-            # Collect linked entity IDs: patient IDs for DOCTOR, account IDs for ACCOUNT_ADMIN
             acct_rows = list(
                 UserCareRoleAccount.select()
                 .where(UserCareRoleAccount.user == u.id)
             )
-            doctor_patient_ids = [
-                r.account_id for r in acct_rows if r.role == CareRole.DOCTOR
-            ]
             account_admin_account_ids = [
                 r.account_id for r in acct_rows if r.role == CareRole.ACCOUNT_ADMIN
             ]
@@ -161,8 +166,7 @@ class UserRoleService:
                     "email": u.email,
                     "roles": role_values,
                     "linked_patient_id": linked_patient_id or "",
-                    "doctor_all_patients": doctor_all_patients,
-                    "doctor_patient_ids": doctor_patient_ids,
+                    "linked_doctor_id": linked_doctor_id or "",
                     "account_admin_account_ids": account_admin_account_ids,
                 }
             )

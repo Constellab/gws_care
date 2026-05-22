@@ -63,6 +63,10 @@ def _patient_option(opt: EntityOption) -> rx.Component:
     return rx.select.item(opt.label, value=opt.id)
 
 
+def _doctor_option(opt: EntityOption) -> rx.Component:
+    return rx.select.item(opt.label, value=opt.id)
+
+
 def _account_chip(account_id: str, account_label: str, user_id: str, role: str) -> rx.Component:
     """Small removable chip for one assigned account."""
     return rx.badge(
@@ -99,61 +103,24 @@ def _account_label_for_id(account_id: rx.Var) -> rx.Component:
     )
 
 
-def _doctor_patient_section(user: UserRoleRowDTO) -> rx.Component:
-    """Patient scope section shown when the DOCTOR role is assigned."""
+def _doctor_section(user: UserRoleRowDTO) -> rx.Component:
+    """Linked doctor selector shown when the DOCTOR role is assigned."""
     return rx.cond(
         user.roles.contains("DOCTOR"),
-        rx.vstack(
-            # "All patients" toggle
-            rx.hstack(
-                rx.checkbox(
-                    checked=user.doctor_all_patients,
-                    on_change=lambda val: AdminState.set_doctor_all_patients(user.id, val),
+        rx.box(
+            rx.select.root(
+                rx.select.trigger(
+                    placeholder=LanguageState.tr["link_doctor_placeholder"],
                     size="1",
                 ),
-                rx.text(LanguageState.tr["all_patients_label"], size="1"),
-                spacing="1",
-                align="center",
-            ),
-            # When not all_patients: show assigned patients + add selector
-            rx.cond(
-                ~user.doctor_all_patients,
-                rx.vstack(
-                    rx.hstack(
-                        rx.foreach(
-                            user.doctor_patients,
-                            lambda opt: rx.badge(
-                                rx.hstack(
-                                    rx.text(opt.label, size="1"),
-                                    rx.icon(
-                                        "x", size=10, cursor="pointer",
-                                        on_click=lambda: AdminState.remove_account_link(user.id, "DOCTOR", opt.id),
-                                    ),
-                                    spacing="1", align="center",
-                                ),
-                                color_scheme="blue", variant="soft", size="1",
-                            ),
-                        ),
-                        wrap="wrap",
-                        spacing="1",
-                    ),
-                    rx.select.root(
-                        rx.select.trigger(
-                            placeholder=LanguageState.tr["link_patient_doctor_placeholder"],
-                            size="1",
-                        ),
-                        rx.select.content(
-                            rx.foreach(AdminState.patient_options, _patient_option),
-                        ),
-                        on_change=lambda val: AdminState.add_account_link(user.id, "DOCTOR", val),
-                        size="1",
-                    ),
-                    spacing="1",
-                    align="start",
+                rx.select.content(
+                    rx.select.item(LanguageState.tr["no_doctor_option"], value="__none__"),
+                    rx.foreach(AdminState.doctor_options, _doctor_option),
                 ),
+                value=user.linked_doctor_id,
+                on_change=lambda val: AdminState.set_doctor_link(user.id, val),
+                size="1",
             ),
-            spacing="1",
-            align="start",
             padding_left="1.5rem",
         ),
     )
@@ -208,10 +175,10 @@ def _user_row(user: UserRoleRowDTO) -> rx.Component:
             rx.vstack(
                 # ── ADMIN ──────────────────────────────────────────────────
                 _role_toggle(user, "ADMIN"),
-                # ── DOCTOR + patient scope ──────────────────────────────────
+                # ── DOCTOR + linked doctor profile ──────────────────────────
                 rx.vstack(
                     _role_toggle(user, "DOCTOR"),
-                    _doctor_patient_section(user),
+                    _doctor_section(user),
                     spacing="1",
                     align="start",
                 ),

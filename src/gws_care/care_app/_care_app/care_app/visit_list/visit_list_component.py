@@ -253,25 +253,38 @@ def _new_visit_dialog() -> rx.Component:
     """Unified dialog for creating a new visit (campaign or consultation)."""
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Nouvelle visite"),
-            rx.vstack(
-                # Visit type selector
-                rx.vstack(
-                    rx.text("Type de visite", size="2", weight="medium"),
-                    rx.radio_group.root(
-                        rx.hstack(
-                            rx.radio_group.item(value="campaign"),
-                            rx.text("Campagne", size="2"),
-                            rx.radio_group.item(value="consultation"),
-                            rx.text("Consultation", size="2"),
-                            spacing="2",
-                            align="center",
-                        ),
-                        value=VisitListState.new_visit_type,
-                        on_change=VisitListState.set_new_visit_type,
+            rx.dialog.title(
+                rx.cond(
+                    VisitListState.new_visit_type == "consultation",
+                    "Nouvelle visite de consultation",
+                    rx.cond(
+                        VisitListState.new_visit_type == "campaign",
+                        "Nouvelle visite de campagne",
+                        "Nouvelle visite",
                     ),
-                    spacing="1",
-                    width="100%",
+                )
+            ),
+            rx.vstack(
+                # Visit type selector — hidden when type is forced by page context
+                rx.cond(
+                    ~VisitListState.new_visit_type_locked,
+                    rx.vstack(
+                        rx.text("Type de visite", size="2", weight="medium"),
+                        rx.radio_group.root(
+                            rx.hstack(
+                                rx.radio_group.item(value="campaign"),
+                                rx.text("Campagne", size="2"),
+                                rx.radio_group.item(value="consultation"),
+                                rx.text("Consultation", size="2"),
+                                spacing="2",
+                                align="center",
+                            ),
+                            value=VisitListState.new_visit_type,
+                            on_change=VisitListState.set_new_visit_type,
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
                 ),
                 # Patient picker table
                 rx.vstack(

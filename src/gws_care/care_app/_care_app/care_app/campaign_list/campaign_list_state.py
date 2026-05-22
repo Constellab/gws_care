@@ -251,7 +251,7 @@ class CampaignListState(AccountPickerState):
         form_picker = await self.get_state(CampaignFormPickerState)
         form_account_id = form_picker.form_account_id
         if not self.form_name.strip() or not form_account_id or not self.form_start_date or not self.form_end_date:
-            self.form_error = "Please fill in all required fields."
+            self.form_error = "Veuillez remplir tous les champs obligatoires."
             return
         self.is_saving = True
         self.form_error = ""

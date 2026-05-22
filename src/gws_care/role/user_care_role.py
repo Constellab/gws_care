@@ -26,6 +26,8 @@ class UserCareRole(Model):
     role: CareRole = EnumField(choices=CareRole, null=False)
     # Kept for PATIENT role only (single patient link)
     linked_patient_id: str = CharField(max_length=36, null=True)
+    # For DOCTOR role: link to a registered MedicalDoctor profile
+    linked_doctor_id: str = CharField(max_length=36, null=True)
     # For DOCTOR role: True = global patient access, False = scoped to UserCareRoleAccount entries
     all_patients: bool = BooleanField(default=True, null=False)
 

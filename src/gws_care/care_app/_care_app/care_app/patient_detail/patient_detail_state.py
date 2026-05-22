@@ -27,7 +27,13 @@ class PatientDetailDTO(BaseModel):
     social_security_number: str | None = None
     sex: str | None = None
     qr_code: str | None = None
+    account_id: str = ""
     account_name: str = ""
+    # Linked registered doctor
+    primary_physician_id: str = ""
+    primary_physician_full_name: str = ""
+    primary_physician_specialization: str = ""
+    primary_physician_email: str = ""
 
 
 class ExamRowDTO(BaseModel):
@@ -586,6 +592,23 @@ class PatientDetailState(ReflexMainState):
                 from gws_care.patient.patient_service import PatientService
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
                 p = PatientService.get_patient(patient_id)
+                # Resolve linked doctor if set
+                physician_id = str(p.primary_physician_id) if p.primary_physician_id else ""
+                physician_full_name = ""
+                physician_specialization = ""
+                physician_phone = p.primary_physician_phone or ""
+                physician_email = ""
+                if physician_id:
+                    try:
+                        from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+                        doc = MedicalDoctorService.get_doctor(physician_id)
+                        physician_full_name = doc.full_name
+                        physician_specialization = doc.specialization or ""
+                        physician_phone = doc.phone or ""
+                        physician_email = doc.email or ""
+                    except Exception:
+                        pass
+
                 self.patient = PatientDetailDTO(
                     id=str(p.id),
                     patient_number=p.patient_number,
@@ -601,10 +624,14 @@ class PatientDetailState(ReflexMainState):
                     phone=p.phone,
                     email=p.email,
                     primary_physician_name=p.primary_physician_name,
-                    primary_physician_phone=p.primary_physician_phone,
+                    primary_physician_phone=physician_phone,
                     social_security_number=p.social_security_number,
                     sex=p.sex,
                     qr_code=p.qr_code,
+                    primary_physician_id=physician_id,
+                    primary_physician_full_name=physician_full_name,
+                    primary_physician_specialization=physician_specialization,
+                    primary_physician_email=physician_email,
                 )
                 exams = ExamService.list_exams_for_patient(patient_id)
                 self.exams = [
@@ -644,7 +671,12 @@ class PatientDetailState(ReflexMainState):
                     AccountForVisitDTO(id=str(link.account_id), name=link.account.name)
                     for link in links
                 ]
-                self.patient.account_name = links[0].account.name if links else ""
+                if links:
+                    self.patient.account_name = links[0].account.name
+                    self.patient.account_id = str(links[0].account_id)
+                else:
+                    self.patient.account_name = ""
+                    self.patient.account_id = ""
             await self._load_prescriptions()
             await self._load_certificates()
         except Exception as e:

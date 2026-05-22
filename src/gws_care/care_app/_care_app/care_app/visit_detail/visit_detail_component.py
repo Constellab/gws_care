@@ -470,6 +470,41 @@ def visit_detail_page() -> rx.Component:
                         ),
                         # Workflow lifeline
                         _workflow_lifeline_visit(),
+                        # Contextual workflow hint
+                        rx.match(
+                            VisitDetailState.visit.campaign_visit_status,
+                            ("pending", rx.callout(
+                                LanguageState.tr["hint_visit_pending"],
+                                icon="info",
+                                color_scheme="gray",
+                                size="1",
+                            )),
+                            ("visit_done", rx.callout(
+                                LanguageState.tr["hint_visit_done"],
+                                icon="flask-conical",
+                                color_scheme="amber",
+                                size="1",
+                            )),
+                            ("lab_done", rx.callout(
+                                LanguageState.tr["hint_visit_lab_done"],
+                                icon="stethoscope",
+                                color_scheme="blue",
+                                size="1",
+                            )),
+                            ("doctor_clinic_validated", rx.callout(
+                                LanguageState.tr["hint_visit_clinic_validated"],
+                                icon="building-2",
+                                color_scheme="violet",
+                                size="1",
+                            )),
+                            ("doctor_company_validated", rx.callout(
+                                LanguageState.tr["hint_visit_company_validated"],
+                                icon="circle-check",
+                                color_scheme="green",
+                                size="1",
+                            )),
+                            rx.fragment(),
+                        ),
                         # "Mark Visit Done" — only when pending
                         rx.cond(
                             (VisitDetailState.visit.campaign_visit_status == "pending")

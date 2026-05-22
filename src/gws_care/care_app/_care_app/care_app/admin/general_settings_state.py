@@ -82,9 +82,9 @@ class GeneralSettingsState(RoleState):
             with await self.authenticate_user():
                 from gws_care.core.care_app_config_service import CareAppConfigService
                 CareAppConfigService.save_page_size(int(self.page_size))
-            self.save_page_size_success = "Saved."
+            self.save_page_size_success = "Enregistré."
         except Exception as e:
-            self.save_page_size_error = f"Error: {e}"
+            self.save_page_size_error = f"Erreur : {e}"
         finally:
             self.is_saving_page_size = False
 
@@ -99,8 +99,8 @@ class GeneralSettingsState(RoleState):
             with await self.authenticate_user():
                 from gws_care.core.care_app_config_service import CareAppConfigService
                 CareAppConfigService.save_color_theme(theme)
-            self.save_theme_success = "Saved."
+            self.save_theme_success = "Enregistré."
         except Exception as e:
-            self.save_theme_error = f"Error: {e}"
+            self.save_theme_error = f"Erreur : {e}"
         finally:
             self.is_saving_theme = False

@@ -16,6 +16,12 @@ class AccountPickerRowDTO(BaseModel):
     account_type: str = ""
     city: str | None = None
 
+
+class DoctorPickerRowDTO(BaseModel):
+    id: str
+    full_name: str
+    specialization: str = ""
+
 class PatientFormState(FormDialogState, rx.State):
     """Manages the create / update patient dialog.
 
@@ -35,6 +41,15 @@ class PatientFormState(FormDialogState, rx.State):
     form_city: str = ""
     form_primary_physician_name: str = ""
     form_primary_physician_phone: str = ""
+    form_physician_id: str = ""
+    form_physician_name: str = ""  # display label shown on the picker button
+
+    # Doctor picker
+    doc_picker_is_open: bool = False
+    doc_picker_filter: str = ""
+    doc_picker_rows: list[DoctorPickerRowDTO] = []
+    doc_picker_is_loading: bool = False
+    doc_picker_error: str = ""
 
     # New optional fields
     form_social_security_number: str = ""
@@ -106,6 +121,35 @@ class PatientFormState(FormDialogState, rx.State):
     @rx.event
     def set_form_primary_physician_phone(self, value: str):
         self.form_primary_physician_phone = value
+
+    # ── Doctor picker ───────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_doctor_picker(self):
+        self.doc_picker_filter = ""
+        self.doc_picker_error = ""
+        self.doc_picker_is_open = True
+        await self._run_doc_search()
+
+    @rx.event
+    def close_doctor_picker(self):
+        self.doc_picker_is_open = False
+
+    @rx.event
+    async def doc_picker_set_filter(self, value: str):
+        self.doc_picker_filter = value
+        await self._run_doc_search()
+
+    @rx.event
+    def doc_picker_confirm(self, doctor_id: str, name: str):
+        self.form_physician_id = doctor_id
+        self.form_physician_name = name
+        self.doc_picker_is_open = False
+
+    @rx.event
+    def doc_picker_clear(self):
+        self.form_physician_id = ""
+        self.form_physician_name = ""
 
     @rx.event
     def set_form_social_security_number(self, value: str):
@@ -196,6 +240,31 @@ class PatientFormState(FormDialogState, rx.State):
             self.acct_picker_is_loading = False
 
 
+    async def _run_doc_search(self) -> None:
+        self.doc_picker_is_loading = True
+        self.doc_picker_error = ""
+        try:
+            _main = await self.get_state(ReflexMainState)
+            with await _main.authenticate_user():
+                from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+                doctors = MedicalDoctorService.list_doctors(active_only=True)
+                name_filter = self.doc_picker_filter.strip().lower()
+                if name_filter:
+                    doctors = [d for d in doctors if name_filter in d.full_name.lower()
+                               or name_filter in (d.specialization or "").lower()]
+                self.doc_picker_rows = [
+                    DoctorPickerRowDTO(
+                        id=d.id,
+                        full_name=d.full_name,
+                        specialization=d.specialization or "",
+                    )
+                    for d in doctors
+                ]
+        except Exception as e:
+            self.doc_picker_error = str(e)
+        finally:
+            self.doc_picker_is_loading = False
+
     @rx.event
     async def open_create_dialog(self):
         """Open the dialog in create mode with blank fields."""
@@ -248,6 +317,7 @@ class PatientFormState(FormDialogState, rx.State):
             self.form_city = p.city or ""
             self.form_primary_physician_name = p.primary_physician_name or ""
             self.form_primary_physician_phone = p.primary_physician_phone or ""
+            self.form_physician_id = str(p.primary_physician_id) if p.primary_physician_id else ""
             from gws_care.patient.patient_account import PatientAccount
             first_link = PatientAccount.select().where(PatientAccount.patient == patient_id).first()
             self.form_account_id = str(first_link.account_id) if first_link else ""
@@ -278,6 +348,20 @@ class PatientFormState(FormDialogState, rx.State):
                 self.form_account_name = ""
         else:
             self.form_account_name = ""
+
+        # Resolve the doctor display name for the picker button
+        if self.form_physician_id:
+            try:
+                _main3 = await self.get_state(ReflexMainState)
+                with await _main3.authenticate_user():
+                    from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+                    doc = MedicalDoctorService.get_doctor(self.form_physician_id)
+                    self.form_physician_name = doc.full_name
+            except Exception:
+                self.form_physician_name = ""
+        else:
+            self.form_physician_name = ""
+
         self.dialog_opened = True
 
     # ── FormDialogState abstract method implementations ───────────────────────
@@ -295,6 +379,7 @@ class PatientFormState(FormDialogState, rx.State):
         self.form_city = ""
         self.form_primary_physician_name = ""
         self.form_primary_physician_phone = ""
+        self.form_physician_id = ""
         self._editing_patient_id = ""
         self.is_update_mode = False
         self.form_social_security_number = ""
@@ -310,6 +395,11 @@ class PatientFormState(FormDialogState, rx.State):
         self.acct_picker_filter = ""
         self.acct_picker_accounts = []
         self.acct_picker_error = ""
+        self.form_physician_name = ""
+        self.doc_picker_is_open = False
+        self.doc_picker_filter = ""
+        self.doc_picker_rows = []
+        self.doc_picker_error = ""
 
     async def _create(self, form_data: dict) -> AsyncGenerator:
         """Create a new patient from form data."""
@@ -342,18 +432,14 @@ class PatientFormState(FormDialogState, rx.State):
             address=self.form_address or None,
             postal_code=self.form_postal_code or None,
             city=self.form_city or None,
-            primary_physician_name=self.form_primary_physician_name or None,
-            primary_physician_phone=self.form_primary_physician_phone or None,
+            primary_physician_name=None,
+            primary_physician_phone=None,
+            primary_physician_id=self.form_physician_id or None,
             account_id=self.form_account_id or None,
             social_security_number=self.form_social_security_number or None,
             weight=float(self.form_weight) if self.form_weight.strip() else None,
             height=float(self.form_height) if self.form_height.strip() else None,
             sex=self.form_sex or None,
-            notification_preferences={
-                "email": self.form_notif_email,
-                "sms": self.form_notif_sms,
-                "whatsapp": self.form_notif_whatsapp,
-            },
         )
 
         async with self:
@@ -401,8 +487,9 @@ class PatientFormState(FormDialogState, rx.State):
             address=self.form_address or None,
             postal_code=self.form_postal_code or None,
             city=self.form_city or None,
-            primary_physician_name=self.form_primary_physician_name or None,
-            primary_physician_phone=self.form_primary_physician_phone or None,
+            primary_physician_name=None,
+            primary_physician_phone=None,
+            primary_physician_id=self.form_physician_id or None,
             account_id=self.form_account_id or None,
             social_security_number=self.form_social_security_number or None,
             weight=float(self.form_weight) if self.form_weight.strip() else None,

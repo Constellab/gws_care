@@ -124,6 +124,27 @@ class CampaignDetailState(PatientPickerState):
     # PDF download
     is_downloading_pdf: bool = False
 
+    # ── Tabs ──────────────────────────────────────────────────────────────────
+    active_tab: str = "patients"
+
+    # ── Patient table filter + sort ────────────────────────────────────────────
+    patient_filter_name: str = ""
+    patient_filter_number: str = ""
+    patient_sort_col: str = "full_name"
+    patient_sort_dir: str = "asc"
+
+    # ── Exam type table sort ───────────────────────────────────────────────────
+    exam_sort_col: str = "name"
+    exam_sort_dir: str = "asc"
+
+    # ── Visit table filter + sort ──────────────────────────────────────────────
+    visit_filter_name: str = ""
+    visit_filter_number: str = ""
+    visit_filter_visit_id: str = ""
+    visit_filter_status: str = ""
+    visit_sort_col: str = "patient_name"
+    visit_sort_dir: str = "asc"
+
     @rx.event
     async def on_load(self):
         await self._load_roles()
@@ -140,20 +161,129 @@ class CampaignDetailState(PatientPickerState):
     def go_to_visit(self, visit_id: str):
         return rx.redirect(f"/visit/{visit_id}")
 
+    @rx.event
+    def set_active_tab(self, tab: str):
+        self.active_tab = tab
+
+    # ── Patient filter / sort ──────────────────────────────────────────────────
+
+    @rx.event
+    def set_patient_filter_name(self, v: str):
+        self.patient_filter_name = v
+
+    @rx.event
+    def set_patient_filter_number(self, v: str):
+        self.patient_filter_number = v
+
+    @rx.event
+    def sort_patients(self, col: str):
+        if self.patient_sort_col == col:
+            self.patient_sort_dir = "desc" if self.patient_sort_dir == "asc" else "asc"
+        else:
+            self.patient_sort_col = col
+            self.patient_sort_dir = "asc"
+
+    # ── Exam type sort ─────────────────────────────────────────────────────────
+
+    @rx.event
+    def sort_exam_types(self, col: str):
+        if self.exam_sort_col == col:
+            self.exam_sort_dir = "desc" if self.exam_sort_dir == "asc" else "asc"
+        else:
+            self.exam_sort_col = col
+            self.exam_sort_dir = "asc"
+
+    # ── Visit filter / sort ────────────────────────────────────────────────────
+
+    @rx.event
+    def set_visit_filter_name(self, v: str):
+        self.visit_filter_name = v
+
+    @rx.event
+    def set_visit_filter_number(self, v: str):
+        self.visit_filter_number = v
+
+    @rx.event
+    def set_visit_filter_visit_id(self, v: str):
+        self.visit_filter_visit_id = v
+
+    @rx.event
+    def set_visit_filter_status(self, v: str):
+        self.visit_filter_status = v
+
+    @rx.event
+    def sort_visits(self, col: str):
+        if self.visit_sort_col == col:
+            self.visit_sort_dir = "desc" if self.visit_sort_dir == "asc" else "asc"
+        else:
+            self.visit_sort_col = col
+            self.visit_sort_dir = "asc"
+
     @rx.var
     def program_status_index(self) -> int:
         """Return the 0-based index of the current program status in the workflow order."""
-        order = ["draft", "validated", "in_progress", "closed", "archived"]
+        order = ["draft", "validated", "terrain_exam", "sample_analysis", "closed", "archived"]
         if not self.program:
             return 0
-        # Map doctor_company_validated to in_progress (same visual position)
         status = self.program.status
-        if status == "doctor_company_validated":
-            status = "in_progress"
+        # Collapse intermediate statuses into sample_analysis (same visual position)
+        if status in ("lab_done", "doctor_clinic_validated", "doctor_company_validated"):
+            status = "sample_analysis"
         try:
             return order.index(status)
         except ValueError:
             return 0
+
+    @rx.var
+    def filtered_patients(self) -> list[PatientRowDTO]:
+        rows = list(self.patients)
+        if self.patient_filter_name:
+            q = self.patient_filter_name.lower()
+            rows = [p for p in rows if q in p.full_name.lower()]
+        if self.patient_filter_number:
+            q = self.patient_filter_number.lower()
+            rows = [p for p in rows if q in p.patient_number.lower()]
+        rev = self.patient_sort_dir == "desc"
+        if self.patient_sort_col == "patient_number":
+            rows = sorted(rows, key=lambda p: p.patient_number.lower(), reverse=rev)
+        else:
+            rows = sorted(rows, key=lambda p: p.full_name.lower(), reverse=rev)
+        return rows
+
+    @rx.var
+    def filtered_exam_types(self) -> list[ExamTypeRowDTO]:
+        rows = list(self.exam_types)
+        rev = self.exam_sort_dir == "desc"
+        if self.exam_sort_col == "code":
+            rows = sorted(rows, key=lambda e: e.code.lower(), reverse=rev)
+        elif self.exam_sort_col == "category":
+            rows = sorted(rows, key=lambda e: e.category.lower(), reverse=rev)
+        else:
+            rows = sorted(rows, key=lambda e: e.name.lower(), reverse=rev)
+        return rows
+
+    @rx.var
+    def filtered_visits(self) -> list[VisitRowDTO]:
+        rows = list(self.visits)
+        if self.visit_filter_name:
+            q = self.visit_filter_name.lower()
+            rows = [v for v in rows if q in v.patient_name.lower()]
+        if self.visit_filter_number:
+            q = self.visit_filter_number.lower()
+            rows = [v for v in rows if q in v.patient_number.lower()]
+        if self.visit_filter_visit_id:
+            q = self.visit_filter_visit_id.lower()
+            rows = [v for v in rows if q in v.visit_number.lower()]
+        if self.visit_filter_status:
+            rows = [v for v in rows if v.campaign_visit_status == self.visit_filter_status]
+        rev = self.visit_sort_dir == "desc"
+        if self.visit_sort_col == "visit_number":
+            rows = sorted(rows, key=lambda v: v.visit_number.lower(), reverse=rev)
+        elif self.visit_sort_col == "status":
+            rows = sorted(rows, key=lambda v: v.campaign_visit_status, reverse=rev)
+        else:
+            rows = sorted(rows, key=lambda v: v.patient_name.lower(), reverse=rev)
+        return rows
 
     @rx.var
     def can_validate_program(self) -> bool:
@@ -225,7 +355,7 @@ class CampaignDetailState(PatientPickerState):
 
     @rx.event
     async def start_campaign(self):
-        """VALIDATED → IN_PROGRESS."""
+        """VALIDATED → TERRAIN_EXAM."""
         if not self.program:
             return
         self.error_message = ""
@@ -235,13 +365,29 @@ class CampaignDetailState(PatientPickerState):
                 from gws_care.campaign.campaign_service import CampaignService
                 CampaignService.start_campaign(self.program.id)
             await self._load_program()
-            self.success_message = "Campaign started."
+            self.success_message = "Campagne démarrée."
+        except Exception as e:
+            self.error_message = str(e)
+
+    @rx.event
+    async def complete_terrain(self):
+        """TERRAIN_EXAM → SAMPLE_ANALYSIS."""
+        if not self.program:
+            return
+        self.error_message = ""
+        self.success_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.complete_terrain_phase(self.program.id)
+            await self._load_program()
+            self.success_message = "Phase terrain terminée. Passez à la saisie des résultats."
         except Exception as e:
             self.error_message = str(e)
 
     @rx.event
     async def validate_lab(self):
-        """IN_PROGRESS → LAB_DONE (Operator)."""
+        """SAMPLE_ANALYSIS → LAB_DONE (Operator)."""
         if not self.program:
             return
         self.error_message = ""
@@ -323,7 +469,7 @@ class CampaignDetailState(PatientPickerState):
             filename = f"qr_grid_{self.program.campaign_number}.pdf"
             return rx.download(data=pdf_bytes, filename=filename)
         except Exception as e:
-            self.error_message = f"PDF generation error: {e}"
+            self.error_message = f"Erreur lors de la génération du PDF : {e}"
         finally:
             self.is_downloading_pdf = False
 
@@ -341,7 +487,7 @@ class CampaignDetailState(PatientPickerState):
             filename = f"rapport_{self.program.campaign_number}.pdf"
             return rx.download(data=pdf_bytes, filename=filename)
         except Exception as e:
-            self.error_message = f"PDF generation error: {e}"
+            self.error_message = f"Erreur lors de la génération du PDF : {e}"
         finally:
             self.is_downloading_pdf = False
 
@@ -351,8 +497,8 @@ class CampaignDetailState(PatientPickerState):
     async def open_add_patient_dialog(self):
         if not self.program:
             return
-        # Open the picker restricted to the program's billing account
-        await self._open_picker(account_id=self.program.account_id or "")
+        # Show all patients (no account filter) so operators can add any patient
+        await self._open_picker(account_id="")
         self.add_patient_dialog_open = True
 
     @rx.event
@@ -520,6 +666,13 @@ class CampaignDetailState(PatientPickerState):
                     )
                     for v in visits
                 ]
+
+                # Default tab: show visits once the campaign is active
+                if self.program.status in ("terrain_exam", "sample_analysis", "closed", "archived",
+                                           "lab_done", "doctor_clinic_validated", "doctor_company_validated"):
+                    self.active_tab = "visits"
+                else:
+                    self.active_tab = "patients"
 
         except Exception as e:
             self.error_message = str(e)

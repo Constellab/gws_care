@@ -119,7 +119,7 @@ class TerrainState(RoleState):
     def on_scan_error(self, message: str):
         """Called by the camera scanner component on error."""
         self.scanner_active = False
-        self.scan_error = f"Scanner error: {message}"
+        self.scan_error = f"Erreur scanner : {message}"
 
     @rx.event
     def set_scan_result(self, value: str):
@@ -230,6 +230,9 @@ class TerrainState(RoleState):
                     updated_patients.append(TerrainPatientDTO(**{
                         **p.dict(),
                         "visit_id": visit_id,
+                        # When a visit is freshly created it has no status in local state yet;
+                        # default to "pending" so the mark-done button becomes visible.
+                        "visit_status": p.visit_status or "pending",
                         "exams": updated_exams,
                         "exams_done": exams_done,
                     }))
@@ -279,7 +282,7 @@ class TerrainState(RoleState):
                 for p in self.patients
             ]
             self._apply_filter()
-            self.success_message = "On-site visit marked as done."
+            self.success_message = "Visite sur site marquée comme terminée."
         except Exception as e:
             self.error_message = str(e)
 
@@ -298,7 +301,7 @@ class TerrainState(RoleState):
             filename = f"qr_grid_{self.campaign_number or self.campaign_id}.pdf"
             return rx.download(data=pdf_bytes, filename=filename)
         except Exception as e:
-            self.error_message = f"PDF generation error: {e}"
+            self.error_message = f"Erreur lors de la génération du PDF : {e}"
         finally:
             self.is_downloading_pdf = False
 

@@ -210,7 +210,7 @@ class ImportState(ReflexMainState):
             try:
                 content = raw_bytes.decode("utf-8-sig")
             except UnicodeDecodeError:
-                self.parse_error = "Could not decode the file. Please save it as UTF-8 CSV."
+                self.parse_error = "Impossible de lire le fichier. Veuillez l'enregistrer en UTF-8 CSV."
                 return
 
             from gws_care.core.bulk_import_service import BulkImportService
@@ -231,7 +231,7 @@ class ImportState(ReflexMainState):
             )
             self.preview_rows = self._build_preview_rows(parse_result)
         except Exception as e:
-            self.parse_error = f"Parse error: {e}"
+            self.parse_error = f"Erreur de lecture : {e}"
         finally:
             self.is_parsing = False
 
@@ -285,7 +285,7 @@ class ImportState(ReflexMainState):
                         errors += 1
 
         except Exception as e:
-            self.parse_error = f"Authentication or DB error: {e}"
+            self.parse_error = f"Erreur d'authentification ou de base de données : {e}"
 
         self.preview_rows = updated_rows
         self.success_count = success
