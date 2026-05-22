@@ -15,8 +15,8 @@ from .patient_portal_state import (
     PatientPortalState,
     PortalAppointmentDTO,
     PortalDocumentDTO,
+    PortalExamResultDTO,
     PortalMessageDTO,
-    PortalVisitDTO,
 )
 
 # ── Shared sub-components ─────────────────────────────────────────────────────
@@ -63,17 +63,29 @@ def _portal_nav() -> rx.Component:
 # ── My Results ────────────────────────────────────────────────────────────────
 
 
-def _visit_result_card(v: PortalVisitDTO) -> rx.Component:
+def _visit_result_card(v: PortalExamResultDTO) -> rx.Component:
     return rx.card(
         rx.vstack(
             rx.hstack(
                 rx.vstack(
-                    rx.heading(v.campaign_name, size="4"),
+                    rx.heading(v.exam_type_label, size="4"),
                     rx.hstack(
                         rx.icon("calendar", size=13, color="var(--gray-9)"),
-                        rx.text(v.campaign_start_date, size="2", color="var(--gray-9)"),
-                        rx.separator(orientation="vertical"),
-                        rx.text(v.visit_number, size="2", color="var(--gray-9)"),
+                        rx.text(v.exam_date, size="2", color="var(--gray-9)"),
+                        rx.cond(
+                            v.visit_number != "",
+                            rx.fragment(
+                                rx.separator(orientation="vertical"),
+                                rx.text(v.visit_number, size="2", color="var(--gray-9)"),
+                            ),
+                        ),
+                        rx.cond(
+                            v.campaign_name != "",
+                            rx.fragment(
+                                rx.separator(orientation="vertical"),
+                                rx.text(v.campaign_name, size="2", color="var(--gray-9)"),
+                            ),
+                        ),
                         spacing="1",
                         align="center",
                     ),
@@ -86,7 +98,7 @@ def _visit_result_card(v: PortalVisitDTO) -> rx.Component:
                 width="100%",
             ),
             rx.cond(
-                v.doctor_company_message != "",
+                v.interpretation != "",
                 rx.vstack(
                     rx.text(
                         LanguageState.tr["patient_message_label"] + ":",
@@ -95,7 +107,7 @@ def _visit_result_card(v: PortalVisitDTO) -> rx.Component:
                         color="var(--gray-11)",
                     ),
                     rx.box(
-                        rx.text(v.doctor_company_message, size="2"),
+                        rx.text(v.interpretation, size="2"),
                         padding="0.75rem",
                         border_radius="var(--radius-2)",
                         background="var(--accent-2)",
@@ -103,14 +115,6 @@ def _visit_result_card(v: PortalVisitDTO) -> rx.Component:
                     ),
                     spacing="1",
                     width="100%",
-                ),
-            ),
-            rx.cond(
-                v.doctor_company_validated_at != "",
-                rx.text(
-                    LanguageState.tr["validated_by_label"] + ": " + v.doctor_company_validated_at,
-                    size="1",
-                    color="var(--gray-9)",
                 ),
             ),
             width="100%",
@@ -135,7 +139,7 @@ def my_results_page() -> rx.Component:
                         icon="triangle-alert",
                     ),
                     rx.cond(
-                        PatientPortalState.portal_visits.length() == 0,
+                        PatientPortalState.portal_exam_results.length() == 0,
                         rx.center(
                             rx.vstack(
                                 rx.icon("file-search", size=40, color="var(--gray-7)"),
@@ -146,7 +150,7 @@ def my_results_page() -> rx.Component:
                             padding="4rem",
                         ),
                         rx.vstack(
-                            rx.foreach(PatientPortalState.portal_visits, _visit_result_card),
+                            rx.foreach(PatientPortalState.portal_exam_results, _visit_result_card),
                             width="100%",
                             spacing="3",
                         ),
@@ -163,26 +167,18 @@ def my_results_page() -> rx.Component:
 def _appointment_row(a: PortalAppointmentDTO) -> rx.Component:
     return rx.table.row(
         rx.table.cell(rx.text(a.scheduled_at, size="2")),
-        rx.table.cell(rx.text(a.exam_type_label, size="2")),
+        rx.table.cell(rx.text(a.visit_number, size="2")),
         rx.table.cell(
             rx.match(
                 a.status,
-                ("SCHEDULED", rx.badge(a.status_label, color_scheme="blue", variant="soft", size="1")),
-                ("IN_PROGRESS", rx.badge(a.status_label, color_scheme="amber", variant="soft", size="1")),
-                ("DONE", rx.badge(a.status_label, color_scheme="green", variant="soft", size="1")),
-                ("CANCELLED", rx.badge(a.status_label, color_scheme="red", variant="soft", size="1")),
+                ("scheduled", rx.badge(a.status_label, color_scheme="blue", variant="soft", size="1")),
+                ("in_progress", rx.badge(a.status_label, color_scheme="amber", variant="soft", size="1")),
+                ("done", rx.badge(a.status_label, color_scheme="green", variant="soft", size="1")),
+                ("cancelled", rx.badge(a.status_label, color_scheme="red", variant="soft", size="1")),
                 rx.badge(a.status_label, color_scheme="gray", variant="soft", size="1"),
             )
         ),
-        rx.table.cell(
-            rx.cond(
-                a.notes != "",
-                rx.tooltip(
-                    rx.icon("info", size=14, color="var(--gray-9)"),
-                    content=a.notes,
-                ),
-            )
-        ),
+        rx.table.cell(""),
     )
 
 
@@ -216,7 +212,7 @@ def my_appointments_page() -> rx.Component:
                             rx.table.header(
                                 rx.table.row(
                                     rx.table.column_header_cell(LanguageState.tr["col_date"]),
-                                    rx.table.column_header_cell(LanguageState.tr["col_exam_type"]),
+                                    rx.table.column_header_cell(LanguageState.tr["col_visit_number"]),
                                     rx.table.column_header_cell(LanguageState.tr["col_status"]),
                                     rx.table.column_header_cell(""),
                                 )

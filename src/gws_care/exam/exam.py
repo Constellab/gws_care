@@ -12,6 +12,7 @@ from gws_care.core.model_with_user import ModelWithUser
 from gws_care.exam.exam_type import ExamStatus, ExamType
 from gws_care.patient.patient import Patient
 from gws_care.user.user import User
+from gws_care.visit.visit import Visit
 
 from .exam_dto import ExamDTO
 
@@ -43,8 +44,8 @@ class Exam(ModelWithUser):
     # Terrain fields (Phase 4)
     tube_qr_code: str = CharField(max_length=100, null=True, index=True)
     is_done_on_site: bool = BooleanField(default=False, null=False)
-    # Phase 8 — visit FK (nullable for backward compat with standalone exams)
-    visit_id: str = CharField(max_length=36, null=True, index=True)
+    # visit FK — mandatory for EXAM-type visits, nullable for standalone exams (backward compat)
+    visit: Visit = ForeignKeyField(Visit, null=True, backref="exams", on_delete="SET NULL")
 
     def to_dto(self) -> ExamDTO:
         return ExamDTO(

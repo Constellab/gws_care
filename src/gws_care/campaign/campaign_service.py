@@ -16,8 +16,8 @@ from gws_care.patient.patient import Patient
 from gws_care.role.care_action import CareAction
 from gws_care.role.permission_service import PermissionService
 from gws_care.user.user import User
-from gws_care.workflow.program_validation_step import CampaignValidationStep
-from gws_care.workflow.program_validation_workflow import CampaignValidationWorkflow
+from gws_care.workflow.campaign_validation_step import CampaignValidationStep
+from gws_care.workflow.campaign_validation_workflow import CampaignValidationWorkflow
 
 
 class CampaignService:
@@ -61,7 +61,7 @@ class CampaignService:
         return list(
             Patient.select()
             .join(CampaignPatient)
-            .where(CampaignPatient.program == campaign_id)
+            .where(CampaignPatient.campaign == campaign_id)
             .order_by(Patient.last_name, Patient.first_name)
         )
 
@@ -71,17 +71,17 @@ class CampaignService:
         return list(
             ExamTypeModel.select()
             .join(CampaignExamType)
-            .where(CampaignExamType.program == campaign_id)
+            .where(CampaignExamType.campaign == campaign_id)
             .order_by(ExamTypeModel.name)
         )
 
     @classmethod
     def to_row_dto(cls, campaign: Campaign) -> CampaignRowDTO:
-        patient_count = CampaignPatient.select().where(CampaignPatient.program == campaign.id).count()
-        exam_type_count = CampaignExamType.select().where(CampaignExamType.program == campaign.id).count()
+        patient_count = CampaignPatient.select().where(CampaignPatient.campaign == campaign.id).count()
+        exam_type_count = CampaignExamType.select().where(CampaignExamType.campaign == campaign.id).count()
         return CampaignRowDTO(
             id=str(campaign.id),
-            program_number=campaign.program_number,
+            campaign_number=campaign.campaign_number,
             name=campaign.name,
             account_name=campaign.account.name if campaign.account_id else None,
             start_date=str(campaign.start_date),
@@ -141,7 +141,7 @@ class CampaignService:
         campaign.status = CampaignStatus.VALIDATED
         campaign.save()
         CampaignValidationWorkflow.insert(
-            program=campaign,
+            campaign=campaign,
             step=CampaignValidationStep.VALIDATED,
             validated_by=user,
             validated_at=now,
@@ -181,14 +181,14 @@ class CampaignService:
         if campaign.status != CampaignStatus.IN_PROGRESS:
             raise BadRequestException("Only IN_PROGRESS campaigns can be lab-validated")
 
-        from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
+        from gws_care.visit.campaign_visit_status import CampaignVisitStatus
         cls._assert_all_visits_at_least_status(campaign_id, CampaignVisitStatus.LAB_DONE)
 
         now = datetime.utcnow()
         campaign.status = CampaignStatus.LAB_DONE
         campaign.save()
         CampaignValidationWorkflow.insert(
-            program=campaign,
+            campaign=campaign,
             step=CampaignValidationStep.LAB_DONE,
             validated_by=user,
             validated_at=now,
@@ -225,14 +225,14 @@ class CampaignService:
         if campaign.status != CampaignStatus.LAB_DONE:
             raise BadRequestException("Only LAB_DONE campaigns can be clinic-doctor validated")
 
-        from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
+        from gws_care.visit.campaign_visit_status import CampaignVisitStatus
         cls._assert_all_visits_at_least_status(campaign_id, CampaignVisitStatus.DOCTOR_CLINIC_VALIDATED)
 
         now = datetime.utcnow()
         campaign.status = CampaignStatus.DOCTOR_CLINIC_VALIDATED
         campaign.save()
         CampaignValidationWorkflow.insert(
-            program=campaign,
+            campaign=campaign,
             step=CampaignValidationStep.DOCTOR_CLINIC_VALIDATED,
             validated_by=user,
             validated_at=now,
@@ -266,7 +266,7 @@ class CampaignService:
         campaign.status = CampaignStatus.DOCTOR_COMPANY_VALIDATED
         campaign.save()
         CampaignValidationWorkflow.insert(
-            program=campaign,
+            campaign=campaign,
             step=CampaignValidationStep.DOCTOR_COMPANY_VALIDATED,
             validated_by=None,
             validated_at=now,
@@ -341,11 +341,11 @@ class CampaignService:
                 )
 
         if CampaignPatient.get_or_none(
-            (CampaignPatient.program == campaign_id) & (CampaignPatient.patient == patient_id)
+            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
         ) is not None:
             raise BadRequestException("Patient is already in this campaign")
 
-        CampaignPatient.create(program=campaign, patient=patient)
+        CampaignPatient.create(campaign=campaign, patient=patient)
 
     @classmethod
     def remove_patient(cls, campaign_id: str, patient_id: str) -> None:
@@ -355,7 +355,7 @@ class CampaignService:
             raise BadRequestException("Patients can only be removed from DRAFT or VALIDATED campaigns")
 
         link = CampaignPatient.get_or_none(
-            (CampaignPatient.program == campaign_id) & (CampaignPatient.patient == patient_id)
+            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
         )
         if link is None:
             raise BadRequestException("Patient is not in this campaign")
@@ -376,11 +376,11 @@ class CampaignService:
             raise BadRequestException(f"ExamType '{exam_type.name}' is inactive and cannot be added")
 
         if CampaignExamType.get_or_none(
-            (CampaignExamType.program == campaign_id) & (CampaignExamType.exam_type == exam_type_id)
+            (CampaignExamType.campaign == campaign_id) & (CampaignExamType.exam_type == exam_type_id)
         ) is not None:
             raise BadRequestException("ExamType is already in this campaign")
 
-        CampaignExamType.create(program=campaign, exam_type=exam_type)
+        CampaignExamType.create(campaign=campaign, exam_type=exam_type)
 
     @classmethod
     def remove_exam_type(cls, campaign_id: str, exam_type_id: str) -> None:
@@ -389,7 +389,7 @@ class CampaignService:
             raise BadRequestException("Exam types can only be removed from DRAFT or VALIDATED campaigns")
 
         link = CampaignExamType.get_or_none(
-            (CampaignExamType.program == campaign_id) & (CampaignExamType.exam_type == exam_type_id)
+            (CampaignExamType.campaign == campaign_id) & (CampaignExamType.exam_type == exam_type_id)
         )
         if link is None:
             raise BadRequestException("ExamType is not in this campaign")
@@ -403,14 +403,14 @@ class CampaignService:
 
         Returns False if there are no visits (empty campaign).
         """
-        from gws_care.campaign_visit.campaign_visit import CampaignVisit
-        from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
-        total = CampaignVisit.select().where(CampaignVisit.program == campaign_id).count()
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+        total = Visit.select().where(Visit.campaign == campaign_id).count()
         if total == 0:
             return False
-        done = CampaignVisit.select().where(
-            CampaignVisit.program == campaign_id,
-            CampaignVisit.status == CampaignVisitStatus(status_value),
+        done = Visit.select().where(
+            Visit.campaign == campaign_id,
+            Visit.campaign_visit_status == CampaignVisitStatus(status_value),
         ).count()
         return done == total
 
@@ -421,21 +421,21 @@ class CampaignService:
         Visits that have advanced PAST min_status (e.g. already DOCTOR_CLINIC_VALIDATED
         when checking for LAB_DONE) are considered compliant.
         """
-        from gws_care.campaign_visit.campaign_visit import CampaignVisit
-        from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.campaign_visit_status import CampaignVisitStatus
         status_order = list(CampaignVisitStatus)
         min_index = status_order.index(min_status)
         # Statuses that are strictly before the required minimum
         statuses_not_ready = status_order[:min_index]
 
-        total = CampaignVisit.select().where(CampaignVisit.program == campaign_id).count()
+        total = Visit.select().where(Visit.campaign == campaign_id).count()
         if total == 0:
             raise BadRequestException("The campaign has no visits — cannot validate.")
 
         if statuses_not_ready:
-            not_ready_count = CampaignVisit.select().where(
-                CampaignVisit.program == campaign_id,
-                CampaignVisit.status.in_(statuses_not_ready),
+            not_ready_count = Visit.select().where(
+                Visit.campaign == campaign_id,
+                Visit.campaign_visit_status.in_(statuses_not_ready),
             ).count()
         else:
             not_ready_count = 0
@@ -470,12 +470,12 @@ class CampaignService:
     @classmethod
     def _check_appointment_dates(cls, campaign: Campaign, new_start: date, new_end: date) -> None:
         """Raise if any linked appointments fall outside the campaign date window."""
-        from gws_care.campaign_visit.campaign_visit import CampaignVisit
+        from gws_care.visit.visit import Visit
         incompatible = (
             Appointment.select()
             .where(Appointment.visit.is_null(False))
-            .join(CampaignVisit, on=(CampaignVisit.id == Appointment.visit))
-            .where(CampaignVisit.program == campaign.id)
+            .join(Visit, on=(Visit.id == Appointment.visit))
+            .where(Visit.campaign == campaign.id)
             .where(
                 (Appointment.scheduled_at < datetime.combine(new_start, datetime.min.time())) |
                 (Appointment.scheduled_at > datetime.combine(new_end, datetime.max.time()))

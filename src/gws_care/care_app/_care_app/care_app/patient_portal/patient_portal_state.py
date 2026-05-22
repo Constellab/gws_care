@@ -13,24 +13,24 @@ from pydantic import BaseModel
 from ..common.role_state import RoleState
 
 
-class PortalVisitDTO(BaseModel):
+class PortalExamResultDTO(BaseModel):
     id: str
-    visit_number: str
-    campaign_name: str
-    campaign_start_date: str
+    exam_type_label: str
+    exam_date: str
+    status: str
     status_label: str
-    doctor_company_validated_at: str = ""
-    doctor_company_message: str = ""
     interpretation: str = ""
+    visit_number: str = ""
+    campaign_name: str = ""
+    visit_type: str = ""
 
 
 class PortalAppointmentDTO(BaseModel):
     id: str
+    visit_number: str
     scheduled_at: str
-    exam_type_label: str
     status: str
     status_label: str
-    notes: str = ""
 
 
 class PortalDocumentDTO(BaseModel):
@@ -56,7 +56,7 @@ class PatientPortalState(RoleState):
     """State shared by all three patient-portal pages."""
 
     # My Results
-    portal_visits: list[PortalVisitDTO] = []
+    portal_exam_results: list[PortalExamResultDTO] = []
     visits_loading: bool = False
     visits_error: str = ""
 
@@ -140,23 +140,37 @@ class PatientPortalState(RoleState):
         self.visits_error = ""
         try:
             with await self.authenticate_user():
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
-                from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
-                visits = CampaignVisitService.list_for_patient(patient_id)
-                self.portal_visits = [
-                    PortalVisitDTO(
-                        id=str(v.id),
-                        visit_number=v.visit_number,
-                        campaign_name=v.program.name if v.program_id else "",
-                        campaign_start_date=str(v.program.start_date) if v.program_id else "",
-                        status_label=v.status.get_label(),
-                        doctor_company_validated_at=str(v.doctor_company_validated_at) if v.doctor_company_validated_at else "",
-                        doctor_company_message=v.doctor_company_message or "",
-                        interpretation=v.doctor_company_interpretation or "",
-                    )
-                    for v in visits
-                    if v.status == CampaignVisitStatus.DOCTOR_COMPANY_VALIDATED
-                ]
+                from gws_care.exam.exam import Exam
+                exams = list(
+                    Exam.select()
+                    .where(Exam.patient == patient_id)
+                    .order_by(Exam.exam_date.desc())
+                )
+                results = []
+                for e in exams:
+                    visit_number = ""
+                    campaign_name = ""
+                    visit_type = ""
+                    try:
+                        if e.visit_id:
+                            visit_number = e.visit.visit_number or ""
+                            visit_type = e.visit.visit_type.value if e.visit.visit_type else ""
+                            if e.visit.campaign_id:
+                                campaign_name = e.visit.campaign.name
+                    except Exception:
+                        pass
+                    results.append(PortalExamResultDTO(
+                        id=str(e.id),
+                        exam_type_label=e.exam_type.get_label() if hasattr(e.exam_type, "get_label") else str(e.exam_type.value),
+                        exam_date=str(e.exam_date),
+                        status=e.status.value,
+                        status_label=e.status.get_label() if hasattr(e.status, "get_label") else e.status.value,
+                        interpretation=e.interpretation or "",
+                        visit_number=visit_number,
+                        campaign_name=campaign_name,
+                        visit_type=visit_type,
+                    ))
+                self.portal_exam_results = results
         except Exception as e:
             self.visits_error = str(e)
         finally:
@@ -173,18 +187,17 @@ class PatientPortalState(RoleState):
         self.appointments_error = ""
         try:
             with await self.authenticate_user():
-                from gws_care.appointment.appointment_service import AppointmentService
-                appts = AppointmentService.list_for_patient(patient_id)
+                from gws_care.visit.consultation_service import ConsultationService
+                visits = ConsultationService.list_for_patient(patient_id)
                 self.portal_appointments = [
                     PortalAppointmentDTO(
-                        id=str(a.id),
-                        scheduled_at=str(a.scheduled_at),
-                        exam_type_label=a.exam_type.get_label() if hasattr(a.exam_type, "get_label") else str(a.exam_type.value),
-                        status=a.status.value,
-                        status_label=a.status.get_label(),
-                        notes=a.notes or "",
+                        id=str(v.id),
+                        visit_number=v.visit_number or "",
+                        scheduled_at=str(v.scheduled_at) if v.scheduled_at else "",
+                        status=v.consultation_visit_status.value if v.consultation_visit_status else "",
+                        status_label=v.consultation_visit_status.get_label() if v.consultation_visit_status else "",
                     )
-                    for a in appts
+                    for v in visits
                 ]
         except Exception as e:
             self.appointments_error = str(e)

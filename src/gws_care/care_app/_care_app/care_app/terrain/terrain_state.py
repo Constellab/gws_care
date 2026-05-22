@@ -46,9 +46,9 @@ class TerrainPatientDTO(BaseModel):
 class TerrainState(RoleState):
     """State for the /on-site/[program_id_param] page."""
 
-    program_id: str = ""
+    campaign_id: str = ""
     campaign_name: str = ""
-    program_number: str = ""
+    campaign_number: str = ""
     account_name: str = ""
     campaign_start_date: str = ""
     campaign_end_date: str = ""
@@ -78,7 +78,7 @@ class TerrainState(RoleState):
 
     @rx.event
     def go_back(self):
-        return rx.redirect(f"/campaign/{self.program_id}")
+        return rx.redirect(f"/campaign/{self.campaign_id}")
 
     @rx.event
     def set_search_query(self, value: str):
@@ -171,22 +171,22 @@ class TerrainState(RoleState):
         self.error_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.campaign_visit.campaign_visit import CampaignVisit
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.exam.exam import Exam
                 from gws_care.exam.exam_service import ExamService
                 from gws_care.exam.exam_type import ExamStatus, ExamType
                 from gws_care.patient.patient import Patient as PatientModel
+                from gws_care.visit.visit import Visit
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
 
                 # Create a CampaignVisit for this patient if none exists yet
                 if not visit_id:
-                    existing_visit = CampaignVisit.get_or_none(
-                        (CampaignVisit.program == self.program_id) & (CampaignVisit.patient == patient_id)
+                    existing_visit = Visit.get_or_none(
+                        (Visit.campaign == self.campaign_id) & (Visit.patient == patient_id)
                     )
                     if existing_visit:
                         visit_id = str(existing_visit.id)
                     else:
-                        new_visit = CampaignVisitService.create_visit(self.program_id, patient_id)
+                        new_visit = CampaignVisitService.create_visit(self.campaign_id, patient_id)
                         visit_id = str(new_visit.id)
 
                 if not exam_id:
@@ -243,19 +243,19 @@ class TerrainState(RoleState):
     @rx.event
     async def mark_terrain_done(self, patient_id: str):
         """Mark the on-site phase as done for a patient's visit."""
-        if not self.program_id:
+        if not self.campaign_id:
             return
         self.error_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.campaign_visit.campaign_visit import CampaignVisit
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
-                from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
+                from gws_care.visit.visit import Visit
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.campaign_visit_status import CampaignVisitStatus
 
-                visit = CampaignVisit.get_or_none(
-                    (CampaignVisit.program == self.program_id) & (CampaignVisit.patient == patient_id)
+                visit = Visit.get_or_none(
+                    (Visit.campaign == self.campaign_id) & (Visit.patient == patient_id)
                 )
-                if visit and visit.status == CampaignVisitStatus.PENDING:
+                if visit and visit.campaign_visit_status == CampaignVisitStatus.PENDING:
                     CampaignVisitService.mark_terrain_done(str(visit.id))
 
                     # Phase 5 — send on-site thank-you notification to the patient
@@ -286,16 +286,16 @@ class TerrainState(RoleState):
     @rx.event
     async def download_pdf(self):
         """Generate and download the tube QR code grid PDF."""
-        if not self.program_id:
+        if not self.campaign_id:
             return
         self.is_downloading_pdf = True
         self.error_message = ""
         try:
             with await self.authenticate_user():
                 from gws_care.qr_code import QrCodeService
-                pdf_bytes = QrCodeService.generate_tube_qr_grid(self.program_id)
+                pdf_bytes = QrCodeService.generate_tube_qr_grid(self.campaign_id)
 
-            filename = f"qr_grid_{self.program_number or self.program_id}.pdf"
+            filename = f"qr_grid_{self.campaign_number or self.campaign_id}.pdf"
             return rx.download(data=pdf_bytes, filename=filename)
         except Exception as e:
             self.error_message = f"PDF generation error: {e}"
@@ -321,20 +321,20 @@ class TerrainState(RoleState):
         if not program_id:
             self.error_message = "No program ID"
             return
-        self.program_id = program_id
+        self.campaign_id = program_id
         self.is_loading = True
         self.error_message = ""
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_exam_type import CampaignExamType
                 from gws_care.campaign.campaign_service import CampaignService
-                from gws_care.campaign_visit.campaign_visit import CampaignVisit
-                from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
                 from gws_care.exam.exam import Exam
+                from gws_care.visit.visit import Visit
+                from gws_care.visit.campaign_visit_status import CampaignVisitStatus
 
                 program = CampaignService.get_campaign(program_id)
                 self.campaign_name = program.name
-                self.program_number = program.program_number
+                self.campaign_number = program.campaign_number
                 self.account_name = program.account.name if program.account_id else ""
                 self.campaign_start_date = str(program.start_date)
                 self.campaign_end_date = str(program.end_date)
@@ -342,7 +342,7 @@ class TerrainState(RoleState):
                 # Load the program's configured exam types once (source of truth)
                 program_exam_types = list(
                     CampaignExamType.select()
-                    .where(CampaignExamType.program == program_id)
+                    .where(CampaignExamType.campaign == program_id)
                 )
 
                 patients = CampaignService.get_patients(program_id)
@@ -359,13 +359,13 @@ class TerrainState(RoleState):
                             pass
 
                     # Find the visit for this patient in this program
-                    visit = CampaignVisit.get_or_none(
-                        (CampaignVisit.program == program_id) & (CampaignVisit.patient == patient.id)
+                    visit = Visit.get_or_none(
+                        (Visit.campaign == program_id) & (Visit.patient == patient.id)
                     )
                     visit_id = str(visit.id) if visit else ""
                     visit_number = visit.visit_number if visit else ""
-                    visit_status = visit.status.value if visit else ""
-                    visit_status_label = visit.status.get_label() if visit else ""
+                    visit_status = visit.campaign_visit_status.value if visit else ""
+                    visit_status_label = visit.campaign_visit_status.get_label() if visit else ""
 
                     # Load exams belonging to this patient's visit in this program
                     visit_exams = []

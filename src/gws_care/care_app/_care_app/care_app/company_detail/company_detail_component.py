@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..patient_list.patient_form_component import patient_form_dialog
 from ..patient_list.patient_form_state import PatientFormState
@@ -35,21 +36,21 @@ def _company_info_card(company: CompanyDetailDTO) -> rx.Component:
                 rx.heading(company.name, size="5"),
                 rx.cond(
                     company.is_active,
-                    rx.badge("Active", color_scheme="green", variant="soft", size="1"),
-                    rx.badge("Inactive", color_scheme="gray", variant="soft", size="1"),
+                    rx.badge(LanguageState.tr["active_badge"], color_scheme="green", variant="soft", size="1"),
+                    rx.badge(LanguageState.tr["inactive_badge"], color_scheme="gray", variant="soft", size="1"),
                 ),
                 spacing="2",
                 align="center",
             ),
             rx.separator(width="100%"),
             rx.grid(
-                _info_item("Registration N°", company.registration_number),
-                _info_item("City", company.city),
-                _info_item("Address", company.address),
-                _info_item("Postal Code", company.postal_code),
-                _info_item("Phone", company.phone),
-                _info_item("Email", company.email),
-                _info_item("Contact", company.contact_name),
+                _info_item(LanguageState.tr["info_registration"], company.registration_number),
+                _info_item(LanguageState.tr["col_city"], company.city),
+                _info_item(LanguageState.tr["field_address"], company.address),
+                _info_item(LanguageState.tr["field_postal_code"], company.postal_code),
+                _info_item(LanguageState.tr["field_phone"], company.phone),
+                _info_item(LanguageState.tr["field_email"], company.email),
+                _info_item(LanguageState.tr["info_contact"], company.contact_name),
                 columns="3",
                 spacing="4",
                 width="100%",
@@ -91,7 +92,7 @@ def _patient_row(p: CompanyPatientRowDTO) -> rx.Component:
                         size="1",
                         on_click=lambda: CompanyDetailState.go_to_patient(p.id),
                     ),
-                    content="View patient",
+                    content=LanguageState.tr["tooltip_view_patient"],
                 ),
                 rx.tooltip(
                     rx.icon_button(
@@ -101,7 +102,7 @@ def _patient_row(p: CompanyPatientRowDTO) -> rx.Component:
                         color_scheme="red",
                         on_click=lambda: CompanyDetailState.remove_patient(p.id),
                     ),
-                    content="Remove from company",
+                    content=LanguageState.tr["tooltip_remove_from_account"],
                 ),
                 spacing="1",
             )
@@ -115,9 +116,9 @@ def _assign_patient_dialog() -> rx.Component:
     """Dialog to assign an existing unlinked patient to this company."""
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Assign Existing Patient"),
+            rx.dialog.title(LanguageState.tr["assign_patient_dialog_title"]),
             rx.dialog.description(
-                "Select a patient who is not yet assigned to any company.",
+                LanguageState.tr["assign_patient_dialog_desc"],
                 size="2",
                 margin_bottom="1rem",
             ),
@@ -125,7 +126,7 @@ def _assign_patient_dialog() -> rx.Component:
                 CompanyDetailState.unassigned_patients.length() > 0,
                 rx.vstack(
                     rx.select.root(
-                        rx.select.trigger(placeholder="Search a patient…", width="100%"),
+                        rx.select.trigger(placeholder=LanguageState.tr["search_a_patient_placeholder"], width="100%"),
                         rx.select.content(
                             rx.foreach(
                                 CompanyDetailState.unassigned_patients,
@@ -138,7 +139,7 @@ def _assign_patient_dialog() -> rx.Component:
                     ),
                     rx.hstack(
                         rx.button(
-                            "Cancel",
+                            LanguageState.tr["cancel_btn"],
                             variant="soft",
                             color_scheme="gray",
                             on_click=CompanyDetailState.close_assign_dialog,
@@ -148,7 +149,7 @@ def _assign_patient_dialog() -> rx.Component:
                             rx.cond(
                                 CompanyDetailState.is_assigning,
                                 rx.spinner(size="2"),
-                                rx.text("Assign"),
+                                LanguageState.tr["assign_btn"],
                             ),
                             on_click=CompanyDetailState.confirm_assign,
                             disabled=(CompanyDetailState.assign_patient_id == "")
@@ -163,12 +164,12 @@ def _assign_patient_dialog() -> rx.Component:
                 ),
                 rx.vstack(
                     rx.text(
-                        "All patients are already assigned to a company.",
+                        LanguageState.tr["all_patients_assigned"],
                         size="2",
                         color="var(--gray-9)",
                     ),
                     rx.button(
-                        "Close",
+                        LanguageState.tr["close_btn"],
                         variant="soft",
                         color_scheme="gray",
                         on_click=CompanyDetailState.close_assign_dialog,
@@ -189,19 +190,19 @@ def _assign_patient_dialog() -> rx.Component:
 def _patients_section() -> rx.Component:
     return rx.vstack(
         rx.hstack(
-            rx.heading("Patients", size="4"),
+            rx.heading(LanguageState.tr["patients_in_account_title"], size="4"),
             rx.spacer(),
             rx.hstack(
                 rx.button(
                     rx.icon("user-plus", size=14),
-                    "Assign existing",
+                    LanguageState.tr["assign_existing_btn"],
                     variant="outline",
                     size="2",
                     on_click=CompanyDetailState.open_assign_dialog,
                 ),
                 rx.button(
                     rx.icon("plus", size=14),
-                    "New patient",
+                    LanguageState.tr["new_patient_small_btn"],
                     size="2",
                     on_click=lambda: PatientFormState.open_create_for_company(CompanyDetailState.company.id),
                 ),
@@ -217,13 +218,13 @@ def _patients_section() -> rx.Component:
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
-                            rx.table.column_header_cell("N°"),
-                            rx.table.column_header_cell("Patient"),
-                            rx.table.column_header_cell("Gender"),
-                            rx.table.column_header_cell("Date of Birth"),
-                            rx.table.column_header_cell("City"),
-                            rx.table.column_header_cell("Phone"),
-                            rx.table.column_header_cell("Actions"),
+                            rx.table.column_header_cell(LanguageState.tr["col_number"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_patient"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_gender"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_dob"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_city"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_phone"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_actions"]),
                         )
                     ),
                     rx.table.body(
@@ -237,7 +238,7 @@ def _patients_section() -> rx.Component:
             ),
             rx.center(
                 rx.text(
-                    "No patients assigned to this company yet.",
+                    LanguageState.tr["no_patients_assigned"],
                     size="2",
                     color="var(--gray-9)",
                 ),
@@ -255,7 +256,7 @@ def company_detail_page() -> rx.Component:
         page_layout(
             rx.button(
                 rx.icon("arrow-left", size=16),
-                "Back to companies",
+                LanguageState.tr["back_to_companies"],
                 on_click=CompanyDetailState.go_back,
                 variant="ghost",
                 size="2",
@@ -280,7 +281,7 @@ def company_detail_page() -> rx.Component:
                         spacing="5",
                     ),
                     rx.center(
-                        rx.text("Company not found.", color="var(--gray-9)"),
+                        rx.text(LanguageState.tr["company_not_found"], color="var(--gray-9)"),
                         padding="3rem",
                     ),
                 ),

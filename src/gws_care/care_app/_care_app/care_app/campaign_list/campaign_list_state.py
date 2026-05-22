@@ -1,4 +1,4 @@
-"""State for the program list page."""
+"""State for the campaign list page."""
 
 import reflex as rx
 from pydantic import BaseModel
@@ -6,11 +6,11 @@ from pydantic import BaseModel
 from ..common.account_picker_state import AccountPickerRowDTO, AccountPickerState
 
 
-class ProgramRowDTO(BaseModel):
+class CampaignRowStateDTO(BaseModel):
     """Campaign row for list display."""
 
     id: str
-    program_number: str
+    campaign_number: str
     name: str
     account_name: str = ""
     account_id: str = ""
@@ -106,7 +106,7 @@ class CampaignListState(AccountPickerState):
     acct_picker_selected_id: str = ""
     acct_picker_selected_name: str = ""
 
-    programs: list[ProgramRowDTO] = []
+    programs: list[CampaignRowStateDTO] = []
     is_loading: bool = False
     is_loading_more: bool = False
     has_more: bool = False
@@ -193,15 +193,15 @@ class CampaignListState(AccountPickerState):
         await self._load_programs()
 
     @rx.event
-    def go_to_program(self, program_id: str):
-        return rx.redirect(f"/campaign/{program_id}")
+    def go_to_campaign(self, campaign_id: str):
+        return rx.redirect(f"/campaign/{campaign_id}")
 
     @rx.event
-    async def archive_program(self, program_id: str):
+    async def archive_campaign(self, campaign_id: str):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
-                CampaignService.archive_campaign(program_id)
+                CampaignService.archive_campaign(campaign_id)
             await self._load_programs()
         except Exception as e:
             self.error_message = str(e)
@@ -308,9 +308,9 @@ class CampaignListState(AccountPickerState):
                 has_more = len(programs) > self._current_page_size
                 programs = programs[:self._current_page_size]
                 new_rows = [
-                    ProgramRowDTO(
+                    CampaignRowStateDTO(
                         id=str(c.id),
-                        program_number=c.program_number,
+                        campaign_number=c.campaign_number,
                         name=c.name,
                         account_name=c.account.name if c.account_id else "",
                         account_id=str(c.account_id) if c.account_id else "",

@@ -1,4 +1,4 @@
-"""Notifications page component — history, preferences, and compose."""
+"""Notifications page component — inbox, sent, compose, preferences."""
 
 import reflex as rx
 from gws_reflex_main import main_component
@@ -28,112 +28,221 @@ def _type_badge(ntype: str) -> rx.Component:
     return rx.match(
         ntype,
         ("APPOINTMENT_REMINDER", rx.badge(LanguageState.tr["notif_type_reminder"], color_scheme="blue", variant="soft", size="1")),
+        ("APPOINTMENT_REMINDER_15D", rx.badge(LanguageState.tr["notif_type_reminder"], color_scheme="blue", variant="soft", size="1")),
+        ("APPOINTMENT_REMINDER_3D", rx.badge(LanguageState.tr["notif_type_reminder"], color_scheme="blue", variant="soft", size="1")),
+        ("APPOINTMENT_REMINDER_1D", rx.badge(LanguageState.tr["notif_type_reminder"], color_scheme="blue", variant="soft", size="1")),
         ("MANUAL_PATIENT", rx.badge(LanguageState.tr["notif_type_patient"], color_scheme="purple", variant="soft", size="1")),
         ("MANUAL_ACCOUNT", rx.badge(LanguageState.tr["notif_type_account"], color_scheme="cyan", variant="soft", size="1")),
         rx.badge(ntype, color_scheme="gray", variant="soft", size="1"),
     )
 
 
-def _channel_badge(channel: str) -> rx.Component:
-    return rx.match(
-        channel,
-        ("EMAIL", rx.badge(LanguageState.tr["notif_channel_email"], color_scheme="blue", variant="soft", size="1")),
-        rx.badge(channel, color_scheme="gray", variant="soft", size="1"),
-    )
+# ── Inbox/Sent message row (email-client style) ───────────────────────────────
 
-
-# ── History tab ───────────────────────────────────────────────────────────────
-
-def _sortable_header(label: str, column: str) -> rx.Component:
-    """Column header cell with a sort-direction arrow."""
-    return rx.table.column_header_cell(
-        rx.hstack(
-            rx.text(label, size="2"),
-            rx.cond(
-                NotificationsState.sort_column == column,
+def _inbox_message_row(log: NotificationLogRow) -> rx.Component:
+    """Email-client-style row for the inbox: two-line layout with reply button."""
+    return rx.box(
+        rx.vstack(
+            # Line 1: badges + date + sender + reply button
+            rx.hstack(
+                _type_badge(log.notification_type),
+                _status_badge(log.status),
+                rx.text(log.sent_by_name, size="1", color="var(--gray-10)"),
+                rx.spacer(),
+                rx.text(log.created_at, size="1", color="var(--gray-9)"),
                 rx.cond(
-                    NotificationsState.sort_ascending,
-                    rx.icon("chevron-up", size=13, color="var(--accent-9)"),
-                    rx.icon("chevron-down", size=13, color="var(--accent-9)"),
+                    log.parent_log_id != "",
+                    rx.badge(
+                        rx.icon("corner-down-right", size=11),
+                        LanguageState.tr["reply_badge"],
+                        color_scheme="grass",
+                        variant="soft",
+                        size="1",
+                    ),
                 ),
-                rx.icon("chevrons-up-down", size=13, color="var(--gray-7)"),
+                rx.button(
+                    rx.icon("reply", size=13),
+                    LanguageState.tr["reply_btn"],
+                    size="1",
+                    variant="ghost",
+                    on_click=lambda: NotificationsState.open_reply(log.id, log.subject),
+                ),
+                spacing="2",
+                align="center",
+                width="100%",
+            ),
+            # Line 2: Subject (bold, full width)
+            rx.text(
+                log.subject,
+                size="2",
+                weight="bold",
+                color="var(--gray-12)",
+                overflow="hidden",
+                text_overflow="ellipsis",
+                white_space="nowrap",
+                width="100%",
+            ),
+            # Line 3: body preview
+            rx.cond(
+                log.body_preview != "",
+                rx.text(
+                    log.body_preview,
+                    size="1",
+                    color="var(--gray-9)",
+                    overflow="hidden",
+                    text_overflow="ellipsis",
+                    white_space="nowrap",
+                    width="100%",
+                ),
             ),
             spacing="1",
-            align="center",
-        ),
-        on_click=lambda: NotificationsState.set_sort(column),
-        style={"cursor": "pointer"},
-    )
-
-
-def _log_row(log: NotificationLogRow) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(rx.text(log.created_at, size="1", color="var(--gray-9)")),
-        rx.table.cell(_type_badge(log.notification_type)),
-        rx.table.cell(_channel_badge(log.channel)),
-        rx.table.cell(_status_badge(log.status)),
-        rx.table.cell(rx.text(log.recipient_name, size="2")),
-        rx.table.cell(rx.text(log.recipient_email, size="2", color="var(--gray-10)")),
-        rx.table.cell(rx.text(log.subject, size="2")),
-        rx.table.cell(rx.text(log.sent_by_name, size="1", color="var(--gray-9)")),
-    )
-
-
-def _history_tab() -> rx.Component:
-    return rx.vstack(
-        # Filter bar
-        rx.hstack(
-            rx.select.root(
-                rx.select.trigger(placeholder=LanguageState.tr["history_all_types"]),
-                rx.select.content(
-                    rx.select.item(LanguageState.tr["history_all_types"], value="ALL"),
-                    rx.select.item(LanguageState.tr["history_reminders"], value="APPOINTMENT_REMINDER"),
-                    rx.select.item(LanguageState.tr["history_manual_patient"], value="MANUAL_PATIENT"),
-                    rx.select.item(LanguageState.tr["history_manual_account"], value="MANUAL_ACCOUNT"),
-                ),
-                value=NotificationsState.filter_type,
-                on_change=NotificationsState.set_filter_type,
-                size="2",
-            ),
-            rx.spacer(),
-            rx.text(
-                NotificationsState.logs.length(),
-                LanguageState.tr["entries_suffix"],
-                size="2",
-                color="var(--gray-9)",
-            ),
             width="100%",
-            align="center",
         ),
-        # Table
+        padding="0.75rem 1rem",
+        border_bottom="1px solid var(--gray-4)",
+        _hover={"background": "var(--gray-2)"},
+        width="100%",
+    )
+
+
+def _sent_message_row(log: NotificationLogRow) -> rx.Component:
+    """Email-client-style row for the sent box: two-line layout without reply."""
+    return rx.box(
+        rx.vstack(
+            # Line 1: badges + date + recipient
+            rx.hstack(
+                _type_badge(log.notification_type),
+                _status_badge(log.status),
+                rx.text(
+                    LanguageState.tr["col_to"],
+                    size="1",
+                    color="var(--gray-9)",
+                ),
+                rx.text(log.recipient_name, size="1", color="var(--gray-10)"),
+                rx.spacer(),
+                rx.text(log.created_at, size="1", color="var(--gray-9)"),
+                rx.cond(
+                    log.parent_log_id != "",
+                    rx.badge(
+                        rx.icon("corner-down-right", size=11),
+                        LanguageState.tr["reply_badge"],
+                        color_scheme="grass",
+                        variant="soft",
+                        size="1",
+                    ),
+                ),
+                spacing="2",
+                align="center",
+                width="100%",
+            ),
+            # Line 2: Subject (bold, full width)
+            rx.text(
+                log.subject,
+                size="2",
+                weight="bold",
+                color="var(--gray-12)",
+                overflow="hidden",
+                text_overflow="ellipsis",
+                white_space="nowrap",
+                width="100%",
+            ),
+            # Line 3: body preview
+            rx.cond(
+                log.body_preview != "",
+                rx.text(
+                    log.body_preview,
+                    size="1",
+                    color="var(--gray-9)",
+                    overflow="hidden",
+                    text_overflow="ellipsis",
+                    white_space="nowrap",
+                    width="100%",
+                ),
+            ),
+            spacing="1",
+            width="100%",
+        ),
+        padding="0.75rem 1rem",
+        border_bottom="1px solid var(--gray-4)",
+        _hover={"background": "var(--gray-2)"},
+        width="100%",
+    )
+
+
+# ── Sort/filter toolbar ───────────────────────────────────────────────────────
+
+def _sort_icon(column: str) -> rx.Component:
+    return rx.cond(
+        NotificationsState.sort_column == column,
+        rx.cond(
+            NotificationsState.sort_ascending,
+            rx.icon("chevron-up", size=13, color="var(--accent-9)"),
+            rx.icon("chevron-down", size=13, color="var(--accent-9)"),
+        ),
+        rx.icon("chevrons-up-down", size=13, color="var(--gray-6)"),
+    )
+
+
+def _sort_btn(label: str, column: str) -> rx.Component:
+    return rx.button(
+        label,
+        _sort_icon(column),
+        variant="ghost",
+        size="1",
+        color="var(--gray-11)",
+        on_click=lambda: NotificationsState.set_sort(column),
+    )
+
+
+def _message_toolbar(count: rx.Var) -> rx.Component:
+    return rx.hstack(
+        rx.select.root(
+            rx.select.trigger(placeholder=LanguageState.tr["history_all_types"], size="2"),
+            rx.select.content(
+                rx.select.item(LanguageState.tr["history_all_types"], value="ALL"),
+                rx.select.item(LanguageState.tr["history_reminders"], value="APPOINTMENT_REMINDER"),
+                rx.select.item(LanguageState.tr["history_manual_patient"], value="MANUAL_PATIENT"),
+                rx.select.item(LanguageState.tr["history_manual_account"], value="MANUAL_ACCOUNT"),
+            ),
+            value=NotificationsState.filter_type,
+            on_change=NotificationsState.set_filter_type,
+            size="2",
+        ),
+        rx.text(LanguageState.tr["sort_by_label"], size="1", color="var(--gray-9)"),
+        _sort_btn(LanguageState.tr["col_date"], "created_at"),
+        _sort_btn(LanguageState.tr["col_type"], "notification_type"),
+        _sort_btn(LanguageState.tr["col_subject"], "subject"),
+        rx.spacer(),
+        rx.text(count, LanguageState.tr["entries_suffix"], size="1", color="var(--gray-9)"),
+        align="center",
+        spacing="2",
+        width="100%",
+        padding_x="0.5rem",
+        padding_y="0.5rem",
+    )
+
+
+# ── Inbox tab ─────────────────────────────────────────────────────────────────
+
+def _inbox_tab() -> rx.Component:
+    return rx.vstack(
+        _message_toolbar(NotificationsState.inbox_logs.length()),
         rx.cond(
             NotificationsState.is_loading_logs,
             rx.center(rx.spinner(size="3"), padding="2rem"),
             rx.cond(
-                NotificationsState.logs.length() > 0,
-                rx.table.root(
-                    rx.table.header(
-                        rx.table.row(
-                            _sortable_header(LanguageState.tr["col_date"], "created_at"),
-                            _sortable_header(LanguageState.tr["col_type"], "notification_type"),
-                            _sortable_header(LanguageState.tr["col_channel"], "channel"),
-                            _sortable_header(LanguageState.tr["col_status"], "status"),
-                            _sortable_header(LanguageState.tr["col_recipient"], "recipient_name"),
-                            _sortable_header(LanguageState.tr["col_email"], "recipient_email"),
-                            _sortable_header(LanguageState.tr["col_subject"], "subject"),
-                            _sortable_header(LanguageState.tr["col_sent_by"], "sent_by_name"),
-                        )
-                    ),
-                    rx.table.body(
-                        rx.foreach(NotificationsState.logs, _log_row)
-                    ),
+                NotificationsState.inbox_logs.length() > 0,
+                rx.box(
+                    rx.foreach(NotificationsState.inbox_logs, _inbox_message_row),
+                    border="1px solid var(--gray-4)",
+                    border_radius="var(--radius-3)",
+                    overflow="hidden",
                     width="100%",
-                    variant="surface",
                 ),
                 rx.center(
                     rx.vstack(
-                        rx.icon("bell-off", size=36, color="var(--gray-7)"),
-                        rx.text(LanguageState.tr["no_notifications_history"], color="var(--gray-9)"),
+                        rx.icon("inbox", size=36, color="var(--gray-7)"),
+                        rx.text(LanguageState.tr["inbox_empty"], color="var(--gray-9)"),
                         align="center",
                         spacing="2",
                     ),
@@ -141,7 +250,40 @@ def _history_tab() -> rx.Component:
                 ),
             ),
         ),
-        spacing="3",
+        spacing="2",
+        width="100%",
+    )
+
+
+# ── Sent tab ──────────────────────────────────────────────────────────────────
+
+def _sent_tab() -> rx.Component:
+    return rx.vstack(
+        _message_toolbar(NotificationsState.sent_logs.length()),
+        rx.cond(
+            NotificationsState.is_loading_logs,
+            rx.center(rx.spinner(size="3"), padding="2rem"),
+            rx.cond(
+                NotificationsState.sent_logs.length() > 0,
+                rx.box(
+                    rx.foreach(NotificationsState.sent_logs, _sent_message_row),
+                    border="1px solid var(--gray-4)",
+                    border_radius="var(--radius-3)",
+                    overflow="hidden",
+                    width="100%",
+                ),
+                rx.center(
+                    rx.vstack(
+                        rx.icon("send", size=36, color="var(--gray-7)"),
+                        rx.text(LanguageState.tr["sent_empty"], color="var(--gray-9)"),
+                        align="center",
+                        spacing="2",
+                    ),
+                    padding="3rem",
+                ),
+            ),
+        ),
+        spacing="2",
         width="100%",
     )
 
@@ -157,6 +299,34 @@ def _compose_tab() -> rx.Component:
                     LanguageState.tr["compose_card_desc"],
                     size="2",
                     color="var(--gray-10)",
+                ),
+                # Reply banner (shown when replying to a message)
+                rx.cond(
+                    NotificationsState.reply_to_id != "",
+                    rx.callout(
+                        rx.hstack(
+                            rx.text(
+                                LanguageState.tr["replying_to_label"],
+                                size="2",
+                                weight="medium",
+                            ),
+                            rx.text(NotificationsState.reply_to_subject, size="2"),
+                            rx.spacer(),
+                            rx.icon_button(
+                                rx.icon("x", size=13),
+                                size="1",
+                                variant="ghost",
+                                on_click=NotificationsState.clear_reply,
+                            ),
+                            spacing="2",
+                            align="center",
+                            width="100%",
+                        ),
+                        icon="reply",
+                        color_scheme="grass",
+                        size="1",
+                        width="100%",
+                    ),
                 ),
                 rx.separator(width="100%"),
                 # Mode toggle
@@ -264,18 +434,49 @@ def notifications_page() -> rx.Component:
             rx.tabs.root(
                 rx.tabs.list(
                     rx.tabs.trigger(
-                        rx.hstack(rx.icon("pencil-line", size=15), rx.text(LanguageState.tr["tab_compose"]), spacing="1", align="center"),
-                        value="compose",
+                        rx.hstack(
+                            rx.icon("inbox", size=15),
+                            rx.text(LanguageState.tr["tab_inbox"]),
+                            rx.cond(
+                                NotificationsState.inbox_logs.length() > 0,
+                                rx.badge(
+                                    NotificationsState.inbox_logs.length(),
+                                    color_scheme="blue",
+                                    variant="solid",
+                                    size="1",
+                                ),
+                            ),
+                            spacing="1",
+                            align="center",
+                        ),
+                        value="inbox",
                     ),
                     rx.tabs.trigger(
-                        rx.hstack(rx.icon("history", size=15), rx.text(LanguageState.tr["tab_history"]), spacing="1", align="center"),
-                        value="history",
+                        rx.hstack(
+                            rx.icon("send", size=15),
+                            rx.text(LanguageState.tr["tab_sent"]),
+                            spacing="1",
+                            align="center",
+                        ),
+                        value="sent",
+                    ),
+                    rx.tabs.trigger(
+                        rx.hstack(
+                            rx.icon("pencil-line", size=15),
+                            rx.text(LanguageState.tr["tab_compose"]),
+                            spacing="1",
+                            align="center",
+                        ),
+                        value="compose",
                     ),
                 ),
+                rx.tabs.content(_inbox_tab(), value="inbox", padding_top="1rem"),
+                rx.tabs.content(_sent_tab(), value="sent", padding_top="1rem"),
                 rx.tabs.content(_compose_tab(), value="compose", padding_top="1rem"),
-                rx.tabs.content(_history_tab(), value="history", padding_top="1rem"),
-                default_value="compose",
+                value=NotificationsState.active_tab,
+                on_change=NotificationsState.set_active_tab,
                 width="100%",
             ),
         )
     )
+

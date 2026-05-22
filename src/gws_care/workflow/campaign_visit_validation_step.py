@@ -6,7 +6,7 @@ from enum import Enum
 class CampaignVisitValidationStep(Enum):
     """Each distinct validation step a visit passes through.
 
-    Rows in VisitValidationWorkflow record who performed each step
+    Rows in CampaignVisitValidationWorkflow record who performed each step
     and when, providing a complete audit trail of the visit lifecycle.
     """
 
@@ -32,5 +32,3 @@ class CampaignVisitValidationStep(Enum):
         return labels.get(self, self.value)
 
 
-# Backward-compat alias
-VisitValidationStep = CampaignVisitValidationStep

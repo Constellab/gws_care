@@ -35,7 +35,7 @@ from gws_care.role.user_care_role import UserCareRole
 from gws_care.role.user_role_service import UserRoleService
 from gws_care.user.care_user_sync_service import CareUserSyncService
 from gws_care.user.user import User
-from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+from gws_care.visit.campaign_visit_service import CampaignVisitService
 from gws_core import BaseTestCase
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

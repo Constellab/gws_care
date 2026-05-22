@@ -1,4 +1,4 @@
-from peewee import BooleanField, CharField
+from peewee import BooleanField, CharField, TextField
 
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
@@ -15,7 +15,7 @@ class Account(ModelWithUser):
     account_type: str = CharField(max_length=20, default="COMPANY", null=False)
     name: str = CharField(max_length=255, null=False, unique=True)
     registration_number: str = CharField(max_length=100, null=True)
-    address: str = CharField(max_length=500, null=True)
+    address: str = TextField(null=True)
     postal_code: str = CharField(max_length=20, null=True)
     city: str = CharField(max_length=100, null=True)
     phone: str = CharField(max_length=50, null=True)

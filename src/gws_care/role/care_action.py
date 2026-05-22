@@ -9,7 +9,7 @@ class CareAction(str, Enum):
     Naming convention: <DOMAIN>_<VERB>
     """
 
-    # ── MedicalProgram management ───────────────────────────────────────────────────
+    # ── Campaign management ───────────────────────────────────────────────────
     CAMPAIGN_CREATE = "program:create"
     CAMPAIGN_UPDATE = "program:update"
     CAMPAIGN_VALIDATE_INITIAL = "program:validate_initial"   # DRAFT → VALIDATED (Clinic Doctor / Admin)

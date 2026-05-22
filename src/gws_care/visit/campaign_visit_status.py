@@ -1,10 +1,10 @@
-"""CampaignVisitStatus enumeration."""
+"""CampaignVisitStatus enumeration — lifecycle of a campaign visit."""
 
 from enum import Enum
 
 
 class CampaignVisitStatus(Enum):
-    """Lifecycle status of a CampaignVisit."""
+    """Lifecycle status of a campaign Visit."""
 
     PENDING = "pending"                             # Appointment scheduled, patient not yet seen
     VISIT_DONE = "visit_done"                       # Patient seen on-site, samples collected

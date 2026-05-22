@@ -29,10 +29,10 @@ class NotificationType(str, Enum):
     TERRAIN_THANK_YOU = "TERRAIN_THANK_YOU"             # After on-site visit (→ Patient)
 
     # ── Phase 2 — Validation workflow (already used in code) ─────────────────
-    LAB_DONE = "LAB_DONE"                               # MedicalProgram lab-validated (→ Clinic Doctor)
+    LAB_DONE = "LAB_DONE"                               # Campaign lab-validated (→ Clinic Doctor)
     CAMPAIGN_CLINIC_VALIDATED = "CAMPAIGN_CLINIC_VALIDATED"  # Clinic validated (→ Company Doctor)
     RESULTS_AVAILABLE = "RESULTS_AVAILABLE"             # Visit results ready (→ Patient)
 
     # ── Phase 5 — Certificate & program report ───────────────────────────────
     CERTIFICATE_AVAILABLE = "CERTIFICATE_AVAILABLE"     # Certificate generated (→ Patient)
-    CAMPAIGN_REPORT = "CAMPAIGN_REPORT"                 # MedicalProgram finished report (→ Company Doctor)
+    CAMPAIGN_REPORT = "CAMPAIGN_REPORT"                 # Campaign finished report (→ Company Doctor)

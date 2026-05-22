@@ -1,4 +1,4 @@
-"""State for the Notifications page (history + preferences + compose)."""
+"""State for the Notifications page (inbox, sent, compose, preferences)."""
 
 import reflex as rx
 from pydantic import BaseModel
@@ -17,7 +17,9 @@ class NotificationLogRow(BaseModel):
     recipient_name: str
     recipient_email: str
     subject: str
+    body_preview: str
     sent_by_name: str
+    parent_log_id: str
 
 
 class NotificationsState(CombinedPickerState):
@@ -98,16 +100,18 @@ class NotificationsState(CombinedPickerState):
     async def acct_picker_clear(self):
         await self._acct_picker_clear()
 
-    # ── History tab ───────────────────────────────────────────────────────────
-    logs: list[NotificationLogRow] = []
+    # ── Inbox / Sent box ──────────────────────────────────────────────────────
+    inbox_logs: list[NotificationLogRow] = []
+    sent_logs: list[NotificationLogRow] = []
     is_loading_logs: bool = False
+    history_box: str = "inbox"      # "inbox" | "sent"
     filter_type: str = "ALL"
     sort_column: str = "created_at"
     sort_ascending: bool = False
 
     # ── Preferences tab ───────────────────────────────────────────────────────
     pref_enabled: bool = True
-    pref_new_day: str = ""          # input field for adding a new reminder day
+    pref_new_day: str = ""
     pref_days: list[int] = []
     is_saving_pref: bool = False
     pref_success: str = ""
@@ -115,49 +119,44 @@ class NotificationsState(CombinedPickerState):
 
     # ── Compose tab ───────────────────────────────────────────────────────────
     compose_mode: str = "patient"   # "patient" | "account"
-    compose_channel: str = "EMAIL"
     compose_subject: str = ""
     compose_body: str = ""
     is_sending: bool = False
     send_success: str = ""
     send_error: str = ""
 
+    # ── Reply context ─────────────────────────────────────────────────────────
+    reply_to_id: str = ""
+    reply_to_subject: str = ""
+
     # ── Reminders ─────────────────────────────────────────────────────────────
     reminder_result: str = ""
     is_processing_reminders: bool = False
 
-    # ── SMTP Configuration ────────────────────────────────────────────────────
-    smtp_host: str = ""
-    smtp_port: str = "587"
-    smtp_username: str = ""
-    smtp_credentials_name: str = ""
-    smtp_use_tls: bool = True
-    smtp_from_email: str = ""
-    smtp_from_name: str = ""
-    is_saving_smtp: bool = False
-    smtp_success: str = ""
-    smtp_error: str = ""
-
-
     # ── Active tab ────────────────────────────────────────────────────────────
-    active_tab: str = "history"
+    active_tab: str = "inbox"
 
     @rx.event
     async def on_load(self):
-        await self._load_logs()
+        await self._load_inbox_logs()
+        await self._load_sent_logs()
         await self._load_preferences()
-        await self._load_smtp_config()
 
     @rx.event
     async def set_active_tab(self, tab: str):
         self.active_tab = tab
 
-    # ── History ───────────────────────────────────────────────────────────────
+    @rx.event
+    async def set_history_box(self, box: str):
+        self.history_box = box
+
+    # ── Inbox / Sent ────────────────────────────────────────────────────────────
 
     @rx.event
     async def set_filter_type(self, value: str):
         self.filter_type = value
-        await self._load_logs()
+        await self._load_inbox_logs()
+        await self._load_sent_logs()
 
     @rx.event
     async def set_sort(self, column: str):
@@ -167,43 +166,71 @@ class NotificationsState(CombinedPickerState):
         else:
             self.sort_column = column
             self.sort_ascending = True
-        await self._load_logs()
+        await self._load_inbox_logs()
+        await self._load_sent_logs()
 
-    async def _load_logs(self):
+    async def _make_log_rows(self, logs) -> list[NotificationLogRow]:
+        rows = []
+        for log_entry in logs:
+            body_text = log_entry.body or ""
+            first_line = body_text.split("\n")[0][:120]
+            rows.append(NotificationLogRow(
+                id=str(log_entry.id),
+                created_at=log_entry.created_at.strftime("%Y-%m-%d %H:%M") if log_entry.created_at else "",
+                notification_type=log_entry.notification_type.value,
+                channel=log_entry.channel.value,
+                status=log_entry.status.value,
+                recipient_name=log_entry.recipient_name or "—",
+                recipient_email=log_entry.recipient_email or "—",
+                subject=log_entry.subject,
+                body_preview=first_line,
+                sent_by_name=(
+                    f"{log_entry.sent_by.first_name} {log_entry.sent_by.last_name}"
+                    if log_entry.sent_by_id else "System"
+                ),
+                parent_log_id=str(log_entry.parent_log_id) if log_entry.parent_log_id else "",
+            ))
+        sort_col = self.sort_column
+        return sorted(
+            rows,
+            key=lambda row: (getattr(row, sort_col) or "").lower(),
+            reverse=not self.sort_ascending,
+        )
+
+    async def _load_inbox_logs(self):
         self.is_loading_logs = True
         try:
             with await self.authenticate_user():
                 from gws_care.notification.notification_service import NotificationService
-                logs = NotificationService.list_logs(
+                user = await self._get_current_user()
+                if user is None:
+                    self.inbox_logs = []
+                    return
+                logs = NotificationService.list_inbox_logs(
+                    user_id=str(user.id),
                     notification_type=self.filter_type if self.filter_type != "ALL" else None,
                 )
-                rows = [
-                    NotificationLogRow(
-                        id=str(l.id),
-                        created_at=l.created_at.strftime("%Y-%m-%d %H:%M") if l.created_at else "",
-                        notification_type=l.notification_type.value,
-                        channel=l.channel.value,
-                        status=l.status.value,
-                        recipient_name=l.recipient_name or "—",
-                        recipient_email=l.recipient_email or "—",
-                        subject=l.subject,
-                        sent_by_name=(
-                            f"{l.sent_by.first_name} {l.sent_by.last_name}"
-                            if l.sent_by_id else "System"
-                        ),
-                    )
-                    for l in logs
-                ]
-                sort_col = self.sort_column
-                self.logs = sorted(
-                    rows,
-                    key=lambda row: (getattr(row, sort_col) or "").lower(),
-                    reverse=not self.sort_ascending,
-                )
-        except Exception as e:
-            self.logs = []
+                self.inbox_logs = await self._make_log_rows(logs)
+        except Exception:
+            self.inbox_logs = []
         finally:
             self.is_loading_logs = False
+
+    async def _load_sent_logs(self):
+        try:
+            with await self.authenticate_user():
+                from gws_care.notification.notification_service import NotificationService
+                user = await self._get_current_user()
+                if user is None:
+                    self.sent_logs = []
+                    return
+                logs = NotificationService.list_sent_logs(
+                    user_id=str(user.id),
+                    notification_type=self.filter_type if self.filter_type != "ALL" else None,
+                )
+                self.sent_logs = await self._make_log_rows(logs)
+        except Exception:
+            self.sent_logs = []
 
     # ── Preferences ───────────────────────────────────────────────────────────
 
@@ -297,7 +324,7 @@ class NotificationsState(CombinedPickerState):
                     return
                 count = NotificationService.process_appointment_reminders(user)
                 self.reminder_result = f"{count} reminder(s) sent."
-            await self._load_logs()
+            await self._load_sent_logs()
         except Exception as e:
             self.reminder_result = f"Error: {e}"
         finally:
@@ -312,10 +339,22 @@ class NotificationsState(CombinedPickerState):
         self.send_error = ""
 
     @rx.event
-    async def set_compose_channel(self, value: str | list[str]):
-        self.compose_channel = value if isinstance(value, str) else value[0]
+    async def open_reply(self, log_id: str, subject: str):
+        """Pre-fill compose form for a reply to the given message."""
+        self.reply_to_id = log_id
+        prefix = "Re: " if not subject.startswith("Re: ") else ""
+        self.reply_to_subject = prefix + subject
+        self.compose_subject = self.reply_to_subject
+        self.compose_body = ""
         self.send_success = ""
         self.send_error = ""
+        self.active_tab = "compose"
+
+    @rx.event
+    async def clear_reply(self):
+        """Clear reply context."""
+        self.reply_to_id = ""
+        self.reply_to_subject = ""
 
     async def _on_account_picked(self, account_id: str) -> None:
         """Account picker callback: store selected account for compose tab."""
@@ -338,11 +377,16 @@ class NotificationsState(CombinedPickerState):
         self.send_error = ""
         try:
             with await self.authenticate_user():
+                from gws_care.notification.notification_models import NotificationLog
                 from gws_care.notification.notification_service import NotificationService
                 user = await self._get_current_user()
                 if user is None:
                     self.send_error = "Could not identify current user."
                     return
+
+                parent_log = None
+                if self.reply_to_id:
+                    parent_log = NotificationLog.get_or_none(NotificationLog.id == self.reply_to_id)
 
                 if self.compose_mode == "patient":
                     from gws_care.notification.notification_dto import SendCustomMessageDTO
@@ -353,6 +397,7 @@ class NotificationsState(CombinedPickerState):
                             body=self.compose_body,
                         ),
                         sent_by=user,
+                        parent_log=parent_log,
                     )
                     self.send_success = "Message sent to patient."
                 else:
@@ -365,85 +410,16 @@ class NotificationsState(CombinedPickerState):
                         ),
                         sent_by=user,
                     )
-                    sent_count = sum(1 for l in logs if l.status.value == "SENT")
-                    self.send_success = f"Message sent to {sent_count} recipient(s)."
+                    self.send_success = f"Message sent to {len(logs)} recipient(s)."
 
                 self.compose_subject = ""
                 self.compose_body = ""
-            await self._load_logs()
+                self.reply_to_id = ""
+                self.reply_to_subject = ""
+            await self._load_sent_logs()
         except Exception as e:
             self.send_error = f"Error: {e}"
         finally:
             self.is_sending = False
 
-    # ── Loaders ───────────────────────────────────────────────────────────────
 
-    async def _load_smtp_config(self):
-        try:
-            from gws_care.notification.notification_service import NotificationService
-            cfg = NotificationService.get_smtp_config()
-            self.smtp_host = cfg.host
-            self.smtp_port = str(cfg.port)
-            self.smtp_username = cfg.username
-            self.smtp_credentials_name = cfg.credentials_name
-            self.smtp_use_tls = cfg.use_tls
-            self.smtp_from_email = cfg.from_email
-            self.smtp_from_name = cfg.from_name
-        except Exception:
-            pass
-
-    @rx.event
-    async def set_smtp_host(self, value: str):
-        self.smtp_host = value
-
-    @rx.event
-    async def set_smtp_port(self, value: str):
-        self.smtp_port = value
-
-    @rx.event
-    async def set_smtp_username(self, value: str):
-        self.smtp_username = value
-
-    @rx.event
-    async def set_smtp_credentials_name(self, value: str):
-        self.smtp_credentials_name = value
-
-    @rx.event
-    async def set_smtp_use_tls(self, value: bool):
-        self.smtp_use_tls = value
-
-    @rx.event
-    async def set_smtp_from_email(self, value: str):
-        self.smtp_from_email = value
-
-    @rx.event
-    async def set_smtp_from_name(self, value: str):
-        self.smtp_from_name = value
-
-    @rx.event
-    async def save_smtp_config(self):
-        self.is_saving_smtp = True
-        self.smtp_success = ""
-        self.smtp_error = ""
-        try:
-            from gws_care.notification.notification_dto import SmtpConfigDTO
-            from gws_care.notification.notification_service import NotificationService
-            try:
-                port = int(self.smtp_port)
-            except (ValueError, TypeError):
-                self.smtp_error = "Port must be a valid integer."
-                return
-            NotificationService.save_smtp_config(SmtpConfigDTO(
-                host=self.smtp_host,
-                port=port,
-                username=self.smtp_username,
-                credentials_name=self.smtp_credentials_name,
-                use_tls=self.smtp_use_tls,
-                from_email=self.smtp_from_email,
-                from_name=self.smtp_from_name,
-            ))
-            self.smtp_success = "SMTP configuration saved."
-        except Exception as e:
-            self.smtp_error = f"Error: {e}"
-        finally:
-            self.is_saving_smtp = False

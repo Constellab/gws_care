@@ -54,6 +54,7 @@ class SaveExamDTO(BaseModelDTO):
     """DTO for creating / updating an exam session."""
 
     patient_id: str
+    visit_id: str | None = None
     account_id: str | None = None
     exam_date: date
     exam_type: ExamType

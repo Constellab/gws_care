@@ -119,7 +119,7 @@ def _form_fields() -> rx.Component:
                 rx.input(
                     value=PatientFormState.form_last_name,
                     on_change=PatientFormState.set_form_last_name,
-                    placeholder="DUPONT",
+                    placeholder=LanguageState.tr["placeholder_last_name"],
                     size="2",
                     width="100%",
                 ),
@@ -129,7 +129,7 @@ def _form_fields() -> rx.Component:
                 rx.input(
                     value=PatientFormState.form_first_name,
                     on_change=PatientFormState.set_form_first_name,
-                    placeholder="Marie",
+                    placeholder=LanguageState.tr["placeholder_first_name"],
                     size="2",
                     width="100%",
                 ),
@@ -232,7 +232,7 @@ def _form_fields() -> rx.Component:
                 rx.input(
                     value=PatientFormState.form_city,
                     on_change=PatientFormState.set_form_city,
-                    placeholder="Paris",
+                    placeholder=LanguageState.tr["placeholder_city"],
                     size="2",
                     width="100%",
                 ),

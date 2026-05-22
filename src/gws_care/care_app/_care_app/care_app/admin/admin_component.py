@@ -11,8 +11,6 @@ from .general_settings_state import GeneralSettingsState
 from .import_component import import_dialog
 from .import_state import ImportState
 
-_SIMPLE_ROLES = ["ADMIN", "DOCTOR", "OPERATOR"]
-_ALL_ROLES = ["ADMIN", "DOCTOR", "OPERATOR", "ACCOUNT_ADMIN", "PATIENT"]
 _ROLE_LABELS = {
     "ADMIN": "Administrator",
     "DOCTOR": "Doctor",
@@ -65,58 +63,194 @@ def _patient_option(opt: EntityOption) -> rx.Component:
     return rx.select.item(opt.label, value=opt.id)
 
 
+def _account_chip(account_id: str, account_label: str, user_id: str, role: str) -> rx.Component:
+    """Small removable chip for one assigned account."""
+    return rx.badge(
+        rx.hstack(
+            rx.text(account_label, size="1"),
+            rx.icon(
+                "x",
+                size=10,
+                cursor="pointer",
+                on_click=lambda: AdminState.remove_account_link(user_id, role, account_id),
+            ),
+            spacing="1",
+            align="center",
+        ),
+        color_scheme="gray",
+        variant="soft",
+        size="1",
+    )
+
+
+def _account_label_for_id(account_id: rx.Var) -> rx.Component:
+    """Resolve an account ID to its label from the account_options list."""
+    # Use rx.cond chain — simpler: just show the ID if not found
+    # We iterate options and return the matching label; fallback to account_id
+    return rx.fragment(
+        rx.foreach(
+            AdminState.account_options,
+            lambda opt: rx.cond(
+                opt.id == account_id,
+                rx.text(opt.label, size="1"),
+                rx.fragment(),
+            ),
+        )
+    )
+
+
+def _doctor_patient_section(user: UserRoleRowDTO) -> rx.Component:
+    """Patient scope section shown when the DOCTOR role is assigned."""
+    return rx.cond(
+        user.roles.contains("DOCTOR"),
+        rx.vstack(
+            # "All patients" toggle
+            rx.hstack(
+                rx.checkbox(
+                    checked=user.doctor_all_patients,
+                    on_change=lambda val: AdminState.set_doctor_all_patients(user.id, val),
+                    size="1",
+                ),
+                rx.text(LanguageState.tr["all_patients_label"], size="1"),
+                spacing="1",
+                align="center",
+            ),
+            # When not all_patients: show assigned patients + add selector
+            rx.cond(
+                ~user.doctor_all_patients,
+                rx.vstack(
+                    rx.hstack(
+                        rx.foreach(
+                            user.doctor_patients,
+                            lambda opt: rx.badge(
+                                rx.hstack(
+                                    rx.text(opt.label, size="1"),
+                                    rx.icon(
+                                        "x", size=10, cursor="pointer",
+                                        on_click=lambda: AdminState.remove_account_link(user.id, "DOCTOR", opt.id),
+                                    ),
+                                    spacing="1", align="center",
+                                ),
+                                color_scheme="blue", variant="soft", size="1",
+                            ),
+                        ),
+                        wrap="wrap",
+                        spacing="1",
+                    ),
+                    rx.select.root(
+                        rx.select.trigger(
+                            placeholder=LanguageState.tr["link_patient_doctor_placeholder"],
+                            size="1",
+                        ),
+                        rx.select.content(
+                            rx.foreach(AdminState.patient_options, _patient_option),
+                        ),
+                        on_change=lambda val: AdminState.add_account_link(user.id, "DOCTOR", val),
+                        size="1",
+                    ),
+                    spacing="1",
+                    align="start",
+                ),
+            ),
+            spacing="1",
+            align="start",
+            padding_left="1.5rem",
+        ),
+    )
+
+
+def _account_admin_section(user: UserRoleRowDTO) -> rx.Component:
+    """Multi-account section shown when the ACCOUNT_ADMIN role is assigned."""
+    return rx.cond(
+        user.roles.contains("ACCOUNT_ADMIN"),
+        rx.vstack(
+            rx.hstack(
+                rx.foreach(
+                    user.account_admin_accounts,
+                    lambda opt: rx.badge(
+                        rx.hstack(
+                            rx.text(opt.label, size="1"),
+                            rx.icon(
+                                "x", size=10, cursor="pointer",
+                                on_click=lambda: AdminState.remove_account_link(user.id, "ACCOUNT_ADMIN", opt.id),
+                            ),
+                            spacing="1", align="center",
+                        ),
+                        color_scheme="orange", variant="soft", size="1",
+                    ),
+                ),
+                wrap="wrap",
+                spacing="1",
+            ),
+            rx.select.root(
+                rx.select.trigger(
+                    placeholder=LanguageState.tr["link_account_placeholder"],
+                    size="1",
+                ),
+                rx.select.content(
+                    rx.foreach(AdminState.account_options, _account_option),
+                ),
+                on_change=lambda val: AdminState.add_account_link(user.id, "ACCOUNT_ADMIN", val),
+                size="1",
+            ),
+            spacing="1",
+            align="start",
+            padding_left="1.5rem",
+        ),
+    )
+
+
 def _user_row(user: UserRoleRowDTO) -> rx.Component:
     return rx.table.row(
         rx.table.cell(rx.text(user.full_name, size="2", weight="medium")),
         rx.table.cell(rx.text(user.email, size="2", color="var(--gray-9)")),
         rx.table.cell(
             rx.vstack(
-                # Simple role toggles (ADMIN, DOCTOR, OPERATOR)
-                rx.hstack(
-                    rx.foreach(
-                        rx.Var.create(_SIMPLE_ROLES),
-                        lambda role: _role_toggle(user, role),
-                    ),
-                    spacing="2",
+                # ── ADMIN ──────────────────────────────────────────────────
+                _role_toggle(user, "ADMIN"),
+                # ── DOCTOR + patient scope ──────────────────────────────────
+                rx.vstack(
+                    _role_toggle(user, "DOCTOR"),
+                    _doctor_patient_section(user),
+                    spacing="1",
+                    align="start",
                 ),
-                # ACCOUNT_ADMIN toggle + linked account selector
-                rx.hstack(
+                # ── OPERATOR ───────────────────────────────────────────────
+                _role_toggle(user, "OPERATOR"),
+                # ── ACCOUNT_ADMIN + account list ───────────────────────────
+                rx.vstack(
                     _role_toggle(user, "ACCOUNT_ADMIN"),
-                    rx.cond(
-                        user.roles.contains("ACCOUNT_ADMIN"),
-                        rx.select.root(
-                            rx.select.trigger(placeholder="Link an account…"),
-                            rx.select.content(
-                                rx.foreach(AdminState.account_options, _account_option),
-                            ),
-                            value=user.linked_account_id,
-                            on_change=lambda val: AdminState.set_account_link(user.id, val),
-                            size="1",
-                        ),
-                    ),
-                    spacing="2",
-                    align="center",
+                    _account_admin_section(user),
+                    spacing="1",
+                    align="start",
                 ),
-                # PATIENT toggle + linked patient selector
-                rx.hstack(
+                # ── PATIENT + linked patient selector ──────────────────────
+                rx.vstack(
                     _role_toggle(user, "PATIENT"),
                     rx.cond(
                         user.roles.contains("PATIENT"),
-                        rx.select.root(
-                            rx.select.trigger(placeholder="Link a patient…"),
-                            rx.select.content(
-                                rx.foreach(AdminState.patient_options, _patient_option),
+                        rx.box(
+                            rx.select.root(
+                                rx.select.trigger(
+                                    placeholder=LanguageState.tr["link_patient_placeholder"],
+                                    size="1",
+                                ),
+                                rx.select.content(
+                                    rx.foreach(AdminState.patient_options, _patient_option),
+                                ),
+                                value=user.linked_patient_id,
+                                on_change=lambda val: AdminState.set_patient_link(user.id, val),
+                                size="1",
                             ),
-                            value=user.linked_patient_id,
-                            on_change=lambda val: AdminState.set_patient_link(user.id, val),
-                            size="1",
+                            padding_left="1.5rem",
                         ),
                     ),
-                    spacing="2",
-                    align="center",
+                    spacing="1",
+                    align="start",
                 ),
                 spacing="2",
                 align="start",
+                padding="0.25rem 0",
             )
         ),
         style={":hover": {"background_color": "var(--gray-2)"}},
@@ -146,21 +280,30 @@ def _user_roles_tab() -> rx.Component:
                 color_scheme="green",
             ),
         ),
+        rx.input(
+            rx.input.slot(rx.icon("search", size=14)),
+            placeholder=LanguageState.tr["filter_users_placeholder"],
+            value=AdminState.user_name_filter,
+            on_change=AdminState.set_user_name_filter,
+            size="2",
+            width="100%",
+            max_width="320px",
+        ),
         rx.cond(
             AdminState.is_loading,
             rx.center(rx.spinner(size="3"), padding="3rem"),
             rx.cond(
-                AdminState.users,
+                AdminState.filtered_users,
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
-                            rx.table.column_header_cell("Name"),
-                            rx.table.column_header_cell("Email"),
-                            rx.table.column_header_cell("Roles"),
+                            rx.table.column_header_cell(LanguageState.tr["col_name"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_email"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_roles"]),
                         )
                     ),
                     rx.table.body(
-                        rx.foreach(AdminState.users, _user_row),
+                        rx.foreach(AdminState.filtered_users, _user_row),
                     ),
                     width="100%",
                     variant="surface",
@@ -281,7 +424,7 @@ def _general_tab() -> rx.Component:
                 rx.separator(width="100%"),
                 rx.hstack(
                     rx.select.root(
-                        rx.select.trigger(placeholder="Page size"),
+                        rx.select.trigger(placeholder=LanguageState.tr["page_size_placeholder"]),
                         rx.select.content(
                             rx.select.item("10 items", value="10"),
                             rx.select.item("25 items", value="25"),
@@ -314,12 +457,112 @@ def _general_tab() -> rx.Component:
             ),
             width="100%",
         ),
+        rx.card(
+            rx.vstack(
+                rx.hstack(
+                    rx.icon("palette", size=18, color="var(--accent-9)"),
+                    rx.heading(LanguageState.tr["theme_label"], size="4"),
+                    spacing="2",
+                    align="center",
+                ),
+                rx.text(
+                    LanguageState.tr["theme_desc"],
+                    size="2",
+                    color="var(--gray-10)",
+                ),
+                rx.separator(width="100%"),
+                rx.hstack(
+                    # Green (Constellab primary teal)
+                    rx.box(
+                        rx.vstack(
+                            rx.box(
+                                width="40px",
+                                height="40px",
+                                border_radius="50%",
+                                background="linear-gradient(135deg, #1d907d 0%, #25b49c 100%)",
+                                box_shadow=rx.cond(
+                                    GeneralSettingsState.color_theme == "green",
+                                    "0 0 0 3px var(--gray-12)",
+                                    "none",
+                                ),
+                            ),
+                            rx.text(LanguageState.tr["theme_green"], size="1", weight=rx.cond(
+                                GeneralSettingsState.color_theme == "green", "bold", "regular"
+                            )),
+                            align="center",
+                            spacing="1",
+                        ),
+                        cursor="pointer",
+                        on_click=lambda: GeneralSettingsState.set_color_theme("green"),
+                        opacity=rx.cond(GeneralSettingsState.color_theme == "green", "1", "0.6"),
+                    ),
+                    # Pink (Constellab warn palette)
+                    rx.box(
+                        rx.vstack(
+                            rx.box(
+                                width="40px",
+                                height="40px",
+                                border_radius="50%",
+                                background="linear-gradient(135deg, #c35895 0%, #ff93d0 100%)",
+                                box_shadow=rx.cond(
+                                    GeneralSettingsState.color_theme == "pink",
+                                    "0 0 0 3px var(--gray-12)",
+                                    "none",
+                                ),
+                            ),
+                            rx.text(LanguageState.tr["theme_pink"], size="1", weight=rx.cond(
+                                GeneralSettingsState.color_theme == "pink", "bold", "regular"
+                            )),
+                            align="center",
+                            spacing="1",
+                        ),
+                        cursor="pointer",
+                        on_click=lambda: GeneralSettingsState.set_color_theme("pink"),
+                        opacity=rx.cond(GeneralSettingsState.color_theme == "pink", "1", "0.6"),
+                    ),
+                    # Purple (Constellab accent palette)
+                    rx.box(
+                        rx.vstack(
+                            rx.box(
+                                width="40px",
+                                height="40px",
+                                border_radius="50%",
+                                background="linear-gradient(135deg, #675a9d 0%, #c5bbee 100%)",
+                                box_shadow=rx.cond(
+                                    GeneralSettingsState.color_theme == "purple",
+                                    "0 0 0 3px var(--gray-12)",
+                                    "none",
+                                ),
+                            ),
+                            rx.text(LanguageState.tr["theme_purple"], size="1", weight=rx.cond(
+                                GeneralSettingsState.color_theme == "purple", "bold", "regular"
+                            )),
+                            align="center",
+                            spacing="1",
+                        ),
+                        cursor="pointer",
+                        on_click=lambda: GeneralSettingsState.set_color_theme("purple"),
+                        opacity=rx.cond(GeneralSettingsState.color_theme == "purple", "1", "0.6"),
+                    ),
+                    spacing="5",
+                    align="center",
+                ),
+                rx.cond(
+                    GeneralSettingsState.save_theme_success != "",
+                    rx.badge(GeneralSettingsState.save_theme_success, color_scheme="green", size="1"),
+                ),
+                rx.cond(
+                    GeneralSettingsState.save_theme_error != "",
+                    rx.badge(GeneralSettingsState.save_theme_error, color_scheme="red", size="1"),
+                ),
+                spacing="3",
+                width="100%",
+            ),
+            width="100%",
+        ),
         width="100%",
         spacing="4",
     )
-
-
-# ── Notification preferences helpers ──────────────────────────────────────────
 
 def _day_chip(day: int) -> rx.Component:
     return rx.badge(
@@ -442,141 +685,6 @@ def _notifications_tab() -> rx.Component:
                     ),
                     spacing="3",
                     align="center",
-                ),
-                spacing="3",
-                width="100%",
-            ),
-            width="100%",
-        ),
-        # ── SMTP server configuration ─────────────────────────────────────────
-        rx.card(
-            rx.vstack(
-                rx.heading("SMTP Server Configuration", size="4"),
-                rx.text(
-                    "Configure the outgoing mail server used to deliver notification emails.",
-                    size="2",
-                    color="var(--gray-10)",
-                ),
-                rx.separator(width="100%"),
-                rx.grid(
-                    rx.vstack(
-                        rx.text("SMTP Host", size="2", weight="medium"),
-                        rx.input(
-                            placeholder="smtp.example.com",
-                            value=NotificationsState.smtp_host,
-                            on_change=NotificationsState.set_smtp_host,
-                            size="2",
-                            width="100%",
-                        ),
-                        spacing="1",
-                        width="100%",
-                    ),
-                    rx.vstack(
-                        rx.text("Port", size="2", weight="medium"),
-                        rx.input(
-                            placeholder="587",
-                            value=NotificationsState.smtp_port,
-                            on_change=NotificationsState.set_smtp_port,
-                            type="number",
-                            min="1",
-                            max="65535",
-                            size="2",
-                            width="100%",
-                        ),
-                        spacing="1",
-                        width="100%",
-                    ),
-                    columns="2",
-                    spacing="4",
-                    width="100%",
-                ),
-                rx.grid(
-                    rx.vstack(
-                        rx.text("Username", size="2", weight="medium"),
-                        rx.input(
-                            placeholder="user@example.com",
-                            value=NotificationsState.smtp_username,
-                            on_change=NotificationsState.set_smtp_username,
-                            size="2",
-                            width="100%",
-                        ),
-                        spacing="1",
-                        width="100%",
-                    ),
-                    rx.vstack(
-                        rx.text("Credentials Name", size="2", weight="medium"),
-                        rx.input(
-                            placeholder="e.g. smtp-care",
-                            value=NotificationsState.smtp_credentials_name,
-                            on_change=NotificationsState.set_smtp_credentials_name,
-                            size="2",
-                            width="100%",
-                        ),
-                        rx.text(
-                            "Name of a Constellab Credentials (type Basic) that holds the SMTP password. The password is never stored in the app database.",
-                            size="1",
-                            color="var(--gray-9)",
-                        ),
-                        spacing="1",
-                        width="100%",
-                    ),
-                    columns="2",
-                    spacing="4",
-                    width="100%",
-                ),
-                rx.grid(
-                    rx.vstack(
-                        rx.text("From Email", size="2", weight="medium"),
-                        rx.input(
-                            placeholder="noreply@example.com",
-                            value=NotificationsState.smtp_from_email,
-                            on_change=NotificationsState.set_smtp_from_email,
-                            size="2",
-                            width="100%",
-                        ),
-                        spacing="1",
-                        width="100%",
-                    ),
-                    rx.vstack(
-                        rx.text("From Name", size="2", weight="medium"),
-                        rx.input(
-                            placeholder="Constellab Care",
-                            value=NotificationsState.smtp_from_name,
-                            on_change=NotificationsState.set_smtp_from_name,
-                            size="2",
-                            width="100%",
-                        ),
-                        spacing="1",
-                        width="100%",
-                    ),
-                    columns="2",
-                    spacing="4",
-                    width="100%",
-                ),
-                rx.hstack(
-                    rx.text("Use TLS", size="2", weight="medium"),
-                    rx.spacer(),
-                    rx.switch(
-                        checked=NotificationsState.smtp_use_tls,
-                        on_change=NotificationsState.set_smtp_use_tls,
-                    ),
-                    width="100%",
-                    align="center",
-                ),
-                rx.cond(
-                    NotificationsState.smtp_error != "",
-                    rx.callout(NotificationsState.smtp_error, icon="triangle-alert", color_scheme="red", size="1"),
-                ),
-                rx.cond(
-                    NotificationsState.smtp_success != "",
-                    rx.callout(NotificationsState.smtp_success, icon="check", color_scheme="green", size="1"),
-                ),
-                rx.button(
-                    rx.icon("save", size=14),
-                    "Save SMTP Settings",
-                    on_click=NotificationsState.save_smtp_config,
-                    loading=NotificationsState.is_saving_smtp,
-                    size="2",
                 ),
                 spacing="3",
                 width="100%",

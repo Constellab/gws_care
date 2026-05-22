@@ -43,11 +43,13 @@ class NotificationLog(Model):
     recipient_name: str = CharField(max_length=255, null=True)
 
     # Content
-    subject: str = CharField(max_length=500, null=False)
+    subject: str = TextField(null=False)
     body: str = TextField(null=False)
 
     # Metadata
     sent_by: User = ForeignKeyField(User, null=True, backref="+", on_delete="SET NULL")
+    recipient_user: User = ForeignKeyField(User, null=True, backref="received_notifications", on_delete="SET NULL")
+    parent_log = ForeignKeyField("self", null=True, backref="replies", on_delete="SET NULL")
     related_appointment: Appointment = ForeignKeyField(
         Appointment, null=True, backref="notification_logs", on_delete="SET NULL"
     )
@@ -80,7 +82,7 @@ class NotificationBell(Model):
     """In-app notification bell entry for a specific user."""
 
     user: User = ForeignKeyField(User, null=False, backref="bell_notifications", on_delete="CASCADE")
-    message: str = CharField(max_length=500, null=False)
+    message: str = TextField(null=False)
     is_read: bool = BooleanField(default=False, null=False)
     related_log: NotificationLog = ForeignKeyField(
         NotificationLog, null=True, backref="+", on_delete="CASCADE"

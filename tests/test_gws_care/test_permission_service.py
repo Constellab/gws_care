@@ -182,16 +182,14 @@ class TestPermissionService(BaseTestCase):
     def test_account_admin_own_account_passes(self):
         account_id = "acc-001"
         user = _make_user("rhown")
-        UserRoleService.assign_role_with_link(
-            str(user.id), CareRole.ACCOUNT_ADMIN, linked_account_id=account_id
-        )
+        UserRoleService.assign_role(str(user.id), CareRole.ACCOUNT_ADMIN)
+        UserRoleService.add_account_link(str(user.id), CareRole.ACCOUNT_ADMIN, account_id)
         PermissionService.require_own_account(user, account_id)  # must not raise
 
     def test_account_admin_other_account_raises(self):
         user = _make_user("rhother")
-        UserRoleService.assign_role_with_link(
-            str(user.id), CareRole.ACCOUNT_ADMIN, linked_account_id="acc-001"
-        )
+        UserRoleService.assign_role(str(user.id), CareRole.ACCOUNT_ADMIN)
+        UserRoleService.add_account_link(str(user.id), CareRole.ACCOUNT_ADMIN, "acc-001")
         with self.assertRaises(ForbiddenException):
             PermissionService.require_own_account(user, "acc-999")
 

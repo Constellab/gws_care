@@ -14,8 +14,8 @@ class CampaignPatient(Model):
     All patients in a campaign must belong to the campaign's billing account.
     """
 
-    program: Campaign = ForeignKeyField(Campaign, null=False, backref="program_patients", on_delete="CASCADE")
-    patient: Patient = ForeignKeyField(Patient, null=False, backref="program_patients", on_delete="CASCADE")
+    campaign: Campaign = ForeignKeyField(Campaign, null=False, backref="campaign_patients", on_delete="CASCADE", column_name='program_id')
+    patient: Patient = ForeignKeyField(Patient, null=False, backref="campaign_patients", on_delete="CASCADE")
 
     class Meta:
         table_name = "gws_care_program_patient"
@@ -23,5 +23,5 @@ class CampaignPatient(Model):
         is_table = True
         db_manager = CareDbManager.get_instance()
         indexes = (
-            (("program", "patient"), True),  # unique: one row per (program, patient)
+            (("campaign", "patient"), True),  # unique: one row per (campaign, patient)
         )

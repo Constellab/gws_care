@@ -6,20 +6,21 @@ from gws_core import BadRequestException, NotFoundException
 
 from gws_care.campaign.campaign import Campaign
 from gws_care.campaign.campaign_patient import CampaignPatient
-from gws_care.campaign_visit.campaign_visit import CampaignVisit
-from gws_care.campaign_visit.campaign_visit_dto import (
-    CampaignVisitRowDTO,
-    SaveStandaloneVisitDTO,
-    ValidateDoctorClinicDTO,
-    ValidateDoctorCompanyDTO,
-)
-from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
 from gws_care.patient.patient import Patient
 from gws_care.role.care_action import CareAction
 from gws_care.role.permission_service import PermissionService
 from gws_care.user.user import User
-from gws_care.workflow.visit_validation_step import CampaignVisitValidationStep
-from gws_care.workflow.visit_validation_workflow import CampaignVisitValidationWorkflow
+from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+from gws_care.visit.visit import Visit
+from gws_care.visit.visit_dto import (
+    SaveStandaloneVisitDTO,
+    ValidateDoctorClinicDTO,
+    ValidateDoctorCompanyDTO,
+    VisitRowDTO,
+)
+from gws_care.visit.visit_type import VisitType
+from gws_care.workflow.campaign_visit_validation_step import CampaignVisitValidationStep
+from gws_care.workflow.campaign_visit_validation_workflow import CampaignVisitValidationWorkflow
 
 
 class CampaignVisitService:
@@ -28,38 +29,38 @@ class CampaignVisitService:
     # ── Queries ───────────────────────────────────────────────────────────────
 
     @classmethod
-    def get_visit(cls, visit_id: str) -> CampaignVisit:
-        visit = CampaignVisit.get_or_none(CampaignVisit.id == visit_id)
+    def get_visit(cls, visit_id: str) -> Visit:
+        visit = Visit.get_or_none(Visit.id == visit_id)
         if visit is None:
             raise NotFoundException(f"CampaignVisit '{visit_id}' not found")
         return visit
 
     @classmethod
-    def list_for_campaign(cls, campaign_id: str) -> list[CampaignVisit]:
+    def list_for_campaign(cls, campaign_id: str) -> list[Visit]:
         """Return all visits for a campaign, ordered by patient name."""
         return list(
-            CampaignVisit.select()
+            Visit.select()
             .join(Patient)
-            .where(CampaignVisit.program == campaign_id)
+            .where(Visit.campaign == campaign_id)
             .order_by(Patient.last_name, Patient.first_name)
         )
 
     @classmethod
-    def list_for_patient(cls, patient_id: str) -> list[CampaignVisit]:
+    def list_for_patient(cls, patient_id: str) -> list[Visit]:
         """Return all visits for a patient, most recent first."""
         from peewee import JOIN
         return list(
-            CampaignVisit.select()
+            Visit.select()
             .join(Campaign, JOIN.LEFT_OUTER)
-            .where(CampaignVisit.patient == patient_id)
+            .where(Visit.patient == patient_id)
             .order_by(Campaign.start_date.desc())
         )
 
     @classmethod
-    def to_row_dto(cls, visit: CampaignVisit) -> CampaignVisitRowDTO:
+    def to_row_dto(cls, visit: Visit) -> VisitRowDTO:
         patient = visit.patient
         account = visit.billing_account if visit.billing_account_id else None
-        return CampaignVisitRowDTO(
+        return VisitRowDTO(
             id=str(visit.id),
             visit_number=visit.visit_number,
             patient_id=str(patient.id) if patient else None,
@@ -68,21 +69,21 @@ class CampaignVisitService:
             billing_account_id=str(visit.billing_account_id) if visit.billing_account_id else None,
             account_name=account.name if account else None,
             scheduled_at=visit.scheduled_at.isoformat() if visit.scheduled_at else None,
-            status=visit.status.value,
-            status_label=visit.status.get_label(),
+            campaign_visit_status=visit.campaign_visit_status.value,
+            status_label=visit.campaign_visit_status.get_label(),
         )
 
     # ── Creation ──────────────────────────────────────────────────────────────
 
     @classmethod
-    def create_visit(cls, campaign_id: str, patient_id: str) -> CampaignVisit:
+    def create_visit(cls, campaign_id: str, patient_id: str) -> Visit:
         """Create a new visit for a patient in a campaign.
 
         Called automatically when a patient is added to a campaign.
         Raises if the visit already exists.
         """
-        existing = CampaignVisit.get_or_none(
-            (CampaignVisit.program == campaign_id) & (CampaignVisit.patient == patient_id)
+        existing = Visit.get_or_none(
+            (Visit.campaign == campaign_id) & (Visit.patient == patient_id)
         )
         if existing is not None:
             raise BadRequestException("A visit already exists for this patient in this campaign")
@@ -97,14 +98,14 @@ class CampaignVisitService:
 
         # Ensure the patient-campaign link exists
         if CampaignPatient.get_or_none(
-            (CampaignPatient.program == campaign_id) & (CampaignPatient.patient == patient_id)
+            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
         ) is None:
             raise BadRequestException("Patient is not enrolled in this campaign")
 
-        visit = CampaignVisit()
-        visit.program = campaign
+        visit = Visit()
+        visit.campaign = campaign
         visit.patient = patient
-        visit.status = CampaignVisitStatus.PENDING
+        visit.campaign_visit_status = CampaignVisitStatus.PENDING
         visit.save()
         return visit
 
@@ -118,12 +119,12 @@ class CampaignVisitService:
         account_id: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
-    ) -> list[CampaignVisit]:
+    ) -> list[Visit]:
         """Return visits that have a scheduled_at date, ordered soonest first."""
-        query = CampaignVisit.select().join(Patient)
-        query = query.where(CampaignVisit.scheduled_at.is_null(False))
+        query = Visit.select().join(Patient)
+        query = query.where(Visit.scheduled_at.is_null(False))
         if status:
-            query = query.where(CampaignVisit.status == status)
+            query = query.where(Visit.campaign_visit_status == status)
         if search:
             term = f"%{search}%"
             query = query.where(
@@ -132,29 +133,30 @@ class CampaignVisitService:
                 | Patient.patient_number ** term
             )
         if account_id:
-            query = query.where(CampaignVisit.billing_account == account_id)
+            query = query.where(Visit.billing_account == account_id)
         if date_from:
             query = query.where(
-                CampaignVisit.scheduled_at >= datetime.fromisoformat(date_from)
+                Visit.scheduled_at >= datetime.fromisoformat(date_from)
             )
         if date_to:
             query = query.where(
-                CampaignVisit.scheduled_at <= datetime.fromisoformat(date_to + "T23:59:59")
+                Visit.scheduled_at <= datetime.fromisoformat(date_to + "T23:59:59")
             )
-        return list(query.order_by(CampaignVisit.scheduled_at.asc()))
+        return list(query.order_by(Visit.scheduled_at.asc()))
 
     @classmethod
-    def list_scheduled_for_patient(cls, patient_id: str) -> list[CampaignVisit]:
+    def list_scheduled_for_patient(cls, patient_id: str) -> list[Visit]:
         """Return scheduled visits for a specific patient, newest first."""
         return list(
-            CampaignVisit.select()
-            .where((CampaignVisit.patient == patient_id) & CampaignVisit.scheduled_at.is_null(False))
-            .order_by(CampaignVisit.scheduled_at.desc())
+            Visit.select()
+            .where((Visit.patient == patient_id) & Visit.scheduled_at.is_null(False))
+            .order_by(Visit.scheduled_at.desc())
         )
 
     @classmethod
     def list_all(
         cls,
+        visit_type: "VisitType | None" = None,
         status: CampaignVisitStatus | None = None,
         search: str = "",
         account_id: str | None = None,
@@ -162,15 +164,17 @@ class CampaignVisitService:
         date_to: str | None = None,
         limit: int | None = None,
         offset: int = 0,
-    ) -> list[CampaignVisit]:
+    ) -> list[Visit]:
         """Return all visits (including campaign visits without scheduled_at).
 
         Date filters apply only to visits that have a scheduled_at value; visits
         without a scheduled date are always included regardless of date range.
         """
-        query = CampaignVisit.select().join(Patient)
+        query = Visit.select().join(Patient)
+        if visit_type:
+            query = query.where(Visit.visit_type == visit_type)
         if status:
-            query = query.where(CampaignVisit.status == status)
+            query = query.where(Visit.campaign_visit_status == status)
         if search:
             term = f"%{search}%"
             query = query.where(
@@ -179,18 +183,18 @@ class CampaignVisitService:
                 | Patient.patient_number ** term
             )
         if account_id:
-            query = query.where(CampaignVisit.billing_account == account_id)
+            query = query.where(Visit.billing_account == account_id)
         if date_from:
             query = query.where(
-                CampaignVisit.scheduled_at.is_null()
-                | (CampaignVisit.scheduled_at >= datetime.fromisoformat(date_from))
+                Visit.scheduled_at.is_null()
+                | (Visit.scheduled_at >= datetime.fromisoformat(date_from))
             )
         if date_to:
             query = query.where(
-                CampaignVisit.scheduled_at.is_null()
-                | (CampaignVisit.scheduled_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+                Visit.scheduled_at.is_null()
+                | (Visit.scheduled_at <= datetime.fromisoformat(date_to + "T23:59:59"))
             )
-        query = query.order_by(CampaignVisit.created_at.desc())
+        query = query.order_by(Visit.created_at.desc())
         if offset:
             query = query.offset(offset)
         if limit:
@@ -198,7 +202,7 @@ class CampaignVisitService:
         return list(query)
 
     @classmethod
-    def create_standalone_visit(cls, dto: SaveStandaloneVisitDTO) -> CampaignVisit:
+    def create_standalone_visit(cls, dto: SaveStandaloneVisitDTO) -> Visit:
         """Create a visit linked to an auto-created individual campaign."""
         visit, _campaign = cls.create_visit_with_default_campaign(
             patient_id=dto.patient_id,
@@ -213,7 +217,7 @@ class CampaignVisitService:
         patient_id: str,
         scheduled_at_str: str,
         billing_account_id: str | None = None,
-    ) -> tuple["CampaignVisit", "Campaign"]:
+    ) -> tuple["Visit", "Campaign"]:
         """Create an individual campaign and a visit for the patient within it.
 
         The campaign starts in DRAFT status so exam types can be configured
@@ -246,21 +250,21 @@ class CampaignVisitService:
         CampaignPatient.create(program=campaign, patient=patient)
 
         # Create the visit
-        visit = CampaignVisit()
-        visit.program = campaign
+        visit = Visit()
+        visit.campaign = campaign
         visit.patient = patient
         visit.billing_account_id = billing_account_id or None
         visit.scheduled_at = scheduled_at
-        visit.status = CampaignVisitStatus.PENDING
+        visit.campaign_visit_status = CampaignVisitStatus.PENDING
         visit.save()
 
         return visit, campaign
 
     @classmethod
-    def update_standalone_visit(cls, visit_id: str, dto: SaveStandaloneVisitDTO) -> CampaignVisit:
+    def update_standalone_visit(cls, visit_id: str, dto: SaveStandaloneVisitDTO) -> Visit:
         """Update a standalone scheduled visit."""
         visit = cls.get_visit(visit_id)
-        if visit.status in (CampaignVisitStatus.CANCELLED, CampaignVisitStatus.LAB_DONE,
+        if visit.campaign_visit_status in (CampaignVisitStatus.CANCELLED, CampaignVisitStatus.LAB_DONE,
                              CampaignVisitStatus.DOCTOR_CLINIC_VALIDATED, CampaignVisitStatus.DOCTOR_COMPANY_VALIDATED):
             raise BadRequestException("Cannot edit a visit in its current state.")
 
@@ -275,47 +279,47 @@ class CampaignVisitService:
         return visit
 
     @classmethod
-    def cancel_visit(cls, visit_id: str) -> CampaignVisit:
+    def cancel_visit(cls, visit_id: str) -> Visit:
         """Cancel a visit (standalone scheduling use case)."""
         visit = cls.get_visit(visit_id)
-        if visit.status in (CampaignVisitStatus.LAB_DONE, CampaignVisitStatus.DOCTOR_CLINIC_VALIDATED,
+        if visit.campaign_visit_status in (CampaignVisitStatus.LAB_DONE, CampaignVisitStatus.DOCTOR_CLINIC_VALIDATED,
                              CampaignVisitStatus.DOCTOR_COMPANY_VALIDATED):
             raise BadRequestException("Cannot cancel a validated visit.")
-        visit.status = CampaignVisitStatus.CANCELLED
+        visit.campaign_visit_status = CampaignVisitStatus.CANCELLED
         visit.save()
         return visit
 
     @classmethod
-    def force_set_status(cls, visit_id: str, status: str) -> CampaignVisit:
+    def force_set_status(cls, visit_id: str, status: str) -> Visit:
         """Force-set a visit to any status (used by the workflow lifeline to allow going back)."""
         visit = cls.get_visit(visit_id)
         try:
-            visit.status = CampaignVisitStatus(status)
+            visit.campaign_visit_status = CampaignVisitStatus(status)
         except ValueError:
             raise BadRequestException(f"Invalid visit status: '{status}'")
         visit.save()
         return visit
 
     @classmethod
-    def start_visit(cls, visit_id: str) -> CampaignVisit:
+    def start_visit(cls, visit_id: str) -> Visit:
         """Mark visit as visit done (patient seen, samples collected)."""
         visit = cls.get_visit(visit_id)
-        if visit.status != CampaignVisitStatus.PENDING:
+        if visit.campaign_visit_status != CampaignVisitStatus.PENDING:
             raise BadRequestException("Only PENDING visits can be started.")
-        visit.status = CampaignVisitStatus.VISIT_DONE
+        visit.campaign_visit_status = CampaignVisitStatus.VISIT_DONE
         visit.save()
         return visit
 
     # ── Lifecycle transitions ─────────────────────────────────────────────────
 
     @classmethod
-    def mark_terrain_done(cls, visit_id: str) -> CampaignVisit:
+    def mark_terrain_done(cls, visit_id: str) -> Visit:
         """Mark visit as done (patient seen, samples collected)."""
         visit = cls.get_visit(visit_id)
-        if visit.status != CampaignVisitStatus.PENDING:
+        if visit.campaign_visit_status != CampaignVisitStatus.PENDING:
             raise BadRequestException("Only PENDING visits can be marked as visit done")
         now = datetime.utcnow()
-        visit.status = CampaignVisitStatus.VISIT_DONE
+        visit.campaign_visit_status = CampaignVisitStatus.VISIT_DONE
         visit.save()
         CampaignVisitValidationWorkflow.insert(
             visit=visit,
@@ -326,14 +330,14 @@ class CampaignVisitService:
         return visit
 
     @classmethod
-    def validate_lab(cls, visit_id: str, user: User) -> CampaignVisit:
+    def validate_lab(cls, visit_id: str, user: User) -> Visit:
         """Lab validation: lock results."""
         PermissionService.require(user, CareAction.VISIT_VALIDATE_LAB)
         visit = cls.get_visit(visit_id)
-        if visit.status != CampaignVisitStatus.VISIT_DONE:
+        if visit.campaign_visit_status != CampaignVisitStatus.VISIT_DONE:
             raise BadRequestException("Only VISIT_DONE visits can be lab-validated")
         now = datetime.utcnow()
-        visit.status = CampaignVisitStatus.LAB_DONE
+        visit.campaign_visit_status = CampaignVisitStatus.LAB_DONE
         visit.save()
         CampaignVisitValidationWorkflow.insert(
             visit=visit,
@@ -346,14 +350,14 @@ class CampaignVisitService:
         return visit
 
     @classmethod
-    def validate_doctor_clinic(cls, visit_id: str, user: User, dto: ValidateDoctorClinicDTO) -> CampaignVisit:
+    def validate_doctor_clinic(cls, visit_id: str, user: User, dto: ValidateDoctorClinicDTO) -> Visit:
         """Clinic doctor validation: add interpretation (Validation Clinic Doctor / Employé)."""
         PermissionService.require(user, CareAction.VISIT_VALIDATE_CLINIC)
         visit = cls.get_visit(visit_id)
-        if visit.status != CampaignVisitStatus.LAB_DONE:
+        if visit.campaign_visit_status != CampaignVisitStatus.LAB_DONE:
             raise BadRequestException("Only LAB_DONE visits can be clinic-doctor validated")
         now = datetime.utcnow()
-        visit.status = CampaignVisitStatus.DOCTOR_CLINIC_VALIDATED
+        visit.campaign_visit_status = CampaignVisitStatus.DOCTOR_CLINIC_VALIDATED
         visit.doctor_clinic_interpretation = dto.interpretation
         visit.save()
         CampaignVisitValidationWorkflow.insert(
@@ -367,7 +371,7 @@ class CampaignVisitService:
         return visit
 
     @classmethod
-    def validate_doctor_company(cls, visit_id: str, user: User, dto: ValidateDoctorCompanyDTO) -> CampaignVisit:
+    def validate_doctor_company(cls, visit_id: str, user: User, dto: ValidateDoctorCompanyDTO) -> Visit:
         """Company doctor validation: add interpretation + patient message.
 
         Phase 2.3 additions:
@@ -377,12 +381,12 @@ class CampaignVisitService:
         """
         PermissionService.require(user, CareAction.VISIT_VALIDATE_COMPANY)
         visit = cls.get_visit(visit_id)
-        if visit.status != CampaignVisitStatus.DOCTOR_CLINIC_VALIDATED:
+        if visit.campaign_visit_status != CampaignVisitStatus.DOCTOR_CLINIC_VALIDATED:
             raise BadRequestException(
                 "Only DOCTOR_CLINIC_VALIDATED visits can be company-doctor validated"
             )
         now = datetime.utcnow()
-        visit.status = CampaignVisitStatus.DOCTOR_COMPANY_VALIDATED
+        visit.campaign_visit_status = CampaignVisitStatus.DOCTOR_COMPANY_VALIDATED
         visit.doctor_company_interpretation = dto.interpretation
         visit.doctor_company_message = dto.message
         visit.save()
@@ -405,7 +409,7 @@ class CampaignVisitService:
         # Auto-advance campaign when all visits are company-doctor validated
         try:
             from gws_care.campaign.campaign_service import CampaignService
-            CampaignService.check_and_advance_to_company_validated(str(visit.program_id))
+            CampaignService.check_and_advance_to_company_validated(str(visit.campaign_id))
         except Exception as exc:
             print(f"[CampaignVisitService] check_and_advance_to_company_validated failed: {exc}")
 

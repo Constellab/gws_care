@@ -1,23 +1,28 @@
-"""DTOs for CampaignVisit."""
+"""DTOs for Visit."""
 
 from datetime import datetime
+from typing import Optional
 
 from gws_core import BaseModelDTO, ModelDTO
 
-from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
+from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+from gws_care.visit.consultation_visit_status import ConsultationVisitStatus
+from gws_care.visit.visit_type import VisitType
 
 
-class CampaignVisitDTO(ModelDTO):
-    """Full campaign visit record returned to callers."""
+class VisitDTO(ModelDTO):
+    """Full visit record returned to callers."""
 
+    visit_type: VisitType = VisitType.CAMPAIGN
     visit_number: str
-    program_id: str | None = None
+    campaign_id: str | None = None
     patient_id: str
     patient_name: str | None = None
     billing_account_id: str | None = None
     account_name: str | None = None
     scheduled_at: datetime | None = None
-    status: CampaignVisitStatus
+    campaign_visit_status: CampaignVisitStatus
+    consultation_visit_status: Optional[ConsultationVisitStatus] = None
 
     # Interpretation text (authorship tracked in CampaignVisitValidationWorkflow)
     doctor_clinic_interpretation: str | None = None
@@ -25,7 +30,7 @@ class CampaignVisitDTO(ModelDTO):
     doctor_company_message: str | None = None
 
 
-class CampaignVisitRowDTO(BaseModelDTO):
+class VisitRowDTO(BaseModelDTO):
     """Lightweight row for list views."""
 
     id: str
@@ -36,7 +41,7 @@ class CampaignVisitRowDTO(BaseModelDTO):
     billing_account_id: str | None = None
     account_name: str | None = None
     scheduled_at: str | None = None
-    status: str
+    campaign_visit_status: str
     status_label: str
 
 

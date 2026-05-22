@@ -1,4 +1,4 @@
-"""MedicalProgram detail page component."""
+"""Campaign detail page component."""
 
 import reflex as rx
 from gws_reflex_main import main_component
@@ -6,7 +6,7 @@ from gws_reflex_main import main_component
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..common.patient_picker_component import patient_picker_widget
-from .program_detail_state import (
+from .campaign_detail_state import (
     CampaignDetailState,
     ExamTypeOptionDTO,
     ExamTypeRowDTO,
@@ -88,7 +88,7 @@ def _prog_lifeline_step(step_idx: int, value: str, label: str, color: str) -> rx
 
 
 def _workflow_lifeline_program() -> rx.Component:
-    """Horizontal workflow progress lifeline for the program detail page."""
+    """Horizontal workflow progress lifeline for the campaign detail page."""
     steps = [
         (0, "draft",        "Draft",       "gray"),
         (1, "validated",    "Validated",   "blue"),
@@ -142,7 +142,7 @@ _VISIT_STATUS_COLORS: dict[str, str] = {
 
 def _visit_status_badge(v: VisitRowDTO) -> rx.Component:
     return rx.match(
-        v.status,
+        v.campaign_visit_status,
         ("pending", rx.badge(v.status_label, color_scheme="gray", variant="soft", size="1")),
         ("visit_done", rx.badge(v.status_label, color_scheme="amber", variant="soft", size="1")),
         ("lab_done", rx.badge(v.status_label, color_scheme="blue", variant="soft", size="1")),
@@ -225,7 +225,7 @@ def _workflow_buttons() -> rx.Component:
                 loading=CampaignDetailState.is_downloading_pdf,
             ),
         ),
-        # MedicalProgram report PDF
+        # Campaign report PDF
         rx.button(
             rx.icon("file-bar-chart", size=16),
             "Rapport PDF",
@@ -406,7 +406,7 @@ def _add_exam_type_dialog() -> rx.Component:
     )
 
 
-def program_detail_page() -> rx.Component:
+def campaign_detail_page() -> rx.Component:
     return main_component(
         page_layout(
             rx.cond(
@@ -437,7 +437,7 @@ def program_detail_page() -> rx.Component:
                             width="100%",
                             align="center",
                         ),
-                        # MedicalProgram info card
+                        # Campaign info card
                         rx.card(
                             rx.hstack(
                                 rx.vstack(
@@ -448,7 +448,7 @@ def program_detail_page() -> rx.Component:
                                         align="center",
                                     ),
                                     rx.hstack(
-                                        rx.text(CampaignDetailState.program.program_number, size="2", color="var(--gray-9)"),
+                                        rx.text(CampaignDetailState.program.campaign_number, size="2", color="var(--gray-9)"),
                                         rx.separator(orientation="vertical"),
                                         rx.text(CampaignDetailState.program.account_name, size="2"),
                                         spacing="2",
@@ -598,7 +598,7 @@ def program_detail_page() -> rx.Component:
                                             rx.table.header(
                                                 rx.table.row(
                                                     rx.table.column_header_cell(LanguageState.tr["col_name"]),
-                                                    rx.table.column_header_cell("Code"),
+                                                    rx.table.column_header_cell(LanguageState.tr["col_code"]),
                                                     rx.table.column_header_cell(LanguageState.tr["col_type"]),
                                                     rx.table.column_header_cell(""),
                                                 )

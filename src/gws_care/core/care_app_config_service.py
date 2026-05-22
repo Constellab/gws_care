@@ -2,6 +2,7 @@
 
 _DEFAULT_PAGE_SIZE = 50
 VALID_PAGE_SIZES = [10, 25, 50, 100, 200]
+VALID_THEMES = ["green", "pink", "purple"]
 
 
 class CareAppConfigService:
@@ -27,3 +28,23 @@ class CareAppConfigService:
         rows_updated = CareAppConfig.update(list_page_size=page_size).execute()
         if rows_updated == 0:
             CareAppConfig.insert(list_page_size=page_size).execute()
+
+    @classmethod
+    def get_color_theme(cls) -> str:
+        try:
+            from gws_care.core.care_app_config import CareAppConfig
+            config = CareAppConfig.get_or_none()
+            if config is None:
+                return "green"
+            return config.color_theme or "green"
+        except Exception:
+            return "green"
+
+    @classmethod
+    def save_color_theme(cls, theme: str) -> None:
+        from gws_care.core.care_app_config import CareAppConfig
+        if theme not in VALID_THEMES:
+            theme = "green"
+        rows_updated = CareAppConfig.update(color_theme=theme).execute()
+        if rows_updated == 0:
+            CareAppConfig.insert(color_theme=theme).execute()

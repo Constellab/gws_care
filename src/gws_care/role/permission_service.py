@@ -33,7 +33,7 @@ from gws_care.role.care_role import CareRole
 
 # Map action → set of roles that may perform it (ADMIN is always implicitly allowed)
 _PERMISSION_MAP: dict[CareAction, frozenset[CareRole]] = {
-    # ── MedicalProgram ─────────────────────────────────────────────────────────────
+    # ── Campaign ─────────────────────────────────────────────────────────────
     CareAction.CAMPAIGN_CREATE:         frozenset({CareRole.OPERATOR}),
     CareAction.CAMPAIGN_UPDATE:         frozenset({CareRole.OPERATOR}),
     CareAction.CAMPAIGN_VALIDATE_INITIAL: frozenset({CareRole.DOCTOR}),
@@ -133,25 +133,29 @@ class PermissionService:
 
     @classmethod
     def require_own_account(cls, user: "User", account_id: str) -> None:  # noqa: F821
-        """Require that an ACCOUNT_ADMIN user's linked account matches *account_id*.
+        """Require that the user is permitted to access *account_id*.
 
-        ADMIN / platform admins bypass this check.
+        - ADMIN / platform admin: always allowed.
+        - OPERATOR: unrestricted (full visibility).
+        - DOCTOR: unrestricted account visibility (patient scope is separate).
+        - ACCOUNT_ADMIN: must have *account_id* in their linked account list.
         """
         if cls._is_platform_admin(user):
             return
         roles = cls._get_user_roles(user)
         if CareRole.ADMIN in roles:
             return
-        # OPERATOR or DOCTOR have unrestricted account visibility
-        if CareRole.OPERATOR in roles or CareRole.DOCTOR in roles:
+        if CareRole.OPERATOR in roles:
+            return
+        if CareRole.DOCTOR in roles:
             return
         if CareRole.ACCOUNT_ADMIN in roles:
             from gws_care.role.user_role_service import UserRoleService
-            linked = UserRoleService.get_linked_account_id(str(user.id))
-            if linked and linked == account_id:
+            linked = UserRoleService.get_linked_account_ids(str(user.id), CareRole.ACCOUNT_ADMIN)
+            if account_id in linked:
                 return
             raise ForbiddenException(
-                "You can only access data belonging to your own account."
+                "You can only access data belonging to your assigned accounts."
             )
         raise ForbiddenException(
             "You do not have permission to access this account's data."
@@ -159,18 +163,31 @@ class PermissionService:
 
     @classmethod
     def require_own_patient(cls, user: "User", patient_id: str) -> None:  # noqa: F821
-        """Require that a PATIENT user's linked patient ID matches *patient_id*.
+        """Require that the user is permitted to access *patient_id*.
 
-        ADMIN / platform admins bypass; OPERATOR and DOCTOR have full access.
+        - ADMIN / platform admin: always allowed.
+        - OPERATOR: unrestricted (full patient visibility).
+        - DOCTOR with all_patients=True: unrestricted.
+          DOCTOR with all_patients=False: must be in their linked patient list.
+        - ACCOUNT_ADMIN: allowed (scoped at account level, checked separately).
+        - PATIENT: must match their own linked patient ID.
         """
         if cls._is_platform_admin(user):
             return
         roles = cls._get_user_roles(user)
-        if CareRole.ADMIN in roles or CareRole.OPERATOR in roles or CareRole.DOCTOR in roles:
+        if CareRole.ADMIN in roles or CareRole.OPERATOR in roles:
             return
+        if CareRole.DOCTOR in roles:
+            from gws_care.role.user_role_service import UserRoleService
+            if UserRoleService.get_doctor_all_patients(str(user.id)):
+                return
+            linked = UserRoleService.get_linked_account_ids(str(user.id), CareRole.DOCTOR)
+            if not linked or patient_id in linked:
+                return
+            raise ForbiddenException(
+                "You can only access data for your assigned patients."
+            )
         if CareRole.ACCOUNT_ADMIN in roles:
-            # Account admins can read patients of their account — deeper check
-            # is done at the service level with require_own_account.
             return
         if CareRole.PATIENT in roles:
             from gws_care.role.user_role_service import UserRoleService

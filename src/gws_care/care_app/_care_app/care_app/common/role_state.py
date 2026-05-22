@@ -21,7 +21,9 @@ class RoleState(ReflexMainState):
 
     _care_roles: list[str] = []   # private — backend use only
     _is_platform_admin: bool = False  # private — True when gws_core UserGroup is ADMIN
-    _linked_account_id: str = ""  # private — set for ACCOUNT_ADMIN role
+    _linked_account_ids: list[str] = []  # private — account IDs for ACCOUNT_ADMIN
+    _doctor_all_patients: bool = True   # private — True when doctor has global patient access
+    _doctor_patient_ids: list[str] = []  # private — patient IDs for scoped DOCTOR
     _linked_patient_id: str = ""  # private — set for PATIENT role
     _active_role_override: str = ""  # private — set when user manually switches role view
 
@@ -87,8 +89,19 @@ class RoleState(ReflexMainState):
         return self._is_platform_admin or len(self._care_roles) > 0
 
     @rx.var
-    def linked_account_id(self) -> str:
-        return self._linked_account_id
+    def linked_account_ids(self) -> list[str]:
+        """Account IDs the current ACCOUNT_ADMIN user is linked to."""
+        return self._linked_account_ids
+
+    @rx.var
+    def doctor_all_patients(self) -> bool:
+        """True when the current DOCTOR user has global access to all patients."""
+        return self._doctor_all_patients
+
+    @rx.var
+    def doctor_patient_ids(self) -> list[str]:
+        """Patient IDs the current DOCTOR is restricted to (when not all_patients)."""
+        return self._doctor_patient_ids
 
     @rx.var
     def linked_patient_id(self) -> str:
@@ -187,10 +200,14 @@ class RoleState(ReflexMainState):
                         pass
 
                 user_id = str(effective_user.id)
+                from gws_care.role.care_role import CareRole
                 roles = UserRoleService.get_roles_for_user(user_id)
                 self._care_roles = [r.value for r in roles]
-                # Linked entity IDs for ACCOUNT_ADMIN / PATIENT roles
-                self._linked_account_id = UserRoleService.get_linked_account_id(user_id) or ""
+                # Linked account IDs for ACCOUNT_ADMIN
+                self._linked_account_ids = UserRoleService.get_linked_account_ids(user_id, CareRole.ACCOUNT_ADMIN)
+                # Doctor patient scope
+                self._doctor_all_patients = UserRoleService.get_doctor_all_patients(user_id)
+                self._doctor_patient_ids = UserRoleService.get_linked_account_ids(user_id, CareRole.DOCTOR)
                 self._linked_patient_id = UserRoleService.get_linked_patient_id(user_id) or ""
                 # Resolve display name from the effective user
                 try:
@@ -210,7 +227,9 @@ class RoleState(ReflexMainState):
                     self._is_platform_admin = False
         except Exception:
             self._care_roles = []
-            self._linked_account_id = ""
+            self._linked_account_ids = []
+            self._doctor_all_patients = True
+            self._doctor_patient_ids = []
             self._linked_patient_id = ""
             self._is_platform_admin = False
 

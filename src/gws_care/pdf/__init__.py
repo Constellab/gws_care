@@ -286,11 +286,11 @@ def generate_campaign_report_pdf(program_id: str) -> bytes:
     )
 
     from gws_care.campaign.campaign_service import CampaignService
-    from gws_care.campaign_visit.campaign_visit import CampaignVisit
-    from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
+    from gws_care.visit.visit import Visit
+    from gws_care.visit.campaign_visit_status import CampaignVisitStatus
 
     program = CampaignService.get_campaign(program_id)
-    visits = list(CampaignVisit.select().where(CampaignVisit.program == program_id))
+    visits = list(Visit.select().where(Visit.campaign == program_id))
     patients = CampaignService.get_patients(program_id)
     exam_types = CampaignService.get_exam_types(program_id)
 
@@ -343,7 +343,7 @@ def generate_campaign_report_pdf(program_id: str) -> bytes:
     story.append(Paragraph("Statistiques de présence", h2))
     total = len(patients)
     present = sum(
-        1 for v in visits if v.status != CampaignVisitStatus.PENDING
+        1 for v in visits if v.campaign_visit_status != CampaignVisitStatus.PENDING
     )
     absent = total - present
     pct = round(present / total * 100) if total else 0
@@ -383,7 +383,7 @@ def generate_campaign_report_pdf(program_id: str) -> bytes:
     attendance_rows = [attendance_header]
     for p in patients:
         visit = visit_map.get(str(p.id))
-        if visit and visit.status != CampaignVisitStatus.PENDING:
+        if visit and visit.campaign_visit_status != CampaignVisitStatus.PENDING:
             status_cell = Paragraph("<font color='green'>✓ Présent</font>", body)
         else:
             status_cell = Paragraph("<font color='red'>✗ Absent</font>", body)
@@ -468,12 +468,12 @@ def generate_visit_results_pdf(visit_id: str) -> bytes:
     from gws_care.exam.exam import Exam
     from gws_care.exam.exam_result import ExamResult
     from gws_care.exam.exam_result_service import ExamResultService
-    from gws_care.campaign_visit.campaign_visit import CampaignVisit
-    from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+    from gws_care.visit.visit import Visit
+    from gws_care.visit.campaign_visit_service import CampaignVisitService
 
-    visit: CampaignVisit = CampaignVisitService.get_visit(visit_id)
+    visit: Visit = CampaignVisitService.get_visit(visit_id)
     patient = visit.patient
-    program = visit.program
+    program = visit.campaign
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(

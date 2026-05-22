@@ -2,6 +2,7 @@
 
 import reflex as rx
 
+from ..common.language_state import LanguageState
 from .import_state import ImportRowResultDTO, ImportState
 
 # ── Sub-components ─────────────────────────────────────────────────────────────
@@ -285,20 +286,20 @@ def import_dialog() -> rx.Component:
                             ImportState.is_importing,
                             rx.hstack(
                                 rx.spinner(size="2"),
-                                rx.text("Importing…"),
+                                rx.text(LanguageState.tr["importing_text"]),
                                 spacing="2",
                                 align="center",
                             ),
                             rx.hstack(
                                 rx.icon("upload", size=14),
-                                rx.text("Import"),
+                                rx.text(LanguageState.tr["import_btn"]),
                                 rx.badge(
                                     ImportState.valid_row_count,
                                     color_scheme="blue",
                                     variant="soft",
                                     size="1",
                                 ),
-                                rx.text("rows"),
+                                rx.text(LanguageState.tr["rows_suffix"]),
                                 spacing="2",
                                 align="center",
                             ),

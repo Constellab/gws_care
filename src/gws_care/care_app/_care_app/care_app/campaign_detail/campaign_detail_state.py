@@ -1,4 +1,4 @@
-"""State for the program detail page."""
+"""State for the campaign detail page."""
 
 import reflex as rx
 from pydantic import BaseModel
@@ -15,9 +15,9 @@ _VISIT_STATUS_ORDER = [
 ]
 
 
-class ProgramDetailDTO(BaseModel):
+class CampaignDetailStateDTO(BaseModel):
     id: str
-    program_number: str
+    campaign_number: str
     name: str
     account_id: str = ""
     account_name: str = ""
@@ -47,8 +47,8 @@ class VisitRowDTO(BaseModel):
     visit_number: str
     patient_name: str = ""
     patient_number: str = ""
-    status: str
-    status_label: str
+    campaign_visit_status: str = ""
+    status_label: str = ""
 
 
 class ExamTypeOptionDTO(BaseModel):
@@ -103,7 +103,7 @@ class CampaignDetailState(PatientPickerState):
         self.picker_selected_label = label
         self.picker_is_open = False
 
-    program: ProgramDetailDTO | None = None
+    program: CampaignDetailStateDTO | None = None
     patients: list[PatientRowDTO] = []
     exam_types: list[ExamTypeRowDTO] = []
     visits: list[VisitRowDTO] = []
@@ -138,7 +138,7 @@ class CampaignDetailState(PatientPickerState):
 
     @rx.event
     def go_to_visit(self, visit_id: str):
-        return rx.redirect(f"/campaign-visit/{visit_id}")
+        return rx.redirect(f"/visit/{visit_id}")
 
     @rx.var
     def program_status_index(self) -> int:
@@ -163,30 +163,30 @@ class CampaignDetailState(PatientPickerState):
     @rx.var
     def all_visits_lab_ready(self) -> bool:
         """True if every non-cancelled visit has reached at least LAB_VALIDATED."""
-        non_cancelled = [v for v in self.visits if v.status != "cancelled"]
+        non_cancelled = [v for v in self.visits if v.campaign_visit_status != "cancelled"]
         if not non_cancelled:
             return False
         min_idx = _VISIT_STATUS_ORDER.index("lab_done")
         compliant_statuses = set(_VISIT_STATUS_ORDER[min_idx:])
-        return all(v.status in compliant_statuses for v in non_cancelled)
+        return all(v.campaign_visit_status in compliant_statuses for v in non_cancelled)
 
     @rx.var
     def all_visits_clinic_ready(self) -> bool:
         """True if every non-cancelled visit has reached at least DOCTOR_CLINIC_VALIDATED."""
-        non_cancelled = [v for v in self.visits if v.status != "cancelled"]
+        non_cancelled = [v for v in self.visits if v.campaign_visit_status != "cancelled"]
         if not non_cancelled:
             return False
         min_idx = _VISIT_STATUS_ORDER.index("doctor_clinic_validated")
         compliant_statuses = set(_VISIT_STATUS_ORDER[min_idx:])
-        return all(v.status in compliant_statuses for v in non_cancelled)
+        return all(v.campaign_visit_status in compliant_statuses for v in non_cancelled)
 
     @rx.var
     def all_visits_company_validated(self) -> bool:
         """True if every non-cancelled visit has reached DOCTOR_COMPANY_VALIDATED."""
-        non_cancelled = [v for v in self.visits if v.status != "cancelled"]
+        non_cancelled = [v for v in self.visits if v.campaign_visit_status != "cancelled"]
         if not non_cancelled:
             return False
-        return all(v.status == "doctor_company_validated" for v in non_cancelled)
+        return all(v.campaign_visit_status == "doctor_company_validated" for v in non_cancelled)
 
     @rx.event
     async def set_workflow_status(self, status: str):
@@ -320,7 +320,7 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user():
                 from gws_care.qr_code import QrCodeService
                 pdf_bytes = QrCodeService.generate_tube_qr_grid(self.program.id)
-            filename = f"qr_grid_{self.program.program_number}.pdf"
+            filename = f"qr_grid_{self.program.campaign_number}.pdf"
             return rx.download(data=pdf_bytes, filename=filename)
         except Exception as e:
             self.error_message = f"PDF generation error: {e}"
@@ -338,7 +338,7 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user():
                 from gws_care.pdf import generate_campaign_report_pdf
                 pdf_bytes = generate_campaign_report_pdf(self.program.id)
-            filename = f"rapport_{self.program.program_number}.pdf"
+            filename = f"rapport_{self.program.campaign_number}.pdf"
             return rx.download(data=pdf_bytes, filename=filename)
         except Exception as e:
             self.error_message = f"PDF generation error: {e}"
@@ -467,12 +467,12 @@ class CampaignDetailState(PatientPickerState):
 
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
 
                 program = CampaignService.get_campaign(page_id)
-                self.program = ProgramDetailDTO(
+                self.program = CampaignDetailStateDTO(
                     id=str(program.id),
-                    program_number=program.program_number,
+                    campaign_number=program.campaign_number,
                     name=program.name,
                     account_id=str(program.account_id) if program.account_id else "",
                     account_name=program.account.name if program.account_id else "",
@@ -515,8 +515,8 @@ class CampaignDetailState(PatientPickerState):
                         visit_number=v.visit_number,
                         patient_name=v.patient.get_full_name() if v.patient_id else "",
                         patient_number=v.patient.patient_number if v.patient_id else "",
-                        status=v.status.value,
-                        status_label=v.status.get_label(),
+                        campaign_visit_status=v.campaign_visit_status.value,
+                        status_label=v.campaign_visit_status.get_label(),
                     )
                     for v in visits
                 ]

@@ -46,7 +46,7 @@ def user_menu_button() -> rx.Component:
                         rx.text(
                             RoleState.user_full_name,
                             size="2",
-                            weight="medium",
+                            weight="bold",
                             color="var(--gray-12)",
                             overflow="hidden",
                             text_overflow="ellipsis",
@@ -118,7 +118,7 @@ def user_menu_button() -> rx.Component:
                         rx.text(
                             RoleState.user_full_name,
                             size="2",
-                            weight="medium",
+                            weight="bold",
                             color="var(--gray-12)",
                             overflow="hidden",
                             text_overflow="ellipsis",

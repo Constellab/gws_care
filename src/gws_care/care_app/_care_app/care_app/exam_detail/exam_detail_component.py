@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .exam_detail_state import (
     PREDEFINED_LAB_PARAMS,
@@ -412,28 +413,28 @@ def _lab_add_row_form() -> rx.Component:
             rx.input(
                 value=ExamDetailState.new_lab_parameter,
                 on_change=ExamDetailState.set_new_lab_parameter,
-                placeholder="Parameter name *",
+                placeholder=LanguageState.tr["placeholder_param_name"],
                 size="2",
                 flex="3",
             ),
             rx.input(
                 value=ExamDetailState.new_lab_unit,
                 on_change=ExamDetailState.set_new_lab_unit,
-                placeholder="Unit",
+                placeholder=LanguageState.tr["placeholder_unit"],
                 size="2",
                 flex="1",
             ),
             rx.input(
                 value=ExamDetailState.new_lab_value,
                 on_change=ExamDetailState.set_new_lab_value,
-                placeholder="Value",
+                placeholder=LanguageState.tr["placeholder_value"],
                 size="2",
                 flex="2",
             ),
             rx.input(
                 value=ExamDetailState.new_lab_reference_range,
                 on_change=ExamDetailState.set_new_lab_reference_range,
-                placeholder="Reference range",
+                placeholder=LanguageState.tr["placeholder_ref_range"],
                 size="2",
                 flex="2",
             ),
@@ -476,11 +477,11 @@ def _lab_results_section() -> rx.Component:
                     rx.table.root(
                         rx.table.header(
                             rx.table.row(
-                                rx.table.column_header_cell("Parameter"),
-                                rx.table.column_header_cell("Unit"),
-                                rx.table.column_header_cell("Value"),
-                                rx.table.column_header_cell("Reference range"),
-                                rx.table.column_header_cell("Status"),
+                                rx.table.column_header_cell(LanguageState.tr["col_parameter"]),
+                                rx.table.column_header_cell(LanguageState.tr["col_unit"]),
+                                rx.table.column_header_cell(LanguageState.tr["col_value"]),
+                                rx.table.column_header_cell(LanguageState.tr["col_ref_range"]),
+                                rx.table.column_header_cell(LanguageState.tr["col_status"]),
                                 rx.table.column_header_cell(""),
                             ),
                         ),
@@ -501,11 +502,11 @@ def _lab_results_section() -> rx.Component:
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
-                            rx.table.column_header_cell("Parameter"),
-                            rx.table.column_header_cell("Unit"),
-                            rx.table.column_header_cell("Value"),
-                            rx.table.column_header_cell("Reference range"),
-                            rx.table.column_header_cell("Status"),
+                            rx.table.column_header_cell(LanguageState.tr["col_parameter"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_unit"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_value"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_ref_range"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_status"]),
                         ),
                     ),
                     rx.table.body(

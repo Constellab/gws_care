@@ -1,45 +1,26 @@
 """State for the Admin panel — user role management."""
 
 import reflex as rx
-from pydantic import BaseModel
 
 from ..common.role_state import RoleState
 
 
-class UserRoleRowDTO(BaseModel):
+class EntityOption(rx.Base):
+    id: str
+    label: str
+
+
+class UserRoleRowDTO(rx.Base):
     """Represents a user with their assigned role list for the admin panel."""
 
     id: str
     full_name: str
     email: str
     roles: list[str]   # list of CareRole values
-    linked_account_id: str = ""
     linked_patient_id: str = ""
-
-    @property
-    def is_admin(self) -> bool:
-        return "ADMIN" in self.roles
-
-    @property
-    def is_doctor(self) -> bool:
-        return "DOCTOR" in self.roles
-
-    @property
-    def is_operator(self) -> bool:
-        return "OPERATOR" in self.roles
-
-    @property
-    def is_account_admin(self) -> bool:
-        return "ACCOUNT_ADMIN" in self.roles
-
-    @property
-    def is_patient_user(self) -> bool:
-        return "PATIENT" in self.roles
-
-
-class EntityOption(BaseModel):
-    id: str
-    label: str
+    doctor_all_patients: bool = True
+    doctor_patients: list[EntityOption] = []
+    account_admin_accounts: list[EntityOption] = []
 
 
 class AdminState(RoleState):
@@ -50,9 +31,27 @@ class AdminState(RoleState):
     error_message: str = ""
     success_message: str = ""
 
+    # Filter for the user roles table
+    user_name_filter: str = ""
+
     # Options for the linked-entity selectors
     account_options: list[EntityOption] = []
     patient_options: list[EntityOption] = []
+
+    @rx.event
+    def set_user_name_filter(self, value: str):
+        self.user_name_filter = value
+
+    @rx.var
+    def filtered_users(self) -> list[UserRoleRowDTO]:
+        """Users filtered by name (case-insensitive)."""
+        if not self.user_name_filter:
+            return self.users
+        needle = self.user_name_filter.lower()
+        return [
+            u for u in self.users
+            if needle in u.full_name.lower() or needle in u.email.lower()
+        ]
 
     # Per-user pending link selections (user_id → entity_id)
     _pending_account_links: dict[str, str] = {}
@@ -64,8 +63,9 @@ class AdminState(RoleState):
         redirect = await self._require_any_of(self.is_admin)
         if redirect:
             return redirect
-        await self._load_users()
+        # Load options first so labels are available for chip resolution in _load_users
         await self._load_entity_options()
+        await self._load_users()
 
     @rx.event
     async def toggle_role(self, user_id: str, role: str):
@@ -92,17 +92,59 @@ class AdminState(RoleState):
 
     @rx.event
     async def set_account_link(self, user_id: str, account_id: str):
-        """Save the linked account for an ACCOUNT_ADMIN user."""
+        """Save the linked account for an ACCOUNT_ADMIN user (legacy, replaced by add/remove)."""
+        await self._add_account_link(user_id, "ACCOUNT_ADMIN", account_id)
+
+    @rx.event
+    async def add_account_link(self, user_id: str, role: str, account_id: str):
+        """Add an account link for ACCOUNT_ADMIN or DOCTOR role."""
         self.error_message = ""
         self.success_message = ""
         try:
             with await self.authenticate_user():
                 from gws_care.role.care_role import CareRole
                 from gws_care.role.user_role_service import UserRoleService
-                UserRoleService.assign_role_with_link(
-                    user_id, CareRole.ACCOUNT_ADMIN, linked_account_id=account_id or None
-                )
-                self.success_message = "Account link saved."
+                UserRoleService.add_account_link(user_id, CareRole(role), account_id)
+                self.success_message = "Account added."
+            await self._load_users()
+        except Exception as e:
+            self.error_message = f"Error adding account: {e}"
+
+    @rx.event
+    async def remove_account_link(self, user_id: str, role: str, account_id: str):
+        """Remove an account link for ACCOUNT_ADMIN or DOCTOR role."""
+        self.error_message = ""
+        self.success_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.role.care_role import CareRole
+                from gws_care.role.user_role_service import UserRoleService
+                UserRoleService.remove_account_link(user_id, CareRole(role), account_id)
+                self.success_message = "Account removed."
+            await self._load_users()
+        except Exception as e:
+            self.error_message = f"Error removing account: {e}"
+
+    @rx.event
+    async def set_doctor_all_patients(self, user_id: str, value: bool):
+        """Toggle the 'all patients' flag for a DOCTOR user."""
+        self.error_message = ""
+        self.success_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.role.user_role_service import UserRoleService
+                UserRoleService.set_doctor_all_patients(user_id, value)
+                self.success_message = "Doctor patient scope updated."
+            await self._load_users()
+        except Exception as e:
+            self.error_message = f"Error updating doctor scope: {e}"
+
+    async def _add_account_link(self, user_id: str, role: str, account_id: str):
+        try:
+            with await self.authenticate_user():
+                from gws_care.role.care_role import CareRole
+                from gws_care.role.user_role_service import UserRoleService
+                UserRoleService.add_account_link(user_id, CareRole(role), account_id)
             await self._load_users()
         except Exception as e:
             self.error_message = f"Error saving account link: {e}"
@@ -132,14 +174,25 @@ class AdminState(RoleState):
             with await self.authenticate_user():
                 from gws_care.role.user_role_service import UserRoleService
                 rows = UserRoleService.list_users_with_roles()
+                # Build id→label lookup maps from already-loaded options
+                patient_map = {opt.id: opt.label for opt in self.patient_options}
+                account_map = {opt.id: opt.label for opt in self.account_options}
                 self.users = [
                     UserRoleRowDTO(
                         id=r["id"],
                         full_name=r["full_name"],
                         email=r["email"],
                         roles=r["roles"],
-                        linked_account_id=r.get("linked_account_id") or "",
                         linked_patient_id=r.get("linked_patient_id") or "",
+                        doctor_all_patients=r.get("doctor_all_patients", True),
+                        doctor_patients=[
+                            EntityOption(id=pid, label=patient_map.get(pid, pid))
+                            for pid in (r.get("doctor_patient_ids") or [])
+                        ],
+                        account_admin_accounts=[
+                            EntityOption(id=aid, label=account_map.get(aid, aid))
+                            for aid in (r.get("account_admin_account_ids") or [])
+                        ],
                     )
                     for r in rows
                 ]

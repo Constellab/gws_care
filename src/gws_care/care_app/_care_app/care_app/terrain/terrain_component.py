@@ -49,7 +49,7 @@ def _exam_row(e: TerrainExamDTO) -> rx.Component:
             ~e.is_done_on_site,
             rx.button(
                 rx.icon("check", size=12),
-                "Fait",
+                LanguageState.tr["terrain_done_btn"],
                 variant="soft",
                 color_scheme="green",
                 size="1",
@@ -102,7 +102,7 @@ def _patient_card(p: TerrainPatientDTO) -> rx.Component:
                     rx.hstack(
                         rx.text(p.patient_number, size="2", color="var(--gray-9)"),
                         rx.separator(orientation="vertical"),
-                        rx.text("Né(e) le " + p.date_of_birth, size="2", color="var(--gray-9)"),
+                        rx.text(LanguageState.tr["terrain_born_on"] + p.date_of_birth, size="2", color="var(--gray-9)"),
                         spacing="2",
                         align="center",
                     ),
@@ -112,7 +112,7 @@ def _patient_card(p: TerrainPatientDTO) -> rx.Component:
                         rx.hstack(
                             rx.icon("circle_check", size=13, color="var(--green-9)"),
                             rx.text(
-                                p.exams_done.to_string() + " / " + p.exams_total.to_string() + " exams done",
+                                p.exams_done.to_string() + " / " + p.exams_total.to_string() + LanguageState.tr["terrain_exams_done_suffix"],
                                 size="2",
                                 color="var(--gray-9)",
                             ),
@@ -143,7 +143,7 @@ def _patient_card(p: TerrainPatientDTO) -> rx.Component:
                 p.visit_status == "pending",
                 rx.button(
                     rx.icon("check-check", size=14),
-                    "Mark on-site visit as done",
+                    LanguageState.tr["terrain_mark_visit_done_btn"],
                     variant="solid",
                     color_scheme="green",
                     size="2",
@@ -165,7 +165,7 @@ def terrain_page() -> rx.Component:
             rx.hstack(
                 rx.button(
                     rx.icon("arrow-left", size=14),
-                    "Retour à la campagne",
+                    LanguageState.tr["terrain_back_to_campaign"],
                     variant="ghost",
                     size="2",
                     on_click=TerrainState.go_back,
@@ -182,12 +182,12 @@ def terrain_page() -> rx.Component:
                 width="100%",
                 align="center",
             ),
-            # MedicalProgram info
+            # Campaign info
             rx.card(
                 rx.vstack(
                     rx.heading(TerrainState.campaign_name, size="5"),
                     rx.hstack(
-                        rx.text(TerrainState.program_number, size="2", color="var(--gray-9)"),
+                        rx.text(TerrainState.campaign_number, size="2", color="var(--gray-9)"),
                         rx.separator(orientation="vertical"),
                         rx.text(TerrainState.account_name, size="2", color="var(--gray-9)"),
                         rx.separator(orientation="vertical"),
@@ -208,13 +208,13 @@ def terrain_page() -> rx.Component:
             rx.card(
                 rx.vstack(
                     rx.hstack(
-                        rx.heading("Scanner un QR code", size="4"),
+                        rx.heading(LanguageState.tr["terrain_scan_title"], size="4"),
                         rx.spacer(),
                         rx.button(
                             rx.cond(
                                 TerrainState.scanner_active,
-                                rx.hstack(rx.icon("camera-off", size=14), rx.text("Arrêter caméra"), spacing="1"),
-                                rx.hstack(rx.icon("camera", size=14), rx.text("Scanner caméra"), spacing="1"),
+                                rx.hstack(rx.icon("camera-off", size=14), rx.text(LanguageState.tr["terrain_stop_camera"]), spacing="1"),
+                                rx.hstack(rx.icon("camera", size=14), rx.text(LanguageState.tr["terrain_scan_camera"]), spacing="1"),
                             ),
                             variant=rx.cond(TerrainState.scanner_active, "solid", "soft"),
                             color_scheme=rx.cond(TerrainState.scanner_active, "red", "blue"),
@@ -235,7 +235,7 @@ def terrain_page() -> rx.Component:
                                 width="100%",
                             ),
                             rx.text(
-                                "Pointez la caméra vers un QR code patient ou tube.",
+                                LanguageState.tr["terrain_camera_hint"],
                                 size="2",
                                 color="var(--gray-9)",
                                 text_align="center",
@@ -247,7 +247,7 @@ def terrain_page() -> rx.Component:
                     # Manual entry fallback
                     rx.hstack(
                         rx.input(
-                            placeholder="Ou saisir manuellement (n° patient, code tube)…",
+                            placeholder=LanguageState.tr["terrain_manual_input_placeholder"],
                             value=TerrainState.scan_result,
                             on_change=TerrainState.set_scan_result,
                             size="3",
@@ -255,7 +255,7 @@ def terrain_page() -> rx.Component:
                         ),
                         rx.button(
                             rx.icon("search", size=16),
-                            "Rechercher",
+                            LanguageState.tr["terrain_search_btn"],
                             on_click=TerrainState.process_scan,
                             size="3",
                         ),
@@ -283,7 +283,7 @@ def terrain_page() -> rx.Component:
                     rx.cond(
                         TerrainState.scan_found_patient != None,  # noqa: E711
                         rx.callout(
-                            "Patient trouvé : " + TerrainState.scan_found_patient.full_name,
+                            LanguageState.tr["terrain_patient_found_prefix"] + TerrainState.scan_found_patient.full_name,
                             color_scheme="green",
                             icon="circle_check",
                             size="1",
@@ -316,7 +316,7 @@ def terrain_page() -> rx.Component:
             rx.hstack(
                 rx.input(
                     rx.input.slot(rx.icon("search", size=13)),
-                    placeholder="Rechercher par nom ou n° dossier…",
+                    placeholder=LanguageState.tr["terrain_search_placeholder"],
                     value=TerrainState.search_query,
                     on_change=TerrainState.set_search_query,
                     size="2",
@@ -341,7 +341,7 @@ def terrain_page() -> rx.Component:
                     rx.center(
                         rx.vstack(
                             rx.icon("users", size=40, color="var(--gray-7)"),
-                            rx.text("Aucun patient trouvé.", size="3", color="var(--gray-9)"),
+                            rx.text(LanguageState.tr["terrain_no_patients"], size="3", color="var(--gray-9)"),
                             spacing="3",
                             align="center",
                         ),

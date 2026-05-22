@@ -40,12 +40,29 @@ class ExamService:
 
     @classmethod
     def create_exam(cls, dto: SaveExamDTO) -> Exam:
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+        from gws_care.visit.visit_type import VisitType
+
         patient = Patient.get_or_none(Patient.id == dto.patient_id)
         if patient is None:
             raise BadRequestException(f"Patient '{dto.patient_id}' not found")
 
+        if dto.visit_id:
+            visit = Visit.get_or_none(Visit.id == dto.visit_id)
+            if visit is None:
+                raise BadRequestException(f"Visit '{dto.visit_id}' not found")
+        else:
+            visit = Visit()
+            visit.visit_type = VisitType.CONSULTATION
+            visit.patient = patient
+            visit.billing_account_id = dto.account_id
+            visit.campaign_visit_status = CampaignVisitStatus.PENDING
+            visit.save()
+
         exam = Exam()
         exam.patient = patient
+        exam.visit = visit
         exam.billing_account_id = dto.account_id
         exam.exam_date = dto.exam_date
         exam.exam_type = dto.exam_type
@@ -149,7 +166,7 @@ class ExamService:
         Returns None if not found.
         """
         from gws_care.patient.patient import Patient as PatientModel
-        from gws_care.campaign_visit.campaign_visit import CampaignVisit
+        from gws_care.visit.visit import Visit
 
         exam = Exam.get_or_none(Exam.tube_qr_code == qr_code)
         if exam is None:
@@ -168,7 +185,7 @@ class ExamService:
 
         return {
             "patient": patient,
-            "visit": None,  # visit FK not yet on Exam; extension point
+            "visit": Visit.get_or_none(Visit.id == exam.visit_id) if exam.visit_id else None,
             "exams_to_do": [e for e in all_exams_for_patient if not e.is_done_on_site],
         }
 
@@ -179,7 +196,7 @@ class ExamService:
         Falls back to patient-level exams if no visit FK is present.
         """
         from gws_care.campaign.campaign_service import CampaignService
-        from gws_care.campaign_visit.campaign_visit import CampaignVisit
+        from gws_care.visit.visit import Visit
         patients = CampaignService.get_patients(program_id)
         if not patients:
             return []

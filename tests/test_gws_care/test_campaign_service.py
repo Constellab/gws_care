@@ -277,7 +277,7 @@ def _make_campaign_in_progress():
     Returns (campaign, patient, user).
     """
     from gws_care.user.user import User
-    from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+    from gws_care.visit.campaign_visit_service import CampaignVisitService
 
     user = User.select().first()
     account = _make_account()
@@ -292,29 +292,29 @@ def _make_campaign_in_progress():
 
 def _advance_visit_to_lab_validated(campaign, patient, user):
     """Helper: bring the visit all the way to LAB_VALIDATED."""
-    from gws_care.campaign_visit.campaign_visit import CampaignVisit
-    from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+    from gws_care.visit.visit import Visit
+    from gws_care.visit.campaign_visit_service import CampaignVisitService
 
-    visit = CampaignVisit.get((CampaignVisit.program == campaign.id) & (CampaignVisit.patient == patient.id))
+    visit = Visit.get((Visit.program == campaign.id) & (Visit.patient == patient.id))
     vid = str(visit.id)
     CampaignVisitService.mark_terrain_done(vid)
     CampaignVisitService.mark_results_entered(vid)
     CampaignVisitService.validate_lab(vid, user)
-    return CampaignVisit.get_by_id(visit.id)
+    return Visit.get_by_id(visit.id)
 
 
 def _advance_visit_to_clinic_validated(campaign, patient, user):
     """Helper: bring the visit all the way to DOCTOR_CLINIC_VALIDATED."""
-    from gws_care.campaign_visit.campaign_visit import CampaignVisit
-    from gws_care.campaign_visit.campaign_visit_dto import ValidateDoctorClinicDTO
-    from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+    from gws_care.visit.visit import Visit
+    from gws_care.visit.visit_dto import ValidateDoctorClinicDTO
+    from gws_care.visit.campaign_visit_service import CampaignVisitService
 
     _advance_visit_to_lab_validated(campaign, patient, user)
-    visit = CampaignVisit.get((CampaignVisit.program == campaign.id) & (CampaignVisit.patient == patient.id))
+    visit = Visit.get((Visit.program == campaign.id) & (Visit.patient == patient.id))
     CampaignVisitService.validate_doctor_clinic(
         str(visit.id), user, ValidateDoctorClinicDTO(interpretation="Normal.")
     )
-    return CampaignVisit.get_by_id(visit.id)
+    return Visit.get_by_id(visit.id)
 
 
 class TestCampaignPhase2(BaseTestCase):
@@ -406,16 +406,16 @@ class TestCampaignPhase2(BaseTestCase):
 
     def test_auto_advance_campaign_when_all_visits_company_validated(self):
         """Campaign auto-advances to DOCTOR_COMPANY_VALIDATED when all visits done."""
-        from gws_care.campaign_visit.campaign_visit import CampaignVisit
-        from gws_care.campaign_visit.campaign_visit_dto import ValidateDoctorCompanyDTO
-        from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.visit_dto import ValidateDoctorCompanyDTO
+        from gws_care.visit.campaign_visit_service import CampaignVisitService
 
         campaign, patient, user = _make_campaign_in_progress()
         _advance_visit_to_clinic_validated(campaign, patient, user)
         campaign = CampaignService.validate_lab_campaign(str(campaign.id), user)
         campaign = CampaignService.validate_doctor_clinic_campaign(str(campaign.id), user)
 
-        visit = CampaignVisit.get((CampaignVisit.program == campaign.id) & (CampaignVisit.patient == patient.id))
+        visit = Visit.get((Visit.program == campaign.id) & (Visit.patient == patient.id))
         CampaignVisitService.validate_doctor_company(
             str(visit.id), user, ValidateDoctorCompanyDTO(interpretation="Apte.", message="RAS.")
         )
@@ -428,9 +428,9 @@ class TestCampaignPhase2(BaseTestCase):
     def test_no_auto_advance_when_some_visits_pending(self):
         """Campaign stays DOCTOR_CLINIC_VALIDATED when only some visits are done."""
         from gws_care.campaign.campaign import Campaign
-        from gws_care.campaign_visit.campaign_visit import CampaignVisit
-        from gws_care.campaign_visit.campaign_visit_dto import ValidateDoctorClinicDTO, ValidateDoctorCompanyDTO
-        from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.visit_dto import ValidateDoctorClinicDTO, ValidateDoctorCompanyDTO
+        from gws_care.visit.campaign_visit_service import CampaignVisitService
 
         user = __import__("gws_care.user.user", fromlist=["User"]).User.select().first()
         account = _make_account("TwoPatAcct")
@@ -439,7 +439,7 @@ class TestCampaignPhase2(BaseTestCase):
         campaign, _ = _make_campaign(account=account)
         CampaignService.add_patient(str(campaign.id), str(patient1.id))
         CampaignService.add_patient(str(campaign.id), str(patient2.id))
-        from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+        from gws_care.visit.campaign_visit_service import CampaignVisitService
         CampaignVisitService.create_visit(str(campaign.id), str(patient1.id))
         CampaignVisitService.create_visit(str(campaign.id), str(patient2.id))
         CampaignService.validate_campaign(str(campaign.id), user)
@@ -447,7 +447,7 @@ class TestCampaignPhase2(BaseTestCase):
 
         # Bring both visits to DOCTOR_CLINIC_VALIDATED
         for patient in [patient1, patient2]:
-            visit = CampaignVisit.get((CampaignVisit.program == campaign.id) & (CampaignVisit.patient == patient.id))
+            visit = Visit.get((Visit.program == campaign.id) & (Visit.patient == patient.id))
             vid = str(visit.id)
             CampaignVisitService.mark_terrain_done(vid)
             CampaignVisitService.mark_results_entered(vid)
@@ -458,7 +458,7 @@ class TestCampaignPhase2(BaseTestCase):
         campaign = CampaignService.validate_doctor_clinic_campaign(str(campaign.id), user)
 
         # Validate only patient1's visit — patient2 still pending
-        visit1 = CampaignVisit.get((CampaignVisit.program == campaign.id) & (CampaignVisit.patient == patient1.id))
+        visit1 = Visit.get((Visit.program == campaign.id) & (Visit.patient == patient1.id))
         CampaignVisitService.validate_doctor_company(
             str(visit1.id), user, ValidateDoctorCompanyDTO(interpretation="Apte.", message="")
         )

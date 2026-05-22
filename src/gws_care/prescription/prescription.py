@@ -13,6 +13,7 @@ from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
 from gws_care.patient.patient import Patient
 from gws_care.user.user import User
+from gws_care.visit.visit import Visit
 
 # ── DTOs ──────────────────────────────────────────────────────────────────────
 
@@ -74,6 +75,8 @@ class Prescription(ModelWithUser):
     instructions: str = TextField(null=True)
     diagnosis: str = TextField(null=True)
     is_archived: bool = BooleanField(default=False, null=False)
+    # Optional link to a classical visit (null for standalone prescriptions)
+    visit: Visit = ForeignKeyField(Visit, null=True, backref="prescriptions", on_delete="SET NULL")
 
     @property
     def drugs(self) -> list[dict[str, Any]]:

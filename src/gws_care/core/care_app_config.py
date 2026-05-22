@@ -1,7 +1,7 @@
 """Singleton application configuration model."""
 
 from gws_core import Model
-from peewee import IntegerField
+from peewee import CharField, IntegerField
 
 from gws_care.core.care_db_manager import CareDbManager
 
@@ -10,6 +10,7 @@ class CareAppConfig(Model):
     """One-row singleton storing app-wide configuration (e.g. list page size)."""
 
     list_page_size: int = IntegerField(default=50, null=False)
+    color_theme: str = CharField(max_length=20, default="green", null=False)
 
     class Meta:
         table_name = "gws_care_app_config"

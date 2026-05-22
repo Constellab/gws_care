@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_base import form_dialog_component
 
+from ..common.language_state import LanguageState
 from .exam_form_state import ExamFormState, StagedFile
 
 _EXAM_TYPE_OPTIONS = [
@@ -37,9 +38,9 @@ _DOC_TYPE_OPTIONS = [
 ]
 
 
-def _field(label: str, input_component: rx.Component) -> rx.Component:
+def _field(label, input_component: rx.Component) -> rx.Component:
     return rx.vstack(
-        rx.text(label, size="2", weight="medium"),
+        label if not isinstance(label, str) else rx.text(label, size="2", weight="medium"),
         input_component,
         width="100%",
         spacing="1",
@@ -187,32 +188,32 @@ def _form_fields() -> rx.Component:
             width="100%",
         ),
         _field(
-            "Reason for visit",
+            LanguageState.tr["field_reason_for_visit"],
             rx.text_area(
                 value=ExamFormState.form_reason_for_visit,
                 on_change=ExamFormState.set_form_reason_for_visit,
-                placeholder="Reason for visit...",
+                placeholder=LanguageState.tr["placeholder_reason_for_visit"],
                 size="2",
                 width="100%",
                 rows="2",
             ),
         ),
         _field(
-            "Medical history",
+            LanguageState.tr["field_medical_history"],
             rx.text_area(
                 value=ExamFormState.form_medical_history,
                 on_change=ExamFormState.set_form_medical_history,
-                placeholder="Relevant medical history...",
+                placeholder=LanguageState.tr["placeholder_medical_history"],
                 size="2",
                 width="100%",
                 rows="3",
             ),
         ),
         rx.vstack(
-            rx.text("Physical examination", size="2", weight="medium"),
+            rx.text(LanguageState.tr["field_physical_exam"], size="2", weight="medium"),
             rx.grid(
                 _field(
-                    "Weight (kg)",
+                    LanguageState.tr["field_weight"],
                     rx.input(
                         value=ExamFormState.form_weight,
                         on_change=ExamFormState.set_form_weight,
@@ -223,7 +224,7 @@ def _form_fields() -> rx.Component:
                     ),
                 ),
                 _field(
-                    "Height (cm)",
+                    LanguageState.tr["field_height"],
                     rx.input(
                         value=ExamFormState.form_height,
                         on_change=ExamFormState.set_form_height,
@@ -234,7 +235,7 @@ def _form_fields() -> rx.Component:
                     ),
                 ),
                 _field(
-                    "BMI",
+                    LanguageState.tr["field_bmi"],
                     rx.input(
                         value=ExamFormState.form_bmi,
                         on_change=ExamFormState.set_form_bmi,
@@ -245,7 +246,7 @@ def _form_fields() -> rx.Component:
                     ),
                 ),
                 _field(
-                    "Blood pressure",
+                    LanguageState.tr["field_blood_pressure"],
                     rx.input(
                         value=ExamFormState.form_blood_pressure,
                         on_change=ExamFormState.set_form_blood_pressure,
@@ -255,7 +256,7 @@ def _form_fields() -> rx.Component:
                     ),
                 ),
                 _field(
-                    "Heart rate (bpm)",
+                    LanguageState.tr["field_heart_rate"],
                     rx.input(
                         value=ExamFormState.form_heart_rate,
                         on_change=ExamFormState.set_form_heart_rate,
@@ -266,7 +267,7 @@ def _form_fields() -> rx.Component:
                     ),
                 ),
                 _field(
-                    "Temperature (°C)",
+                    LanguageState.tr["field_temperature"],
                     rx.input(
                         value=ExamFormState.form_temperature,
                         on_change=ExamFormState.set_form_temperature,
@@ -284,17 +285,17 @@ def _form_fields() -> rx.Component:
             spacing="2",
         ),
         _field(
-            "Conclusion and recommendations",
+            LanguageState.tr["field_conclusion"],
             rx.text_area(
                 value=ExamFormState.form_conclusion,
                 on_change=ExamFormState.set_form_conclusion,
-                placeholder="Conclusion and recommendations...",
+                placeholder=LanguageState.tr["placeholder_conclusion_recommendations"],
                 size="2",
                 width="100%",
                 rows="3",
             ),
         ),
-        _field("Attachments", _upload_section()),
+        _field(LanguageState.tr["field_attachments"], _upload_section()),
         width="100%",
         spacing="4",
     )
@@ -304,6 +305,6 @@ def exam_form_dialog() -> rx.Component:
     """Render the create exam dialog (must be placed in the component tree)."""
     return form_dialog_component(
         state=ExamFormState,
-        title="New Exam",
+        title=LanguageState.tr["new_exam_form_title"],
         form_content=_form_fields(),
     )

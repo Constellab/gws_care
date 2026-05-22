@@ -4,7 +4,6 @@ from gws_care.appointment.appointment import Appointment
 from gws_care.campaign.campaign import Campaign
 from gws_care.campaign.campaign_exam_type import CampaignExamType
 from gws_care.campaign.campaign_patient import CampaignPatient
-from gws_care.campaign_visit.campaign_visit import CampaignVisit
 
 # Reflex app task
 from gws_care.care_app.generate_care_app import GenerateCareApp
@@ -23,5 +22,6 @@ from gws_care.role.user_care_role import UserCareRole
 # User sync service — keeps local User table in sync with gws_core
 from gws_care.user.care_user_sync_service import CareUserSyncService
 from gws_care.user.user import User
-from gws_care.workflow.program_validation_workflow import CampaignValidationWorkflow
-from gws_care.workflow.visit_validation_workflow import CampaignVisitValidationWorkflow
+from gws_care.visit.visit import Visit
+from gws_care.workflow.campaign_validation_workflow import CampaignValidationWorkflow
+from gws_care.workflow.campaign_visit_validation_workflow import CampaignVisitValidationWorkflow

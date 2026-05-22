@@ -10,7 +10,7 @@ from gws_care.campaign.campaign_status import CampaignStatus
 class CampaignDTO(ModelDTO):
     """Full campaign record returned to callers."""
 
-    program_number: str
+    campaign_number: str
     name: str
     account_id: str | None = None
     account_name: str | None = None
@@ -25,7 +25,7 @@ class CampaignRowDTO(BaseModelDTO):
     """Lightweight row for list views."""
 
     id: str
-    program_number: str
+    campaign_number: str
     name: str
     account_name: str | None = None
     start_date: str   # ISO string

@@ -2,7 +2,7 @@
 
 This is the database-backed counterpart to the ExamType enum.
 It stores thresholds, units and descriptions per exam type,
-and is used by MedicalProgram to declare which exam types are required.
+and is used by Campaign to declare which exam types are required.
 """
 
 from gws_core import EnumField

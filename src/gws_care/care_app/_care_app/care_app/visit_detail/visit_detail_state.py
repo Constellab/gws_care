@@ -26,8 +26,8 @@ class VisitDetailDTO(BaseModel):
     patient_name: str = ""
     patient_id: str = ""
     campaign_name: str = ""
-    program_id: str = ""
-    status: str
+    campaign_id: str = ""
+    campaign_visit_status: str
     status_label: str
     # Lab validation
     lab_validated_by: str = ""
@@ -61,7 +61,7 @@ _APPRECIATION_LABELS = {
 }
 
 
-class CampaignVisitDetailState(RoleState):
+class VisitDetailState(RoleState):
     """State for the /visit/[id] page."""
 
     visit: VisitDetailDTO | None = None
@@ -99,8 +99,8 @@ class CampaignVisitDetailState(RoleState):
 
     @rx.event
     def go_back(self):
-        if self.visit and self.visit.program_id:
-            return rx.redirect(f"/campaign/{self.visit.program_id}")
+        if self.visit and self.visit.campaign_id:
+            return rx.redirect(f"/campaign/{self.visit.campaign_id}")
         return rx.redirect("/campaigns")
 
     @rx.var
@@ -110,7 +110,7 @@ class CampaignVisitDetailState(RoleState):
         if not self.visit:
             return 0
         try:
-            return order.index(self.visit.status)
+            return order.index(self.visit.campaign_visit_status)
         except ValueError:
             return 0
 
@@ -123,7 +123,7 @@ class CampaignVisitDetailState(RoleState):
         self.success_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
                 CampaignVisitService.force_set_status(self.visit.id, status)
             await self._load_visit()
         except Exception as e:
@@ -299,15 +299,15 @@ class CampaignVisitDetailState(RoleState):
         self.error_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.campaign_visit.campaign_visit import CampaignVisit
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.patient.patient import Patient
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.visit import Visit
                 CampaignVisitService.mark_terrain_done(self.visit.id)
 
                 # Phase 5 — send on-site thank-you notification
                 try:
                     from gws_care.notification.notification_service import NotificationService
-                    visit_obj = CampaignVisit.get_by_id(self.visit.id)
+                    visit_obj = Visit.get_by_id(self.visit.id)
                     patient_obj = Patient.get_by_id(str(visit_obj.patient_id))
                     NotificationService.send_terrain_thank_you(patient_obj, visit_obj)
                 except Exception:
@@ -325,8 +325,8 @@ class CampaignVisitDetailState(RoleState):
         self.success_message = ""
         try:
             with await self.authenticate_user() as auth_user:
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.user.user import User
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
                 user = User.get_by_id(str(auth_user.id))
                 CampaignVisitService.validate_lab(self.visit.id, user)
             await self._load_visit()
@@ -342,9 +342,9 @@ class CampaignVisitDetailState(RoleState):
         self.success_message = ""
         try:
             with await self.authenticate_user() as auth_user:
-                from gws_care.campaign_visit.campaign_visit_dto import ValidateDoctorClinicDTO
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.user.user import User
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.visit_dto import ValidateDoctorClinicDTO
                 user = User.get_by_id(str(auth_user.id))
                 dto = ValidateDoctorClinicDTO(interpretation=self.clinic_interpretation)
                 CampaignVisitService.validate_doctor_clinic(self.visit.id, user, dto)
@@ -361,9 +361,9 @@ class CampaignVisitDetailState(RoleState):
         self.success_message = ""
         try:
             with await self.authenticate_user() as auth_user:
-                from gws_care.campaign_visit.campaign_visit_dto import ValidateDoctorCompanyDTO
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.user.user import User
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.visit_dto import ValidateDoctorCompanyDTO
                 user = User.get_by_id(str(auth_user.id))
                 dto = ValidateDoctorCompanyDTO(
                     interpretation=self.company_interpretation,
@@ -398,30 +398,30 @@ class CampaignVisitDetailState(RoleState):
         self.is_loading = True
         self.error_message = ""
         try:
-            visit_id = self.router.page.params.get("campaign_visit_id_param", "")
+            visit_id = self.router.page.params.get("visit_id_param", "")
             if not visit_id:
                 self.visit = None
                 return
 
             with await self.authenticate_user():
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.exam.exam_result_service import ExamResultService
                 from gws_care.exam.exam_service import ExamService
-                from gws_care.workflow.visit_validation_workflow import (
-                    VisitValidationStep,
-                    VisitValidationWorkflow,
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                from gws_care.workflow.campaign_visit_validation_workflow import (
+                    CampaignVisitValidationStep,
+                    CampaignVisitValidationWorkflow,
                 )
 
                 visit = CampaignVisitService.get_visit(visit_id)
 
                 # Load validation audit rows from workflow table
-                def _workflow_row(step: VisitValidationStep):
+                def _workflow_row(step: CampaignVisitValidationStep):
                     try:
-                        return VisitValidationWorkflow.get(
-                            (VisitValidationWorkflow.visit == visit.id)
-                            & (VisitValidationWorkflow.step == step)
+                        return CampaignVisitValidationWorkflow.get(
+                            (CampaignVisitValidationWorkflow.visit == visit.id)
+                            & (CampaignVisitValidationWorkflow.step == step)
                         )
-                    except VisitValidationWorkflow.DoesNotExist:
+                    except CampaignVisitValidationWorkflow.DoesNotExist:
                         return None
 
                 def _user_name(row) -> str:
@@ -434,19 +434,19 @@ class CampaignVisitDetailState(RoleState):
                     except Exception:
                         return ""
 
-                lab_row = _workflow_row(VisitValidationStep.LAB_DONE)
-                clinic_row = _workflow_row(VisitValidationStep.DOCTOR_CLINIC_VALIDATED)
-                company_row = _workflow_row(VisitValidationStep.DOCTOR_COMPANY_VALIDATED)
+                lab_row = _workflow_row(CampaignVisitValidationStep.LAB_DONE)
+                clinic_row = _workflow_row(CampaignVisitValidationStep.DOCTOR_CLINIC_VALIDATED)
+                company_row = _workflow_row(CampaignVisitValidationStep.DOCTOR_COMPANY_VALIDATED)
 
                 self.visit = VisitDetailDTO(
                     id=str(visit.id),
                     visit_number=visit.visit_number,
                     patient_name=visit.patient.get_full_name() if visit.patient_id else "",
                     patient_id=str(visit.patient_id) if visit.patient_id else "",
-                    campaign_name=visit.program.name if visit.program_id else "",
-                    program_id=str(visit.program_id) if visit.program_id else "",
-                    status=visit.status.value,
-                    status_label=visit.status.get_label(),
+                    campaign_name=visit.campaign.name if visit.campaign_id else "",
+                    campaign_id=str(visit.campaign_id) if visit.campaign_id else "",
+                    campaign_visit_status=visit.campaign_visit_status.value,
+                    status_label=visit.campaign_visit_status.get_label(),
                     lab_validated_by=_user_name(lab_row),
                     lab_validated_at=str(lab_row.validated_at) if lab_row else "",
                     doctor_clinic_validated_by=_user_name(clinic_row),
@@ -469,8 +469,8 @@ class CampaignVisitDetailState(RoleState):
                     from gws_care.exam.exam import Exam
 
                     rows = []
-                    if visit.program_id:
-                        campaign_exam_types = CampaignService.get_exam_types(str(visit.program_id))
+                    if visit.campaign_id:
+                        campaign_exam_types = CampaignService.get_exam_types(str(visit.campaign_id))
 
                         # Index existing exam records by their exam_type category
                         existing_exams = list(Exam.select().where(Exam.visit_id == str(visit_id)))

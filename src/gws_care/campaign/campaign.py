@@ -13,7 +13,7 @@ from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
 
 
-def _generate_program_number() -> str:
+def _generate_campaign_number() -> str:
     """Generate a unique campaign number like PRG-XXXXXXXX."""
     chars = string.ascii_uppercase + string.digits
     suffix = "".join(secrets.choice(chars) for _ in range(8))
@@ -27,7 +27,7 @@ class Campaign(ModelWithUser):
     of exam types, performed during a defined date range.
     """
 
-    program_number: str = CharField(max_length=50, unique=True, null=False, index=True)
+    campaign_number: str = CharField(max_length=50, unique=True, null=False, index=True, column_name='program_number')
     name: str = CharField(max_length=255, null=False)
     account: Account = ForeignKeyField(Account, null=True, backref="programs", on_delete="SET NULL")
     start_date = DateField(null=False)
@@ -38,20 +38,20 @@ class Campaign(ModelWithUser):
 
     def _before_insert(self) -> None:
         super()._before_insert()
-        if not self.program_number:
-            self.program_number = _generate_program_number()
+        if not self.campaign_number:
+            self.campaign_number = _generate_campaign_number()
 
     @property
-    def campaign_number(self) -> str:
-        """Alias for program_number (backward-compat field name kept in DB)."""
-        return self.program_number
+    def program_number(self) -> str:
+        """Backward-compat alias kept for legacy code still using program_number."""
+        return self.campaign_number
 
     def to_dto(self) -> CampaignDTO:
         return CampaignDTO(
             id=self.id,
             created_at=self.created_at,
             last_modified_at=self.last_modified_at,
-            program_number=self.program_number,
+            campaign_number=self.campaign_number,
             name=self.name,
             account_id=str(self.account_id) if self.account_id else None,
             account_name=self.account.name if self.account_id else None,

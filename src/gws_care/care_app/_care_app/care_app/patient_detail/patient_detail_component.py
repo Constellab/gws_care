@@ -199,12 +199,12 @@ def _id_card_visual() -> rx.Component:
         rx.box(
             rx.hstack(
                 rx.hstack(
-                    rx.icon("heart-pulse", size=16, color="#166c5e"),
+                    rx.icon("heart-pulse", size=16, color="var(--accent-9)"),
                     rx.text(
                         "CONSTELLAB CARE — PS CONSULTING",
                         size="1",
                         weight="bold",
-                        color="#166c5e",
+                        color="var(--accent-9)",
                     ),
                     spacing="2",
                     align="center",
@@ -213,13 +213,13 @@ def _id_card_visual() -> rx.Component:
                 rx.text(
                     PatientDetailState.patient.patient_number,
                     size="1",
-                    color="#166c5e",
+                    color="var(--accent-9)",
                     weight="medium",
                 ),
                 width="100%",
                 align="center",
             ),
-            background="#d3f0eb",
+            background="var(--accent-2)",
             padding="0.5rem 1rem",
             border_radius="8px 8px 0 0",
         ),
@@ -245,12 +245,12 @@ def _id_card_visual() -> rx.Component:
                         "",
                     ),
                     size="4",
-                    color="#7cd2c4",
+                    color="var(--accent-5)",
                 ),
-                rx.separator(width="100%", color_scheme="teal", margin_y="0.4rem"),
+                rx.separator(width="100%", margin_y="0.4rem", color="var(--accent-5)"),
                 # SSN
                 rx.vstack(
-                    rx.text(LanguageState.tr["field_ssn"], size="1", color="#7cd2c4", weight="medium"),
+                    rx.text(LanguageState.tr["field_ssn"], size="1", color="var(--accent-5)", weight="medium"),
                     rx.cond(
                         PatientDetailState.patient.social_security_number,
                         rx.text(
@@ -260,21 +260,21 @@ def _id_card_visual() -> rx.Component:
                             weight="bold",
                             font_family="monospace",
                         ),
-                        rx.text("—", size="3", color="#7cd2c4"),
+                        rx.text("—", size="3", color="var(--accent-5)"),
                     ),
                     spacing="0",
                     align_items="start",
                 ),
                 # DOB
                 rx.vstack(
-                    rx.text(LanguageState.tr["info_dob"], size="1", color="#7cd2c4", weight="medium"),
+                    rx.text(LanguageState.tr["info_dob"], size="1", color="var(--accent-5)", weight="medium"),
                     rx.text(PatientDetailState.patient.date_of_birth, size="3", color="white", weight="bold"),
                     spacing="0",
                     align_items="start",
                 ),
                 # Sex
                 rx.vstack(
-                    rx.text(LanguageState.tr["field_sex"], size="1", color="#7cd2c4", weight="medium"),
+                    rx.text(LanguageState.tr["field_sex"], size="1", color="var(--accent-5)", weight="medium"),
                     rx.text(sex_label, size="3", color="white", weight="bold"),
                     spacing="0",
                     align_items="start",
@@ -299,11 +299,11 @@ def _id_card_visual() -> rx.Component:
                         border_radius="6px",
                     ),
                     rx.box(
-                        rx.icon("qr-code", size=80, color="#50c3b0"),
+                        rx.icon("qr-code", size=80, color="var(--accent-6)"),
                         padding="10px",
                     ),
                 ),
-                rx.text(LanguageState.tr["qr_code_label"], size="1", color="#7cd2c4"),
+                rx.text(LanguageState.tr["qr_code_label"], size="1", color="var(--accent-5)"),
                 align="center",
                 justify="center",
                 padding="1rem",
@@ -317,17 +317,17 @@ def _id_card_visual() -> rx.Component:
             rx.text(
                 LanguageState.tr["id_card_footer"],
                 size="1",
-                color="#7cd2c4",
+                color="var(--accent-5)",
                 text_align="center",
             ),
-            background="#07241f",
+            background="var(--accent-12)",
             padding="0.25rem",
             border_radius="0 0 8px 8px",
         ),
-        background="linear-gradient(135deg, #0e483e 0%, #1d907d 100%)",
+        background="linear-gradient(135deg, var(--accent-10) 0%, var(--accent-8) 100%)",
         border_radius="8px",
         width="480px",
-        box_shadow="0 8px 32px rgba(14,72,62,0.45)",
+        box_shadow="0 8px 32px var(--accent-a8)",
     )
 
 
@@ -371,6 +371,7 @@ def id_card_dialog() -> rx.Component:
                 ),
                 spacing="4",
                 align="center",
+                margin_top="1rem",
             ),
             max_width="560px",
             on_interact_outside=PatientDetailState.close_id_card,
@@ -401,7 +402,7 @@ def _patient_visit_row(visit: PatientVisitRowDTO) -> rx.Component:
                 visit.campaign_name,
                 rx.link(
                     visit.campaign_name,
-                    on_click=lambda: PatientDetailState.go_to_program(visit.program_id),
+                    on_click=lambda: PatientDetailState.go_to_campaign(visit.campaign_id),
                     cursor="pointer",
                     size="2",
                 ),
@@ -415,7 +416,7 @@ def _patient_visit_row(visit: PatientVisitRowDTO) -> rx.Component:
                 rx.text("—", size="2", color="var(--gray-7)"),
             )
         ),
-        rx.table.cell(_visit_status_badge(visit.status)),
+        rx.table.cell(_visit_status_badge(visit.campaign_visit_status)),
         rx.table.cell(
             rx.tooltip(
                 rx.icon_button(
@@ -614,7 +615,7 @@ def _exams_section() -> rx.Component:
                 on_change=PatientDetailState.set_exam_filter_from,
                 size="1",
                 width="130px",
-                placeholder="De",
+                placeholder=LanguageState.tr["placeholder_date_from"],
             ),
             rx.text("→", size="2", color="var(--gray-8)"),
             rx.input(
@@ -623,7 +624,7 @@ def _exams_section() -> rx.Component:
                 on_change=PatientDetailState.set_exam_filter_to,
                 size="1",
                 width="130px",
-                placeholder="à",
+                placeholder=LanguageState.tr["placeholder_date_to"],
             ),
             rx.select.root(
                 rx.select.trigger(
@@ -747,7 +748,7 @@ def _prescriptions_tab() -> rx.Component:
                 on_change=PatientDetailState.set_presc_filter_from,
                 size="1",
                 width="130px",
-                placeholder="De",
+                placeholder=LanguageState.tr["placeholder_date_from"],
             ),
             rx.text("→", size="2", color="var(--gray-8)"),
             rx.input(
@@ -756,7 +757,7 @@ def _prescriptions_tab() -> rx.Component:
                 on_change=PatientDetailState.set_presc_filter_to,
                 size="1",
                 width="130px",
-                placeholder="à",
+                placeholder=LanguageState.tr["placeholder_date_to"],
             ),
             rx.tooltip(
                 rx.icon_button(
@@ -888,7 +889,7 @@ def _certificates_tab() -> rx.Component:
                 on_change=PatientDetailState.set_cert_filter_from,
                 size="1",
                 width="130px",
-                placeholder="De",
+                placeholder=LanguageState.tr["placeholder_date_from"],
             ),
             rx.text("→", size="2", color="var(--gray-8)"),
             rx.input(
@@ -897,7 +898,7 @@ def _certificates_tab() -> rx.Component:
                 on_change=PatientDetailState.set_cert_filter_to,
                 size="1",
                 width="130px",
-                placeholder="à",
+                placeholder=LanguageState.tr["placeholder_date_to"],
             ),
             rx.tooltip(
                 rx.icon_button(

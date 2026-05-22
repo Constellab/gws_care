@@ -10,6 +10,7 @@ from gws_care.core.model_with_user import ModelWithUser
 from gws_care.exam.exam import Exam
 from gws_care.patient.patient import Patient
 from gws_care.user.user import User
+from gws_care.visit.visit import Visit
 
 # ── Certificate types ─────────────────────────────────────────────────────────
 
@@ -78,6 +79,8 @@ class MedicalCertificate(ModelWithUser):
         Patient, null=False, backref="certificates", on_delete="CASCADE"
     )
     exam: Exam = ForeignKeyField(Exam, null=True, backref="certificates", on_delete="SET NULL")
+    # Optional link to a classical visit (null for standalone certificates and exam-visit certificates)
+    visit: Visit = ForeignKeyField(Visit, null=True, backref="visit_certificates", on_delete="SET NULL")
     issue_date: date = DateField(null=False)
     conclusion: str = TextField(null=False)
     is_fit_for_work: bool = BooleanField(default=True, null=False)

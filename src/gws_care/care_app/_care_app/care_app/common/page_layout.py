@@ -6,6 +6,7 @@ from gws_reflex_main import (
     page_sidebar_component,
 )
 
+from ..admin.general_settings_state import GeneralSettingsState
 from .bell_state import BellEntryDTO, BellState
 from .language_state import LanguageState
 from .role_state import RoleState
@@ -111,6 +112,20 @@ def _bell_button() -> rx.Component:
     )
 
 
+def _nav_group_label(label: str) -> rx.Component:
+    """Small uppercase category header for a sidebar group."""
+    return rx.text(
+        label,
+        size="1",
+        color="var(--gray-9)",
+        weight="medium",
+        text_transform="uppercase",
+        letter_spacing="0.05em",
+        padding_left="0.5rem",
+        padding_top="0.5rem",
+    )
+
+
 def _sidebar_content() -> rx.Component:
     return rx.vstack(
         # Header — keep the existing heart-pulse logo
@@ -127,57 +142,80 @@ def _sidebar_content() -> rx.Component:
         ),
         # Nav items — shown / hidden based on the user's CareRole
         rx.vstack(
-            # Dashboard — visible to everyone with a role
-            menu_item_component("layout-dashboard", LanguageState.tr["nav_dashboard"], "/dashboard"),
-
-            # Patients — Operator, Doctor, Admin (not RH, not Patient)
-            rx.cond(
-                RoleState.is_operator | RoleState.is_doctor,
-                menu_item_component("users", LanguageState.tr["nav_patients"], "/"),
-            ),
-
-            # Visits — Operator, Doctor, Admin
-            rx.cond(
-                RoleState.is_operator | RoleState.is_doctor,
-                menu_item_component("calendar", LanguageState.tr["nav_visits"], "/visits"),
-            ),
-
-            # Campaigns — Operator, Doctor, Admin
-            rx.cond(
-                RoleState.is_operator | RoleState.is_doctor | RoleState.is_admin,
-                menu_item_component(
-                    "clipboard-list",
-                    LanguageState.tr["nav_campaigns"],
-                    "/campaigns",
-                    additional_active_route_prefixes=["/campaign", "/campaign-visit/"],
-                ),
-            ),
-
-            # Accounts — Operator, Doctor, Account Admin, Admin
-            rx.cond(
-                RoleState.is_operator | RoleState.is_doctor | RoleState.is_account_admin,
-                menu_item_component(
-                    "building-2",
-                    LanguageState.tr["nav_accounts"],
-                    "/accounts",
-                    additional_active_route_prefixes=["/account"],
-                ),
-            ),
-
-            # Patient portal — Patient role only
+            # ── "Espace personnel" — Patient role only ───────────────────────
             rx.cond(
                 RoleState.is_patient_user,
                 rx.vstack(
+                    _nav_group_label(LanguageState.tr["nav_group_my_space"]),
                     menu_item_component("file-heart", LanguageState.tr["nav_my_results"], "/my-results"),
                     menu_item_component("calendar-check", LanguageState.tr["nav_my_appointments"], "/my-appointments"),
                     menu_item_component("file-text", LanguageState.tr["nav_my_documents"], "/my-documents"),
                     width="100%",
                     spacing="1",
+                    align_items="start",
                 ),
             ),
 
-            rx.separator(width="100%", margin_y="0.25rem"),
-            menu_item_component("bell", LanguageState.tr["nav_notifications"], "/notifications"),
+            # ── "Essentiels" — Operator, Doctor ─────────────────────────────
+            rx.cond(
+                RoleState.is_operator | RoleState.is_doctor,
+                rx.vstack(
+                    _nav_group_label(LanguageState.tr["nav_group_essentials"]),
+                    menu_item_component("layout-dashboard", LanguageState.tr["nav_dashboard"], "/dashboard"),
+                    menu_item_component("users", LanguageState.tr["nav_patients"], "/"),
+                    menu_item_component(
+                        "stethoscope",
+                        LanguageState.tr["nav_consultations"],
+                        "/consultations",
+                        additional_active_route_prefixes=["/consultation/"],
+                    ),
+                    menu_item_component("bell", LanguageState.tr["nav_notifications"], "/notifications"),
+                    width="100%",
+                    spacing="1",
+                    align_items="start",
+                ),
+            ),
+
+            # ── "Campagnes" — Operator, Doctor ───────────────────────────────
+            rx.cond(
+                RoleState.is_operator | RoleState.is_doctor,
+                rx.vstack(
+                    _nav_group_label(LanguageState.tr["nav_group_campaigns"]),
+                    menu_item_component(
+                        "clipboard-list",
+                        LanguageState.tr["nav_campaigns"],
+                        "/campaigns",
+                        additional_active_route_prefixes=["/campaign/"],
+                    ),
+                    menu_item_component(
+                        "calendar",
+                        LanguageState.tr["nav_campaign_visits"],
+                        "/campaign-visits",
+                        additional_active_route_prefixes=["/visit/"],
+                    ),
+                    width="100%",
+                    spacing="1",
+                    align_items="start",
+                ),
+            ),
+
+            # ── "Administration" — Operator, Doctor, Admin, Account Admin ────
+            rx.cond(
+                RoleState.is_operator | RoleState.is_doctor | RoleState.is_admin | RoleState.is_account_admin,
+                rx.vstack(
+                    _nav_group_label(LanguageState.tr["nav_group_administration"]),
+                    menu_item_component(
+                        "building-2",
+                        LanguageState.tr["nav_accounts"],
+                        "/accounts",
+                        additional_active_route_prefixes=["/account"],
+                    ),
+                    width="100%",
+                    spacing="1",
+                    align_items="start",
+                ),
+            ),
+
             width="100%",
             spacing="1",
             align_items="start",
@@ -205,7 +243,10 @@ def page_layout(*children: rx.Component, **kwargs) -> rx.Component:
     """
     vstack_props = {"width": "100%", "spacing": "4", "padding": "1.5rem", "min_width": "0", "overflow_x": "hidden"}
     vstack_props.update(kwargs)
-    return page_sidebar_component(
-        sidebar_content=_sidebar_content(),
-        content=rx.vstack(*children, **vstack_props),
+    return rx.box(
+        rx.el.style(GeneralSettingsState.theme_css),
+        page_sidebar_component(
+            sidebar_content=_sidebar_content(),
+            content=rx.vstack(*children, **vstack_props),
+        ),
     )

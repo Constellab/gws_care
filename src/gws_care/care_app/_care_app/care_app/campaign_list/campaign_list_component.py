@@ -1,4 +1,4 @@
-"""MedicalProgram list page component."""
+"""Campaign list page component."""
 
 import reflex as rx
 from gws_reflex_main import main_component
@@ -10,7 +10,7 @@ from ..common.account_picker_component import (
 )
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
-from .program_list_state import CampaignFormPickerState, CampaignListState, ProgramRowDTO
+from .campaign_list_state import CampaignFormPickerState, CampaignListState, CampaignRowStateDTO
 
 # ── Status color helper ────────────────────────────────────────────────────────
 
@@ -31,12 +31,12 @@ def _status_badge(status: str, label: str) -> rx.Component:
     return rx.badge(label, color_scheme=color, variant="soft", size="1")
 
 
-def _campaign_row(program: ProgramRowDTO) -> rx.Component:
+def _campaign_row(program: CampaignRowStateDTO) -> rx.Component:
     return rx.table.row(
         rx.table.cell(
             rx.vstack(
                 rx.text(program.name, size="2", weight="medium"),
-                rx.text(program.program_number, size="1", color="var(--gray-9)"),
+                rx.text(program.campaign_number, size="1", color="var(--gray-9)"),
                 spacing="0",
             )
         ),
@@ -76,7 +76,7 @@ def _campaign_row(program: ProgramRowDTO) -> rx.Component:
                         rx.icon("chevron-right", size=14),
                         variant="ghost",
                         size="1",
-                        on_click=lambda: CampaignListState.go_to_program(program.id),
+                        on_click=lambda: CampaignListState.go_to_campaign(program.id),
                     ),
                     content=LanguageState.tr["tooltip_view_campaign"],
                 ),
@@ -88,16 +88,16 @@ def _campaign_row(program: ProgramRowDTO) -> rx.Component:
                             variant="ghost",
                             size="1",
                             color_scheme="gray",
-                            on_click=lambda: CampaignListState.archive_program(program.id),
+                            on_click=lambda: CampaignListState.archive_campaign(program.id),
                         ),
-                        content=LanguageState.tr["tooltip_archive_program"],
+                        content=LanguageState.tr["tooltip_archive_campaign"],
                     ),
                 ),
                 spacing="1",
             )
         ),
         style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
-        on_click=lambda: CampaignListState.go_to_program(program.id),
+        on_click=lambda: CampaignListState.go_to_campaign(program.id),
     )
 
 
@@ -205,7 +205,7 @@ def _create_program_dialog() -> rx.Component:
     )
 
 
-def program_list_page() -> rx.Component:
+def campaign_list_page() -> rx.Component:
     return main_component(
         page_layout(
             account_picker_dialog(CampaignListState),

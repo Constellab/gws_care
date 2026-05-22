@@ -22,9 +22,10 @@ class VisitRowDTO(BaseModel):
     account_name: str | None = None
     campaign_name: str = ""
     scheduled_at: str = ""  # empty for program visits without a scheduled date
-    status: str
+    campaign_visit_status: str
     status_label: str = ""
     visit_number: str = ""
+    visit_type: str = ""  # "campaign" or "consultation"
 
 
 class AccountOptionDTO(BaseModel):
@@ -44,7 +45,7 @@ class CalendarDayDTO(BaseModel):
     visits: list[VisitRowDTO] = []
 
 
-class CampaignVisitListState(CombinedPickerState):
+class VisitListState(CombinedPickerState):
     """State for the /visits page."""
 
     # ── Patient picker vars (declared here for independent state storage) ─────
@@ -130,6 +131,7 @@ class CampaignVisitListState(CombinedPickerState):
     error_message: str = ""
     search: str = ""
     filter_status: str = "ALL"
+    filter_visit_type: str = "ALL"  # ALL / campaign / consultation
     filter_account_id: str = ""
     filter_date_from: str = ""
     filter_date_to: str = ""
@@ -148,9 +150,10 @@ class CampaignVisitListState(CombinedPickerState):
 
     # ── New CampaignVisit dialog ──────────────────────────────────────────────────────
     show_new_visit_dialog: bool = False
+    new_visit_type: str = ""  # "" = not yet selected, "campaign" or "consultation"
     new_visit_scheduled_at: str = ""
     new_visit_error: str = ""
-    new_visit_is_saving: bool = False    # Accounts available for the selected patient
+    new_visit_is_saving: bool = False
     new_visit_patient_accounts: list[PatientAccountOption] = []
     new_visit_account_id: str = ""
     new_visit_account_name: str = ""
@@ -168,6 +171,36 @@ class CampaignVisitListState(CombinedPickerState):
         today = date.today()
         self.calendar_year = today.year
         self.calendar_month = today.month
+        await self._load_companies()
+        await self._load_visits()
+
+    @rx.event
+    async def on_load_consultations(self):
+        """on_load for /consultations — pre-filters to consultation type."""
+        await self._load_roles()
+        redirect = await self._require_any_of(self.is_operator, self.is_doctor)
+        if redirect:
+            return redirect
+        from datetime import date
+        today = date.today()
+        self.calendar_year = today.year
+        self.calendar_month = today.month
+        self.filter_visit_type = "consultation"
+        await self._load_companies()
+        await self._load_visits()
+
+    @rx.event
+    async def on_load_campaign_visits(self):
+        """on_load for /campaign-visits — pre-filters to campaign type."""
+        await self._load_roles()
+        redirect = await self._require_any_of(self.is_operator, self.is_doctor)
+        if redirect:
+            return redirect
+        from datetime import date
+        today = date.today()
+        self.calendar_year = today.year
+        self.calendar_month = today.month
+        self.filter_visit_type = "campaign"
         await self._load_companies()
         await self._load_visits()
 
@@ -218,6 +251,11 @@ class CampaignVisitListState(CombinedPickerState):
         await self._load_visits()
 
     @rx.event
+    async def set_filter_visit_type(self, value: str):
+        self.filter_visit_type = value
+        await self._load_visits()
+
+    @rx.event
     async def set_filter_status(self, value: str):
         self.filter_status = value
         await self._load_visits()
@@ -242,6 +280,7 @@ class CampaignVisitListState(CombinedPickerState):
         """Reset all filters and reload."""
         self.search = ""
         self.filter_status = "ALL"
+        self.filter_visit_type = "ALL"
         self.filter_account_id = ""
         if self.view_mode == "calendar":
             from datetime import date
@@ -266,7 +305,11 @@ class CampaignVisitListState(CombinedPickerState):
 
     @rx.event
     def go_to_visit(self, visit_id: str):
-        return rx.redirect(f"/campaign-visit/{visit_id}")
+        return rx.redirect(f"/visit/{visit_id}")
+
+    @rx.event
+    def go_to_consultation(self, visit_id: str):
+        return rx.redirect(f"/consultation/{visit_id}")
 
     @rx.event
     def go_to_patient(self, patient_id: str):
@@ -283,6 +326,7 @@ class CampaignVisitListState(CombinedPickerState):
     @rx.event
     async def open_new_visit_dialog(self):
         await self._open_picker(account_id="")
+        self.new_visit_type = ""
         self.new_visit_scheduled_at = ""
         self.new_visit_error = ""
         self.new_visit_is_saving = False
@@ -290,6 +334,10 @@ class CampaignVisitListState(CombinedPickerState):
         self.new_visit_account_id = ""
         self.new_visit_account_name = ""
         self.show_new_visit_dialog = True
+
+    @rx.event
+    def set_new_visit_type(self, value: str):
+        self.new_visit_type = value
 
     @rx.event
     def close_new_visit_dialog(self):
@@ -342,27 +390,51 @@ class CampaignVisitListState(CombinedPickerState):
 
     @rx.event
     async def save_new_visit(self):
+        if not self.new_visit_type:
+            self.new_visit_error = "Veuillez sélectionner le type de visite."
+            return
         if not self.picker_selected_id:
-            self.new_visit_error = "Please select a patient."
-            return
-        if not self.new_visit_scheduled_at:
-            self.new_visit_error = "Please select a date and time."
-            return
-        if not self.new_visit_account_id:
-            self.new_visit_error = "Please select a billing account."
+            self.new_visit_error = "Veuillez sélectionner un patient."
             return
         self.new_visit_error = ""
         self.new_visit_is_saving = True
         try:
-            with await self.authenticate_user():
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
-                _visit, program = CampaignVisitService.create_visit_with_default_campaign(
-                    patient_id=self.picker_selected_id,
-                    scheduled_at_str=self.new_visit_scheduled_at,
-                    billing_account_id=self.new_visit_account_id,
-                )
-            self.show_new_visit_dialog = False
-            return rx.redirect(f"/campaign/{program.id}")
+            if self.new_visit_type == "campaign":
+                if not self.new_visit_account_id:
+                    self.new_visit_error = "Veuillez sélectionner un compte de facturation."
+                    return
+                if not self.new_visit_scheduled_at:
+                    self.new_visit_error = "Veuillez sélectionner une date et heure."
+                    return
+                with await self.authenticate_user():
+                    from gws_care.visit.campaign_visit_service import CampaignVisitService
+                    _visit, program = CampaignVisitService.create_visit_with_default_campaign(
+                        patient_id=self.picker_selected_id,
+                        scheduled_at_str=self.new_visit_scheduled_at,
+                        billing_account_id=self.new_visit_account_id,
+                    )
+                self.show_new_visit_dialog = False
+                return rx.redirect(f"/campaign/{program.id}")
+            else:  # consultation
+                with await self.authenticate_user():
+                    from datetime import datetime
+
+                    from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+                    from gws_care.visit.visit import Visit
+                    from gws_care.visit.visit_type import VisitType
+                    visit = Visit()
+                    visit.visit_type = VisitType.CONSULTATION
+                    visit.patient_id = self.picker_selected_id
+                    visit.billing_account_id = self.new_visit_account_id or None
+                    visit.scheduled_at = (
+                        datetime.fromisoformat(self.new_visit_scheduled_at)
+                        if self.new_visit_scheduled_at else None
+                    )
+                    visit.campaign_visit_status = CampaignVisitStatus.PENDING
+                    visit.save()
+                    visit_id = str(visit.id)
+                self.show_new_visit_dialog = False
+                return rx.redirect(f"/consultation/{visit_id}")
         except Exception as e:
             self.new_visit_error = str(e)
         finally:
@@ -447,15 +519,22 @@ class CampaignVisitListState(CombinedPickerState):
         self.error_message = ""
         try:
             with await self.authenticate_user():
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
-                from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+                from gws_care.visit.visit_type import VisitType
 
                 status_filter = (
                     CampaignVisitStatus(self.filter_status)
                     if self.filter_status and self.filter_status != "ALL"
                     else None
                 )
+                vt_filter = None
+                if self.filter_visit_type == "campaign":
+                    vt_filter = VisitType.CAMPAIGN
+                elif self.filter_visit_type == "consultation":
+                    vt_filter = VisitType.CONSULTATION
                 visits = CampaignVisitService.list_all(
+                    visit_type=vt_filter,
                     status=status_filter,
                     search=self.search,
                     account_id=self.filter_account_id or None,
@@ -472,9 +551,9 @@ class CampaignVisitListState(CombinedPickerState):
                 visit_rows = []
                 for v in visits:
                     campaign_name = ""
-                    if v.program_id:
+                    if v.campaign_id:
                         try:
-                            campaign_name = v.program.name
+                            campaign_name = v.campaign.name
                         except Exception:
                             campaign_name = ""
                     visit_rows.append(VisitRowDTO(
@@ -484,9 +563,10 @@ class CampaignVisitListState(CombinedPickerState):
                         account_name=v.billing_account.name if v.billing_account_id else None,
                         campaign_name=campaign_name,
                         scheduled_at=v.scheduled_at.isoformat() if v.scheduled_at else "",
-                        status=v.status.value,
-                        status_label=v.status.get_label(),
+                        campaign_visit_status=v.campaign_visit_status.value,
+                        status_label=v.campaign_visit_status.get_label(),
                         visit_number=v.visit_number or "",
+                        visit_type=v.visit_type.value if v.visit_type else "",
                     ))
                 sort_col = self.sort_column
                 all_rows = visit_rows if reset else self.visits + visit_rows

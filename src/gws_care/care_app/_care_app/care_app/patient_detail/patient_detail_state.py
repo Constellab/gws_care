@@ -45,9 +45,9 @@ class PatientVisitRowDTO(BaseModel):
     id: str
     visit_number: str
     campaign_name: str = ""
-    program_id: str = ""
+    campaign_id: str = ""
     scheduled_at: str = ""
-    status: str
+    campaign_visit_status: str = ""
     status_label: str = ""
 
 
@@ -487,12 +487,12 @@ class PatientDetailState(ReflexMainState):
     @rx.event
     def go_to_visit(self, visit_id: str):
         """Navigate to the visit detail page."""
-        return rx.redirect(f"/campaign-visit/{visit_id}")
+        return rx.redirect(f"/visit/{visit_id}")
 
     @rx.event
-    def go_to_program(self, program_id: str):
-        """Navigate to the program detail page."""
-        return rx.redirect(f"/campaign/{program_id}")
+    def go_to_campaign(self, campaign_id: str):
+        """Navigate to the campaign detail page."""
+        return rx.redirect(f"/campaign/{campaign_id}")
 
     @rx.event
     def go_to_visits(self):
@@ -534,8 +534,8 @@ class PatientDetailState(ReflexMainState):
         self.create_visit_error = ""
         try:
             with await self.authenticate_user():
-                from gws_care.campaign_visit.campaign_visit_dto import SaveStandaloneVisitDTO
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.visit_dto import SaveStandaloneVisitDTO
                 dto = SaveStandaloneVisitDTO(
                     patient_id=self.patient.id,
                     billing_account_id=self.create_visit_account_id or None,
@@ -582,9 +582,9 @@ class PatientDetailState(ReflexMainState):
 
         try:
             with await self.authenticate_user():
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
                 from gws_care.exam.exam_service import ExamService
                 from gws_care.patient.patient_service import PatientService
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
                 p = PatientService.get_patient(patient_id)
                 self.patient = PatientDetailDTO(
                     id=str(p.id),
@@ -630,11 +630,11 @@ class PatientDetailState(ReflexMainState):
                     PatientVisitRowDTO(
                         id=str(v.id),
                         visit_number=v.visit_number,
-                        campaign_name=v.program.name if v.program_id else "",
-                        program_id=str(v.program_id) if v.program_id else "",
+                        campaign_name=v.campaign.name if v.campaign_id else "",
+                        campaign_id=str(v.campaign_id) if v.campaign_id else "",
                         scheduled_at=v.scheduled_at.isoformat() if v.scheduled_at else "",
-                        status=v.status.value,
-                        status_label=v.status.get_label(),
+                        campaign_visit_status=v.campaign_visit_status.value,
+                        status_label=v.campaign_visit_status.get_label(),
                     )
                     for v in visits
                 ]
@@ -682,17 +682,17 @@ class PatientDetailState(ReflexMainState):
             return
         try:
             with await self.authenticate_user():
-                from gws_care.campaign_visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
                 visits = CampaignVisitService.list_for_patient(patient_id)
                 self.patient_visits = [
                     PatientVisitRowDTO(
                         id=str(v.id),
                         visit_number=v.visit_number,
-                        campaign_name=v.program.name if v.program_id else "",
-                        program_id=str(v.program_id) if v.program_id else "",
+                        campaign_name=v.campaign.name if v.campaign_id else "",
+                        campaign_id=str(v.campaign_id) if v.campaign_id else "",
                         scheduled_at=v.scheduled_at.isoformat() if v.scheduled_at else "",
-                        status=v.status.value,
-                        status_label=v.status.get_label(),
+                        campaign_visit_status=v.campaign_visit_status.value,
+                        status_label=v.campaign_visit_status.get_label(),
                     )
                     for v in visits
                 ]

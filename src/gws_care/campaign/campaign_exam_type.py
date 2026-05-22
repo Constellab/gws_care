@@ -14,8 +14,8 @@ class CampaignExamType(Model):
     Defines which exam types are to be performed during the campaign.
     """
 
-    program: Campaign = ForeignKeyField(Campaign, null=False, backref="program_exam_types", on_delete="CASCADE")
-    exam_type: ExamTypeModel = ForeignKeyField(ExamTypeModel, null=False, backref="program_exam_types", on_delete="CASCADE")
+    campaign: Campaign = ForeignKeyField(Campaign, null=False, backref="campaign_exam_types", on_delete="CASCADE", column_name='program_id')
+    exam_type: ExamTypeModel = ForeignKeyField(ExamTypeModel, null=False, backref="campaign_exam_types", on_delete="CASCADE")
 
     class Meta:
         table_name = "gws_care_program_exam_type"
@@ -23,5 +23,5 @@ class CampaignExamType(Model):
         is_table = True
         db_manager = CareDbManager.get_instance()
         indexes = (
-            (("program", "exam_type"), True),  # unique per pair
+            (("campaign", "exam_type"), True),  # unique per pair
         )

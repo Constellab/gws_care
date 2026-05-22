@@ -203,6 +203,8 @@ class NotificationService:
         account=None,
         appointment=None,
         extra_data: dict | None = None,
+        recipient_user: User | None = None,
+        parent_log: NotificationLog | None = None,
     ) -> NotificationLog:
         log = NotificationLog()
         log.notification_type = notification_type
@@ -214,6 +216,8 @@ class NotificationService:
         log.recipient_phone = recipient_phone
         log.recipient_name = recipient_name
         log.sent_by = sent_by
+        log.recipient_user = recipient_user
+        log.parent_log = parent_log
         log.patient = patient
         log.account = account
         log.related_appointment = appointment
@@ -230,9 +234,16 @@ class NotificationService:
     # ── Manual sending ────────────────────────────────────────────────────────
 
     @classmethod
-    def send_to_patient(cls, dto: SendCustomMessageDTO, sent_by: User) -> NotificationLog:
-        """Send an email message to a single patient."""
+    def send_to_patient(
+        cls,
+        dto: SendCustomMessageDTO,
+        sent_by: User,
+        parent_log: NotificationLog | None = None,
+    ) -> NotificationLog:
+        """Send an in-app + optional email message to a single patient."""
         from gws_care.patient.patient_service import PatientService
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
 
         if not dto.subject.strip():
             raise BadRequestException("Subject is required")
@@ -241,14 +252,22 @@ class NotificationService:
 
         patient = PatientService.get_patient(dto.patient_id)
 
-        if not patient.email:
-            raise BadRequestException(
-                f"Patient {patient.get_full_name()} has no email address configured."
+        # Resolve recipient_user: the User row linked to this patient via PATIENT role
+        recipient_user: User | None = None
+        patient_role = (
+            UserCareRole.select()
+            .where(
+                UserCareRole.role == CareRole.PATIENT,
+                UserCareRole.linked_patient_id == str(patient.id),
             )
+            .first()
+        )
+        if patient_role:
+            recipient_user = User.get_or_none(User.id == patient_role.user_id)
 
         log = cls._create_log(
             notification_type=NotificationType.MANUAL_PATIENT,
-            channel=NotificationChannel.EMAIL,
+            channel=NotificationChannel.IN_APP,
             subject=dto.subject,
             body=dto.body,
             recipient_email=patient.email,
@@ -256,16 +275,19 @@ class NotificationService:
             recipient_name=patient.get_full_name(),
             sent_by=sent_by,
             patient=patient,
+            recipient_user=recipient_user,
+            parent_log=parent_log,
         )
-        success = cls._dispatch(
-            NotificationChannel.EMAIL.value,
-            patient.email,
-            patient.phone,
-            patient.get_full_name(),
-            dto.subject,
-            dto.body,
-        )
-        cls._finalise_log(log, success)
+        cls._finalise_log(log, True)
+
+        # Also dispatch bell notification to recipient user if known
+        if recipient_user:
+            cls.create_bell(str(recipient_user.id), f"Message de {sent_by.get_full_name()}: {dto.subject}", log=log)
+
+        # Also send email if patient has one
+        if patient.email:
+            cls._send_email(patient.email, dto.subject, dto.body)
+
         return log
 
     @classmethod
@@ -326,13 +348,26 @@ class NotificationService:
         patients = PatientService.list_patients_for_account(dto.account_id)
         logs = []
 
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
+
         for patient in patients:
-            if not patient.email:
-                continue
+            # Resolve recipient_user for this patient
+            recipient_user: User | None = None
+            patient_role = (
+                UserCareRole.select()
+                .where(
+                    UserCareRole.role == CareRole.PATIENT,
+                    UserCareRole.linked_patient_id == str(patient.id),
+                )
+                .first()
+            )
+            if patient_role:
+                recipient_user = User.get_or_none(User.id == patient_role.user_id)
 
             log = cls._create_log(
                 notification_type=NotificationType.MANUAL_ACCOUNT,
-                channel=NotificationChannel.EMAIL,
+                channel=NotificationChannel.IN_APP,
                 subject=dto.subject,
                 body=dto.body,
                 recipient_email=patient.email,
@@ -341,16 +376,16 @@ class NotificationService:
                 sent_by=sent_by,
                 patient=patient,
                 account=account,
+                recipient_user=recipient_user,
             )
-            success = cls._dispatch(
-                NotificationChannel.EMAIL.value,
-                patient.email,
-                patient.phone,
-                patient.get_full_name(),
-                dto.subject,
-                dto.body,
-            )
-            cls._finalise_log(log, success)
+            cls._finalise_log(log, True)
+
+            if recipient_user:
+                cls.create_bell(str(recipient_user.id), f"Message de {sent_by.get_full_name()}: {dto.subject}", log=log)
+
+            if patient.email:
+                cls._send_email(patient.email, dto.subject, dto.body)
+
             logs.append(log)
 
         return logs
@@ -667,6 +702,40 @@ class NotificationService:
             query = query.where(NotificationLog.patient == patient_id)
         if account_id:
             query = query.where(NotificationLog.account == account_id)
+        if notification_type and notification_type != "ALL":
+            query = query.where(NotificationLog.notification_type == notification_type)
+        return list(query.limit(limit))
+
+    @classmethod
+    def list_sent_logs(
+        cls,
+        user_id: str,
+        notification_type: str | None = None,
+        limit: int = 200,
+    ) -> list[NotificationLog]:
+        """Messages sent by the given user."""
+        query = (
+            NotificationLog.select()
+            .where(NotificationLog.sent_by == user_id)
+            .order_by(NotificationLog.created_at.desc())
+        )
+        if notification_type and notification_type != "ALL":
+            query = query.where(NotificationLog.notification_type == notification_type)
+        return list(query.limit(limit))
+
+    @classmethod
+    def list_inbox_logs(
+        cls,
+        user_id: str,
+        notification_type: str | None = None,
+        limit: int = 200,
+    ) -> list[NotificationLog]:
+        """Messages received by the given user (recipient_user_id = user_id)."""
+        query = (
+            NotificationLog.select()
+            .where(NotificationLog.recipient_user == user_id)
+            .order_by(NotificationLog.created_at.desc())
+        )
         if notification_type and notification_type != "ALL":
             query = query.where(NotificationLog.notification_type == notification_type)
         return list(query.limit(limit))

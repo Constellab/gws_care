@@ -9,11 +9,14 @@ from peewee import CharField, DateTimeField, ForeignKeyField, TextField
 
 from gws_care.account.account import Account
 from gws_care.campaign.campaign import Campaign
-from gws_care.campaign_visit.campaign_visit_dto import CampaignVisitDTO
-from gws_care.campaign_visit.campaign_visit_status import CampaignVisitStatus
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
 from gws_care.patient.patient import Patient
+from gws_care.user.user import User
+from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+from gws_care.visit.consultation_visit_status import ConsultationVisitStatus
+from gws_care.visit.visit_dto import VisitDTO
+from gws_care.visit.visit_type import VisitType
 
 
 def _generate_visit_number() -> str:
@@ -22,28 +25,39 @@ def _generate_visit_number() -> str:
     return f"VIS-{suffix}"
 
 
-class CampaignVisit(ModelWithUser):
-    """One medical visit — all exams for a single patient in a single campaign.
+class Visit(ModelWithUser):
+    """One medical visit for a patient.
 
-    Progresses through a sequential validation chain:
-    PENDING → VISIT_DONE → LAB_DONE
-           → DOCTOR_CLINIC_VALIDATED → DOCTOR_COMPANY_VALIDATED
+    Two types controlled by visit_type:
 
-    Validation steps (who validated and when) are tracked in
-    CampaignVisitValidationWorkflow — one row per step per visit.
+    CONSULTATION — standalone medical visit; prescriptions, certificates, and/or
+                   exam records can be attached. Simple PENDING → CLOSED lifecycle.
+
+    CAMPAIGN     — visit within a campaign; full validation workflow:
+                   PENDING → VISIT_DONE → LAB_DONE
+                           → DOCTOR_CLINIC_VALIDATED → DOCTOR_COMPANY_VALIDATED
+                   Validation steps tracked in CampaignVisitValidationWorkflow.
     """
 
+    visit_type: VisitType = EnumField(choices=VisitType, default=VisitType.CAMPAIGN, null=False)
     visit_number: str = CharField(max_length=50, unique=True, null=False, index=True)
-    program: Campaign = ForeignKeyField(Campaign, null=True, backref="visits", on_delete="CASCADE")
+    campaign: Campaign = ForeignKeyField(Campaign, null=True, backref="visits", on_delete="CASCADE", column_name='program_id')
     patient: Patient = ForeignKeyField(Patient, null=False, backref="visits", on_delete="CASCADE")
     billing_account: Account = ForeignKeyField(Account, null=True, backref="visits", on_delete="SET NULL")
     scheduled_at: datetime = DateTimeField(null=True)
-    status: CampaignVisitStatus = EnumField(choices=CampaignVisitStatus, default=CampaignVisitStatus.PENDING, null=False)
+    # Campaign visit lifecycle — used when visit_type=CAMPAIGN
+    campaign_visit_status: CampaignVisitStatus = EnumField(choices=CampaignVisitStatus, default=CampaignVisitStatus.PENDING, null=False)
+    # Consultation visit lifecycle — used when visit_type=CONSULTATION
+    consultation_visit_status: ConsultationVisitStatus = EnumField(choices=ConsultationVisitStatus, null=True)
 
     # Interpretation text — kept on CampaignVisit for fast access; authorship is in CampaignVisitValidationWorkflow
     doctor_clinic_interpretation: str = TextField(null=True)
     doctor_company_interpretation: str = TextField(null=True)
     doctor_company_message: str = TextField(null=True)
+
+    # Classical / Exam visit closing audit
+    closed_by: User = ForeignKeyField(User, null=True, backref="+", on_delete="SET NULL")
+    closed_at: datetime = DateTimeField(null=True)
 
     def _before_insert(self) -> None:
         super()._before_insert()
@@ -52,24 +66,25 @@ class CampaignVisit(ModelWithUser):
 
     @property
     def campaign_id(self):
-        """Alias for program_id (DB column kept for backward compatibility)."""
+        """Raw FK value for the campaign field (DB column: program_id)."""
         return self.program_id
 
-    def to_dto(self) -> CampaignVisitDTO:
+    def to_dto(self) -> VisitDTO:
         patient = self.patient
         account = self.billing_account if self.billing_account_id else None
-        return CampaignVisitDTO(
+        return VisitDTO(
             id=self.id,
             created_at=self.created_at,
             last_modified_at=self.last_modified_at,
+            visit_type=self.visit_type,
             visit_number=self.visit_number,
-            program_id=str(self.program_id) if self.program_id else None,
+            campaign_id=str(self.campaign_id) if self.campaign_id else None,
             patient_id=str(self.patient_id),
             billing_account_id=str(self.billing_account_id) if self.billing_account_id else None,
             account_name=account.name if account else None,
             scheduled_at=self.scheduled_at,
             patient_name=patient.get_full_name() if patient else None,
-            status=self.status,
+            campaign_visit_status=self.campaign_visit_status,
             doctor_clinic_interpretation=self.doctor_clinic_interpretation,
             doctor_company_interpretation=self.doctor_company_interpretation,
             doctor_company_message=self.doctor_company_message,

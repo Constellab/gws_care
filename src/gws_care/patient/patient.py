@@ -21,8 +21,8 @@ class Patient(ModelWithUser):
     date_of_birth: date = DateField(null=False)
     # M / F / Other
     gender: str = CharField(max_length=10, null=False)
-    photo: str = CharField(max_length=500, null=True)
-    address: str = CharField(max_length=500, null=True)
+    photo: str = TextField(null=True)
+    address: str = TextField(null=True)
     postal_code: str = CharField(max_length=20, null=True)
     city: str = CharField(max_length=100, null=True)
     phone: str = CharField(max_length=50, null=True)
