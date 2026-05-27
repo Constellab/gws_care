@@ -18,11 +18,11 @@ from .terrain_state import TerrainExamDTO, TerrainPatientDTO, TerrainState
 def _terrain_status_badge(p: TerrainPatientDTO) -> rx.Component:
     return rx.match(
         p.visit_status,
-        ("pending", rx.badge("Pending", color_scheme="gray", variant="soft", size="1")),
-        ("visit_done", rx.badge("Visit Done ✓", color_scheme="green", variant="solid", size="1")),
-        ("lab_done", rx.badge("Lab Done", color_scheme="blue", variant="soft", size="1")),
-        ("doctor_clinic_validated", rx.badge("Clinic Doctor Validated", color_scheme="violet", variant="soft", size="1")),
-        ("doctor_company_validated", rx.badge("Company Doctor Validated", color_scheme="green", variant="soft", size="1")),
+        ("pending", rx.badge(LanguageState.tr["status_pending"], color_scheme="gray", variant="soft", size="1")),
+        ("visit_done", rx.badge(LanguageState.tr["status_visit_done"], color_scheme="green", variant="solid", size="1")),
+        ("lab_done", rx.badge(LanguageState.tr["status_lab_done"], color_scheme="blue", variant="soft", size="1")),
+        ("doctor_clinic_validated", rx.badge(LanguageState.tr["status_doctor_clinic_validated"], color_scheme="violet", variant="soft", size="1")),
+        ("doctor_company_validated", rx.badge(LanguageState.tr["status_doctor_company_validated"], color_scheme="green", variant="soft", size="1")),
         rx.badge(p.visit_status_label, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -128,9 +128,9 @@ def _patient_card(p: TerrainPatientDTO) -> rx.Component:
                 align="start",
                 width="100%",
             ),
-            # Exam checklist
+            # Exam checklist — hidden when visit is cancelled
             rx.cond(
-                p.exams_total > 0,
+                (p.exams_total > 0) & (p.visit_status != "cancelled"),
                 rx.vstack(
                     rx.separator(width="100%"),
                     rx.foreach(p.exams, _exam_row),
@@ -138,19 +138,43 @@ def _patient_card(p: TerrainPatientDTO) -> rx.Component:
                     spacing="1",
                 ),
             ),
-            # Mark visit done — only shown once every exam is ticked off
+            # Action buttons — depend on visit status
             rx.cond(
-                (p.exams_total > 0)
-                & (p.exams_done == p.exams_total)
-                & ((p.visit_status == "pending") | (p.visit_status == "")),
+                (p.visit_status == "pending") | (p.visit_status == ""),
+                # Pending: mark done + absent buttons side by side
+                rx.hstack(
+                    rx.button(
+                        rx.icon("check-check", size=14),
+                        LanguageState.tr["terrain_mark_visit_done_btn"],
+                        variant="solid",
+                        color_scheme="green",
+                        size="2",
+                        flex="1",
+                        on_click=lambda: TerrainState.mark_terrain_done(p.id),
+                    ),
+                    rx.button(
+                        rx.icon("user-x", size=14),
+                        LanguageState.tr["terrain_cancel_visit_btn"],
+                        variant="soft",
+                        color_scheme="red",
+                        size="2",
+                        on_click=lambda: TerrainState.cancel_visit(p.id),
+                    ),
+                    spacing="2",
+                    width="100%",
+                ),
+            ),
+            rx.cond(
+                p.visit_status == "cancelled",
+                # Cancelled: reactivate button
                 rx.button(
-                    rx.icon("check-check", size=14),
-                    LanguageState.tr["terrain_mark_visit_done_btn"],
-                    variant="solid",
-                    color_scheme="green",
+                    rx.icon("rotate-ccw", size=14),
+                    LanguageState.tr["terrain_reactivate_visit_btn"],
+                    variant="soft",
+                    color_scheme="blue",
                     size="2",
                     width="100%",
-                    on_click=lambda: TerrainState.mark_terrain_done(p.id),
+                    on_click=lambda: TerrainState.reactivate_visit(p.id),
                 ),
             ),
             width="100%",
@@ -173,6 +197,18 @@ def terrain_page() -> rx.Component:
                     on_click=TerrainState.go_back,
                 ),
                 rx.spacer(),
+                rx.cond(
+                    TerrainState.is_operator | TerrainState.is_admin,
+                    rx.button(
+                        rx.icon("check-check", size=14),
+                        LanguageState.tr["btn_complete_terrain"],
+                        variant="solid",
+                        color_scheme="orange",
+                        size="2",
+                        disabled=~TerrainState.all_visits_closeable,
+                        on_click=TerrainState.complete_terrain,
+                    ),
+                ),
                 rx.button(
                     rx.icon("download", size=14),
                     "PDF QR Codes",
@@ -183,6 +219,7 @@ def terrain_page() -> rx.Component:
                 ),
                 width="100%",
                 align="center",
+                spacing="2",
             ),
             # Campaign info
             rx.card(
@@ -298,6 +335,13 @@ def terrain_page() -> rx.Component:
                 ),
                 width="100%",
             ),
+            # Help message
+            rx.callout(
+                LanguageState.tr["terrain_help_message"],
+                icon="info",
+                color_scheme="blue",
+                size="1",
+            ),
             # Alerts
             rx.cond(
                 TerrainState.error_message != "",
@@ -317,7 +361,7 @@ def terrain_page() -> rx.Component:
                     size="2",
                 ),
             ),
-            # Search filter
+            # Search + status filter
             rx.hstack(
                 rx.input(
                     rx.input.slot(rx.icon("search", size=13)),
@@ -326,6 +370,19 @@ def terrain_page() -> rx.Component:
                     on_change=TerrainState.set_search_query,
                     size="2",
                     flex="1",
+                ),
+                rx.select.root(
+                    rx.select.trigger(size="2", width="180px"),
+                    rx.select.content(
+                        rx.select.item(LanguageState.tr["terrain_status_all"], value="__all__"),
+                        rx.select.item(LanguageState.tr["status_pending"], value="pending"),
+                        rx.select.item(LanguageState.tr["status_visit_done"], value="visit_done"),
+                        rx.select.item(LanguageState.tr["status_lab_done"], value="lab_done"),
+                        rx.select.item(LanguageState.tr["status_doctor_clinic_validated"], value="doctor_clinic_validated"),
+                        rx.select.item(LanguageState.tr["status_doctor_company_validated"], value="doctor_company_validated"),
+                    ),
+                    value=TerrainState.visit_status_filter,
+                    on_change=TerrainState.set_visit_status_filter,
                 ),
                 rx.text(
                     TerrainState.filtered_patients.length().to_string() + " patients",

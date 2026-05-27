@@ -123,7 +123,7 @@ def _new_consultation_dialog() -> rx.Component:
                 rx.cond(
                     ConsultationListState.new_error != "",
                     rx.callout.root(
-                        rx.callout.icon(rx.icon("alert-circle", size=16)),
+                        rx.callout.icon(rx.icon("circle-alert", size=16)),
                         rx.callout.text(ConsultationListState.new_error),
                         color_scheme="red",
                         size="1",
@@ -209,7 +209,7 @@ def _consultations_table() -> rx.Component:
         rx.cond(
             ConsultationListState.error_message != "",
             rx.callout.root(
-                rx.callout.icon(rx.icon("alert-circle", size=16)),
+                rx.callout.icon(rx.icon("circle-alert", size=16)),
                 rx.callout.text(ConsultationListState.error_message),
                 color_scheme="red",
             ),

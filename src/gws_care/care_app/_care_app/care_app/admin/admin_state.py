@@ -1,16 +1,17 @@
 """State for the Admin panel — user role management."""
 
 import reflex as rx
+from pydantic import BaseModel
 
 from ..common.role_state import RoleState
 
 
-class EntityOption(rx.Base):
-    id: str
-    label: str
+class EntityOption(BaseModel):
+    id: str = ""
+    label: str = ""
 
 
-class UserRoleRowDTO(rx.Base):
+class UserRoleRowDTO(BaseModel):
     """Represents a user with their assigned role list for the admin panel."""
 
     id: str

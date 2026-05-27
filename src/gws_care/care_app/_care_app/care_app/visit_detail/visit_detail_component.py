@@ -198,6 +198,19 @@ def _exam_result_row(row: ExamResultRowDTO) -> rx.Component:
                 align="center",
             )
         ),
+        rx.table.cell(
+            rx.cond(
+                row.exam_id != "",
+                rx.button(
+                    rx.icon("external-link", size=12),
+                    LanguageState.tr["btn_open_exam_detail"],
+                    variant="ghost",
+                    size="1",
+                    color_scheme="blue",
+                    on_click=lambda: VisitDetailState.open_exam_detail(row.exam_id),
+                ),
+            )
+        ),
     )
 
 
@@ -211,16 +224,6 @@ def _workflow_actions() -> rx.Component:
             size="2",
             color_scheme="gray",
             on_click=VisitDetailState.download_results_pdf,
-        ),
-        rx.cond(
-            (VisitDetailState.visit.campaign_visit_status == "pending") & (VisitDetailState.is_operator | VisitDetailState.is_admin),
-            rx.button(
-                rx.icon("map-pin", size=16),
-                LanguageState.tr["btn_mark_visit_done"],
-                on_click=VisitDetailState.mark_terrain_done,
-                color_scheme="amber",
-                size="2",
-            ),
         ),
         rx.cond(
             (VisitDetailState.visit.campaign_visit_status == "visit_done") & (VisitDetailState.is_operator | VisitDetailState.is_admin),
@@ -505,22 +508,6 @@ def visit_detail_page() -> rx.Component:
                             )),
                             rx.fragment(),
                         ),
-                        # "Mark Visit Done" — only when pending
-                        rx.cond(
-                            (VisitDetailState.visit.campaign_visit_status == "pending")
-                            & (VisitDetailState.is_operator | VisitDetailState.is_admin),
-                            rx.hstack(
-                                rx.button(
-                                    rx.icon("map-pin", size=16),
-                                    LanguageState.tr["btn_mark_visit_done"],
-                                    on_click=VisitDetailState.mark_terrain_done,
-                                    color_scheme="amber",
-                                    size="2",
-                                ),
-                                justify="end",
-                                width="100%",
-                            ),
-                        ),
                         # Alerts
                         rx.cond(
                             VisitDetailState.error_message != "",
@@ -553,6 +540,7 @@ def visit_detail_page() -> rx.Component:
                                                 rx.table.column_header_cell(LanguageState.tr["col_exam_name"]),
                                                 rx.table.column_header_cell(LanguageState.tr["col_value"]),
                                                 rx.table.column_header_cell(LanguageState.tr["col_appreciation"]),
+                                                rx.table.column_header_cell(""),
                                             )
                                         ),
                                         rx.table.body(

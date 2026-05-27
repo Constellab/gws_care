@@ -132,9 +132,9 @@ class TestCampaignService(BaseTestCase):
         campaign = CampaignService.validate_campaign(str(campaign.id), user)
         self.assertEqual(campaign.status, CampaignStatus.VALIDATED)
 
-        # VALIDATED → IN_PROGRESS
+        # VALIDATED → TERRAIN_EXAM
         campaign = CampaignService.start_campaign(str(campaign.id))
-        self.assertEqual(campaign.status, CampaignStatus.IN_PROGRESS)
+        self.assertEqual(campaign.status, CampaignStatus.TERRAIN_EXAM)
 
         # IN_PROGRESS → LAB_DONE
         campaign = CampaignService.mark_lab_done(str(campaign.id))
@@ -272,33 +272,30 @@ class TestCampaignService(BaseTestCase):
 # ── Phase 2 — Validation workflow tests ──────────────────────────────────────
 
 def _make_campaign_in_progress():
-    """Create a campaign with one patient/visit and advance to IN_PROGRESS.
+    """Create a campaign with one patient/visit and advance to TERRAIN_EXAM.
 
     Returns (campaign, patient, user).
     """
     from gws_care.user.user import User
-    from gws_care.visit.campaign_visit_service import CampaignVisitService
 
     user = User.select().first()
     account = _make_account()
     patient = _make_patient(account=account)
     campaign, _ = _make_campaign(account=account)
     CampaignService.add_patient(str(campaign.id), str(patient.id))
-    CampaignVisitService.create_visit(str(campaign.id), str(patient.id))
     CampaignService.validate_campaign(str(campaign.id), user)
     campaign = CampaignService.start_campaign(str(campaign.id))
     return campaign, patient, user
 
 
 def _advance_visit_to_lab_validated(campaign, patient, user):
-    """Helper: bring the visit all the way to LAB_VALIDATED."""
+    """Helper: bring the visit all the way to LAB_DONE."""
     from gws_care.visit.visit import Visit
     from gws_care.visit.campaign_visit_service import CampaignVisitService
 
-    visit = Visit.get((Visit.program == campaign.id) & (Visit.patient == patient.id))
+    visit = Visit.get((Visit.campaign == campaign.id) & (Visit.patient == patient.id))
     vid = str(visit.id)
     CampaignVisitService.mark_terrain_done(vid)
-    CampaignVisitService.mark_results_entered(vid)
     CampaignVisitService.validate_lab(vid, user)
     return Visit.get_by_id(visit.id)
 
@@ -310,7 +307,7 @@ def _advance_visit_to_clinic_validated(campaign, patient, user):
     from gws_care.visit.campaign_visit_service import CampaignVisitService
 
     _advance_visit_to_lab_validated(campaign, patient, user)
-    visit = Visit.get((Visit.program == campaign.id) & (Visit.patient == patient.id))
+    visit = Visit.get((Visit.campaign == campaign.id) & (Visit.patient == patient.id))
     CampaignVisitService.validate_doctor_clinic(
         str(visit.id), user, ValidateDoctorClinicDTO(interpretation="Normal.")
     )
@@ -415,7 +412,7 @@ class TestCampaignPhase2(BaseTestCase):
         campaign = CampaignService.validate_lab_campaign(str(campaign.id), user)
         campaign = CampaignService.validate_doctor_clinic_campaign(str(campaign.id), user)
 
-        visit = Visit.get((Visit.program == campaign.id) & (Visit.patient == patient.id))
+        visit = Visit.get((Visit.campaign == campaign.id) & (Visit.patient == patient.id))
         CampaignVisitService.validate_doctor_company(
             str(visit.id), user, ValidateDoctorCompanyDTO(interpretation="Apte.", message="RAS.")
         )
@@ -439,18 +436,14 @@ class TestCampaignPhase2(BaseTestCase):
         campaign, _ = _make_campaign(account=account)
         CampaignService.add_patient(str(campaign.id), str(patient1.id))
         CampaignService.add_patient(str(campaign.id), str(patient2.id))
-        from gws_care.visit.campaign_visit_service import CampaignVisitService
-        CampaignVisitService.create_visit(str(campaign.id), str(patient1.id))
-        CampaignVisitService.create_visit(str(campaign.id), str(patient2.id))
         CampaignService.validate_campaign(str(campaign.id), user)
         campaign = CampaignService.start_campaign(str(campaign.id))
 
         # Bring both visits to DOCTOR_CLINIC_VALIDATED
         for patient in [patient1, patient2]:
-            visit = Visit.get((Visit.program == campaign.id) & (Visit.patient == patient.id))
+            visit = Visit.get((Visit.campaign == campaign.id) & (Visit.patient == patient.id))
             vid = str(visit.id)
             CampaignVisitService.mark_terrain_done(vid)
-            CampaignVisitService.mark_results_entered(vid)
             CampaignVisitService.validate_lab(vid, user)
             CampaignVisitService.validate_doctor_clinic(vid, user, ValidateDoctorClinicDTO(interpretation="OK"))
 
@@ -458,7 +451,7 @@ class TestCampaignPhase2(BaseTestCase):
         campaign = CampaignService.validate_doctor_clinic_campaign(str(campaign.id), user)
 
         # Validate only patient1's visit — patient2 still pending
-        visit1 = Visit.get((Visit.program == campaign.id) & (Visit.patient == patient1.id))
+        visit1 = Visit.get((Visit.campaign == campaign.id) & (Visit.patient == patient1.id))
         CampaignVisitService.validate_doctor_company(
             str(visit1.id), user, ValidateDoctorCompanyDTO(interpretation="Apte.", message="")
         )

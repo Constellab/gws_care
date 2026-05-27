@@ -11,6 +11,7 @@ from gws_care.certificate.medical_certificate import MedicalCertificate
 
 # Migrations
 from gws_care.core.migration_0 import Migration0190
+from gws_care.core.migration_1 import Migration0200
 from gws_care.exam.exam import Exam
 from gws_care.exam.exam_result import ExamResult
 from gws_care.exam.exam_type_model import ExamTypeModel

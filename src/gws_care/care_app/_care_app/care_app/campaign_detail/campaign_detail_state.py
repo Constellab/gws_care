@@ -209,7 +209,7 @@ class CampaignDetailState(PatientPickerState):
 
     @rx.event
     def set_visit_filter_status(self, v: str):
-        self.visit_filter_status = v
+        self.visit_filter_status = "" if v == "__all__" else v
 
     @rx.event
     def sort_visits(self, col: str):
@@ -329,7 +329,7 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
                 CampaignService.force_set_status(self.program.id, status)
-            await self._load_program()
+            await self._load_program(preserve_tab=True)
         except Exception as e:
             self.error_message = str(e)
 
@@ -348,7 +348,7 @@ class CampaignDetailState(PatientPickerState):
                 from gws_care.user.user import User
                 user = User.get_by_id(str(auth_user.id))
                 CampaignService.validate_campaign(self.program.id, user)
-            await self._load_program()
+            await self._load_program(preserve_tab=True)
             self.success_message = "Campaign validated successfully."
         except Exception as e:
             self.error_message = str(e)
@@ -364,7 +364,7 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
                 CampaignService.start_campaign(self.program.id)
-            await self._load_program()
+            await self._load_program(preserve_tab=True)
             self.success_message = "Campagne démarrée."
         except Exception as e:
             self.error_message = str(e)
@@ -380,7 +380,7 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
                 CampaignService.complete_terrain_phase(self.program.id)
-            await self._load_program()
+            await self._load_program(preserve_tab=True)
             self.success_message = "Phase terrain terminée. Passez à la saisie des résultats."
         except Exception as e:
             self.error_message = str(e)
@@ -398,7 +398,7 @@ class CampaignDetailState(PatientPickerState):
                 from gws_care.user.user import User
                 user = User.get_by_id(str(auth_user.id))
                 CampaignService.validate_lab_campaign(self.program.id, user)
-            await self._load_program()
+            await self._load_program(preserve_tab=True)
             self.success_message = "Lab validation completed."
         except Exception as e:
             self.error_message = str(e)
@@ -416,7 +416,7 @@ class CampaignDetailState(PatientPickerState):
                 from gws_care.user.user import User
                 user = User.get_by_id(str(auth_user.id))
                 CampaignService.validate_doctor_clinic_campaign(self.program.id, user)
-            await self._load_program()
+            await self._load_program(preserve_tab=True)
             self.success_message = "Clinic validation completed."
         except Exception as e:
             self.error_message = str(e)
@@ -432,7 +432,7 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
                 CampaignService.close_campaign(self.program.id)
-            await self._load_program()
+            await self._load_program(preserve_tab=True)
             self.success_message = "Campaign closed successfully."
         except Exception as e:
             self.error_message = str(e)
@@ -448,7 +448,7 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
                 CampaignService.archive_campaign(self.program.id)
-            await self._load_program()
+            await self._load_program(preserve_tab=True)
             self.success_message = "Campaign archived successfully."
         except Exception as e:
             self.error_message = str(e)
@@ -497,8 +497,7 @@ class CampaignDetailState(PatientPickerState):
     async def open_add_patient_dialog(self):
         if not self.program:
             return
-        # Show all patients (no account filter) so operators can add any patient
-        await self._open_picker(account_id="")
+        await self._open_picker(account_id=self.program.account_id)
         self.add_patient_dialog_open = True
 
     @rx.event
@@ -515,7 +514,7 @@ class CampaignDetailState(PatientPickerState):
                 from gws_care.campaign.campaign_service import CampaignService
                 CampaignService.add_patient(self.program.id, self.picker_selected_id)
             self.add_patient_dialog_open = False
-            await self._load_program()
+            await self._load_program(preserve_tab=True)
         except Exception as e:
             self.error_message = str(e)
         finally:
@@ -529,7 +528,7 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
                 CampaignService.remove_patient(self.program.id, patient_id)
-            await self._load_program()
+            await self._load_program(preserve_tab=True)
         except Exception as e:
             self.error_message = str(e)
 
@@ -580,7 +579,7 @@ class CampaignDetailState(PatientPickerState):
                 from gws_care.campaign.campaign_service import CampaignService
                 CampaignService.add_exam_type(self.program.id, self.selected_exam_type_id)
             self.add_exam_type_dialog_open = False
-            await self._load_program()
+            await self._load_program(preserve_tab=True)
         except Exception as e:
             self.error_message = str(e)
         finally:
@@ -594,17 +593,18 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
                 CampaignService.remove_exam_type(self.program.id, exam_type_id)
-            await self._load_program()
+            await self._load_program(preserve_tab=True)
         except Exception as e:
             self.error_message = str(e)
 
     # ── Internal loader ───────────────────────────────────────────────────────
 
-    async def _load_program(self):
+    async def _load_program(self, preserve_tab: bool = False):
         if not await self.check_authentication():
             return
         self.is_loading = True
         self.error_message = ""
+        saved_tab = self.active_tab if preserve_tab else None
         try:
             page_id = self.router.page.params.get("campaign_id_param", "")
             if not page_id:
@@ -667,12 +667,16 @@ class CampaignDetailState(PatientPickerState):
                     for v in visits
                 ]
 
-                # Default tab: show visits once the campaign is active
-                if self.program.status in ("terrain_exam", "sample_analysis", "closed", "archived",
+                # Default tab: show visits once the campaign is validated or beyond
+                if self.program.status in ("validated", "terrain_exam", "sample_analysis", "closed", "archived",
                                            "lab_done", "doctor_clinic_validated", "doctor_company_validated"):
                     self.active_tab = "visits"
                 else:
                     self.active_tab = "patients"
+
+                # Restore the tab the user was on if we're reloading after an operation
+                if saved_tab is not None:
+                    self.active_tab = saved_tab
 
         except Exception as e:
             self.error_message = str(e)

@@ -644,7 +644,7 @@ def consultation_detail_page() -> rx.Component:
                         rx.cond(
                             ConsultationDetailState.error_message != "",
                             rx.callout.root(
-                                rx.callout.icon(rx.icon("alert-circle", size=16)),
+                                rx.callout.icon(rx.icon("circle-alert", size=16)),
                                 rx.callout.text(ConsultationDetailState.error_message),
                                 color_scheme="red",
                             ),
@@ -652,7 +652,7 @@ def consultation_detail_page() -> rx.Component:
                         rx.cond(
                             ConsultationDetailState.success_message != "",
                             rx.callout.root(
-                                rx.callout.icon(rx.icon("check-circle", size=16)),
+                                rx.callout.icon(rx.icon("circle-check", size=16)),
                                 rx.callout.text(ConsultationDetailState.success_message),
                                 color_scheme="green",
                             ),

@@ -103,6 +103,15 @@ class VisitDetailState(RoleState):
             return rx.redirect(f"/campaign/{self.visit.campaign_id}")
         return rx.redirect("/campaigns")
 
+    @rx.event
+    def go_to_terrain(self):
+        if self.visit and self.visit.campaign_id:
+            return rx.redirect(f"/on-site/{self.visit.campaign_id}")
+
+    @rx.event
+    def open_exam_detail(self, exam_id: str):
+        return rx.redirect(f"/exam/{exam_id}")
+
     @rx.var
     def visit_status_index(self) -> int:
         """Return the 0-based index of the current visit status in the workflow order."""

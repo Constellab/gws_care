@@ -594,8 +594,8 @@ class TestBulkImportService(BaseTestCase):
 
     # ── Duplicate accounts ────────────────────────────────────────────────────
 
-    def test_import_two_accounts_same_name_creates_two_records(self):
-        """The service does not deduplicate; two rows produce two DB records."""
+    def test_import_two_accounts_same_name_skips_duplicate(self):
+        """Importing the same account name twice creates only one DB record."""
         row = {
             "name": "Duplicate Corp", "registration_number": "", "address": "",
             "postal_code": "", "city": "", "phone": "", "email": "", "contact_name": "",
@@ -604,7 +604,7 @@ class TestBulkImportService(BaseTestCase):
         BulkImportService.import_account_row(row)
 
         count = Account.select().where(Account.name == "Duplicate Corp").count()
-        self.assertEqual(count, 2)
+        self.assertEqual(count, 1)
 
     # ── End-to-end: accounts then patients ────────────────────────────────────
 

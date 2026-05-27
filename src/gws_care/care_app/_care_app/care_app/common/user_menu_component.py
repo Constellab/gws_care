@@ -39,7 +39,7 @@ def user_menu_button() -> rx.Component:
             rx.box(
                 rx.hstack(
                     rx.box(
-                        rx.icon("user-circle", size=22, color="var(--accent-9)"),
+                        rx.icon("circle-user", size=22, color="var(--accent-9)"),
                         flex_shrink="0",
                     ),
                     rx.vstack(
@@ -111,7 +111,7 @@ def user_menu_button() -> rx.Component:
             rx.box(
                 rx.hstack(
                     rx.box(
-                        rx.icon("user-circle", size=22, color="var(--accent-9)"),
+                        rx.icon("circle-user", size=22, color="var(--accent-9)"),
                         flex_shrink="0",
                     ),
                     rx.vstack(

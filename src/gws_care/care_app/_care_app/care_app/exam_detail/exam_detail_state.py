@@ -26,6 +26,7 @@ class ExamDetailDTO(BaseModel):
     conclusion: str | None = None
     patient_id: str
     patient_name: str
+    visit_id: str = ""
 
 
 # ── Predefined laboratory parameters ────────────────────────────────────────
@@ -176,6 +177,8 @@ class ExamDetailState(RoleState):
     @rx.event
     def go_back(self):
         if self.exam:
+            if self.exam.visit_id:
+                return rx.redirect(f"/visit/{self.exam.visit_id}")
             return rx.redirect(f"/patient/{self.exam.patient_id}")
         return rx.redirect("/")
 
@@ -366,6 +369,7 @@ class ExamDetailState(RoleState):
                     conclusion=exam.conclusion,
                     patient_id=str(patient.id),
                     patient_name=f"{patient.first_name} {patient.last_name}",
+                    visit_id=str(exam.visit_id) if exam.visit_id else "",
                 )
                 result = ExamResultService.get_result_for_exam(exam_id)
                 if result:

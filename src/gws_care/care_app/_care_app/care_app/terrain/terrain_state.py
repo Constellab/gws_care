@@ -56,6 +56,7 @@ class TerrainState(RoleState):
     patients: list[TerrainPatientDTO] = []
     filtered_patients: list[TerrainPatientDTO] = []
     search_query: str = ""
+    visit_status_filter: str = "__all__"
 
     is_loading: bool = False
     is_downloading_pdf: bool = False
@@ -67,6 +68,16 @@ class TerrainState(RoleState):
     scan_found_patient: TerrainPatientDTO | None = None
     scan_error: str = ""
     scanner_active: bool = False  # camera scanner running
+
+    @rx.var
+    def all_visits_closeable(self) -> bool:
+        """True when every patient has a visit that is done (visit_done or beyond) or cancelled."""
+        if not self.patients:
+            return False
+        return all(
+            p.visit_status not in ("pending", "")
+            for p in self.patients
+        )
 
     @rx.event
     async def on_load(self):
@@ -88,6 +99,11 @@ class TerrainState(RoleState):
     @rx.event
     def clear_search(self):
         self.search_query = ""
+        self._apply_filter()
+
+    @rx.event
+    def set_visit_status_filter(self, value: str):
+        self.visit_status_filter = value
         self._apply_filter()
 
     @rx.event
@@ -287,6 +303,69 @@ class TerrainState(RoleState):
             self.error_message = str(e)
 
     @rx.event
+    async def cancel_visit(self, patient_id: str):
+        """Mark a patient's visit as cancelled (patient absent on terrain)."""
+        if not self.campaign_id:
+            return
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.visit.visit import Visit
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                visit = Visit.get_or_none(
+                    (Visit.campaign == self.campaign_id) & (Visit.patient == patient_id)
+                )
+                if visit:
+                    CampaignVisitService.cancel_campaign_visit(str(visit.id))
+            self.patients = [
+                TerrainPatientDTO(**{**p.dict(), "visit_status": "cancelled", "visit_status_label": "Cancelled"})
+                if p.id == patient_id else p
+                for p in self.patients
+            ]
+            self._apply_filter()
+        except Exception as e:
+            self.error_message = str(e)
+
+    @rx.event
+    async def reactivate_visit(self, patient_id: str):
+        """Reactivate a cancelled visit back to pending."""
+        if not self.campaign_id:
+            return
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.visit.visit import Visit
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                visit = Visit.get_or_none(
+                    (Visit.campaign == self.campaign_id) & (Visit.patient == patient_id)
+                )
+                if visit:
+                    CampaignVisitService.reactivate_campaign_visit(str(visit.id))
+            self.patients = [
+                TerrainPatientDTO(**{**p.dict(), "visit_status": "pending", "visit_status_label": "Pending"})
+                if p.id == patient_id else p
+                for p in self.patients
+            ]
+            self._apply_filter()
+        except Exception as e:
+            self.error_message = str(e)
+
+    @rx.event
+    async def complete_terrain(self):
+        """Mark the terrain phase as complete for the campaign (TERRAIN_EXAM → SAMPLE_ANALYSIS)."""
+        if not self.campaign_id:
+            return
+        self.error_message = ""
+        self.success_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.complete_terrain_phase(self.campaign_id)
+            return rx.redirect(f"/campaign/{self.campaign_id}")
+        except Exception as e:
+            self.error_message = str(e)
+
+    @rx.event
     async def download_pdf(self):
         """Generate and download the tube QR code grid PDF."""
         if not self.campaign_id:
@@ -309,13 +388,13 @@ class TerrainState(RoleState):
 
     def _apply_filter(self):
         q = self.search_query
-        if not q:
-            self.filtered_patients = list(self.patients)
-        else:
-            self.filtered_patients = [
-                p for p in self.patients
-                if q in p.full_name.lower() or q in p.patient_number.lower()
-            ]
+        s = self.visit_status_filter
+        result = [
+            p for p in self.patients
+            if (not q or q in p.full_name.lower() or q in p.patient_number.lower())
+            and (s == "__all__" or p.visit_status == s)
+        ]
+        self.filtered_patients = result
 
     async def _load_terrain(self):
         if not await self.check_authentication():
@@ -331,11 +410,16 @@ class TerrainState(RoleState):
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_exam_type import CampaignExamType
                 from gws_care.campaign.campaign_service import CampaignService
+                from gws_care.campaign.campaign_status import CampaignStatus
                 from gws_care.exam.exam import Exam
                 from gws_care.visit.visit import Visit
                 from gws_care.visit.campaign_visit_status import CampaignVisitStatus
 
                 program = CampaignService.get_campaign(program_id)
+
+                if program.status != CampaignStatus.TERRAIN_EXAM:
+                    return rx.redirect(f"/campaign/{program_id}")
+
                 self.campaign_name = program.name
                 self.campaign_number = program.campaign_number
                 self.account_name = program.account.name if program.account_id else ""

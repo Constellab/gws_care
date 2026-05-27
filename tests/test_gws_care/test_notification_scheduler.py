@@ -36,6 +36,7 @@ from gws_care.role.user_role_service import UserRoleService
 from gws_care.user.care_user_sync_service import CareUserSyncService
 from gws_care.user.user import User
 from gws_care.visit.campaign_visit_service import CampaignVisitService
+from gws_care.visit.visit import Visit
 from gws_core import BaseTestCase
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -320,7 +321,7 @@ class TestTerrainThankYou(BaseTestCase):
             )
         )
         CampaignService.add_patient(str(campaign.id), str(p.id))
-        visit = CampaignVisitService.create_visit(str(campaign.id), str(p.id))
+        visit = Visit.get((Visit.campaign == campaign.id) & (Visit.patient == p.id))
         return p, visit
 
     def test_terrain_thank_you_creates_notification_log(self):
@@ -393,7 +394,7 @@ class TestTerrainThankYou(BaseTestCase):
             )
         )
         CampaignService.add_patient(str(campaign.id), str(p.id))
-        visit = CampaignVisitService.create_visit(str(campaign.id), str(p.id))
+        visit = Visit.get((Visit.campaign == campaign.id) & (Visit.patient == p.id))
 
         NotificationService.send_terrain_thank_you(p, visit)
 

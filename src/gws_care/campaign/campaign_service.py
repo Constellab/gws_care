@@ -160,10 +160,25 @@ class CampaignService:
 
     @classmethod
     def complete_terrain_phase(cls, campaign_id: str) -> Campaign:
-        """Transition TERRAIN_EXAM → SAMPLE_ANALYSIS (terrain work done, start lab entry)."""
+        """Transition TERRAIN_EXAM → SAMPLE_ANALYSIS (terrain work done, start lab entry).
+
+        Requires every visit to be either visit_done (or beyond) or cancelled.
+        Any pending visit blocks the transition.
+        """
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.campaign_visit_status import CampaignVisitStatus
         campaign = cls.get_campaign(campaign_id)
         if campaign.status != CampaignStatus.TERRAIN_EXAM:
             raise BadRequestException("Seules les campagnes en phase Terrain Exam peuvent passer en Analyse.")
+        pending_count = Visit.select().where(
+            Visit.campaign == campaign_id,
+            Visit.campaign_visit_status == CampaignVisitStatus.PENDING,
+        ).count()
+        if pending_count > 0:
+            raise BadRequestException(
+                f"{pending_count} visite(s) sont encore en attente. "
+                "Toutes les visites doivent être terminées ou annulées avant de clôturer la phase terrain."
+            )
         campaign.status = CampaignStatus.SAMPLE_ANALYSIS
         campaign.save()
         return campaign
@@ -357,6 +372,9 @@ class CampaignService:
 
         CampaignPatient.create(campaign=campaign, patient=patient)
 
+        from gws_care.visit.campaign_visit_service import CampaignVisitService
+        CampaignVisitService.create_visit(campaign_id, patient_id)
+
     @classmethod
     def remove_patient(cls, campaign_id: str, patient_id: str) -> None:
         campaign = cls.get_campaign(campaign_id)
@@ -370,6 +388,13 @@ class CampaignService:
         if link is None:
             raise BadRequestException("Patient is not in this campaign")
         link.delete_instance()
+
+        from gws_care.visit.visit import Visit
+        orphan_visit = Visit.get_or_none(
+            (Visit.campaign == campaign_id) & (Visit.patient == patient_id)
+        )
+        if orphan_visit is not None:
+            orphan_visit.delete_instance()
 
     # ── ExamType management ───────────────────────────────────────────────────
 
@@ -391,6 +416,12 @@ class CampaignService:
             raise BadRequestException("Ce type d'examen est déjà dans cette campagne.")
 
         CampaignExamType.create(campaign=campaign, exam_type=exam_type)
+
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.campaign_visit_service import CampaignVisitService
+        for cp in CampaignPatient.select().where(CampaignPatient.campaign == campaign_id):
+            if Visit.get_or_none((Visit.campaign == campaign_id) & (Visit.patient == cp.patient_id)) is None:
+                CampaignVisitService.create_visit(campaign_id, str(cp.patient_id))
 
     @classmethod
     def remove_exam_type(cls, campaign_id: str, exam_type_id: str) -> None:
@@ -426,21 +457,25 @@ class CampaignService:
 
     @classmethod
     def _assert_all_visits_at_least_status(cls, campaign_id: str, min_status: "CampaignVisitStatus") -> None:
-        """Raise BadRequestException if any visit has not yet reached min_status.
+        """Raise BadRequestException if any non-cancelled visit has not yet reached min_status.
 
-        Visits that have advanced PAST min_status (e.g. already DOCTOR_CLINIC_VALIDATED
-        when checking for LAB_DONE) are considered compliant.
+        Cancelled visits are explicitly excluded — a patient who did not attend
+        should never block campaign progression.
+        Visits that have advanced past min_status are considered compliant.
         """
         from gws_care.visit.visit import Visit
         from gws_care.visit.campaign_visit_status import CampaignVisitStatus
-        status_order = list(CampaignVisitStatus)
+        status_order = [s for s in CampaignVisitStatus if s != CampaignVisitStatus.CANCELLED]
         min_index = status_order.index(min_status)
-        # Statuses that are strictly before the required minimum
+        # Statuses that are strictly before the required minimum (cancelled already excluded)
         statuses_not_ready = status_order[:min_index]
 
-        total = Visit.select().where(Visit.campaign == campaign_id).count()
-        if total == 0:
-            raise BadRequestException("The campaign has no visits — cannot validate.")
+        active_total = Visit.select().where(
+            Visit.campaign == campaign_id,
+            Visit.campaign_visit_status != CampaignVisitStatus.CANCELLED,
+        ).count()
+        if active_total == 0:
+            raise BadRequestException("La campagne n'a aucune visite active — impossible de valider.")
 
         if statuses_not_ready:
             not_ready_count = Visit.select().where(
@@ -452,8 +487,8 @@ class CampaignService:
 
         if not_ready_count > 0:
             raise BadRequestException(
-                f"{not_ready_count} visit(s) have not yet reached the required status "
-                f"'{min_status.value}'. All visits must be validated before advancing the campaign."
+                f"{not_ready_count} visite(s) n'ont pas encore atteint le statut requis "
+                f"'{min_status.value}'. Toutes les visites actives doivent être validées avant d'avancer la campagne."
             )
 
     @classmethod

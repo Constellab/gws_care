@@ -110,25 +110,16 @@ def _workflow_buttons() -> rx.Component:
                 color_scheme="amber", size="2",
             ),
         ),
-        # Terrain phase — terrain view shortcut + "complete terrain" action
+        # Terrain phase — terrain view shortcut only ("Terminer le terrain" is in the terrain page)
         rx.cond(
             (CampaignDetailState.program.status == "terrain_exam")
             & (CampaignDetailState.is_operator | CampaignDetailState.is_admin),
-            rx.hstack(
-                rx.link(
-                    rx.button(
-                        rx.icon("map-pin", size=16), "Terrain",
-                        variant="soft", color_scheme="amber", size="2",
-                    ),
-                    href="/on-site/" + CampaignDetailState.program.id,
-                ),
+            rx.link(
                 rx.button(
-                    rx.icon("check-check", size=16),
-                    LanguageState.tr["btn_complete_terrain"],
-                    on_click=CampaignDetailState.complete_terrain,
-                    color_scheme="orange", size="2",
+                    rx.icon("map-pin", size=16), "Terrain",
+                    variant="soft", color_scheme="amber", size="2",
                 ),
-                spacing="2",
+                href="/on-site/" + CampaignDetailState.program.id,
             ),
         ),
         rx.cond(
@@ -455,14 +446,18 @@ def _tab_visits() -> rx.Component:
                     width="170px",
                 ),
                 rx.select.content(
-                    rx.select.item(LanguageState.tr["filter_visit_status_placeholder"], value=""),
+                    rx.select.item(LanguageState.tr["filter_visit_status_placeholder"], value="__all__"),
                     rx.select.item(LanguageState.tr["status_pending"], value="pending"),
                     rx.select.item(LanguageState.tr["status_visit_done"], value="visit_done"),
                     rx.select.item(LanguageState.tr["status_lab_done"], value="lab_done"),
                     rx.select.item(LanguageState.tr["status_doctor_clinic_validated"], value="doctor_clinic_validated"),
                     rx.select.item(LanguageState.tr["status_doctor_company_validated"], value="doctor_company_validated"),
                 ),
-                value=CampaignDetailState.visit_filter_status,
+                value=rx.cond(
+                    CampaignDetailState.visit_filter_status != "",
+                    CampaignDetailState.visit_filter_status,
+                    "__all__",
+                ),
                 on_change=CampaignDetailState.set_visit_filter_status,
                 size="2",
             ),
@@ -792,9 +787,9 @@ def campaign_detail_page() -> rx.Component:
                                     value="visits",
                                 ),
                             ),
-                            rx.tabs.content(_tab_patients(), value="patients", pt="4"),
-                            rx.tabs.content(_tab_exam_types(), value="exam_types", pt="4"),
-                            rx.tabs.content(_tab_visits(), value="visits", pt="4"),
+                            rx.tabs.content(_tab_patients(), value="patients", padding_top="1rem"),
+                            rx.tabs.content(_tab_exam_types(), value="exam_types", padding_top="1rem"),
+                            rx.tabs.content(_tab_visits(), value="visits", padding_top="1rem"),
                             value=CampaignDetailState.active_tab,
                             on_change=CampaignDetailState.set_active_tab,
                             width="100%",

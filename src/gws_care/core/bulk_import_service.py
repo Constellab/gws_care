@@ -184,12 +184,8 @@ class BulkImportService:
         account_name = (row_data.get("account_name") or "").strip()
         if account_name:
             account = Account.get_or_none(Account.name == account_name)
-            if account is None:
-                raise ValueError(
-                    f"Account '{account_name}' not found. "
-                    "Import accounts first or check the spelling."
-                )
-            account_id = str(account.id)
+            if account is not None:
+                account_id = str(account.id)
 
         def _parse_float(key: str):
             v = row_data.get(key, "").strip()
@@ -224,11 +220,16 @@ class BulkImportService:
         :param row_data: A single dict from the CSV DictReader
         :type row_data: dict
         """
+        from gws_care.account.account import Account
         from gws_care.account.account_dto import SaveAccountDTO
         from gws_care.account.account_service import AccountService
 
+        name = row_data.get("name", "").strip()
+        if Account.get_or_none(Account.name == name) is not None:
+            return
+
         dto = SaveAccountDTO(
-            name=row_data.get("name", "").strip(),
+            name=name,
             registration_number=row_data.get("registration_number", "").strip() or None,
             address=row_data.get("address", "").strip() or None,
             postal_code=row_data.get("postal_code", "").strip() or None,

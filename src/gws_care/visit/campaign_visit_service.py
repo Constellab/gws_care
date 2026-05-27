@@ -290,6 +290,40 @@ class CampaignVisitService:
         return visit
 
     @classmethod
+    def cancel_campaign_visit(cls, visit_id: str) -> Visit:
+        """Mark a campaign visit as cancelled (patient absent on terrain).
+
+        Only allowed during the TERRAIN_EXAM campaign phase and only from PENDING status.
+        """
+        from gws_care.campaign.campaign_status import CampaignStatus
+        visit = cls.get_visit(visit_id)
+        if visit.campaign_visit_status != CampaignVisitStatus.PENDING:
+            raise BadRequestException("Seule une visite en attente peut être annulée.")
+        campaign = Campaign.get_or_none(Campaign.id == visit.campaign_id)
+        if campaign is None or campaign.status != CampaignStatus.TERRAIN_EXAM:
+            raise BadRequestException("L'annulation de visite n'est possible que pendant la phase terrain.")
+        visit.campaign_visit_status = CampaignVisitStatus.CANCELLED
+        visit.save()
+        return visit
+
+    @classmethod
+    def reactivate_campaign_visit(cls, visit_id: str) -> Visit:
+        """Reactivate a cancelled campaign visit back to PENDING (undo absent marking).
+
+        Only allowed during the TERRAIN_EXAM campaign phase.
+        """
+        from gws_care.campaign.campaign_status import CampaignStatus
+        visit = cls.get_visit(visit_id)
+        if visit.campaign_visit_status != CampaignVisitStatus.CANCELLED:
+            raise BadRequestException("Seule une visite annulée peut être réactivée.")
+        campaign = Campaign.get_or_none(Campaign.id == visit.campaign_id)
+        if campaign is None or campaign.status != CampaignStatus.TERRAIN_EXAM:
+            raise BadRequestException("La réactivation n'est possible que pendant la phase terrain.")
+        visit.campaign_visit_status = CampaignVisitStatus.PENDING
+        visit.save()
+        return visit
+
+    @classmethod
     def force_set_status(cls, visit_id: str, status: str) -> Visit:
         """Force-set a visit to any status (used by the workflow lifeline to allow going back)."""
         visit = cls.get_visit(visit_id)
