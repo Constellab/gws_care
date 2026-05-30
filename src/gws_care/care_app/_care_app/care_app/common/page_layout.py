@@ -98,7 +98,7 @@ def _bell_button() -> rx.Component:
                 ),
                 rx.link(
                     rx.text(LanguageState.tr["notifications_view_all"], size="2", color="var(--accent-9)"),
-                    href="/notifications",
+                    href=rx.cond(RoleState.is_patient_user, "/my-notifications", "/notifications"),
                     text_align="center",
                     width="100%",
                     padding_top="0.5rem",
@@ -118,7 +118,7 @@ def _nav_group_label(label: str) -> rx.Component:
         label,
         size="1",
         color="var(--gray-9)",
-        weight="medium",
+        weight="bold",
         text_transform="uppercase",
         letter_spacing="0.05em",
         padding_left="0.5rem",
@@ -142,14 +142,24 @@ def _sidebar_content() -> rx.Component:
         ),
         # Nav items — shown / hidden based on the user's CareRole
         rx.vstack(
-            # ── "Espace personnel" — Patient role only ───────────────────────
+            # ── Patient portal — new interface ───────────────────────────────
             rx.cond(
                 RoleState.is_patient_user,
                 rx.vstack(
-                    _nav_group_label(LanguageState.tr["nav_group_my_space"]),
-                    menu_item_component("file-heart", LanguageState.tr["nav_my_results"], "/my-results"),
-                    menu_item_component("calendar-check", LanguageState.tr["nav_my_appointments"], "/my-appointments"),
-                    menu_item_component("file-text", LanguageState.tr["nav_my_documents"], "/my-documents"),
+                    # My Essentials
+                    _nav_group_label(LanguageState.tr["nav_group_patient_essentials"]),
+                    menu_item_component("layout-dashboard", LanguageState.tr["nav_patient_dashboard"], "/patient-dashboard"),
+                    menu_item_component("calendar-plus", LanguageState.tr["nav_my_appointments"], "/my-appointments"),
+                    menu_item_component(
+                        "stethoscope",
+                        LanguageState.tr["nav_my_consultations"],
+                        "/my-consultations",
+                    ),
+                    menu_item_component("bell", LanguageState.tr["nav_my_notifications"], "/my-notifications"),
+                    # My Documents
+                    _nav_group_label(LanguageState.tr["nav_group_patient_documents"]),
+                    menu_item_component("file-text", LanguageState.tr["nav_my_prescriptions"], "/my-prescriptions"),
+                    menu_item_component("folder-open", LanguageState.tr["nav_my_all_documents"], "/my-all-documents"),
                     width="100%",
                     spacing="1",
                     align_items="start",
@@ -256,5 +266,6 @@ def page_layout(*children: rx.Component, **kwargs) -> rx.Component:
         page_sidebar_component(
             sidebar_content=_sidebar_content(),
             content=rx.vstack(*children, **vstack_props),
+            sidebar_width="280px",
         ),
     )

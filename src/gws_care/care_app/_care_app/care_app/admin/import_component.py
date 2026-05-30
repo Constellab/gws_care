@@ -54,21 +54,40 @@ def _format_requirements() -> rx.Component:
             icon="info",
             size="1",
         ),
-        rx.callout(
-            rx.vstack(
-                rx.text("Required columns:", size="2", weight="medium"),
-                rx.code("name", size="1"),
-                rx.text("Optional columns:", size="2", weight="medium"),
-                rx.code(
-                    "registration_number, address, postal_code, city, phone, email, contact_name",
-                    size="1",
+        rx.cond(
+            ImportState.import_type == "doctors",
+            rx.callout(
+                rx.vstack(
+                    rx.text("Required columns:", size="2", weight="medium"),
+                    rx.code("last_name, first_name", size="1"),
+                    rx.text("Optional columns:", size="2", weight="medium"),
+                    rx.code(
+                        "specialization, phone, email, rpps_number, address",
+                        size="1",
+                    ),
+                    spacing="2",
+                    align_items="start",
                 ),
-                spacing="2",
-                align_items="start",
+                color_scheme="blue",
+                icon="info",
+                size="1",
             ),
-            color_scheme="blue",
-            icon="info",
-            size="1",
+            rx.callout(
+                rx.vstack(
+                    rx.text("Required columns:", size="2", weight="medium"),
+                    rx.code("name", size="1"),
+                    rx.text("Optional columns:", size="2", weight="medium"),
+                    rx.code(
+                        "registration_number, address, postal_code, city, phone, email, contact_name",
+                        size="1",
+                    ),
+                    spacing="2",
+                    align_items="start",
+                ),
+                color_scheme="blue",
+                icon="info",
+                size="1",
+            ),
         ),
     )
 
@@ -202,14 +221,22 @@ def import_dialog() -> rx.Component:
                 rx.cond(
                     ImportState.import_type == "patients",
                     "Import Patients from CSV",
-                    "Import Accounts from CSV",
+                    rx.cond(
+                        ImportState.import_type == "doctors",
+                        "Import Doctors from CSV",
+                        "Import Accounts from CSV",
+                    ),
                 )
             ),
             rx.dialog.description(
                 rx.cond(
                     ImportState.import_type == "patients",
                     "Upload a CSV file to create multiple patient records at once.",
-                    "Upload a CSV file to create multiple billing accounts at once.",
+                    rx.cond(
+                        ImportState.import_type == "doctors",
+                        "Upload a CSV file to register multiple medical doctors at once.",
+                        "Upload a CSV file to create multiple billing accounts at once.",
+                    ),
                 ),
                 size="2",
                 margin_bottom="0.5rem",

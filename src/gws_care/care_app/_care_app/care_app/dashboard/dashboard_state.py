@@ -72,6 +72,12 @@ class DashboardState(AccountPickerState):
     @rx.event
     async def on_load(self):
         await self._load_roles()
+        redirect = await self._require_any_of(
+            self.is_operator, self.is_doctor, self.is_admin, self.is_account_admin,
+            redirect_to="/patient-dashboard",
+        )
+        if redirect:
+            return redirect
         await self._load_stats()
 
     async def _on_account_picked(self, account_id: str) -> None:

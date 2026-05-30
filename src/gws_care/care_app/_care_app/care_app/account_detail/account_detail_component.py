@@ -178,7 +178,7 @@ def _patients_section() -> rx.Component:
                     rx.icon("plus", size=14),
                     LanguageState.tr["new_patient_small_btn"],
                     size="2",
-                    on_click=lambda: PatientFormState.open_create_for_account(AccountDetailState.account.id),
+                    on_click=PatientFormState.open_create_dialog,
                 ),
                 spacing="2",
             ),

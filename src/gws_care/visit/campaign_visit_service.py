@@ -162,6 +162,7 @@ class CampaignVisitService:
         account_id: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
+        doctor_id: str | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Visit]:
@@ -184,6 +185,8 @@ class CampaignVisitService:
             )
         if account_id:
             query = query.where(Visit.billing_account == account_id)
+        if doctor_id:
+            query = query.where(Visit.doctor == doctor_id)
         if date_from:
             query = query.where(
                 Visit.scheduled_at.is_null()

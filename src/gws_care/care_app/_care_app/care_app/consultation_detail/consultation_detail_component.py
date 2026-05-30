@@ -48,27 +48,30 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                     spacing="1",
                 ),
                 rx.spacer(),
-                # Close / cancel buttons (only when PENDING)
+                # Close / cancel buttons (only for staff, only when PENDING status)
                 rx.cond(
-                    c.status == "pending",
-                    rx.hstack(
-                        rx.button(
-                            rx.icon("check", size=14),
-                            "Clôturer",
-                            on_click=ConsultationDetailState.open_close_dialog,
-                            size="2",
-                            color_scheme="green",
-                            variant="soft",
+                    ~ConsultationDetailState.is_patient_user,
+                    rx.cond(
+                        c.status == "pending",
+                        rx.hstack(
+                            rx.button(
+                                rx.icon("check", size=14),
+                                "Clôturer",
+                                on_click=ConsultationDetailState.open_close_dialog,
+                                size="2",
+                                color_scheme="green",
+                                variant="soft",
+                            ),
+                            rx.button(
+                                rx.icon("x", size=14),
+                                "Annuler",
+                                on_click=ConsultationDetailState.cancel_consultation,
+                                size="2",
+                                color_scheme="red",
+                                variant="soft",
+                            ),
+                            spacing="2",
                         ),
-                        rx.button(
-                            rx.icon("x", size=14),
-                            "Annuler",
-                            on_click=ConsultationDetailState.cancel_consultation,
-                            size="2",
-                            color_scheme="red",
-                            variant="soft",
-                        ),
-                        spacing="2",
                     ),
                 ),
                 width="100%",
@@ -183,12 +186,15 @@ def _exams_section() -> rx.Component:
             rx.icon("activity", size=18, color="var(--accent-9)"),
             rx.heading("Examens", size="4"),
             rx.spacer(),
-            rx.button(
-                rx.icon("plus", size=14),
-                "Ajouter",
-                on_click=ConsultationDetailState.open_new_exam_dialog,
-                size="1",
-                variant="soft",
+            rx.cond(
+                ~ConsultationDetailState.is_patient_user,
+                rx.button(
+                    rx.icon("plus", size=14),
+                    "Ajouter",
+                    on_click=ConsultationDetailState.open_new_exam_dialog,
+                    size="1",
+                    variant="soft",
+                ),
             ),
             spacing="2",
             align="center",
@@ -224,12 +230,15 @@ def _prescriptions_section() -> rx.Component:
             rx.icon("pill", size=18, color="var(--accent-9)"),
             rx.heading("Ordonnances", size="4"),
             rx.spacer(),
-            rx.button(
-                rx.icon("plus", size=14),
-                "Ajouter",
-                on_click=ConsultationDetailState.open_new_prescription_dialog,
-                size="1",
-                variant="soft",
+            rx.cond(
+                ~ConsultationDetailState.is_patient_user,
+                rx.button(
+                    rx.icon("plus", size=14),
+                    "Ajouter",
+                    on_click=ConsultationDetailState.open_new_prescription_dialog,
+                    size="1",
+                    variant="soft",
+                ),
             ),
             spacing="2",
             align="center",
@@ -265,12 +274,15 @@ def _certificates_section() -> rx.Component:
             rx.icon("file-check", size=18, color="var(--accent-9)"),
             rx.heading("Certificats médicaux", size="4"),
             rx.spacer(),
-            rx.button(
-                rx.icon("plus", size=14),
-                "Émettre",
-                on_click=ConsultationDetailState.open_new_certificate_dialog,
-                size="1",
-                variant="soft",
+            rx.cond(
+                ~ConsultationDetailState.is_patient_user,
+                rx.button(
+                    rx.icon("plus", size=14),
+                    "Émettre",
+                    on_click=ConsultationDetailState.open_new_certificate_dialog,
+                    size="1",
+                    variant="soft",
+                ),
             ),
             spacing="2",
             align="center",

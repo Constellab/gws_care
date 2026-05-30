@@ -39,6 +39,7 @@ class CsvParseResult:
 
 _PATIENT_REQUIRED_COLS = {"last_name", "first_name", "date_of_birth", "gender"}
 _VALID_GENDERS = {"M", "F", "Other"}
+_DOCTOR_REQUIRED_COLS = {"last_name", "first_name"}
 
 
 class BulkImportService:
@@ -210,6 +211,86 @@ class BulkImportService:
             height=_parse_float("height"),
         )
         PatientService.create_patient(dto)
+
+    @classmethod
+    def parse_doctors_csv(cls, content: str) -> CsvParseResult:
+        """Parse and validate a medical doctor CSV string.
+
+        :param content: Raw CSV text (UTF-8, may include BOM)
+        :return: CsvParseResult with validated row list or a parse_error string
+        :rtype: CsvParseResult
+        """
+        result = CsvParseResult()
+        try:
+            reader = csv.DictReader(io.StringIO(content.lstrip("﻿")))
+            rows = list(reader)
+        except Exception as exc:
+            result.parse_error = f"CSV read error: {exc}"
+            return result
+
+        if not rows:
+            result.parse_error = "The CSV file is empty or has no data rows."
+            return result
+
+        missing = _DOCTOR_REQUIRED_COLS - set(rows[0].keys())
+        if missing:
+            result.parse_error = f"Missing required columns: {', '.join(sorted(missing))}"
+            return result
+
+        for i, row in enumerate(rows, 1):
+            result.rows.append(cls._validate_doctor_row(i, row))
+
+        return result
+
+    @classmethod
+    def _validate_doctor_row(cls, row_num: int, row: dict) -> RowValidationResult:
+        errors: list[str] = []
+
+        if not row.get("last_name", "").strip():
+            errors.append("last_name required")
+        if not row.get("first_name", "").strip():
+            errors.append("first_name required")
+
+        return RowValidationResult(
+            row_num=row_num,
+            row_data=row,
+            is_valid=not errors,
+            errors=errors,
+        )
+
+    @classmethod
+    def import_doctor_row(cls, row_data: dict) -> None:
+        """Create one medical doctor record from a validated CSV row dict.
+
+        Must be called inside a gws_core auth context. Skips if a doctor with
+        the same last_name + first_name already exists.
+
+        :param row_data: A single dict from the CSV DictReader
+        :type row_data: dict
+        """
+        from gws_care.doctor.medical_doctor import MedicalDoctor
+        from gws_care.doctor.medical_doctor_dto import SaveMedicalDoctorDTO
+        from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+
+        last_name = row_data.get("last_name", "").strip()
+        first_name = row_data.get("first_name", "").strip()
+
+        existing = MedicalDoctor.get_or_none(
+            (MedicalDoctor.last_name == last_name) & (MedicalDoctor.first_name == first_name)
+        )
+        if existing is not None:
+            return
+
+        dto = SaveMedicalDoctorDTO(
+            first_name=first_name,
+            last_name=last_name,
+            specialization=row_data.get("specialization", "").strip() or None,
+            phone=row_data.get("phone", "").strip() or None,
+            email=row_data.get("email", "").strip() or None,
+            rpps_number=row_data.get("rpps_number", "").strip() or None,
+            address=row_data.get("address", "").strip() or None,
+        )
+        MedicalDoctorService.create_doctor(dto)
 
     @classmethod
     def import_account_row(cls, row_data: dict) -> None:

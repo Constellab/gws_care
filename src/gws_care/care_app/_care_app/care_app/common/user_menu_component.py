@@ -78,6 +78,14 @@ def user_menu_button() -> rx.Component:
         rx.popover.content(
             rx.vstack(
                 rx.cond(
+                    RoleState.is_patient_user,
+                    _menu_nav_button(
+                        "user",
+                        LanguageState.tr["nav_my_details"],
+                        "/my-details",
+                    ),
+                ),
+                rx.cond(
                     RoleState.switchable_roles.length() > 0,
                     _menu_nav_button(
                         "repeat-2",

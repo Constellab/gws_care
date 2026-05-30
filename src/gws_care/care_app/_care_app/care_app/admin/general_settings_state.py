@@ -49,10 +49,11 @@ class GeneralSettingsState(RoleState):
     @rx.event
     async def on_load(self):
         try:
-            with await self.authenticate_user():
-                from gws_care.core.care_app_config_service import CareAppConfigService
-                self.page_size = str(CareAppConfigService.get_page_size())
-                self.color_theme = CareAppConfigService.get_color_theme()
+            with await self.authenticate_user() as auth_user:
+                user_id = str(auth_user.id)
+                from gws_care.user.user_app_config_service import UserAppConfigService
+                self.page_size = str(UserAppConfigService.get_page_size(user_id))
+                self.color_theme = UserAppConfigService.get_color_theme(user_id)
         except Exception:
             self.page_size = "50"
             self.color_theme = "green"
@@ -61,9 +62,10 @@ class GeneralSettingsState(RoleState):
     async def load_color_theme(self):
         """Lightweight event to load only the color theme (called on every page)."""
         try:
-            with await self.authenticate_user():
-                from gws_care.core.care_app_config_service import CareAppConfigService
-                self.color_theme = CareAppConfigService.get_color_theme()
+            with await self.authenticate_user() as auth_user:
+                user_id = str(auth_user.id)
+                from gws_care.user.user_app_config_service import UserAppConfigService
+                self.color_theme = UserAppConfigService.get_color_theme(user_id)
         except Exception:
             self.color_theme = "green"
 
@@ -79,9 +81,10 @@ class GeneralSettingsState(RoleState):
         self.save_page_size_success = ""
         self.save_page_size_error = ""
         try:
-            with await self.authenticate_user():
-                from gws_care.core.care_app_config_service import CareAppConfigService
-                CareAppConfigService.save_page_size(int(self.page_size))
+            with await self.authenticate_user() as auth_user:
+                user_id = str(auth_user.id)
+                from gws_care.user.user_app_config_service import UserAppConfigService
+                UserAppConfigService.save_page_size(user_id, int(self.page_size))
             self.save_page_size_success = "Enregistré."
         except Exception as e:
             self.save_page_size_error = f"Erreur : {e}"
@@ -96,9 +99,10 @@ class GeneralSettingsState(RoleState):
         self.save_theme_error = ""
         self.is_saving_theme = True
         try:
-            with await self.authenticate_user():
-                from gws_care.core.care_app_config_service import CareAppConfigService
-                CareAppConfigService.save_color_theme(theme)
+            with await self.authenticate_user() as auth_user:
+                user_id = str(auth_user.id)
+                from gws_care.user.user_app_config_service import UserAppConfigService
+                UserAppConfigService.save_color_theme(user_id, theme)
             self.save_theme_success = "Enregistré."
         except Exception as e:
             self.save_theme_error = f"Erreur : {e}"

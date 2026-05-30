@@ -5,7 +5,6 @@ from datetime import date, datetime
 from gws_core import BadRequestException, NotFoundException
 
 from gws_care.account.account import Account
-from gws_care.appointment.appointment import Appointment
 from gws_care.campaign.campaign import Campaign
 from gws_care.campaign.campaign_dto import CampaignRowDTO, SaveCampaignDTO
 from gws_care.campaign.campaign_exam_type import CampaignExamType
@@ -124,10 +123,6 @@ class CampaignService:
         campaign.account = account
         cls._apply_dto(campaign, dto)
         campaign.save()
-
-        # If dates changed, check appointment coherence (raises if incompatible)
-        if new_start != old_start or new_end != campaign.end_date:
-            cls._check_appointment_dates(campaign, new_start, new_end)
 
         return campaign
 
@@ -512,23 +507,3 @@ class CampaignService:
         campaign.end_date = date.fromisoformat(dto.end_date)
         campaign.notes = dto.notes
 
-    @classmethod
-    def _check_appointment_dates(cls, campaign: Campaign, new_start: date, new_end: date) -> None:
-        """Raise if any linked appointments fall outside the campaign date window."""
-        from gws_care.visit.visit import Visit
-        incompatible = (
-            Appointment.select()
-            .where(Appointment.visit.is_null(False))
-            .join(Visit, on=(Visit.id == Appointment.visit))
-            .where(Visit.campaign == campaign.id)
-            .where(
-                (Appointment.scheduled_at < datetime.combine(new_start, datetime.min.time())) |
-                (Appointment.scheduled_at > datetime.combine(new_end, datetime.max.time()))
-            )
-        )
-        count = incompatible.count()
-        if count > 0:
-            raise BadRequestException(
-                f"{count} appointment(s) fall outside the new campaign date range "
-                f"({new_start} — {new_end}). Please adjust or remove them first."
-            )

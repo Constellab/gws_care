@@ -316,6 +316,14 @@ def _import_tab() -> rx.Component:
                         color_scheme="blue",
                         size="2",
                     ),
+                    rx.button(
+                        rx.icon("stethoscope", size=14),
+                        LanguageState.tr["import_doctors_btn"],
+                        on_click=lambda: ImportState.open_import_dialog("doctors"),
+                        variant="outline",
+                        color_scheme="blue",
+                        size="2",
+                    ),
                     spacing="3",
                     wrap="wrap",
                 ),
@@ -665,28 +673,43 @@ def _notifications_tab() -> rx.Component:
 
 # ── Page ───────────────────────────────────────────────────────────────────────
 
+def _settings_header_admin() -> rx.Component:
+    return rx.hstack(
+        rx.icon("settings", size=22, color="var(--accent-9)"),
+        rx.heading(LanguageState.tr["settings_title"], size="6"),
+        rx.spacer(),
+        rx.badge(
+            LanguageState.tr["settings_admin_only"],
+            color_scheme="red",
+            variant="soft",
+            size="2",
+        ),
+        width="100%",
+        align="center",
+        spacing="2",
+    )
+
+
+def _settings_header_user() -> rx.Component:
+    return rx.hstack(
+        rx.icon("settings", size=22, color="var(--accent-9)"),
+        rx.heading(LanguageState.tr["settings_title"], size="6"),
+        width="100%",
+        align="center",
+        spacing="2",
+    )
+
+
 def settings_page() -> rx.Component:
-    """Settings page — import, user roles, and notification configuration."""
+    """Settings page — full 4-tab view for admin, General-only for other roles."""
     return main_component(
         page_layout(
             import_dialog(),
             rx.cond(
                 AdminState.is_admin,
+                # ── Admin view: 4 tabs ────────────────────────────────────────
                 rx.vstack(
-                    rx.hstack(
-                        rx.icon("settings", size=22, color="var(--accent-9)"),
-                        rx.heading(LanguageState.tr["settings_title"], size="6"),
-                        rx.spacer(),
-                        rx.badge(
-                            LanguageState.tr["settings_admin_only"],
-                            color_scheme="red",
-                            variant="soft",
-                            size="2",
-                        ),
-                        width="100%",
-                        align="center",
-                        spacing="2",
-                    ),
+                    _settings_header_admin(),
                     rx.tabs.root(
                         rx.tabs.list(
                             rx.tabs.trigger(
@@ -736,18 +759,28 @@ def settings_page() -> rx.Component:
                     width="100%",
                     spacing="4",
                 ),
-                rx.center(
+                # ── Non-admin view: General tab only ──────────────────────────
+                rx.cond(
+                    AdminState.has_any_role,
                     rx.vstack(
-                        rx.icon("lock", size=40, color="var(--gray-7)"),
-                        rx.text(
-                            LanguageState.tr["access_denied"],
-                            size="3",
-                            color="var(--gray-9)",
-                        ),
-                        spacing="3",
-                        align="center",
+                        _settings_header_user(),
+                        _general_tab(),
+                        width="100%",
+                        spacing="4",
                     ),
-                    padding="4rem",
+                    rx.center(
+                        rx.vstack(
+                            rx.icon("lock", size=40, color="var(--gray-7)"),
+                            rx.text(
+                                LanguageState.tr["access_denied"],
+                                size="3",
+                                color="var(--gray-9)",
+                            ),
+                            spacing="3",
+                            align="center",
+                        ),
+                        padding="4rem",
+                    ),
                 ),
             ),
         )

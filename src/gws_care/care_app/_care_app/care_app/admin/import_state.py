@@ -88,6 +88,21 @@ _PATIENT_TEMPLATE = (
     "THOMAS,Nathalie,,1994-04-08,F,Marcory Biétry,,Abidjan,+2250701000068,nathalie.thomas@email.ci,,,,1940408FR018,61,163\n"
     "LAMBERT,Henri,,1980-07-19,M,Plateau Clozel,,Abidjan,+2250701000069,henri.lambert@email.ci,,,,1800719FR019,,180\n"
     "SÉKA,Patricia,,1991-12-03,F,Riviera 2 Rue Jardins,,Abidjan,+2250701000070,patricia.seka@email.ci,,,,1911203CI051,58,161\n"
+    # ── Renault Trucks - Lyon (2 patients) ───────────────────────────────────
+    "RENAUD,Pierre,,1981-04-15,M,12 Rue de la Paix,69001,Lyon,+33612345671,pierre.renaud@email.fr,,,Renault Trucks,1810415FR020,,178\n"
+    "FAURE,Isabelle,,1989-07-22,F,5 Place Bellecour,69002,Lyon,+33612345672,isabelle.faure@email.fr,,,Renault Trucks,1890722FR021,62,165\n"
+    # ── bioMérieux - Lyon (2 patients) ───────────────────────────────────────
+    "GARNIER,Marc,,1976-11-08,M,18 Rue de la République,69002,Lyon,+33612345673,marc.garnier@email.fr,,,bioMérieux,1761108FR022,,175\n"
+    "LECLERC,Chloé,,1994-03-30,F,7 Cours Lafayette,69003,Lyon,+33612345674,chloe.leclerc@email.fr,,,bioMérieux,1940330FR023,58,162\n"
+    # ── GL Events - Lyon (2 patients) ────────────────────────────────────────
+    "ROUSSEAU,Éric,,1983-09-14,M,25 Avenue Foch,69006,Lyon,+33612345675,eric.rousseau@email.fr,,,GL Events,1830914FR024,,182\n"
+    "BLANC,Nathalie,,1991-06-28,F,3 Rue Mercière,69002,Lyon,+33612345676,nathalie.blanc@email.fr,,,GL Events,1910628FR025,65,168\n"
+    # ── Caisse d'Épargne Rhône Alpes - Lyon (2 patients) ─────────────────────
+    "CHEVALLIER,Sophie,,1986-01-19,F,15 Quai Saint-Antoine,69002,Lyon,+33612345677,sophie.chevallier@email.fr,Dr. Dupont,+33472100001,Caisse d'Épargne Rhône Alpes,1860119FR026,68,170\n"
+    "PERRIN,Olivier,,1978-10-05,M,42 Rue Garibaldi,69003,Lyon,+33612345678,olivier.perrin@email.fr,,,Caisse d'Épargne Rhône Alpes,1781005FR027,,180\n"
+    # ── Sanofi Lyon (2 patients) ──────────────────────────────────────────────
+    "VASSEUR,Anne,,1995-05-12,F,8 Rue Herriot,69001,Lyon,+33612345679,anne.vasseur@email.fr,,,Sanofi Lyon,1950512FR028,57,161\n"
+    "BERTRAND,Julien,,1972-02-27,M,33 Avenue Berthelot,69007,Lyon,+33612345680,julien.bertrand@email.fr,,,Sanofi Lyon,1720227FR029,,177\n"
 )
 
 _ACCOUNT_TEMPLATE = (
@@ -117,6 +132,29 @@ _ACCOUNT_TEMPLATE = (
     "Pharmacie Centrale CI,CI-ABJ-1960-B-0011,Plateau Rue Lepic,BP 2095,Abidjan,+2252022270000,pharmaCI@pharmacie.ci,Mme. Doumbia\n"
     "CHU de Cocody,CI-ABJ-1970-B-0012,Boulevard de la Corniche Cocody,BP 23,Abidjan,+2252022444000,chu.cocody@sante.ci,M. Yapi\n"
     "SIC CACAO,CI-ABJ-1978-B-1313,Zone Industrielle de Vridi Nord,BP 1393,Abidjan,+2252023460000,contact@siccacao.ci,M. Méité\n"
+    # ── Lyon accounts ─────────────────────────────────────────────────────────
+    "Renault Trucks,FR-69-2001-T-001,99 Route de Lyon,69150,Décines-Charpieu,+33472147000,contact@renaulttrucks.com,M. Renaud\n"
+    "bioMérieux,FR-69-1964-B-002,376 Chemin de l'Orme,69280,Marcy-l'Étoile,+33478874000,contact@biomerieux.com,Mme. Garnier\n"
+    "GL Events,FR-69-1978-G-003,59 Quai Rambaud,69002,Lyon,+33478149000,contact@gl-events.com,M. Rousseau\n"
+    "Caisse d'Épargne Rhône Alpes,FR-69-1950-C-004,42 Boulevard Eugène Deruelle,69432,Lyon,+33826468460,contact@cera.fr,Mme. Chevallier\n"
+    "Sanofi Lyon,FR-69-1976-S-005,14 Avenue Jean Monnet,69800,Saint-Priest,+33472223000,contact.lyon@sanofi.com,M. Vasseur\n"
+)
+
+
+_DOCTOR_TEMPLATE = (
+    "last_name,first_name,specialization,phone,email,rpps_number,address\n"
+    # ── Abidjan doctors (5) ───────────────────────────────────────────────────
+    "KONÉ,Aminata,Médecine du travail,+2250701100001,aminata.kone@medecin.ci,,Centre Médical Plateau Abidjan\n"
+    "BAMBA,Souleymane,Médecine du travail,+2250701100002,souleymane.bamba@medecin.ci,,Cabinet Médical Cocody Abidjan\n"
+    "OUATTARA,Fatoumata,Médecine générale,+2250701100003,fatoumata.ouattara@medecin.ci,,Polyclinique Yopougon Abidjan\n"
+    "DIALLO,Abdoulaye,Médecine du travail,+2250701100004,abdoulaye.diallo@medecin.ci,,Clinique Marcory Abidjan\n"
+    "N'GUESSAN,Marie-Claire,Cardiologie,+2250701100005,marieclaire.nguessan@medecin.ci,,Cabinet Spécialisé Riviera Abidjan\n"
+    # ── Lyon doctors (5) ─────────────────────────────────────────────────────
+    "DUPONT,Marie,Médecine du travail,+33472100001,marie.dupont@medecin.fr,10234567890,12 Rue de la Part-Dieu 69003 Lyon\n"
+    "MARTIN,Thomas,Médecine du travail,+33472100002,thomas.martin@medecin.fr,10234567891,5 Place des Terreaux 69001 Lyon\n"
+    "LAMBERT,Pierre,Médecine du travail,+33472100003,pierre.lambert@medecin.fr,10234567892,25 Avenue de Saxe 69007 Lyon\n"
+    "ROUSSEAU,Isabelle,Médecine générale,+33472100004,isabelle.rousseau@medecin.fr,10234567893,8 Boulevard des Belges 69006 Lyon\n"
+    "BOYER,Sandrine,Cardiologie,+33472100005,sandrine.boyer@medecin.fr,10234567894,17 Rue Garibaldi 69003 Lyon\n"
 )
 
 
@@ -190,6 +228,11 @@ class ImportState(ReflexMainState):
                 data=_PATIENT_TEMPLATE.encode("utf-8"),
                 filename="patients_import_template.csv",
             )
+        if self.import_type == "doctors":
+            return rx.download(
+                data=_DOCTOR_TEMPLATE.encode("utf-8"),
+                filename="doctors_import_template.csv",
+            )
         return rx.download(
             data=_ACCOUNT_TEMPLATE.encode("utf-8"),
             filename="accounts_import_template.csv",
@@ -216,6 +259,8 @@ class ImportState(ReflexMainState):
             from gws_care.core.bulk_import_service import BulkImportService
             if self.import_type == "patients":
                 parse_result = BulkImportService.parse_patients_csv(content)
+            elif self.import_type == "doctors":
+                parse_result = BulkImportService.parse_doctors_csv(content)
             else:
                 parse_result = BulkImportService.parse_accounts_csv(content)
 
@@ -224,11 +269,12 @@ class ImportState(ReflexMainState):
                 return
 
             self._raw_rows = [r.row_data for r in parse_result.rows]
-            self.preview_headers = (
-                ["#", "Last Name", "First Name", "Date of Birth", "Gender", "Status"]
-                if self.import_type == "patients"
-                else ["#", "Name", "City", "Phone", "Status"]
-            )
+            if self.import_type == "patients":
+                self.preview_headers = ["#", "Last Name", "First Name", "Date of Birth", "Gender", "Status"]
+            elif self.import_type == "doctors":
+                self.preview_headers = ["#", "Last Name", "First Name", "Specialization", "Status"]
+            else:
+                self.preview_headers = ["#", "Name", "City", "Phone", "Status"]
             self.preview_rows = self._build_preview_rows(parse_result)
         except Exception as e:
             self.parse_error = f"Erreur de lecture : {e}"
@@ -260,6 +306,8 @@ class ImportState(ReflexMainState):
                     try:
                         if self.import_type == "patients":
                             BulkImportService.import_patient_row(row_data)
+                        elif self.import_type == "doctors":
+                            BulkImportService.import_doctor_row(row_data)
                         else:
                             BulkImportService.import_account_row(row_data)
 
@@ -318,6 +366,14 @@ class ImportState(ReflexMainState):
                     r.row_data.get("first_name", ""),
                     r.row_data.get("date_of_birth", ""),
                     gender,
+                    status_text,
+                ]
+            elif self.import_type == "doctors":
+                cells = [
+                    str(r.row_num),
+                    r.row_data.get("last_name", ""),
+                    r.row_data.get("first_name", ""),
+                    r.row_data.get("specialization", ""),
                     status_text,
                 ]
             else:

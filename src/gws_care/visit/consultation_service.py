@@ -5,8 +5,10 @@ from datetime import datetime
 from gws_core import BadRequestException, NotFoundException
 
 from gws_care.patient.patient import Patient
+from gws_care.visit.appointment_mode import AppointmentMode
 from gws_care.visit.consultation_visit_status import ConsultationVisitStatus
 from gws_care.visit.visit import Visit
+from gws_care.visit.visit_dto import BookAppointmentDTO
 from gws_care.visit.visit_type import VisitType
 
 
@@ -101,6 +103,42 @@ class ConsultationService:
                 visit.scheduled_at = datetime.fromisoformat(scheduled_at_str)
             except ValueError:
                 raise BadRequestException(f"Invalid scheduled_at format: '{scheduled_at_str}'")
+        visit.save()
+        return visit
+
+    @classmethod
+    def create_from_patient_booking(cls, dto: BookAppointmentDTO, patient_id: str) -> Visit:
+        """Create a consultation visit from a patient self-booking request."""
+        patient = Patient.get_or_none(Patient.id == patient_id)
+        if patient is None:
+            raise NotFoundException(f"Patient '{patient_id}' not found")
+
+        try:
+            scheduled_at = datetime.fromisoformat(dto.scheduled_at)
+        except (ValueError, TypeError):
+            raise BadRequestException(f"Invalid scheduled_at format: '{dto.scheduled_at}'")
+
+        try:
+            mode = AppointmentMode(dto.appointment_mode) if dto.appointment_mode else AppointmentMode.ONSITE
+        except ValueError:
+            mode = AppointmentMode.ONSITE
+
+        doctor_id = None
+        if dto.doctor_id:
+            from gws_care.doctor.medical_doctor import MedicalDoctor
+            doctor = MedicalDoctor.get_or_none(MedicalDoctor.id == dto.doctor_id)
+            if doctor is None:
+                raise BadRequestException(f"Doctor '{dto.doctor_id}' not found")
+            doctor_id = doctor.id
+
+        visit = Visit()
+        visit.visit_type = VisitType.CONSULTATION
+        visit.patient = patient
+        visit.consultation_visit_status = ConsultationVisitStatus.SCHEDULED
+        visit.scheduled_at = scheduled_at
+        visit.doctor_id = doctor_id
+        visit.appointment_mode = mode
+        visit.patient_notes = dto.patient_notes or None
         visit.save()
         return visit
 

@@ -61,12 +61,13 @@ class AdminState(RoleState):
     @rx.event
     async def on_load(self):
         await self._load_roles()
-        redirect = await self._require_any_of(self.is_admin)
+        redirect = await self._require_any_of(self.has_any_role, redirect_to="/dashboard")
         if redirect:
             return redirect
-        # Load options first so labels are available for chip resolution in _load_users
-        await self._load_entity_options()
-        await self._load_users()
+        # Admin-only data (user roles, entity options) — skip for non-admin
+        if self.is_admin:
+            await self._load_entity_options()
+            await self._load_users()
 
     @rx.event
     async def toggle_role(self, user_id: str, role: str):

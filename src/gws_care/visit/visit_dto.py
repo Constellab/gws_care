@@ -5,6 +5,7 @@ from typing import Optional
 
 from gws_core import BaseModelDTO, ModelDTO
 
+from gws_care.visit.appointment_mode import AppointmentMode
 from gws_care.visit.campaign_visit_status import CampaignVisitStatus
 from gws_care.visit.consultation_visit_status import ConsultationVisitStatus
 from gws_care.visit.visit_type import VisitType
@@ -23,6 +24,12 @@ class VisitDTO(ModelDTO):
     scheduled_at: datetime | None = None
     campaign_visit_status: CampaignVisitStatus
     consultation_visit_status: Optional[ConsultationVisitStatus] = None
+
+    # Appointment booking fields
+    doctor_id: str | None = None
+    doctor_name: str | None = None
+    appointment_mode: AppointmentMode | None = None
+    patient_notes: str | None = None
 
     # Interpretation text (authorship tracked in CampaignVisitValidationWorkflow)
     doctor_clinic_interpretation: str | None = None
@@ -70,3 +77,12 @@ class SaveStandaloneVisitDTO(BaseModelDTO):
     billing_account_id: str | None = None
     scheduled_at: str          # ISO datetime string (YYYY-MM-DDTHH:MM)
     notes: str | None = None
+
+
+class BookAppointmentDTO(BaseModelDTO):
+    """DTO submitted when a patient self-books a consultation appointment."""
+
+    scheduled_at: str                   # ISO datetime string (YYYY-MM-DDTHH:MM)
+    doctor_id: str | None = None
+    appointment_mode: str = "onsite"    # AppointmentMode value
+    patient_notes: str | None = None

@@ -201,7 +201,7 @@ class NotificationService:
         sent_by: User | None,
         patient=None,
         account=None,
-        appointment=None,
+        visit=None,
         extra_data: dict | None = None,
         recipient_user: User | None = None,
         parent_log: NotificationLog | None = None,
@@ -220,7 +220,7 @@ class NotificationService:
         log.parent_log = parent_log
         log.patient = patient
         log.account = account
-        log.related_appointment = appointment
+        log.related_visit = visit
         log.extra_data = extra_data
         log.save()
         return log
@@ -394,13 +394,13 @@ class NotificationService:
 
     @classmethod
     def send_appointment_reminder(
-        cls, appointment, days_before: int, sent_by: User | None = None
+        cls, visit, days_before: int, sent_by: User | None = None
     ) -> NotificationLog | None:
-        """Send a reminder email for a single appointment.
+        """Send a reminder email for a scheduled consultation visit.
 
         Returns None if the patient has no email.
         """
-        patient = appointment.patient
+        patient = visit.patient
         if not patient.email:
             return None
 
@@ -408,8 +408,7 @@ class NotificationService:
         body = (
             f"Dear {patient.get_full_name()},\n\n"
             f"This is a reminder that you have an appointment scheduled on "
-            f"{appointment.scheduled_at.strftime('%A %d %B %Y at %H:%M')}.\n\n"
-            f"Exam type: {appointment.exam_type.get_label()}\n\n"
+            f"{visit.scheduled_at.strftime('%A %d %B %Y at %H:%M')}.\n\n"
             f"Please contact us if you need to reschedule.\n\nBest regards,\nConstellab Care"
         )
 
@@ -423,7 +422,7 @@ class NotificationService:
             recipient_name=patient.get_full_name(),
             sent_by=sent_by,
             patient=patient,
-            appointment=appointment,
+            visit=visit,
             extra_data={"days_before": days_before},
         )
         success = cls._dispatch(NotificationChannel.EMAIL.value, patient.email, patient.phone, patient.get_full_name(), subject, body)
@@ -432,10 +431,11 @@ class NotificationService:
 
     @classmethod
     def process_appointment_reminders(cls, user: User) -> int:
-        """Send reminders for all upcoming appointments matching user preferences.
+        """Send reminders for all upcoming consultation visits matching user preferences.
 
-        Skips appointments that already have a reminder logged for the same
-        (appointment_id, days_before) combination today.
+        Queries CONSULTATION-type Visits with a scheduled_at on the target date.
+        Skips visits that already have a reminder logged for the same
+        (visit_id, days_before) combination today.
 
         Returns the number of reminders dispatched.
         """
@@ -445,8 +445,9 @@ class NotificationService:
         if not pref.email_reminders_enabled or not pref.reminder_days:
             return 0
 
-        from gws_care.appointment.appointment import Appointment
-        from gws_care.appointment.appointment_status import AppointmentStatus
+        from gws_care.visit.consultation_visit_status import ConsultationVisitStatus
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.visit_type import VisitType
 
         count = 0
         today = date.today()
@@ -457,20 +458,20 @@ class NotificationService:
             target_dt_end = f"{target_date.isoformat()}T23:59:59"
 
             upcoming = list(
-                Appointment.select()
+                Visit.select()
                 .where(
-                    Appointment.scheduled_at >= target_dt_start,
-                    Appointment.scheduled_at <= target_dt_end,
-                    Appointment.status == AppointmentStatus.SCHEDULED,
+                    Visit.visit_type == VisitType.CONSULTATION,
+                    Visit.scheduled_at >= target_dt_start,
+                    Visit.scheduled_at <= target_dt_end,
+                    Visit.consultation_visit_status == ConsultationVisitStatus.SCHEDULED,
                 )
             )
 
-            for appt in upcoming:
-                # Skip if already sent a reminder for this appt + days combo today
+            for visit in upcoming:
                 already_sent = (
                     NotificationLog.select()
                     .where(
-                        NotificationLog.related_appointment == appt.id,
+                        NotificationLog.related_visit == visit.id,
                         NotificationLog.notification_type == NotificationType.APPOINTMENT_REMINDER,
                         NotificationLog.status == NotificationStatus.SENT,
                     )
@@ -482,7 +483,7 @@ class NotificationService:
                 if already_sent:
                     continue
 
-                cls.send_appointment_reminder(appt, days_before=days, sent_by=user)
+                cls.send_appointment_reminder(visit, days_before=days, sent_by=user)
                 count += 1
 
         return count
@@ -501,15 +502,17 @@ class NotificationService:
         """
         Daily scheduler method: send appointment reminders at J-15, J-3, and J-1.
 
+        Queries CONSULTATION-type Visits with a scheduled_at on the target date.
         Each reminder is idempotent — a second call on the same day for the same
-        (appointment, NotificationType) pair will be skipped.
+        (visit_id, NotificationType) pair will be skipped.
 
         Returns the number of reminders dispatched.
         """
         from datetime import date, timedelta
 
-        from gws_care.appointment.appointment import Appointment
-        from gws_care.appointment.appointment_status import AppointmentStatus
+        from gws_care.visit.consultation_visit_status import ConsultationVisitStatus
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.visit_type import VisitType
 
         count = 0
         today = date.today()
@@ -520,20 +523,20 @@ class NotificationService:
             target_dt_end = f"{target_date.isoformat()}T23:59:59"
 
             upcoming = list(
-                Appointment.select()
+                Visit.select()
                 .where(
-                    Appointment.scheduled_at >= target_dt_start,
-                    Appointment.scheduled_at <= target_dt_end,
-                    Appointment.status == AppointmentStatus.SCHEDULED,
+                    Visit.visit_type == VisitType.CONSULTATION,
+                    Visit.scheduled_at >= target_dt_start,
+                    Visit.scheduled_at <= target_dt_end,
+                    Visit.consultation_visit_status == ConsultationVisitStatus.SCHEDULED,
                 )
             )
 
-            for appt in upcoming:
-                # Skip if already attempted this typed reminder for this appointment
+            for visit in upcoming:
                 already_sent = (
                     NotificationLog.select()
                     .where(
-                        NotificationLog.related_appointment == appt.id,
+                        NotificationLog.related_visit == visit.id,
                         NotificationLog.notification_type == notif_type,
                     )
                     .exists()
@@ -541,7 +544,7 @@ class NotificationService:
                 if already_sent:
                     continue
 
-                patient = appt.patient
+                patient = visit.patient
                 if not patient.email:
                     continue
 
@@ -549,8 +552,7 @@ class NotificationService:
                 body = (
                     f"Cher(e) {patient.get_full_name()},\n\n"
                     f"Nous vous rappelons que vous avez un rendez-vous prévu dans {days_before} jour(s), "
-                    f"le {appt.scheduled_at.strftime('%A %d %B %Y à %H:%M')}.\n\n"
-                    f"Type d'examen : {appt.exam_type.get_label()}\n\n"
+                    f"le {visit.scheduled_at.strftime('%A %d %B %Y à %H:%M')}.\n\n"
                     f"Contactez-nous si vous devez modifier ce rendez-vous.\n\nCordialement,\nConstellab Care"
                 )
 
@@ -564,7 +566,7 @@ class NotificationService:
                     recipient_name=patient.get_full_name(),
                     sent_by=None,
                     patient=patient,
-                    appointment=appt,
+                    visit=visit,
                     extra_data={"days_before": days_before},
                 )
                 success = cls._dispatch(

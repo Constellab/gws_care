@@ -539,6 +539,12 @@ class VisitListState(CombinedPickerState):
                     vt_filter = VisitType.CAMPAIGN
                 elif self.filter_visit_type == "consultation":
                     vt_filter = VisitType.CONSULTATION
+                # Scope to the doctor's own visits when a DOCTOR-role user is linked
+                # to a MedicalDoctor record. Admins and unlinked doctors see all.
+                scoped_doctor_id = None
+                if self._linked_doctor_id and not self.is_admin and self.is_doctor:
+                    scoped_doctor_id = self._linked_doctor_id
+
                 visits = CampaignVisitService.list_all(
                     visit_type=vt_filter,
                     status=status_filter,
@@ -546,6 +552,7 @@ class VisitListState(CombinedPickerState):
                     account_id=self.filter_account_id or None,
                     date_from=self.filter_date_from or None,
                     date_to=self.filter_date_to or None,
+                    doctor_id=scoped_doctor_id,
                     limit=(self._current_page_size + 1) if page_limit else None,
                     offset=self._page_offset if not is_calendar else 0,
                 )

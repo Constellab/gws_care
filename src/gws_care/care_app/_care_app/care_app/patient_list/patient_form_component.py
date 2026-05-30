@@ -4,190 +4,10 @@ import reflex as rx
 from gws_reflex_base import form_dialog_component
 
 from ..common.language_state import LanguageState
-from .patient_form_state import AccountPickerRowDTO, DoctorPickerRowDTO, PatientFormState
-
-
-def _account_picker_row(account: AccountPickerRowDTO) -> rx.Component:
-    """One row in the account picker table inside the patient form."""
-    return rx.table.row(
-        rx.table.cell(rx.text(account.name, size="2", weight="medium")),
-        rx.table.cell(
-            rx.cond(
-                account.city,
-                rx.text(account.city, size="2"),
-                rx.text("—", size="2", color="var(--gray-8)"),
-            )
-        ),
-        _hover={"background_color": "var(--accent-2)", "cursor": "pointer"},
-        on_click=lambda: PatientFormState.acct_picker_confirm(account.id, account.name),
-    )
-
-
-def _account_picker_dialog() -> rx.Component:
-    """Account picker dialog embedded in the patient form."""
-    return rx.dialog.root(
-        rx.dialog.content(
-            rx.dialog.title(LanguageState.tr["acct_picker_title"]),
-            rx.vstack(
-                rx.input(
-                    rx.input.slot(rx.icon("search", size=14)),
-                    placeholder=LanguageState.tr["acct_picker_filter_placeholder"],
-                    value=PatientFormState.acct_picker_filter,
-                    on_change=PatientFormState.acct_picker_set_filter,
-                    size="2",
-                    width="100%",
-                ),
-                rx.cond(
-                    PatientFormState.acct_picker_error != "",
-                    rx.callout(
-                        PatientFormState.acct_picker_error,
-                        icon="triangle-alert",
-                        color_scheme="red",
-                        size="1",
-                    ),
-                ),
-                rx.cond(
-                    PatientFormState.acct_picker_is_loading,
-                    rx.center(rx.spinner(size="2"), padding="1.5rem"),
-                    rx.cond(
-                        PatientFormState.acct_picker_accounts.length() > 0,
-                        rx.box(
-                            rx.table.root(
-                                rx.table.header(
-                                    rx.table.row(
-                                        rx.table.column_header_cell(LanguageState.tr["col_account_name"]),
-                                        rx.table.column_header_cell(LanguageState.tr["field_city"]),
-                                    )
-                                ),
-                                rx.table.body(
-                                    rx.foreach(PatientFormState.acct_picker_accounts, _account_picker_row)
-                                ),
-                                width="100%",
-                                variant="surface",
-                            ),
-                            max_height="320px",
-                            overflow_y="auto",
-                            width="100%",
-                        ),
-                        rx.center(
-                            rx.text(LanguageState.tr["no_accounts_found"], size="2", color="var(--gray-9)"),
-                            padding="1.5rem",
-                        ),
-                    ),
-                ),
-                rx.hstack(
-                    rx.button(
-                        LanguageState.tr["cancel_btn"],
-                        variant="soft",
-                        color_scheme="gray",
-                        on_click=PatientFormState.close_account_picker,
-                    ),
-                    justify="end",
-                    width="100%",
-                ),
-                spacing="3",
-                width="100%",
-            ),
-            on_interact_outside=PatientFormState.close_account_picker,
-            on_escape_key_down=PatientFormState.close_account_picker,
-            max_width="500px",
-        ),
-        open=PatientFormState.acct_picker_is_open,
-    )
-
-
-
-def _doctor_picker_row(doctor: DoctorPickerRowDTO) -> rx.Component:
-    """One row in the doctor picker table inside the patient form."""
-    return rx.table.row(
-        rx.table.cell(rx.text(doctor.full_name, size="2", weight="medium")),
-        rx.table.cell(
-            rx.cond(
-                doctor.specialization != "",
-                rx.text(doctor.specialization, size="2"),
-                rx.text("—", size="2", color="var(--gray-8)"),
-            )
-        ),
-        _hover={"background_color": "var(--accent-2)", "cursor": "pointer"},
-        on_click=lambda: PatientFormState.doc_picker_confirm(doctor.id, doctor.full_name),
-    )
-
-
-def _doctor_picker_dialog() -> rx.Component:
-    """Doctor picker dialog embedded in the patient form."""
-    return rx.dialog.root(
-        rx.dialog.content(
-            rx.dialog.title(LanguageState.tr["select_doctor_placeholder"]),
-            rx.vstack(
-                rx.input(
-                    rx.input.slot(rx.icon("search", size=14)),
-                    placeholder=LanguageState.tr["select_doctor_placeholder"],
-                    value=PatientFormState.doc_picker_filter,
-                    on_change=PatientFormState.doc_picker_set_filter,
-                    size="2",
-                    width="100%",
-                ),
-                rx.cond(
-                    PatientFormState.doc_picker_error != "",
-                    rx.callout(
-                        PatientFormState.doc_picker_error,
-                        icon="triangle-alert",
-                        color_scheme="red",
-                        size="1",
-                    ),
-                ),
-                rx.cond(
-                    PatientFormState.doc_picker_is_loading,
-                    rx.center(rx.spinner(size="2"), padding="1.5rem"),
-                    rx.cond(
-                        PatientFormState.doc_picker_rows.length() > 0,
-                        rx.box(
-                            rx.table.root(
-                                rx.table.header(
-                                    rx.table.row(
-                                        rx.table.column_header_cell(LanguageState.tr["field_physician_name"]),
-                                        rx.table.column_header_cell(LanguageState.tr["col_specialization"]),
-                                    )
-                                ),
-                                rx.table.body(
-                                    rx.foreach(PatientFormState.doc_picker_rows, _doctor_picker_row)
-                                ),
-                                width="100%",
-                                variant="surface",
-                            ),
-                            max_height="320px",
-                            overflow_y="auto",
-                            width="100%",
-                        ),
-                        rx.center(
-                            rx.text(LanguageState.tr["no_doctors_found"], size="2", color="var(--gray-9)"),
-                            padding="1.5rem",
-                        ),
-                    ),
-                ),
-                rx.hstack(
-                    rx.button(
-                        LanguageState.tr["cancel_btn"],
-                        variant="soft",
-                        color_scheme="gray",
-                        on_click=PatientFormState.close_doctor_picker,
-                    ),
-                    justify="end",
-                    width="100%",
-                ),
-                spacing="3",
-                width="100%",
-            ),
-            on_interact_outside=PatientFormState.close_doctor_picker,
-            on_escape_key_down=PatientFormState.close_doctor_picker,
-            max_width="500px",
-        ),
-        open=PatientFormState.doc_picker_is_open,
-    )
+from .patient_form_state import PatientFormState
 
 
 def _field(label: str, input_component: rx.Component) -> rx.Component:
-    """Render a labeled form field."""
     return rx.vstack(
         rx.text(label, size="2", weight="medium"),
         input_component,
@@ -197,12 +17,7 @@ def _field(label: str, input_component: rx.Component) -> rx.Component:
 
 
 def _form_fields() -> rx.Component:
-    """Build the form content with all patient fields."""
     return rx.vstack(
-        # Picker dialogs nested here so they live inside the outer form dialog's
-        # DOM tree — required for Radix nested dialogs.
-        _account_picker_dialog(),
-        _doctor_picker_dialog(),
         rx.grid(
             _field(
                 LanguageState.tr["field_last_name"],
@@ -210,8 +25,7 @@ def _form_fields() -> rx.Component:
                     value=PatientFormState.form_last_name,
                     on_change=PatientFormState.set_form_last_name,
                     placeholder=LanguageState.tr["placeholder_last_name"],
-                    size="2",
-                    width="100%",
+                    size="2", width="100%",
                 ),
             ),
             _field(
@@ -220,13 +34,10 @@ def _form_fields() -> rx.Component:
                     value=PatientFormState.form_first_name,
                     on_change=PatientFormState.set_form_first_name,
                     placeholder=LanguageState.tr["placeholder_first_name"],
-                    size="2",
-                    width="100%",
+                    size="2", width="100%",
                 ),
             ),
-            columns="2",
-            spacing="3",
-            width="100%",
+            columns="2", spacing="3", width="100%",
         ),
         _field(
             LanguageState.tr["field_birth_name"],
@@ -234,8 +45,7 @@ def _form_fields() -> rx.Component:
                 value=PatientFormState.form_birth_name,
                 on_change=PatientFormState.set_form_birth_name,
                 placeholder=LanguageState.tr["birth_name_placeholder"],
-                size="2",
-                width="100%",
+                size="2", width="100%",
             ),
         ),
         rx.grid(
@@ -244,9 +54,7 @@ def _form_fields() -> rx.Component:
                 rx.input(
                     value=PatientFormState.form_date_of_birth,
                     on_change=PatientFormState.set_form_date_of_birth,
-                    type="date",
-                    size="2",
-                    width="100%",
+                    type="date", size="2", width="100%",
                 ),
             ),
             _field(
@@ -260,13 +68,10 @@ def _form_fields() -> rx.Component:
                     ),
                     value=PatientFormState.form_gender,
                     on_change=PatientFormState.set_form_gender,
-                    size="2",
-                    width="100%",
+                    size="2", width="100%",
                 ),
             ),
-            columns="2",
-            spacing="3",
-            width="100%",
+            columns="2", spacing="3", width="100%",
         ),
         rx.separator(width="100%"),
         rx.text(LanguageState.tr["section_contact"], size="2", weight="bold", color="var(--gray-9)"),
@@ -277,8 +82,7 @@ def _form_fields() -> rx.Component:
                     value=PatientFormState.form_phone,
                     on_change=PatientFormState.set_form_phone,
                     placeholder="+33 6 00 00 00 00",
-                    size="2",
-                    width="100%",
+                    size="2", width="100%",
                 ),
             ),
             _field(
@@ -287,14 +91,10 @@ def _form_fields() -> rx.Component:
                     value=PatientFormState.form_email,
                     on_change=PatientFormState.set_form_email,
                     placeholder="patient@email.com",
-                    type="email",
-                    size="2",
-                    width="100%",
+                    type="email", size="2", width="100%",
                 ),
             ),
-            columns="2",
-            spacing="3",
-            width="100%",
+            columns="2", spacing="3", width="100%",
         ),
         _field(
             LanguageState.tr["field_address"],
@@ -302,8 +102,7 @@ def _form_fields() -> rx.Component:
                 value=PatientFormState.form_address,
                 on_change=PatientFormState.set_form_address,
                 placeholder="12 rue de la Paix",
-                size="2",
-                width="100%",
+                size="2", width="100%",
             ),
         ),
         rx.grid(
@@ -313,8 +112,7 @@ def _form_fields() -> rx.Component:
                     value=PatientFormState.form_postal_code,
                     on_change=PatientFormState.set_form_postal_code,
                     placeholder="75001",
-                    size="2",
-                    width="100%",
+                    size="2", width="100%",
                 ),
             ),
             _field(
@@ -323,77 +121,10 @@ def _form_fields() -> rx.Component:
                     value=PatientFormState.form_city,
                     on_change=PatientFormState.set_form_city,
                     placeholder=LanguageState.tr["placeholder_city"],
-                    size="2",
-                    width="100%",
+                    size="2", width="100%",
                 ),
             ),
-            columns="2",
-            spacing="3",
-            width="100%",
-        ),
-        rx.separator(width="100%"),
-        rx.text(LanguageState.tr["section_primary_physician"], size="2", weight="bold", color="var(--gray-9)"),
-        _field(
-            LanguageState.tr["field_physician_name"],
-            rx.hstack(
-                rx.button(
-                    rx.icon("user-round-check", size=14),
-                    rx.cond(
-                        PatientFormState.form_physician_id != "",
-                        rx.text(PatientFormState.form_physician_name, size="2"),
-                        rx.text(LanguageState.tr["select_doctor_placeholder"], size="2"),
-                    ),
-                    on_click=PatientFormState.open_doctor_picker,
-                    variant=rx.cond(PatientFormState.form_physician_id != "", "soft", "outline"),
-                    size="2",
-                    type="button",
-                ),
-                rx.cond(
-                    PatientFormState.form_physician_id != "",
-                    rx.icon_button(
-                        rx.icon("x", size=12),
-                        on_click=PatientFormState.doc_picker_clear,
-                        variant="ghost",
-                        color_scheme="gray",
-                        size="2",
-                        type="button",
-                    ),
-                ),
-                spacing="2",
-                align="center",
-            ),
-        ),
-        rx.separator(width="100%"),
-        rx.text(LanguageState.tr["section_account"], size="2", weight="bold", color="var(--gray-9)"),
-        _field(
-            LanguageState.tr["field_account_optional"],
-            rx.hstack(
-                rx.button(
-                    rx.icon("building-2", size=14),
-                    rx.cond(
-                        PatientFormState.form_account_id != "",
-                        rx.text(PatientFormState.form_account_name, size="2"),
-                        rx.text(LanguageState.tr["select_account_placeholder"], size="2"),
-                    ),
-                    on_click=PatientFormState.open_account_picker,
-                    variant=rx.cond(PatientFormState.form_account_id != "", "soft", "outline"),
-                    size="2",
-                    type="button",
-                ),
-                rx.cond(
-                    PatientFormState.form_account_id != "",
-                    rx.icon_button(
-                        rx.icon("x", size=12),
-                        on_click=PatientFormState.acct_picker_clear,
-                        variant="ghost",
-                        color_scheme="gray",
-                        size="2",
-                        type="button",
-                    ),
-                ),
-                spacing="2",
-                align="center",
-            ),
+            columns="2", spacing="3", width="100%",
         ),
         rx.separator(width="100%"),
         rx.text(LanguageState.tr["section_medical_info"], size="2", weight="bold", color="var(--gray-9)"),
@@ -403,8 +134,7 @@ def _form_fields() -> rx.Component:
                 value=PatientFormState.form_social_security_number,
                 on_change=PatientFormState.set_form_social_security_number,
                 placeholder="1 85 07 75 123 456 78",
-                size="2",
-                width="100%",
+                size="2", width="100%",
             ),
         ),
         rx.grid(
@@ -413,10 +143,8 @@ def _form_fields() -> rx.Component:
                 rx.input(
                     value=PatientFormState.form_weight,
                     on_change=PatientFormState.set_form_weight,
-                    placeholder="70",
-                    type="number",
-                    size="2",
-                    width="100%",
+                    placeholder="70", type="number",
+                    size="2", width="100%",
                 ),
             ),
             _field(
@@ -424,15 +152,11 @@ def _form_fields() -> rx.Component:
                 rx.input(
                     value=PatientFormState.form_height,
                     on_change=PatientFormState.set_form_height,
-                    placeholder="175",
-                    type="number",
-                    size="2",
-                    width="100%",
+                    placeholder="175", type="number",
+                    size="2", width="100%",
                 ),
             ),
-            columns="2",
-            spacing="3",
-            width="100%",
+            columns="2", spacing="3", width="100%",
         ),
         width="100%",
         spacing="3",
@@ -440,7 +164,7 @@ def _form_fields() -> rx.Component:
 
 
 def patient_form_dialog() -> rx.Component:
-    """The patient create / edit dialog. Include once per page that needs it."""
+    """The patient create / edit dialog."""
     return form_dialog_component(
         state=PatientFormState,
         title=rx.cond(

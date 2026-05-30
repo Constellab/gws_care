@@ -21,18 +21,17 @@ class PatientDetailDTO(BaseModel):
     city: str | None = None
     phone: str | None = None
     email: str | None = None
-    primary_physician_name: str | None = None
-    primary_physician_phone: str | None = None
     # Medical / identity fields
     social_security_number: str | None = None
     sex: str | None = None
     qr_code: str | None = None
     account_id: str = ""
     account_name: str = ""
-    # Linked registered doctor
+    # Referent doctor (médecin traitant) — from PatientDoctor where is_referent=True
     primary_physician_id: str = ""
     primary_physician_full_name: str = ""
     primary_physician_specialization: str = ""
+    primary_physician_phone: str = ""
     primary_physician_email: str = ""
 
 
@@ -310,8 +309,14 @@ class PatientDetailState(ReflexMainState):
 
     @rx.event
     async def on_load(self):
-        """Load patient data and exam list when the page is mounted."""
+        """Load patient data, exam list and tab states when the page is mounted."""
         await self._load_patient()
+        patient_id = self.patient_id_param
+        if patient_id:
+            from .patient_doctor_tab_state import PatientDoctorTabState
+            from .patient_account_tab_state import PatientAccountTabState
+            yield PatientDoctorTabState.load(patient_id)
+            yield PatientAccountTabState.load(patient_id)
 
     @rx.event
     def go_back(self):
@@ -592,22 +597,23 @@ class PatientDetailState(ReflexMainState):
                 from gws_care.patient.patient_service import PatientService
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
                 p = PatientService.get_patient(patient_id)
-                # Resolve linked doctor if set
-                physician_id = str(p.primary_physician_id) if p.primary_physician_id else ""
+                # Resolve referent doctor from PatientDoctor table
+                physician_id = ""
                 physician_full_name = ""
                 physician_specialization = ""
-                physician_phone = p.primary_physician_phone or ""
+                physician_phone = ""
                 physician_email = ""
-                if physician_id:
-                    try:
-                        from gws_care.doctor.medical_doctor_service import MedicalDoctorService
-                        doc = MedicalDoctorService.get_doctor(physician_id)
-                        physician_full_name = doc.full_name
-                        physician_specialization = doc.specialization or ""
-                        physician_phone = doc.phone or ""
-                        physician_email = doc.email or ""
-                    except Exception:
-                        pass
+                try:
+                    from gws_care.patient.patient_doctor_service import PatientDoctorService
+                    referent = PatientDoctorService.get_referent(patient_id)
+                    if referent:
+                        physician_id = str(referent.id)
+                        physician_full_name = referent.get_full_name()
+                        physician_specialization = referent.specialization or ""
+                        physician_phone = referent.phone or ""
+                        physician_email = referent.email or ""
+                except Exception:
+                    pass
 
                 self.patient = PatientDetailDTO(
                     id=str(p.id),
@@ -623,14 +629,13 @@ class PatientDetailState(ReflexMainState):
                     city=p.city,
                     phone=p.phone,
                     email=p.email,
-                    primary_physician_name=p.primary_physician_name,
-                    primary_physician_phone=physician_phone,
                     social_security_number=p.social_security_number,
                     sex=p.sex,
                     qr_code=p.qr_code,
                     primary_physician_id=physician_id,
                     primary_physician_full_name=physician_full_name,
                     primary_physician_specialization=physician_specialization,
+                    primary_physician_phone=physician_phone,
                     primary_physician_email=physician_email,
                 )
                 exams = ExamService.list_exams_for_patient(patient_id)

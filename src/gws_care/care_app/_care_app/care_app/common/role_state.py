@@ -25,6 +25,7 @@ class RoleState(ReflexMainState):
     _doctor_all_patients: bool = True   # private — True when doctor has global patient access
     _doctor_patient_ids: list[str] = []  # private — patient IDs for scoped DOCTOR
     _linked_patient_id: str = ""  # private — set for PATIENT role
+    _linked_doctor_id: str = ""  # private — MedicalDoctor.id for users with DOCTOR role
     _active_role_override: str = ""  # private — set when user manually switches role view
 
     # public — displayed in the user menu button
@@ -106,6 +107,11 @@ class RoleState(ReflexMainState):
     @rx.var
     def linked_patient_id(self) -> str:
         return self._linked_patient_id
+
+    @rx.var
+    def linked_doctor_id(self) -> str:
+        """MedicalDoctor ID for the logged-in DOCTOR-role user (empty if none)."""
+        return self._linked_doctor_id
 
     @rx.var
     def active_role_display(self) -> str:
@@ -225,12 +231,20 @@ class RoleState(ReflexMainState):
                         self._is_platform_admin = local_user.group == UserGroup.ADMIN
                 except Exception:
                     self._is_platform_admin = False
+                # Resolve linked MedicalDoctor (for DOCTOR-role scoping)
+                try:
+                    from gws_care.doctor.medical_doctor import MedicalDoctor
+                    doctor = MedicalDoctor.get_or_none(MedicalDoctor.user == user_id)
+                    self._linked_doctor_id = str(doctor.id) if doctor else ""
+                except Exception:
+                    self._linked_doctor_id = ""
         except Exception:
             self._care_roles = []
             self._linked_account_ids = []
             self._doctor_all_patients = True
             self._doctor_patient_ids = []
             self._linked_patient_id = ""
+            self._linked_doctor_id = ""
             self._is_platform_admin = False
 
     async def _require_any_of(self, *role_checks: bool, redirect_to: str = "/dashboard"):
@@ -244,5 +258,8 @@ class RoleState(ReflexMainState):
             yield await self._require_any_of(self.is_operator, self.is_doctor)
         """
         if not any(role_checks):
+            # User has no role at all — send to no-access page to avoid redirect loops.
+            if not self.has_any_role:
+                return rx.redirect("/no-access")
             return rx.redirect(redirect_to)
         return None

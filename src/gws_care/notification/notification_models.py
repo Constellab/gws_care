@@ -13,7 +13,6 @@ from gws_core.core.model.db_field import JSONField
 from peewee import BooleanField, CharField, DateTimeField, ForeignKeyField, IntegerField, TextField
 
 from gws_care.account.account import Account
-from gws_care.appointment.appointment import Appointment
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.notification.notification_enums import (
     NotificationChannel,
@@ -22,6 +21,7 @@ from gws_care.notification.notification_enums import (
 )
 from gws_care.patient.patient import Patient
 from gws_care.user.user import User
+from gws_care.visit.visit import Visit
 
 
 class NotificationLog(Model):
@@ -50,8 +50,8 @@ class NotificationLog(Model):
     sent_by: User = ForeignKeyField(User, null=True, backref="+", on_delete="SET NULL")
     recipient_user: User = ForeignKeyField(User, null=True, backref="received_notifications", on_delete="SET NULL")
     parent_log = ForeignKeyField("self", null=True, backref="replies", on_delete="SET NULL")
-    related_appointment: Appointment = ForeignKeyField(
-        Appointment, null=True, backref="notification_logs", on_delete="SET NULL"
+    related_visit: Visit = ForeignKeyField(
+        Visit, null=True, backref="notification_logs", on_delete="SET NULL"
     )
     error_message: str = TextField(null=True)
     extra_data: dict = JSONField(null=True)

@@ -18,6 +18,8 @@ from .patient_detail_state import (
     PatientVisitRowDTO,
     PrescriptionRowDTO,
 )
+from .patient_account_tab_state import AccountPickerRowDTO, LinkedAccountRowDTO, PatientAccountTabState
+from .patient_doctor_tab_state import DoctorPickerRowDTO, LinkedDoctorRowDTO, PatientDoctorTabState
 from .prescription_form_component import prescription_form_dialog
 
 
@@ -108,58 +110,9 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
                         ("F", rx.badge(LanguageState.tr["gender_female_badge"], color_scheme="pink", variant="soft", size="2")),
                         rx.badge(patient.gender, color_scheme="gray", variant="soft", size="2"),
                     ),
-                    rx.cond(
-                        patient.account_name != "",
-                        rx.link(
-                            rx.badge(
-                                rx.icon("building-2", size=12),
-                                patient.account_name,
-                                color_scheme="teal",
-                                variant="soft",
-                                size="2",
-                                style={"cursor": "pointer"},
-                            ),
-                            href="/account/" + patient.account_id,
-                        ),
-                    ),
                     spacing="2",
                     align="center",
                     flex_wrap="wrap",
-                ),
-                rx.cond(
-                    patient.primary_physician_full_name != "",
-                    rx.hstack(
-                        rx.link(
-                            rx.badge(
-                                rx.icon("user-round-check", size=12),
-                                patient.primary_physician_full_name,
-                                color_scheme="purple",
-                                variant="soft",
-                                size="2",
-                                style={"cursor": "pointer"},
-                            ),
-                            href="/doctors",
-                        ),
-                        rx.cond(
-                            patient.primary_physician_specialization != "",
-                            rx.text("·", size="2", color="var(--gray-7)"),
-                        ),
-                        rx.cond(
-                            patient.primary_physician_specialization != "",
-                            rx.text(patient.primary_physician_specialization, size="2", color="var(--gray-9)"),
-                        ),
-                        rx.cond(
-                            patient.primary_physician_phone != "",
-                            rx.text("·", size="2", color="var(--gray-7)"),
-                        ),
-                        rx.cond(
-                            patient.primary_physician_phone != "",
-                            rx.text(patient.primary_physician_phone, size="2", color="var(--gray-9)"),
-                        ),
-                        spacing="2",
-                        align="center",
-                        flex_wrap="wrap",
-                    ),
                 ),
                 spacing="2",
                 align_items="start",
@@ -999,6 +952,284 @@ def _certificates_tab() -> rx.Component:
     )
 
 
+# ── Doctors tab ───────────────────────────────────────────────────────────────
+
+def _doctor_picker_row(doctor: DoctorPickerRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(doctor.full_name, size="2", weight="medium")),
+        rx.table.cell(
+            rx.cond(doctor.specialization != "",
+                    rx.text(doctor.specialization, size="2"),
+                    rx.text("—", size="2", color="var(--gray-8)"))
+        ),
+        _hover={"background_color": "var(--accent-2)", "cursor": "pointer"},
+        on_click=lambda: PatientDoctorTabState.link_doctor(doctor.id),
+    )
+
+
+def _doctor_picker_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(LanguageState.tr["tab_doctors"]),
+            rx.vstack(
+                rx.input(
+                    rx.input.slot(rx.icon("search", size=14)),
+                    placeholder=LanguageState.tr["select_doctor_placeholder"],
+                    value=PatientDoctorTabState.picker_filter,
+                    on_change=PatientDoctorTabState.set_picker_filter,
+                    size="2", width="100%",
+                ),
+                rx.cond(
+                    PatientDoctorTabState.picker_is_loading,
+                    rx.center(rx.spinner(size="2"), padding="1.5rem"),
+                    rx.cond(
+                        PatientDoctorTabState.picker_rows.length() > 0,
+                        rx.box(
+                            rx.table.root(
+                                rx.table.header(rx.table.row(
+                                    rx.table.column_header_cell(LanguageState.tr["col_name"]),
+                                    rx.table.column_header_cell(LanguageState.tr["col_specialization"]),
+                                )),
+                                rx.table.body(rx.foreach(PatientDoctorTabState.picker_rows, _doctor_picker_row)),
+                                width="100%", variant="surface",
+                            ),
+                            max_height="320px", overflow_y="auto", width="100%",
+                        ),
+                        rx.center(rx.text(LanguageState.tr["no_doctors_found"], size="2", color="var(--gray-9)"), padding="1.5rem"),
+                    ),
+                ),
+                rx.hstack(
+                    rx.button(LanguageState.tr["cancel_btn"], variant="soft", color_scheme="gray",
+                              on_click=PatientDoctorTabState.close_picker),
+                    justify="end", width="100%",
+                ),
+                spacing="3", width="100%",
+            ),
+            on_interact_outside=PatientDoctorTabState.close_picker,
+            on_escape_key_down=PatientDoctorTabState.close_picker,
+            max_width="500px",
+        ),
+        open=PatientDoctorTabState.picker_open,
+    )
+
+
+def _linked_doctor_row(doc: LinkedDoctorRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(
+            rx.hstack(
+                rx.cond(
+                    doc.is_referent,
+                    rx.tooltip(
+                        rx.icon("star", size=14, color="var(--amber-9)"),
+                        content=LanguageState.tr["doctor_referent_label"],
+                    ),
+                    rx.fragment(),
+                ),
+                rx.text(doc.full_name, size="2", weight="medium"),
+                spacing="2", align="center",
+            )
+        ),
+        rx.table.cell(rx.cond(doc.specialization != "", rx.text(doc.specialization, size="2"), rx.text("—", size="2", color="var(--gray-8)"))),
+        rx.table.cell(rx.cond(doc.phone != "", rx.text(doc.phone, size="2"), rx.text("—", size="2", color="var(--gray-8)"))),
+        rx.table.cell(
+            rx.hstack(
+                rx.cond(
+                    doc.is_referent,
+                    rx.tooltip(
+                        rx.icon_button(rx.icon("star-off", size=13), variant="ghost", color_scheme="amber", size="1",
+                                       on_click=lambda: PatientDoctorTabState.clear_referent(doc.doctor_id)),
+                        content=LanguageState.tr["doctor_remove_referent_tooltip"],
+                    ),
+                    rx.tooltip(
+                        rx.icon_button(rx.icon("star", size=13), variant="ghost", color_scheme="gray", size="1",
+                                       on_click=lambda: PatientDoctorTabState.set_referent(doc.doctor_id)),
+                        content=LanguageState.tr["doctor_set_referent_tooltip"],
+                    ),
+                ),
+                rx.tooltip(
+                    rx.icon_button(rx.icon("unlink", size=13), variant="ghost", color_scheme="red", size="1",
+                                   on_click=lambda: PatientDoctorTabState.unlink_doctor(doc.doctor_id)),
+                    content=LanguageState.tr["doctor_unlink_tooltip"],
+                ),
+                spacing="1",
+            )
+        ),
+    )
+
+
+def _doctors_tab() -> rx.Component:
+    return rx.vstack(
+        _doctor_picker_dialog(),
+        rx.hstack(
+            rx.spacer(),
+            rx.button(
+                rx.icon("plus", size=14),
+                LanguageState.tr["doctor_link_btn"],
+                on_click=PatientDoctorTabState.open_picker,
+                variant="outline", size="2",
+            ),
+            width="100%",
+        ),
+        rx.cond(
+            PatientDoctorTabState.error_message != "",
+            rx.callout(PatientDoctorTabState.error_message, icon="alert-circle", color_scheme="red", size="1"),
+        ),
+        rx.cond(
+            PatientDoctorTabState.is_loading,
+            rx.center(rx.spinner(size="2"), padding="2rem"),
+            rx.cond(
+                PatientDoctorTabState.linked_doctors.length() > 0,
+                rx.table.root(
+                    rx.table.header(rx.table.row(
+                        rx.table.column_header_cell(LanguageState.tr["col_name"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_specialization"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_phone"]),
+                        rx.table.column_header_cell(""),
+                    )),
+                    rx.table.body(rx.foreach(PatientDoctorTabState.linked_doctors, _linked_doctor_row)),
+                    width="100%", variant="surface",
+                ),
+                rx.center(
+                    rx.vstack(
+                        rx.icon("user-round-x", size=36, color="var(--gray-7)"),
+                        rx.text(LanguageState.tr["no_doctors_linked"], size="2", color="var(--gray-9)"),
+                        spacing="2", align="center",
+                    ),
+                    padding="3rem",
+                ),
+            ),
+        ),
+        width="100%", spacing="3",
+    )
+
+
+# ── Accounts tab ──────────────────────────────────────────────────────────────
+
+def _account_picker_row_tab(account: AccountPickerRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(account.name, size="2", weight="medium")),
+        rx.table.cell(rx.cond(account.city != "", rx.text(account.city, size="2"), rx.text("—", size="2", color="var(--gray-8)"))),
+        _hover={"background_color": "var(--accent-2)", "cursor": "pointer"},
+        on_click=lambda: PatientAccountTabState.link_account(account.id),
+    )
+
+
+def _account_picker_dialog_tab() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(LanguageState.tr["acct_picker_title"]),
+            rx.vstack(
+                rx.input(
+                    rx.input.slot(rx.icon("search", size=14)),
+                    placeholder=LanguageState.tr["acct_picker_filter_placeholder"],
+                    value=PatientAccountTabState.picker_filter,
+                    on_change=PatientAccountTabState.set_picker_filter,
+                    size="2", width="100%",
+                ),
+                rx.cond(
+                    PatientAccountTabState.picker_is_loading,
+                    rx.center(rx.spinner(size="2"), padding="1.5rem"),
+                    rx.cond(
+                        PatientAccountTabState.picker_rows.length() > 0,
+                        rx.box(
+                            rx.table.root(
+                                rx.table.header(rx.table.row(
+                                    rx.table.column_header_cell(LanguageState.tr["col_account_name"]),
+                                    rx.table.column_header_cell(LanguageState.tr["field_city"]),
+                                )),
+                                rx.table.body(rx.foreach(PatientAccountTabState.picker_rows, _account_picker_row_tab)),
+                                width="100%", variant="surface",
+                            ),
+                            max_height="320px", overflow_y="auto", width="100%",
+                        ),
+                        rx.center(rx.text(LanguageState.tr["no_accounts_found"], size="2", color="var(--gray-9)"), padding="1.5rem"),
+                    ),
+                ),
+                rx.hstack(
+                    rx.button(LanguageState.tr["cancel_btn"], variant="soft", color_scheme="gray",
+                              on_click=PatientAccountTabState.close_picker),
+                    justify="end", width="100%",
+                ),
+                spacing="3", width="100%",
+            ),
+            on_interact_outside=PatientAccountTabState.close_picker,
+            on_escape_key_down=PatientAccountTabState.close_picker,
+            max_width="500px",
+        ),
+        open=PatientAccountTabState.picker_open,
+    )
+
+
+def _linked_account_row(acct: LinkedAccountRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(acct.name, size="2", weight="medium")),
+        rx.table.cell(
+            rx.match(
+                acct.account_type,
+                ("COMPANY", rx.badge(LanguageState.tr["account_company_badge"], color_scheme="blue", variant="soft", size="1")),
+                ("INDIVIDUAL", rx.badge(LanguageState.tr["account_individual_badge"], color_scheme="purple", variant="soft", size="1")),
+                rx.badge(acct.account_type, color_scheme="gray", variant="soft", size="1"),
+            )
+        ),
+        rx.table.cell(rx.cond(acct.city != "", rx.text(acct.city, size="2"), rx.text("—", size="2", color="var(--gray-8)"))),
+        rx.table.cell(rx.cond(acct.phone != "", rx.text(acct.phone, size="2"), rx.text("—", size="2", color="var(--gray-8)"))),
+        rx.table.cell(
+            rx.tooltip(
+                rx.icon_button(rx.icon("unlink", size=13), variant="ghost", color_scheme="red", size="1",
+                               on_click=lambda: PatientAccountTabState.unlink_account(acct.account_id)),
+                content=LanguageState.tr["account_unlink_tooltip"],
+            )
+        ),
+    )
+
+
+def _accounts_tab() -> rx.Component:
+    return rx.vstack(
+        _account_picker_dialog_tab(),
+        rx.hstack(
+            rx.spacer(),
+            rx.button(
+                rx.icon("plus", size=14),
+                LanguageState.tr["account_link_btn"],
+                on_click=PatientAccountTabState.open_picker,
+                variant="outline", size="2",
+            ),
+            width="100%",
+        ),
+        rx.cond(
+            PatientAccountTabState.error_message != "",
+            rx.callout(PatientAccountTabState.error_message, icon="alert-circle", color_scheme="red", size="1"),
+        ),
+        rx.cond(
+            PatientAccountTabState.is_loading,
+            rx.center(rx.spinner(size="2"), padding="2rem"),
+            rx.cond(
+                PatientAccountTabState.linked_accounts.length() > 0,
+                rx.table.root(
+                    rx.table.header(rx.table.row(
+                        rx.table.column_header_cell(LanguageState.tr["col_account_name"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_type"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_city"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_phone"]),
+                        rx.table.column_header_cell(""),
+                    )),
+                    rx.table.body(rx.foreach(PatientAccountTabState.linked_accounts, _linked_account_row)),
+                    width="100%", variant="surface",
+                ),
+                rx.center(
+                    rx.vstack(
+                        rx.icon("building-x", size=36, color="var(--gray-7)"),
+                        rx.text(LanguageState.tr["no_accounts_linked"], size="2", color="var(--gray-9)"),
+                        spacing="2", align="center",
+                    ),
+                    padding="3rem",
+                ),
+            ),
+        ),
+        width="100%", spacing="3",
+    )
+
+
 def patient_detail_page() -> rx.Component:
     """Patient detail page."""
     return main_component(
@@ -1069,11 +1300,31 @@ def patient_detail_page() -> rx.Component:
                                     ),
                                     value="certificates",
                                 ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("user-round-check", size=15),
+                                        rx.text(LanguageState.tr["tab_doctors"]),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="doctors",
+                                ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("building-2", size=15),
+                                        rx.text(LanguageState.tr["tab_accounts"]),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="accounts",
+                                ),
                             ),
                             rx.tabs.content(_visits_section(), value="visits", padding_top="1rem"),
                             rx.tabs.content(_exams_section(), value="exams", padding_top="1rem"),
                             rx.tabs.content(_prescriptions_tab(), value="prescriptions", padding_top="1rem"),
                             rx.tabs.content(_certificates_tab(), value="certificates", padding_top="1rem"),
+                            rx.tabs.content(_doctors_tab(), value="doctors", padding_top="1rem"),
+                            rx.tabs.content(_accounts_tab(), value="accounts", padding_top="1rem"),
                             default_value="visits",
                             width="100%",
                         ),

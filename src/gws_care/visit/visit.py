@@ -11,8 +11,10 @@ from gws_care.account.account import Account
 from gws_care.campaign.campaign import Campaign
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
+from gws_care.doctor.medical_doctor import MedicalDoctor
 from gws_care.patient.patient import Patient
 from gws_care.user.user import User
+from gws_care.visit.appointment_mode import AppointmentMode
 from gws_care.visit.campaign_visit_status import CampaignVisitStatus
 from gws_care.visit.consultation_visit_status import ConsultationVisitStatus
 from gws_care.visit.visit_dto import VisitDTO
@@ -50,6 +52,11 @@ class Visit(ModelWithUser):
     # Consultation visit lifecycle — used when visit_type=CONSULTATION
     consultation_visit_status: ConsultationVisitStatus = EnumField(choices=ConsultationVisitStatus, null=True)
 
+    # Appointment fields — set when a patient self-books a consultation visit
+    doctor: MedicalDoctor = ForeignKeyField(MedicalDoctor, null=True, backref="visits", on_delete="SET NULL")
+    appointment_mode: AppointmentMode = EnumField(choices=AppointmentMode, default=AppointmentMode.ONSITE, null=True)
+    patient_notes: str = TextField(null=True)
+
     # Interpretation text — kept on CampaignVisit for fast access; authorship is in CampaignVisitValidationWorkflow
     doctor_clinic_interpretation: str = TextField(null=True)
     doctor_company_interpretation: str = TextField(null=True)
@@ -72,6 +79,7 @@ class Visit(ModelWithUser):
     def to_dto(self) -> VisitDTO:
         patient = self.patient
         account = self.billing_account if self.billing_account_id else None
+        doctor = self.doctor if self.doctor_id else None
         return VisitDTO(
             id=self.id,
             created_at=self.created_at,
@@ -85,6 +93,10 @@ class Visit(ModelWithUser):
             scheduled_at=self.scheduled_at,
             patient_name=patient.get_full_name() if patient else None,
             campaign_visit_status=self.campaign_visit_status,
+            doctor_id=str(self.doctor_id) if self.doctor_id else None,
+            doctor_name=doctor.get_full_name() if doctor else None,
+            appointment_mode=self.appointment_mode,
+            patient_notes=self.patient_notes,
             doctor_clinic_interpretation=self.doctor_clinic_interpretation,
             doctor_company_interpretation=self.doctor_company_interpretation,
             doctor_company_message=self.doctor_company_message,

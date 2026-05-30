@@ -8,6 +8,12 @@ from ..common.combined_picker_state import CombinedPickerState
 from ..common.patient_picker_state import PatientPickerRowDTO
 
 
+class DoctorPickerRowDTO(BaseModel):
+    id: str
+    full_name: str = ""
+    specialization: str = ""
+
+
 class NotificationLogRow(BaseModel):
     id: str
     created_at: str
@@ -118,12 +124,21 @@ class NotificationsState(CombinedPickerState):
     pref_error: str = ""
 
     # ── Compose tab ───────────────────────────────────────────────────────────
-    compose_mode: str = "patient"   # "patient" | "account"
+    compose_mode: str = "patient"   # "patient" | "account" | "doctor"
     compose_subject: str = ""
     compose_body: str = ""
     is_sending: bool = False
     send_success: str = ""
     send_error: str = ""
+
+    # ── Doctor picker (for compose) ───────────────────────────────────────────
+    doc_picker_is_open: bool = False
+    doc_picker_filter: str = ""
+    doc_picker_rows: list[DoctorPickerRowDTO] = []
+    doc_picker_is_loading: bool = False
+    doc_picker_error: str = ""
+    doc_picker_selected_id: str = ""
+    doc_picker_selected_name: str = ""
 
     # ── Reply context ─────────────────────────────────────────────────────────
     reply_to_id: str = ""
@@ -358,8 +373,58 @@ class NotificationsState(CombinedPickerState):
 
     async def _on_account_picked(self, account_id: str) -> None:
         """Account picker callback: store selected account for compose tab."""
-        # acct_picker_selected_id is already set by the base class; we just accept it.
         pass
+
+    # ── Doctor picker events ──────────────────────────────────────────────────
+
+    @rx.event
+    async def open_doctor_picker(self):
+        self.doc_picker_filter = ""
+        self.doc_picker_error = ""
+        self.doc_picker_is_open = True
+        await self._run_doc_search()
+
+    @rx.event
+    def close_doctor_picker(self):
+        self.doc_picker_is_open = False
+
+    @rx.event
+    async def doc_picker_set_filter(self, value: str):
+        self.doc_picker_filter = value
+        await self._run_doc_search()
+
+    @rx.event
+    def doc_picker_confirm(self, doctor_id: str, name: str):
+        self.doc_picker_selected_id = doctor_id
+        self.doc_picker_selected_name = name
+        self.doc_picker_is_open = False
+
+    @rx.event
+    def doc_picker_clear(self):
+        self.doc_picker_selected_id = ""
+        self.doc_picker_selected_name = ""
+
+    async def _run_doc_search(self) -> None:
+        self.doc_picker_is_loading = True
+        self.doc_picker_error = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+                doctors = MedicalDoctorService.list_doctors(active_only=True)
+                f = self.doc_picker_filter.strip().lower()
+                self.doc_picker_rows = [
+                    DoctorPickerRowDTO(
+                        id=d.id,
+                        full_name=d.full_name,
+                        specialization=d.specialization or "",
+                    )
+                    for d in doctors
+                    if not f or f in d.full_name.lower() or f in (d.specialization or "").lower()
+                ]
+        except Exception as e:
+            self.doc_picker_error = str(e)
+        finally:
+            self.doc_picker_is_loading = False
 
     @rx.event
     async def set_compose_subject(self, value: str):
@@ -400,6 +465,34 @@ class NotificationsState(CombinedPickerState):
                         parent_log=parent_log,
                     )
                     self.send_success = "Message sent to patient."
+                elif self.compose_mode == "doctor":
+                    from gws_care.doctor.medical_doctor import MedicalDoctor
+                    from gws_care.notification.notification_enums import (
+                        NotificationChannel,
+                        NotificationStatus,
+                        NotificationType,
+                    )
+                    doc = MedicalDoctor.get_or_none(MedicalDoctor.id == self.doc_picker_selected_id)
+                    if doc is None or not doc.email:
+                        self.send_error = "This doctor has no email address on file."
+                        return
+                    log = NotificationService._create_log(
+                        notification_type=NotificationType.MANUAL_PATIENT,
+                        channel=NotificationChannel.EMAIL,
+                        subject=self.compose_subject,
+                        body=self.compose_body,
+                        recipient_email=doc.email,
+                        recipient_phone=doc.phone,
+                        recipient_name=doc.get_full_name(),
+                        sent_by=user,
+                    )
+                    success = NotificationService._dispatch(
+                        NotificationChannel.EMAIL.value,
+                        doc.email, doc.phone, doc.get_full_name(),
+                        self.compose_subject, self.compose_body,
+                    )
+                    NotificationService._finalise_log(log, success)
+                    self.send_success = f"Message sent to {doc.get_full_name()}."
                 else:
                     from gws_care.notification.notification_dto import SendManualNotificationDTO
                     logs = NotificationService.send_to_account(

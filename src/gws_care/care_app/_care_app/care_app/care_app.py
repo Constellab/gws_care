@@ -28,15 +28,29 @@ from .patient_detail.patient_detail_component import patient_detail_page
 from .patient_detail.patient_detail_state import PatientDetailState
 from .patient_list.patient_list_component import patient_list_page
 from .patient_list.patient_list_state import PatientListState
-from .patient_portal.patient_portal_component import (
-    my_appointments_page,
-    my_documents_page,
-    my_messages_page,
-    my_results_page,
+from .patient_portal.patient_appointments_component import patient_appointments_page
+from .patient_portal.patient_appointments_state import PatientAppointmentsState
+from .patient_portal.patient_dashboard_state import PatientDashboardState
+from .patient_portal.patient_dashboard_component import patient_dashboard_page
+from .patient_portal.patient_details_state import PatientDetailsState
+from .patient_portal.patient_details_component import patient_details_page
+from .patient_portal.patient_consultations_state import PatientConsultationsState
+from .patient_portal.patient_consultations_component import patient_consultations_page
+from .patient_portal.patient_notifications_state import PatientNotificationsState
+from .patient_portal.patient_notifications_component import patient_notifications_page
+from .patient_portal.patient_documents_state import PatientDocumentsState
+from .patient_portal.patient_documents_component import (
+    my_exams_page,
+    my_prescriptions_page,
+    my_certificates_page,
+    my_all_documents_page,
 )
-from .patient_portal.patient_portal_state import PatientPortalState
+from .patient_portal.patient_accounts_state import PatientAccountsState
+from .patient_portal.patient_accounts_component import patient_accounts_page
 from .prescription_detail.prescription_detail_component import prescription_detail_page
 from .prescription_detail.prescription_detail_state import PrescriptionDetailState
+from .no_access.no_access_component import no_access_page
+from .no_access.not_found_component import not_found_page
 from .switch_role.switch_role_component import switch_role_page
 from .switch_role.switch_role_state import SwitchRoleState
 from .terrain.terrain_component import terrain_page
@@ -50,6 +64,7 @@ from .doctor_list.doctor_list_state import DoctorListState
 
 
 app = register_gws_reflex_app()
+app.add_page(not_found_page, route="404")
 
 
 @rx.page(route="/", on_load=[PatientListState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
@@ -106,7 +121,7 @@ def doctors():
     return doctor_list_page()
 
 
-@rx.page(route="/settings", on_load=[AdminState.on_load, GeneralSettingsState.load_color_theme])
+@rx.page(route="/settings", on_load=[AdminState.on_load, GeneralSettingsState.on_load])
 def settings():
     """Settings page — import, user roles, and notification configuration."""
     return settings_page()
@@ -148,30 +163,6 @@ def consultation_detail():
     return consultation_detail_page()
 
 
-@rx.page(route="/my-results", on_load=[PatientPortalState.on_load_results, LanguageState.on_load, GeneralSettingsState.load_color_theme])
-def my_results():
-    """Patient portal — my completed results."""
-    return my_results_page()
-
-
-@rx.page(route="/my-appointments", on_load=[PatientPortalState.on_load_appointments, LanguageState.on_load, GeneralSettingsState.load_color_theme])
-def my_appointments():
-    """Patient portal — my appointments."""
-    return my_appointments_page()
-
-
-@rx.page(route="/my-messages", on_load=[PatientPortalState.on_load_messages, LanguageState.on_load, GeneralSettingsState.load_color_theme])
-def my_messages():
-    """Patient portal — my messages / notifications."""
-    return my_messages_page()
-
-
-@rx.page(route="/my-documents", on_load=[PatientPortalState.on_load_documents, LanguageState.on_load, GeneralSettingsState.load_color_theme])
-def my_documents():
-    """Patient portal — my medical certificates."""
-    return my_documents_page()
-
-
 @rx.page(route="/on-site/[program_id_param]", on_load=[TerrainState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
 def terrain():
     """Terrain page — mobile-optimised for Opérateur Terrain."""
@@ -188,6 +179,72 @@ def prescription_detail():
 def certificate_detail():
     """Certificate detail page."""
     return certificate_detail_page()
+
+
+@rx.page(route="/my-appointments", on_load=[PatientAppointmentsState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def my_appointments():
+    """Patient portal — plan and view appointments."""
+    return patient_appointments_page()
+
+
+@rx.page(route="/patient-dashboard", on_load=[PatientDashboardState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def patient_dashboard():
+    """Patient portal — personal dashboard with KPIs and recent activity."""
+    return patient_dashboard_page()
+
+
+@rx.page(route="/my-details", on_load=[PatientDetailsState.on_load, PatientAccountsState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def my_details():
+    """Patient portal — my personal information and accounts."""
+    return patient_details_page()
+
+
+@rx.page(route="/my-consultations", on_load=[PatientConsultationsState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def my_consultations():
+    """Patient portal — my consultations filtered to this patient."""
+    return patient_consultations_page()
+
+
+@rx.page(route="/my-notifications", on_load=[PatientNotificationsState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def my_notifications():
+    """Patient portal — my notifications inbox."""
+    return patient_notifications_page()
+
+
+@rx.page(route="/my-exams", on_load=[PatientDocumentsState.on_load_exams, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def my_exams():
+    """Patient portal — my exams."""
+    return my_exams_page()
+
+
+@rx.page(route="/my-prescriptions", on_load=[PatientDocumentsState.on_load_prescriptions, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def my_prescriptions():
+    """Patient portal — my prescriptions."""
+    return my_prescriptions_page()
+
+
+@rx.page(route="/my-certificates", on_load=[PatientDocumentsState.on_load_certificates, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def my_certificates():
+    """Patient portal — my medical certificates."""
+    return my_certificates_page()
+
+
+@rx.page(route="/my-all-documents", on_load=[PatientDocumentsState.on_load_all_documents, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def my_all_documents():
+    """Patient portal — all my documents (exams, prescriptions, certificates)."""
+    return my_all_documents_page()
+
+
+@rx.page(route="/my-patient-accounts", on_load=[PatientAccountsState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def my_patient_accounts():
+    """Patient portal — my associated accounts."""
+    return patient_accounts_page()
+
+
+@rx.page(route="/no-access", on_load=[LanguageState.on_load])
+def no_access():
+    """No access page — shown when the user has no CareRole assigned."""
+    return no_access_page()
 
 
 @rx.page(route="/switch_role", on_load=[SwitchRoleState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])

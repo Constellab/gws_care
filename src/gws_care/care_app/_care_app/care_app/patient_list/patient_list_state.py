@@ -76,7 +76,10 @@ class PatientListState(AccountPickerState):
     async def on_load(self):
         """Load patients when the page is mounted."""
         await self._load_roles()
-        redirect = await self._require_any_of(self.is_operator, self.is_doctor)
+        redirect = await self._require_any_of(
+            self.is_operator, self.is_doctor, self.is_admin, self.is_account_admin,
+            redirect_to="/patient-dashboard",
+        )
         if redirect:
             return redirect
         await self._load_patients()

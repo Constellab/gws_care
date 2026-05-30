@@ -16,9 +16,6 @@ class PatientDTO(ModelDTO):
     city: str | None
     phone: str | None
     email: str | None
-    primary_physician_name: str | None
-    primary_physician_phone: str | None
-    primary_physician_id: str | None = None
     account_ids: list[str] = []
     social_security_number: str | None = None
     weight: float | None = None
@@ -39,10 +36,6 @@ class SavePatientDTO(BaseModelDTO):
     city: str | None = None
     phone: str | None = None
     email: str | None = None
-    primary_physician_name: str | None = None
-    primary_physician_phone: str | None = None
-    primary_physician_id: str | None = None
-    account_id: str | None = None
     social_security_number: str | None = None
     weight: float | None = None
     height: float | None = None

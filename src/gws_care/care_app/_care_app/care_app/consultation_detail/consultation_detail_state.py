@@ -95,7 +95,8 @@ class ConsultationDetailState(RoleState):
     async def on_load(self):
         await self._load_roles()
         redirect = await self._require_any_of(
-            self.is_operator, self.is_doctor, self.is_account_admin, self.is_admin
+            self.is_operator, self.is_doctor, self.is_account_admin, self.is_admin,
+            self.is_patient_user,
         )
         if redirect:
             return redirect
@@ -103,6 +104,8 @@ class ConsultationDetailState(RoleState):
 
     @rx.event
     def go_back(self):
+        if self.is_patient_user:
+            return rx.redirect("/my-consultations")
         if self.consultation and self.consultation.patient_id:
             return rx.redirect(f"/patient/{self.consultation.patient_id}")
         return rx.redirect("/consultations")
@@ -412,6 +415,13 @@ class ConsultationDetailState(RoleState):
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
 
                 visit = CampaignVisitService.get_visit(visit_id)
+
+                # Patient security: patients may only view their own consultation
+                if self.is_patient_user:
+                    if not self._linked_patient_id or str(visit.patient_id) != str(self._linked_patient_id):
+                        self.consultation = None
+                        self.error_message = "Access denied."
+                        return
 
                 account_name = ""
                 if visit.billing_account_id:
