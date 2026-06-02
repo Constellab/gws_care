@@ -74,11 +74,11 @@ class CorrectionService:
         return cr
 
     @classmethod
-    def list_all(cls, status: str | None = None) -> list[CorrectionRequest]:
+    def list_all(cls, status: str | None = None, limit: int = 500) -> list[CorrectionRequest]:
         query = CorrectionRequest.select().order_by(CorrectionRequest.created_at.desc())
         if status:
             query = query.where(CorrectionRequest.status == status)
-        return list(query)
+        return list(query.limit(limit))
 
     @classmethod
     def list_for_exam(cls, exam_id: str) -> list[CorrectionRequest]:

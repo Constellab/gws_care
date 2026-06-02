@@ -23,6 +23,11 @@ from gws_care.core.migration_7 import Migration080
 from gws_care.core.migration_8 import Migration090
 from gws_care.core.migration_9 import Migration091
 from gws_care.core.migration_10 import Migration100
+from gws_care.core.migration_11 import Migration101
+from gws_care.core.migration_12 import Migration102
+from gws_care.core.migration_13 import Migration103
+from gws_care.core.migration_14 import Migration104
+from gws_care.core.migration_15 import Migration105
 from gws_care.exam.exam import Exam
 from gws_care.exam.exam_result import ExamResult
 from gws_care.exam_type_ref.exam_parameter import ExamParameter
@@ -31,6 +36,7 @@ from gws_care.patient.patient import Patient
 from gws_care.patient_account.patient_account import PatientAccount
 from gws_care.prebilling.prebilling import Invoice, Prebilling, PrebillingLine
 from gws_care.role.user_care_role import UserCareRole
+from gws_care.scheduling.doctor_schedule import DoctorSchedule, DoctorUnavailableDay
 from gws_care.tube_qr.tube_qr import TubeQR
 
 # User sync service — keeps local User table in sync with gws_core

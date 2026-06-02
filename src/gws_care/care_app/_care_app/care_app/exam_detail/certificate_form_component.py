@@ -61,6 +61,16 @@ def _form_fields() -> rx.Component:
                 ),
             ),
         ),
+        rx.cond(
+            CertificateFormState.form_error != "",
+            rx.callout(
+                CertificateFormState.form_error,
+                icon="triangle-alert",
+                color_scheme="red",
+                size="1",
+            ),
+            rx.fragment(),
+        ),
         width="100%",
         spacing="4",
     )

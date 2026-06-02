@@ -24,26 +24,57 @@ class AuditState(ReflexMainState):
     filter_action: str = ""
     filter_user: str = ""
     filter_resource_type: str = ""
+    # Pagination
+    page: int = 1
+    page_size: int = 50
+    total_count: int = 0
+
+    @rx.var
+    def total_pages(self) -> int:
+        return max(1, (self.total_count + self.page_size - 1) // self.page_size)
+
+    @rx.var
+    def has_prev_page(self) -> bool:
+        return self.page > 1
+
+    @rx.var
+    def has_next_page(self) -> bool:
+        return self.page < self.total_pages
 
     @rx.event
     async def on_load(self):
         await self._load()
 
     @rx.event
-    def set_filter_action(self, v: str):
+    async def set_filter_action(self, v: str):
         self.filter_action = "" if v == "__all__" else v
+        self.page = 1
+        await self._load()
 
     @rx.event
-    def set_filter_user(self, v: str):
+    async def set_filter_user(self, v: str):
         self.filter_user = v
 
     @rx.event
-    def set_filter_resource(self, v: str):
+    async def set_filter_resource(self, v: str):
         self.filter_resource_type = v
 
     @rx.event
     async def apply_filters(self):
+        self.page = 1
         await self._load()
+
+    @rx.event
+    async def prev_page(self):
+        if self.has_prev_page:
+            self.page -= 1
+            await self._load()
+
+    @rx.event
+    async def next_page(self):
+        if self.has_next_page:
+            self.page += 1
+            await self._load()
 
     async def _load(self):
         if not await self.check_authentication():
@@ -60,8 +91,10 @@ class AuditState(ReflexMainState):
                     query = query.where(AuditLog.user_email.contains(self.filter_user))
                 if self.filter_resource_type:
                     query = query.where(AuditLog.resource_type == self.filter_resource_type)
+                self.total_count = query.count()
+                self.page = max(1, min(self.page, self.total_pages))
                 rows = []
-                for log in query.limit(200):
+                for log in query.limit(self.page_size).offset((self.page - 1) * self.page_size):
                     try:
                         action_label = AuditAction(log.action).get_label()
                     except ValueError:

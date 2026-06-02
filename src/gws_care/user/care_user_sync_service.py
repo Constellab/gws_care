@@ -30,6 +30,6 @@ class CareUserSyncService(UserSyncService[User]):
                 from gws_care.role.care_role import CareRole
                 from gws_care.role.user_role_service import UserRoleService
                 UserRoleService.assign_role(str(user.id), CareRole.ADMIN)
-            except Exception:
-                pass  # Table may not exist yet during initial migration
+            except Exception as exc:
+                print(f"[care_user_sync] Role assign failed for user={user.id}: {exc}")
         return user

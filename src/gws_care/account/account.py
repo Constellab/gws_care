@@ -10,9 +10,13 @@ class Account(ModelWithUser):
     """
     Billing account — a company or individual who pays for health services.
     account_type is either "COMPANY" or "INDIVIDUAL".
+    company_id links an account to a Company (employer) when account_type is COMPANY.
+    Chain: Company → Account → Prebilling → Invoice
     """
 
     account_type: str = CharField(max_length=20, default="COMPANY", null=False)
+    # Plain-string FK to Company (no Peewee FK constraint — managed via migration)
+    company_id: str = CharField(max_length=36, null=True)
     name: str = CharField(max_length=255, null=False)
     registration_number: str = CharField(max_length=100, null=True)
     address: str = CharField(max_length=500, null=True)
@@ -29,6 +33,7 @@ class Account(ModelWithUser):
             created_at=self.created_at,
             last_modified_at=self.last_modified_at,
             account_type=self.account_type,
+            company_id=self.company_id or None,
             name=self.name,
             registration_number=self.registration_number,
             address=self.address,

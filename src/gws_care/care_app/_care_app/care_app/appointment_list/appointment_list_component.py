@@ -22,6 +22,7 @@ def _status_badge(status: str) -> rx.Component:
         ("IN_PROGRESS", rx.badge(LanguageState.tr["status_in_progress"], color_scheme="orange", variant="soft", size="1")),
         ("DONE", rx.badge(LanguageState.tr["status_done"], color_scheme="green", variant="soft", size="1")),
         ("CANCELLED", rx.badge(LanguageState.tr["status_cancelled"], color_scheme="gray", variant="soft", size="1")),
+        ("campaign", rx.badge("Inscrit", color_scheme="blue", variant="surface", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -38,9 +39,16 @@ def _appointment_row(appt: AppointmentRowDTO) -> rx.Component:
         ),
         rx.table.cell(
             rx.cond(
-                appt.account_name,
-                rx.text(appt.account_name, size="2"),
-                rx.text("—", size="2", color="var(--gray-7)"),
+                appt.campaign_name,
+                rx.hstack(
+                    rx.badge(appt.campaign_name, color_scheme="purple", variant="soft", size="1"),
+                    spacing="1",
+                ),
+                rx.cond(
+                    appt.account_name,
+                    rx.text(appt.account_name, size="2"),
+                    rx.text("—", size="2", color="var(--gray-7)"),
+                ),
             )
         ),
         rx.table.cell(rx.text(appt.scheduled_at[:16].replace("T", " "), size="2")),
@@ -87,6 +95,24 @@ def _appointment_row(appt: AppointmentRowDTO) -> rx.Component:
                             on_click=lambda: AppointmentListState.complete_appointment(appt.id),
                         ),
                         content=LanguageState.tr["tooltip_done_appt"],
+                    ),
+                ),
+                # Exam sheet button — IN_PROGRESS or DONE
+                rx.cond(
+                    (appt.status == "IN_PROGRESS") | (appt.status == "DONE"),
+                    rx.tooltip(
+                        rx.icon_button(
+                            rx.icon("clipboard-list", size=14),
+                            variant="ghost",
+                            size="1",
+                            color_scheme="blue",
+                            on_click=lambda: AppointmentListState.go_to_or_create_exam(appt.id),
+                        ),
+                        content=rx.cond(
+                            appt.linked_exam_id != "",
+                            "Voir la fiche examen",
+                            "Créer la fiche examen",
+                        ),
                     ),
                 ),
                 # Cancel button — SCHEDULED or IN_PROGRESS
@@ -276,6 +302,14 @@ def appointment_list_page() -> rx.Component:
             rx.hstack(
                 rx.heading(LanguageState.tr["appointments_page_title"], size="6"),
                 rx.spacer(),
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("calendar-clock", size=16),
+                        variant="soft", size="2", color_scheme="gray",
+                        on_click=rx.redirect("/schedule"),
+                    ),
+                    content="Voir les disponibilités des médecins",
+                ),
                 rx.segmented_control.root(
                     rx.segmented_control.item(rx.icon("list", size=15), value="list"),
                     rx.segmented_control.item(rx.icon("calendar-days", size=15), value="calendar"),
@@ -292,6 +326,35 @@ def appointment_list_page() -> rx.Component:
                 width="100%",
                 align="center",
                 spacing="3",
+            ),
+            # Patient context banner — shown when navigated from a patient page
+            rx.cond(
+                AppointmentListState.patient_context_id != "",
+                rx.callout(
+                    rx.hstack(
+                        rx.icon("user", size=14),
+                        rx.text(
+                            "Affichage des rendez-vous de\u00a0: ",
+                            rx.text.strong(AppointmentListState.patient_context_name),
+                            size="2",
+                        ),
+                        rx.spacer(),
+                        rx.button(
+                            rx.icon("x", size=13),
+                            "Voir tous les rendez-vous",
+                            on_click=AppointmentListState.clear_patient_context,
+                            variant="ghost",
+                            size="1",
+                            color_scheme="gray",
+                        ),
+                        width="100%",
+                        align="center",
+                        spacing="2",
+                    ),
+                    icon="info",
+                    color_scheme="blue",
+                    size="1",
+                ),
             ),
             # Filters
             rx.vstack(
@@ -419,6 +482,41 @@ def appointment_list_page() -> rx.Component:
                     ),
                     # ── Calendar view ──
                     _calendar_view(),
+                ),
+            ),
+            # ── Pagination (list mode only) ─────────────────────────────
+            rx.cond(
+                (AppointmentListState.view_mode == "list")
+                & (AppointmentListState.total_count > 0)
+                & ~AppointmentListState.patient_context_id.bool(),
+                rx.hstack(
+                    rx.text(
+                        AppointmentListState.total_count.to(str)
+                        + " rendez-vous — page ",
+                        AppointmentListState.page.to(str),
+                        " / ",
+                        AppointmentListState.total_pages.to(str),
+                        size="2",
+                        color="var(--gray-9)",
+                    ),
+                    rx.spacer(),
+                    rx.button(
+                        rx.icon("chevron-left", size=14),
+                        on_click=AppointmentListState.prev_page,
+                        variant="soft",
+                        size="2",
+                        disabled=~AppointmentListState.has_prev_page,
+                    ),
+                    rx.button(
+                        rx.icon("chevron-right", size=14),
+                        on_click=AppointmentListState.next_page,
+                        variant="soft",
+                        size="2",
+                        disabled=~AppointmentListState.has_next_page,
+                    ),
+                    width="100%",
+                    align="center",
+                    padding_top="0.5rem",
                 ),
             ),
         )

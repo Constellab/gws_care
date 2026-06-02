@@ -138,6 +138,13 @@ class NotificationsState(ReflexMainState):
                 logs = NotificationService.list_logs(
                     notification_type=self.filter_type if self.filter_type != "ALL" else None,
                 )
+                # Batch-load sent_by user names (avoids N+1)
+                user_ids_needed = {l.sent_by_id for l in logs if l.sent_by_id}
+                user_names_map: dict[str, str] = {}
+                if user_ids_needed:
+                    from gws_care.user.user import User
+                    for u in User.select(User.id, User.first_name, User.last_name).where(User.id.in_(user_ids_needed)):
+                        user_names_map[str(u.id)] = f"{u.first_name} {u.last_name}".strip()
                 rows = [
                     NotificationLogRow(
                         id=str(l.id),
@@ -148,10 +155,7 @@ class NotificationsState(ReflexMainState):
                         recipient_name=l.recipient_name or "—",
                         recipient_email=l.recipient_email or "—",
                         subject=l.subject,
-                        sent_by_name=(
-                            f"{l.sent_by.first_name} {l.sent_by.last_name}"
-                            if l.sent_by_id else "System"
-                        ),
+                        sent_by_name=user_names_map.get(str(l.sent_by_id), "System") if l.sent_by_id else "System",
                     )
                     for l in logs
                 ]
@@ -178,8 +182,8 @@ class NotificationsState(ReflexMainState):
                 pref = NotificationService.get_or_create_preference(str(user.id))
                 self.pref_enabled = pref.email_reminders_enabled
                 self.pref_days = list(pref.reminder_days or [])
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[notifications] _load_pref: {exc}")
 
     async def _get_current_user(self):
         from gws_care.user.user import User
@@ -330,6 +334,7 @@ class NotificationsState(ReflexMainState):
                         str(cp.patient_id)
                         for cp in CampaignPatient.select(CampaignPatient.patient)
                         .where(CampaignPatient.campaign == campaign_id)
+                        .limit(5000)
                     )
                     self.patients_filtered = [
                         p for p in self.patients
@@ -337,7 +342,7 @@ class NotificationsState(ReflexMainState):
                         and (not self.compose_patient_search
                              or self.compose_patient_search.lower() in p.display.lower())
                     ]
-            except Exception:
+            except Exception as exc:
                 self._apply_patient_filter()
         else:
             self._apply_patient_filter()
@@ -372,6 +377,7 @@ class NotificationsState(ReflexMainState):
                         return
                     from gws_care.notification.notification_dto import SendCustomMessageDTO
                     sent_total = 0
+                    failed_total = 0
                     for patient_id in self.compose_patient_ids:
                         for channel in self.compose_channels:
                             try:
@@ -385,16 +391,22 @@ class NotificationsState(ReflexMainState):
                                     sent_by=user,
                                 )
                                 sent_total += 1
-                            except Exception:
-                                pass
-                    self.send_success = (
+                            except Exception as exc:
+                                failed_total += 1
+                                print(f"[notifications] send_to_patient {patient_id}/{channel}: {exc}")
+                    msg = (
                         f"{sent_total} message(s) envoyé(s) à "
                         f"{len(self.compose_patient_ids)} patient(s) sur "
                         f"{len(self.compose_channels)} canal(aux)."
                     )
+                    if failed_total:
+                        msg += f" ({failed_total} échec(s))."
+                        self.send_error = f"{failed_total} envoi(s) ont échoué."
+                    self.send_success = msg
                 else:
                     from gws_care.notification.notification_dto import SendManualNotificationDTO
                     sent_total = 0
+                    failed_total = 0
                     for channel in self.compose_channels:
                         try:
                             logs = NotificationService.send_to_account(
@@ -407,9 +419,14 @@ class NotificationsState(ReflexMainState):
                                 sent_by=user,
                             )
                             sent_total += sum(1 for l in logs if l.status.value == "SENT")
-                        except Exception:
-                            pass
-                    self.send_success = f"{sent_total} message(s) envoyé(s) sur {len(self.compose_channels)} canal(aux)."
+                        except Exception as exc:
+                            failed_total += 1
+                            print(f"[notifications] send_to_account {channel}: {exc}")
+                    msg = f"{sent_total} message(s) envoyé(s) sur {len(self.compose_channels)} canal(aux)."
+                    if failed_total:
+                        msg += f" ({failed_total} canal(aux) en échec)."
+                        self.send_error = f"{failed_total} canal(aux) ont rencontré une erreur."
+                    self.send_success = msg
 
                 self.compose_subject = ""
                 self.compose_body = ""
@@ -432,8 +449,8 @@ class NotificationsState(ReflexMainState):
             self.smtp_use_tls = cfg.use_tls
             self.smtp_from_email = cfg.from_email
             self.smtp_from_name = cfg.from_name
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[notifications] _load_smtp_config: {exc}")
 
     @rx.event
     async def set_smtp_host(self, value: str):
@@ -501,8 +518,8 @@ class NotificationsState(ReflexMainState):
             self.brevo_from_email = cfg.from_email
             self.brevo_from_name = cfg.from_name
             self.brevo_sms_sender = cfg.sms_sender
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[notifications] _load_brevo_config: {exc}")
 
     @rx.event
     async def set_brevo_credentials_name(self, value: str):
@@ -556,13 +573,13 @@ class NotificationsState(ReflexMainState):
                         display=f"{p.last_name} {p.first_name} ({p.patient_number})",
                         email=p.email or "",
                     )
-                    for p in PatientService.search_patients()
+                    for p in PatientService.search_patients(limit=500)
                 ]
                 self.patients = all_patients
                 self.patients_filtered = list(all_patients)
                 self.campaigns = [
                     CampaignOption(id=str(c.id), name=c.name)
-                    for c in CampaignService.list_all_campaigns()
+                    for c in CampaignService.list_all_campaigns(limit=500)
                 ]
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[notifications] compose_data load error: {exc}")

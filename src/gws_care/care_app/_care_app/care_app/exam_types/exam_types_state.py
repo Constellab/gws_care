@@ -13,6 +13,7 @@ class ExamTypeRowVM(BaseModel):
     is_active: bool
     allows_attachment: bool
     requires_attachment: bool
+    required_sample_type: str = ""
     parameter_count: int
 
 
@@ -36,6 +37,7 @@ class ExamTypeFormVM(BaseModel):
     is_active: bool = True
     allows_attachment: bool = False
     requires_attachment: bool = False
+    required_sample_type: str = ""  # type de prélèvement associé (ex: "Sang total (EDTA)")
 
 
 class ExamParamFormVM(BaseModel):
@@ -178,6 +180,10 @@ class ExamTypesState(ReflexMainState):
         self.type_form = ExamTypeFormVM(**{**self.type_form.dict(), "requires_attachment": v})
 
     @rx.event
+    def set_type_required_sample_type(self, v: str):
+        self.type_form = ExamTypeFormVM(**{**self.type_form.dict(), "required_sample_type": v if v != "NONE" else ""})
+
+    @rx.event
     async def save_type(self):
         if not self.type_form.name.strip():
             self.type_form_error = "Le nom est obligatoire."
@@ -198,6 +204,7 @@ class ExamTypesState(ReflexMainState):
                     is_active=self.type_form.is_active,
                     allows_attachment=self.type_form.allows_attachment,
                     requires_attachment=self.type_form.requires_attachment,
+                    required_sample_type=self.type_form.required_sample_type or None,
                 )
                 ExamTypeRefService.create(dto)
             self.type_dialog_open = False

@@ -7,6 +7,7 @@ from peewee import BooleanField, CharField, DateField, ForeignKeyField, TextFiel
 
 from gws_care.account.account import Account
 from gws_care.campaign.campaign_status import CampaignStatus
+from gws_care.company.company import Company
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
 from gws_care.user.user import User
@@ -15,12 +16,13 @@ from .campaign_dto import CampaignDTO
 
 
 class Campaign(ModelWithUser):
-    """One medical screening campaign organised by PSC for a billing account.
+    """One medical screening campaign organised by PSC for a company.
 
     Lifecycle follows CampaignStatus (15 states, from DRAFT to ARCHIVED).
     """
 
-    account: Account = ForeignKeyField(Account, null=False, backref="campaigns", on_delete="CASCADE")
+    account: Account = ForeignKeyField(Account, null=True, backref="campaigns", on_delete="SET NULL")
+    company: Company = ForeignKeyField(Company, null=True, backref="campaigns", on_delete="SET NULL")
     name: str = CharField(max_length=255, null=False)
     status: CampaignStatus = EnumField(
         choices=CampaignStatus, default=CampaignStatus.DRAFT, null=False
@@ -41,19 +43,34 @@ class Campaign(ModelWithUser):
         if self.psc_doctor_id:
             try:
                 psc_doc = f"{self.psc_doctor.first_name} {self.psc_doctor.last_name}"
-            except Exception:
+            except Exception as exc:
+                print(f"[campaign.to_dto] psc_doctor for {self.id}: {exc}")
                 psc_doc = None
         ent_doc = None
         if self.enterprise_doctor_id:
             try:
                 ent_doc = f"{self.enterprise_doctor.first_name} {self.enterprise_doctor.last_name}"
-            except Exception:
+            except Exception as exc:
+                print(f"[campaign.to_dto] enterprise_doctor for {self.id}: {exc}")
                 ent_doc = None
+        company_name = ""
+        if self.company_id:
+            try:
+                company_name = self.company.name
+            except Exception as exc:
+                print(f"[campaign.to_dto] company for {self.id}: {exc}")
+        elif self.account_id:
+            try:
+                company_name = self.account.name
+            except Exception as exc:
+                print(f"[campaign.to_dto] account for {self.id}: {exc}")
         return CampaignDTO(
             id=str(self.id),
             name=self.name,
-            account_id=str(self.account_id),
-            account_name=self.account.name if self.account_id else "",
+            account_id=str(self.account_id) if self.account_id else "",
+            account_name=company_name,
+            company_id=str(self.company_id) if self.company_id else "",
+            company_name=company_name,
             status=self.status.value,
             status_label=self.status.get_label(),
             status_color=self.status.get_color(),

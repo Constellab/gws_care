@@ -40,7 +40,7 @@ class AccountListState(ReflexMainState):
 
     @rx.event
     async def handle_name_change(self, value: str):
-        """Filter accounts by name."""
+        """Filter accounts by name — debounce handled in component."""
         self.search_name = value
         await self._load_accounts()
 
@@ -109,10 +109,9 @@ class AccountListState(ReflexMainState):
             with await self.authenticate_user():
                 from gws_care.account.account_service import AccountService
                 accounts = AccountService.list_accounts(active_only=False)
-                filtered = [
-                    a for a in accounts
-                    if not self.search_name or self.search_name.lower() in a.name.lower()
-                ]
+                if self.search_name.strip():
+                    s = self.search_name.strip().lower()
+                    accounts = [a for a in accounts if s in a.name.lower() or (a.city and s in a.city.lower()) or (a.contact_name and s in a.contact_name.lower())]
                 account_rows = [
                     AccountRowDTO(
                         id=str(a.id),
@@ -124,7 +123,7 @@ class AccountListState(ReflexMainState):
                         contact_name=a.contact_name,
                         is_active=a.is_active,
                     )
-                    for a in filtered
+                    for a in accounts
                 ]
                 sort_col = self.sort_column
                 self.accounts = sorted(

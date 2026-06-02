@@ -175,7 +175,52 @@ def _form_fields() -> rx.Component:
         ),
         rx.separator(width="100%"),
         rx.text(LanguageState.tr["section_primary_physician"], size="2", weight="bold", color="var(--gray-9)"),
-        rx.grid(
+        # Smart doctor dropdown — populated from staff directory
+        rx.cond(
+            PatientFormState.doctor_options.length() > 0,
+            rx.vstack(
+                rx.select.root(
+                    rx.select.trigger(
+                        placeholder="Sélectionner un médecin du personnel…",
+                        width="100%",
+                    ),
+                    rx.select.content(
+                        rx.select.group(
+                            rx.select.label("Médecins référencés"),
+                            rx.foreach(
+                                PatientFormState.doctor_options,
+                                lambda d: rx.select.item(
+                                    d.name + rx.cond(d.role_label != "", " (— " + d.role_label + ")", ""),
+                                    value=d.user_id,
+                                ),
+                            ),
+                        ),
+                        rx.select.separator(),
+                        rx.select.item("⊕ Autre médecin / médecin extérieur", value="__other__"),
+                    ),
+                    value=PatientFormState.form_physician_user_id,
+                    on_change=PatientFormState.select_physician_from_directory,
+                    size="2",
+                    width="100%",
+                ),
+                # When a doctor was picked or Other selected, show name field
+                rx.vstack(
+                    _field(
+                        LanguageState.tr["field_physician_name"],
+                        rx.input(
+                            value=PatientFormState.form_primary_physician_name,
+                            on_change=PatientFormState.set_form_primary_physician_name,
+                            placeholder="Dr. Martin",
+                            size="2",
+                            width="100%",
+                        ),
+                    ),
+                    width="100%",
+                ),
+                spacing="2",
+                width="100%",
+            ),
+            # Fallback when no doctors in system yet: free text
             _field(
                 LanguageState.tr["field_physician_name"],
                 rx.input(
@@ -186,19 +231,16 @@ def _form_fields() -> rx.Component:
                     width="100%",
                 ),
             ),
-            _field(
-                LanguageState.tr["field_physician_phone"],
-                rx.input(
-                    value=PatientFormState.form_primary_physician_phone,
-                    on_change=PatientFormState.set_form_primary_physician_phone,
-                    placeholder="+33 1 00 00 00 00",
-                    size="2",
-                    width="100%",
-                ),
+        ),
+        rx.cond(
+            PatientFormState.form_error != "",
+            rx.callout(
+                PatientFormState.form_error,
+                icon="triangle-alert",
+                color_scheme="red",
+                size="1",
             ),
-            columns="2",
-            spacing="3",
-            width="100%",
+            rx.fragment(),
         ),
         rx.hstack(
             rx.button(

@@ -74,6 +74,7 @@ class PatientDossierState(ReflexMainState):
                     PatientDocument.select()
                     .where(PatientDocument.patient == patient_id)
                     .order_by(PatientDocument.created_at.desc())
+                    .limit(500)
                 )
                 self.patient_docs = [
                     PatientDocRowDTO(
@@ -94,6 +95,7 @@ class PatientDossierState(ReflexMainState):
                     PatientNote.select()
                     .where(PatientNote.patient == patient_id)
                     .order_by(PatientNote.created_at.desc())
+                    .limit(500)
                 )
                 self.patient_notes = [
                     PatientNoteRowDTO(
@@ -143,7 +145,7 @@ class PatientDossierState(ReflexMainState):
                         author_name = f"{local_user.first_name} {local_user.last_name}".strip()
                     if not author_name:
                         author_name = getattr(auth_user, "email", "")
-                except Exception:
+                except Exception as exc:
                     author_name = ""
 
                 upload_dir = rx.get_upload_dir()
@@ -182,7 +184,7 @@ class PatientDossierState(ReflexMainState):
                     try:
                         upload_dir = rx.get_upload_dir()
                         (Path(upload_dir) / doc.stored_filename).unlink(missing_ok=True)
-                    except Exception:
+                    except Exception as exc:
                         pass
                     doc.delete_instance()
             await self.load_dossier()
@@ -227,7 +229,7 @@ class PatientDossierState(ReflexMainState):
                         author_name = f"{local_user.first_name} {local_user.last_name}".strip()
                     if not author_name:
                         author_name = getattr(auth_user, "email", "Médecin")
-                except Exception:
+                except Exception as exc:
                     author_name = "Médecin"
 
                 from gws_care.patient.patient_note import PatientNote

@@ -35,11 +35,13 @@ class UserRoleService:
         role: CareRole,
         linked_account_id: str | None = None,
         linked_patient_id: str | None = None,
+        specialty: str | None = None,
     ) -> None:
         """Assign a role to a user with an optional entity link.
 
         For ACCOUNT_ADMIN, pass linked_account_id.
         For PATIENT, pass linked_patient_id.
+        For MEDECIN_PSC / MEDECIN_ENTREPRISE, pass specialty.
         Creates the row if absent; updates the link columns if already present.
         """
         user = User.get_by_id(user_id)
@@ -48,7 +50,9 @@ class UserRoleService:
             row.linked_account_id = linked_account_id
         if linked_patient_id is not None:
             row.linked_patient_id = linked_patient_id
-        if not created or linked_account_id or linked_patient_id:
+        if specialty is not None:
+            row.specialty = specialty or None
+        if not created or linked_account_id or linked_patient_id or specialty is not None:
             row.save()
 
     @classmethod
@@ -91,19 +95,34 @@ class UserRoleService:
 
     @classmethod
     def list_users_with_roles(cls) -> list[dict]:
-        """Return all users with their role lists, for the admin panel."""
+        """Return all active users with their role lists, for the admin panel."""
         users = list(User.select().where(User.is_active == True).order_by(User.last_name))
+        if not users:
+            return []
+        # Batch-load ALL care role rows at once (avoids N+1: one SELECT instead of N)
+        user_ids = [u.id for u in users]
+        all_role_rows = list(UserCareRole.select().where(UserCareRole.user.in_(user_ids)))
+        roles_by_user: dict[str, list] = {}
+        for r in all_role_rows:
+            roles_by_user.setdefault(str(r.user_id), []).append(r)
+        _account_roles = {CareRole.ACCOUNT_ADMIN, CareRole.RH_ENTREPRISE, CareRole.MEDECIN_ENTREPRISE}
+        _doctor_roles = {CareRole.MEDECIN_PSC, CareRole.MEDECIN_ENTREPRISE}
         result = []
         for u in users:
-            rows = list(UserCareRole.select().where(UserCareRole.user == u.id))
+            rows = roles_by_user.get(str(u.id), [])
             role_values = [r.role.value for r in rows]
-            # Collect linked IDs keyed by role
+            # Return linked account from any enterprise role row (Medecin, RH, or legacy AccountAdmin)
             linked_account_id = next(
-                (r.linked_account_id for r in rows if r.role == CareRole.ACCOUNT_ADMIN),
+                (r.linked_account_id for r in rows
+                 if r.role in _account_roles and r.linked_account_id),
                 None,
             )
             linked_patient_id = next(
                 (r.linked_patient_id for r in rows if r.role == CareRole.PATIENT),
+                None,
+            )
+            specialty = next(
+                (r.specialty for r in rows if r.role in _doctor_roles and r.specialty),
                 None,
             )
             result.append(
@@ -114,6 +133,7 @@ class UserRoleService:
                     "roles": role_values,
                     "linked_account_id": linked_account_id or "",
                     "linked_patient_id": linked_patient_id or "",
+                    "specialty": specialty or "",
                 }
             )
         return result

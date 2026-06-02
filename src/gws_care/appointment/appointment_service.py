@@ -62,7 +62,65 @@ class AppointmentService:
             query = query.where(
                 Appointment.scheduled_at <= datetime.fromisoformat(date_to + "T23:59:59")
             )
-        return list(query.order_by(Appointment.scheduled_at.asc()))
+        return list(query.order_by(Appointment.scheduled_at.asc()))  # legacy full-list call
+
+    @classmethod
+    def count_all(
+        cls,
+        status: "AppointmentStatus | None" = None,
+        search: str = "",
+        account_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> int:
+        from gws_care.patient.patient import Patient
+        query = Appointment.select().join(Patient)
+        if status:
+            query = query.where(Appointment.status == status)
+        if search:
+            term = f"%{search}%"
+            query = query.where(
+                Patient.last_name ** term
+                | Patient.first_name ** term
+                | Patient.patient_number ** term
+            )
+        if account_id:
+            query = query.where(Appointment.billing_account == account_id)
+        if date_from:
+            query = query.where(Appointment.scheduled_at >= datetime.fromisoformat(date_from))
+        if date_to:
+            query = query.where(Appointment.scheduled_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+        return query.count()
+
+    @classmethod
+    def list_all_paginated(
+        cls,
+        status: "AppointmentStatus | None" = None,
+        search: str = "",
+        account_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Appointment]:
+        from gws_care.patient.patient import Patient
+        query = Appointment.select(Appointment, Patient).join(Patient)
+        if status:
+            query = query.where(Appointment.status == status)
+        if search:
+            term = f"%{search}%"
+            query = query.where(
+                Patient.last_name ** term
+                | Patient.first_name ** term
+                | Patient.patient_number ** term
+            )
+        if account_id:
+            query = query.where(Appointment.billing_account == account_id)
+        if date_from:
+            query = query.where(Appointment.scheduled_at >= datetime.fromisoformat(date_from))
+        if date_to:
+            query = query.where(Appointment.scheduled_at <= datetime.fromisoformat(date_to + "T23:59:59"))
+        return list(query.order_by(Appointment.scheduled_at.asc()).limit(limit).offset(offset))
 
     @classmethod
     def list_for_patient(cls, patient_id: str) -> list[Appointment]:
@@ -77,13 +135,20 @@ class AppointmentService:
     def to_row_dto(cls, appt: Appointment) -> AppointmentRowDTO:
         patient = appt.patient
         account = appt.billing_account if appt.billing_account_id else None
+        # Resolve exam type label: prefer referential name when available
+        if appt.exam_type_ref_id:
+            from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+            ref = ExamTypeRef.get_or_none(ExamTypeRef.id == appt.exam_type_ref_id)
+            exam_type_label = ref.name if ref else appt.exam_type.get_label()
+        else:
+            exam_type_label = appt.exam_type.get_label()
         return AppointmentRowDTO(
             id=str(appt.id),
             patient_id=str(patient.id),
             patient_name=f"{patient.first_name} {patient.last_name}",
             account_name=account.name if account else None,
             scheduled_at=appt.scheduled_at.isoformat(),
-            exam_type_label=appt.exam_type.get_label(),
+            exam_type_label=exam_type_label,
             status=appt.status.value,
         )
 
@@ -110,8 +175,12 @@ class AppointmentService:
         appt.billing_account_id = dto.account_id or None
         appt.scheduled_at = scheduled_at
         appt.exam_type = exam_type
+        appt.exam_type_ref_id = dto.exam_type_ref_id
         appt.status = AppointmentStatus.SCHEDULED
         appt.notes = dto.notes
+        appt.assigned_doctor_id = dto.assigned_doctor_id
+        appt.duration_minutes = dto.duration_minutes
+        appt.room = dto.room
         appt.save()
         return appt
 
@@ -136,7 +205,11 @@ class AppointmentService:
         appt.billing_account_id = dto.account_id or None
         appt.scheduled_at = scheduled_at
         appt.exam_type = exam_type
+        appt.exam_type_ref_id = dto.exam_type_ref_id
         appt.notes = dto.notes
+        appt.assigned_doctor_id = dto.assigned_doctor_id
+        appt.duration_minutes = dto.duration_minutes
+        appt.room = dto.room
         appt.save()
         return appt
 

@@ -50,7 +50,7 @@ def _campaign_row(c: CampaignListRowDTO) -> rx.Component:
             rx.link(c.name, href=f"/campaign/{c.id}",
                     style={"font_weight": "500", "color": "var(--accent-9)", "_hover": {"text_decoration": "underline"}})
         ),
-        rx.table.cell(rx.text(c.account_name, size="2")),
+        rx.table.cell(rx.text(c.company_name, size="2")),
         rx.table.cell(rx.badge(c.status_label, color_scheme=c.status_color, size="1", variant="soft")),
         rx.table.cell(rx.text(rx.cond(c.start_date != "", c.start_date, "—"), size="2")),
         rx.table.cell(rx.text(rx.cond(c.location != "", c.location, "—"), size="2")),
@@ -79,9 +79,174 @@ def _campaign_row(c: CampaignListRowDTO) -> rx.Component:
     )
 
 
+def _create_campaign_dialog() -> rx.Component:
+    """Dialog pour créer une nouvelle campagne."""
+    exam_option_items = rx.foreach(
+        CampaignListState.exam_type_options,
+        lambda opt: rx.select.item(opt.name + " (" + opt.category_label + ")", value=opt.id),
+    )
+    company_option_items = rx.foreach(
+        CampaignListState.company_options,
+        lambda opt: rx.select.item(opt.name, value=opt.id),
+    )
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(
+                rx.hstack(
+                    rx.icon("plus-circle", size=18, color="var(--accent-9)"),
+                    rx.text("Nouvelle campagne"),
+                    spacing="2",
+                ),
+            ),
+            rx.vstack(
+                # Nom
+                rx.vstack(
+                    rx.text("Nom de la campagne *", size="2", weight="medium"),
+                    rx.input(
+                        placeholder="Ex. Bilan annuel 2026 — Entreprise XYZ",
+                        value=CampaignListState.create_name,
+                        on_change=CampaignListState.set_create_name,
+                        size="2",
+                        width="100%",
+                    ),
+                    spacing="1", width="100%",
+                ),
+                # Entreprise
+                rx.vstack(
+                    rx.text("Entreprise *", size="2", weight="medium"),
+                    rx.select.root(
+                        rx.select.trigger(placeholder="Sélectionner une entreprise…"),
+                        rx.select.content(company_option_items),
+                        value=CampaignListState.create_company_id,
+                        on_change=CampaignListState.set_create_company_id,
+                        size="2",
+                        width="100%",
+                    ),
+                    spacing="1", width="100%",
+                ),
+                # Dates
+                rx.grid(
+                    rx.vstack(
+                        rx.text("Date de début", size="2", weight="medium"),
+                        rx.input(
+                            type="date",
+                            value=CampaignListState.create_start_date,
+                            on_change=CampaignListState.set_create_start_date,
+                            size="2",
+                            width="100%",
+                        ),
+                        spacing="1", width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text("Date de fin", size="2", weight="medium"),
+                        rx.input(
+                            type="date",
+                            value=CampaignListState.create_end_date,
+                            on_change=CampaignListState.set_create_end_date,
+                            size="2",
+                            width="100%",
+                        ),
+                        spacing="1", width="100%",
+                    ),
+                    columns="2",
+                    spacing="3",
+                    width="100%",
+                ),
+                # Lieu
+                rx.vstack(
+                    rx.text("Lieu", size="2", weight="medium"),
+                    rx.input(
+                        placeholder="Ex. Site Paris — Bâtiment B",
+                        value=CampaignListState.create_location,
+                        on_change=CampaignListState.set_create_location,
+                        size="2",
+                        width="100%",
+                    ),
+                    spacing="1", width="100%",
+                ),
+                # Types d'examens
+                rx.vstack(
+                    rx.text("Types d'examens", size="2", weight="medium"),
+                    rx.hstack(
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Ajouter un examen…"),
+                            rx.select.content(exam_option_items),
+                            value=CampaignListState.create_add_exam_select,
+                            on_change=CampaignListState.add_exam_to_campaign,
+                            size="2",
+                        ),
+                        spacing="2", width="100%", align="center",
+                    ),
+                    rx.cond(
+                        CampaignListState.create_selected_exams.length() > 0,
+                        rx.hstack(
+                            rx.foreach(CampaignListState.create_selected_exams, _selected_exam_chip),
+                            flex_wrap="wrap",
+                            spacing="2",
+                        ),
+                        rx.fragment(),
+                    ),
+                    spacing="2", width="100%",
+                ),
+                # Notes
+                rx.vstack(
+                    rx.text("Notes", size="2", weight="medium"),
+                    rx.text_area(
+                        placeholder="Contexte, instructions particulières…",
+                        value=CampaignListState.create_notes,
+                        on_change=CampaignListState.set_create_notes,
+                        size="2",
+                        width="100%",
+                        rows="3",
+                    ),
+                    spacing="1", width="100%",
+                ),
+                # Erreur
+                rx.cond(
+                    CampaignListState.create_error != "",
+                    rx.callout(
+                        CampaignListState.create_error,
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
+                    ),
+                    rx.fragment(),
+                ),
+                # Actions
+                rx.hstack(
+                    rx.dialog.close(
+                        rx.button(
+                            "Annuler",
+                            variant="soft",
+                            color_scheme="gray",
+                            on_click=CampaignListState.close_create_dialog,
+                        ),
+                    ),
+                    rx.button(
+                        rx.icon("plus", size=14),
+                        "Créer la campagne",
+                        on_click=CampaignListState.submit_create,
+                        loading=CampaignListState.is_creating,
+                    ),
+                    justify="end",
+                    spacing="2",
+                    margin_top="0.5rem",
+                    width="100%",
+                ),
+                spacing="3",
+                width="100%",
+            ),
+            max_width="560px",
+        ),
+        open=CampaignListState.show_create_dialog,
+        on_open_change=lambda _: CampaignListState.close_create_dialog(),
+    )
+
+
 def campaigns_list_page() -> rx.Component:
     return main_component(
         page_layout(
+            _create_campaign_dialog(),
             rx.vstack(
                 rx.hstack(
                     rx.vstack(
@@ -91,9 +256,10 @@ def campaigns_list_page() -> rx.Component:
                     ),
                     rx.spacer(),
                     rx.button(
-                        rx.icon("plus", size=16), "Nouvelle campagne",
+                        rx.icon("plus", size=14),
+                        "Nouvelle campagne",
                         on_click=CampaignListState.go_to_create,
-                        variant="solid",
+                        size="2",
                     ),
                     width="100%", align="end",
                 ),
@@ -113,18 +279,6 @@ def campaigns_list_page() -> rx.Component:
                             ),
                             value=CampaignListState.filter_status,
                             on_change=CampaignListState.set_filter_status,
-                        ),
-                        rx.select.root(
-                            rx.select.trigger(placeholder="Compte de facturation"),
-                            rx.select.content(
-                                rx.select.item("— Tous —", value="ALL"),
-                                rx.foreach(
-                                    CampaignListState.account_options,
-                                    lambda a: rx.select.item(a.name, value=a.id),
-                                ),
-                            ),
-                            value=CampaignListState.filter_account_id,
-                            on_change=CampaignListState.set_filter_account,
                         ),
                         rx.button(
                             rx.icon("refresh-cw", size=14), "Actualiser",
@@ -167,182 +321,41 @@ def campaigns_list_page() -> rx.Component:
                         ),
                     ),
                 ),
-                spacing="4",
-                width="100%",
-            ),
-            # ── Nouvelle campagne dialog ──────────────────────────────────
-            rx.dialog.root(
-                rx.dialog.content(
-                    rx.dialog.title("Nouvelle campagne"),
-                    rx.vstack(
-                        # Nom
-                        rx.vstack(
-                            rx.text("Nom *", size="2", weight="medium"),
-                            rx.input(
-                                placeholder="Ex. Bilan annuel 2026",
-                                value=CampaignListState.create_name,
-                                on_change=CampaignListState.set_create_name,
-                                width="100%",
-                            ),
-                            spacing="1", width="100%",
-                        ),
-                        # Types d'examens — sélection par liste déroulante
-                        rx.vstack(
-                            rx.hstack(
-                                rx.text("Types d'examens", size="2", weight="medium"),
-                                rx.cond(
-                                    CampaignListState.create_selected_exams.length() > 0,
-                                    rx.badge(
-                                        CampaignListState.create_selected_exams.length().to(str)
-                                        + " sélectionné(s)",
-                                        color_scheme="blue",
-                                        variant="soft",
-                                        size="1",
-                                    ),
-                                    rx.fragment(),
-                                ),
-                                spacing="2",
-                                align="center",
-                            ),
-                            rx.cond(
-                                CampaignListState.exam_type_options.length() == 0,
-                                rx.text(
-                                    "Aucun examen actif dans le référentiel.",
-                                    size="2",
-                                    color="var(--gray-9)",
-                                ),
-                                rx.select.root(
-                                    rx.select.trigger(
-                                        placeholder="— Ajouter un type d'examen…",
-                                        width="100%",
-                                    ),
-                                    rx.select.content(
-                                        rx.foreach(
-                                            CampaignListState.exam_type_options,
-                                            lambda o: rx.select.item(
-                                                o.name + " (" + o.category_label + ")",
-                                                value=o.id,
-                                            ),
-                                        ),
-                                    ),
-                                    value=CampaignListState.create_add_exam_select,
-                                    on_change=CampaignListState.add_exam_to_campaign,
-                                    width="100%",
-                                ),
-                            ),
-                            # Chips des examens sélectionnés
-                            rx.cond(
-                                CampaignListState.create_selected_exams.length() > 0,
-                                rx.flex(
-                                    rx.foreach(
-                                        CampaignListState.create_selected_exams,
-                                        _selected_exam_chip,
-                                    ),
-                                    flex_wrap="wrap",
-                                    gap="0.5rem",
-                                    width="100%",
-                                    padding_top="0.25rem",
-                                ),
-                                rx.fragment(),
-                            ),
-                            spacing="2", width="100%",
-                        ),
-                        # Compte de facturation
-                        rx.vstack(
-                            rx.text("Compte de facturation *", size="2", weight="medium"),
-                            rx.select.root(
-                                rx.select.trigger(
-                                    placeholder="Sélectionner un compte",
-                                    width="100%",
-                                ),
-                                rx.select.content(
-                                    rx.foreach(
-                                        CampaignListState.account_options,
-                                        lambda a: rx.select.item(a.name, value=a.id),
-                                    ),
-                                ),
-                                value=CampaignListState.create_account_id,
-                                on_change=CampaignListState.set_create_account_id,
-                                width="100%",
-                            ),
-                            spacing="1", width="100%",
-                        ),
-                        # Dates
-                        rx.hstack(
-                            rx.vstack(
-                                rx.text("Date début", size="2", weight="medium"),
-                                rx.input(
-                                    type="date",
-                                    value=CampaignListState.create_start_date,
-                                    on_change=CampaignListState.set_create_start_date,
-                                    width="100%",
-                                ),
-                                spacing="1", width="100%",
-                            ),
-                            rx.vstack(
-                                rx.text("Date fin", size="2", weight="medium"),
-                                rx.input(
-                                    type="date",
-                                    value=CampaignListState.create_end_date,
-                                    on_change=CampaignListState.set_create_end_date,
-                                    width="100%",
-                                ),
-                                spacing="1", width="100%",
-                            ),
-                            spacing="3", width="100%",
-                        ),
-                        # Lieu
-                        rx.vstack(
-                            rx.text("Lieu", size="2", weight="medium"),
-                            rx.input(
-                                placeholder="Ex. Siège social Paris",
-                                value=CampaignListState.create_location,
-                                on_change=CampaignListState.set_create_location,
-                                width="100%",
-                            ),
-                            spacing="1", width="100%",
-                        ),
-                        # Notes
-                        rx.vstack(
-                            rx.text("Notes internes", size="2", weight="medium"),
-                            rx.text_area(
-                                placeholder="Optionnel",
-                                value=CampaignListState.create_notes,
-                                on_change=CampaignListState.set_create_notes,
-                                width="100%",
-                                rows="3",
-                            ),
-                            spacing="1", width="100%",
-                        ),
-                        # Error
-                        rx.cond(
-                            CampaignListState.create_error != "",
-                            rx.callout(CampaignListState.create_error, icon="info", color_scheme="red", size="1"),
-                        ),
-                        spacing="3", width="100%",
-                    ),
+                # ── Pagination ──────────────────────────────────────────────
+                rx.cond(
+                    CampaignListState.total_count > 0,
                     rx.hstack(
-                        rx.dialog.close(
-                            rx.button(
-                                "Annuler",
-                                variant="soft",
-                                color_scheme="gray",
-                                on_click=CampaignListState.close_create_dialog,
-                            ),
+                        rx.text(
+                            CampaignListState.total_count.to(str)
+                            + " campagne(s) — page ",
+                            CampaignListState.page.to(str),
+                            " / ",
+                            CampaignListState.total_pages.to(str),
+                            size="2",
+                            color="var(--gray-9)",
                         ),
                         rx.spacer(),
                         rx.button(
-                            rx.icon("plus", size=14),
-                            "Créer la campagne",
-                            on_click=CampaignListState.submit_create,
-                            loading=CampaignListState.is_creating,
+                            rx.icon("chevron-left", size=14),
+                            on_click=CampaignListState.prev_page,
+                            variant="soft",
+                            size="2",
+                            disabled=~CampaignListState.has_prev_page,
+                        ),
+                        rx.button(
+                            rx.icon("chevron-right", size=14),
+                            on_click=CampaignListState.next_page,
+                            variant="soft",
+                            size="2",
+                            disabled=~CampaignListState.has_next_page,
                         ),
                         width="100%",
-                        margin_top="1rem",
+                        align="center",
+                        padding_top="0.5rem",
                     ),
-                    max_width="560px",
                 ),
-                open=CampaignListState.show_create_dialog,
+                spacing="4",
+                width="100%",
             ),
             # ── Confirm archivage campagne ────────────────────────────────────
             rx.dialog.root(

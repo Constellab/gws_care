@@ -43,43 +43,24 @@ class PatientListState(ReflexMainState):
     sort_column: str = "last_name"
     sort_ascending: bool = True
 
-    # ── Suppression avec double confirmation ──────────────────────────────
-    confirm_delete_patient_open: bool = False
-    confirm_delete_patient_id: str = ""
-    confirm_delete_patient_name: str = ""
-    is_deleting: bool = False
+    # Pagination
+    page: int = 1
+    page_size: int = 50
+    total_count: int = 0
 
-    @rx.event
-    def open_confirm_delete(self, patient_id: str, patient_name: str):
-        self.confirm_delete_patient_id = patient_id
-        self.confirm_delete_patient_name = patient_name
-        self.confirm_delete_patient_open = True
+    @rx.var
+    def total_pages(self) -> int:
+        if self.total_count == 0:
+            return 1
+        return max(1, (self.total_count + self.page_size - 1) // self.page_size)
 
-    @rx.event
-    def dismiss_confirm_delete(self):
-        self.confirm_delete_patient_open = False
-        self.confirm_delete_patient_id = ""
-        self.confirm_delete_patient_name = ""
+    @rx.var
+    def has_prev_page(self) -> bool:
+        return self.page > 1
 
-    @rx.event
-    async def confirmed_delete_patient(self):
-        """Deuxième clic : suppression effective du patient."""
-        patient_id = self.confirm_delete_patient_id
-        if not patient_id:
-            return
-        self.is_deleting = True
-        self.confirm_delete_patient_open = False
-        try:
-            with await self.authenticate_user():
-                from gws_care.patient.patient_service import PatientService
-                PatientService.delete_patient(patient_id)
-            await self._load_patients()
-        except Exception as e:
-            self.error_message = f"Erreur lors de la suppression : {e}"
-        finally:
-            self.is_deleting = False
-            self.confirm_delete_patient_id = ""
-            self.confirm_delete_patient_name = ""
+    @rx.var
+    def has_next_page(self) -> bool:
+        return self.page < self.total_pages
 
     @rx.event
     async def on_load(self):
@@ -88,69 +69,87 @@ class PatientListState(ReflexMainState):
         await self._load_patients()
 
     @rx.event
+    async def go_to_page(self, page: int):
+        self.page = max(1, min(page, self.total_pages))
+        await self._load_patients()
+
+    @rx.event
+    async def prev_page(self):
+        if self.has_prev_page:
+            self.page -= 1
+            await self._load_patients()
+
+    @rx.event
+    async def next_page(self):
+        if self.has_next_page:
+            self.page += 1
+            await self._load_patients()
+
+    @rx.event
     async def set_filter_account(self, value: str):
-        """Filter by account."""
+        """Filter by account — reset to page 1."""
         self.filter_account_id = value if value != "ALL" else ""
+        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def set_filter_dob_from(self, value: str):
-        """Filter patients born on or after this date."""
         self.filter_dob_from = value
+        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def set_filter_dob_to(self, value: str):
-        """Filter patients born on or before this date."""
         self.filter_dob_to = value
+        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def handle_name_change(self, value: str):
-        """Filter by name."""
+        """Debounce: state stores value immediately; _load_patients is called.
+        The actual debounce is handled in the component via rx.debounce_input."""
         self.search_name = value
+        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def handle_patient_number_change(self, value: str):
-        """Filter by patient number."""
         self.search_patient_number = value
+        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def handle_phone_change(self, value: str):
-        """Filter by phone."""
         self.search_phone = value
+        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def clear_filters(self):
-        """Reset all filters and reload."""
         self.search_name = ""
         self.search_patient_number = ""
         self.search_phone = ""
         self.filter_account_id = ""
         self.filter_dob_from = ""
         self.filter_dob_to = ""
+        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def set_sort(self, column: str):
-        """Sort by column; toggle direction if already sorted by the same column."""
         if self.sort_column == column:
             self.sort_ascending = not self.sort_ascending
         else:
             self.sort_column = column
             self.sort_ascending = True
+        self.page = 1
         await self._load_patients()
 
     @rx.event
     def go_to_patient(self, patient_id: str):
-        """Navigate to the patient detail page."""
         return rx.redirect(f"/patient/{patient_id}")
 
     async def _load_companies(self):
-        """Internal: load active accounts for the filter dropdown."""
         try:
             with await self.authenticate_user():
                 from gws_care.account.account_service import AccountService
@@ -158,22 +157,20 @@ class PatientListState(ReflexMainState):
                 self.companies = [
                     AccountOptionDTO(id=str(c.id), name=c.name) for c in comps
                 ]
-        except Exception:
+        except Exception as exc:
             self.companies = []
 
     async def _load_patients(self):
-        """Internal: load patients from DB with current filters."""
+        """Load one page of patients from DB — sort and filter are handled at SQL level."""
         if not await self.check_authentication():
             self.error_message = "Authentication required"
             return
-
         self.is_loading = True
         self.error_message = ""
-
         try:
             with await self.authenticate_user():
                 from gws_care.patient.patient_service import PatientService
-                patients = PatientService.search_patients(
+                filters = dict(
                     name=self.search_name or None,
                     patient_number=self.search_patient_number or None,
                     phone=self.search_phone or None,
@@ -181,7 +178,17 @@ class PatientListState(ReflexMainState):
                     dob_from=self.filter_dob_from or None,
                     dob_to=self.filter_dob_to or None,
                 )
-                patient_rows = [
+                self.total_count = PatientService.count_patients(**filters)
+                # Clamp page to valid range after count update
+                self.page = max(1, min(self.page, self.total_pages))
+                patients = PatientService.search_patients(
+                    **filters,
+                    sort_column=self.sort_column,
+                    sort_ascending=self.sort_ascending,
+                    limit=self.page_size,
+                    offset=(self.page - 1) * self.page_size,
+                )
+                self.patients = [
                     PatientRowDTO(
                         id=str(p.id),
                         patient_number=p.patient_number,
@@ -195,13 +202,7 @@ class PatientListState(ReflexMainState):
                     )
                     for p in patients
                 ]
-                sort_col = self.sort_column
-                self.patients = sorted(
-                    patient_rows,
-                    key=lambda row: (getattr(row, sort_col) or "").lower(),
-                    reverse=not self.sort_ascending,
-                )
         except Exception as e:
-            self.error_message = f"Error loading patients: {e}"
+            self.error_message = f"Erreur lors du chargement des patients : {e}"
         finally:
             self.is_loading = False

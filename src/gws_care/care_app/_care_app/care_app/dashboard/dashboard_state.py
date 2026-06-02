@@ -5,6 +5,8 @@ from pydantic import BaseModel
 import reflex as rx
 from gws_reflex_main import ReflexMainState
 
+from ..common.nav_role_state import NavRoleState
+
 
 # ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -44,6 +46,7 @@ class DashboardState(ReflexMainState):
     # "admin" | "operator" | "doctor_psc" | "doctor_enterprise" | "rh" | "unknown"
     user_role_context: str = "unknown"
     user_display_name: str = ""
+    is_preview_mode: bool = False
 
     # ── KPI counters ─────────────────────────────────────────────────────────
     total_campaigns: int = 0
@@ -99,40 +102,66 @@ class DashboardState(ReflexMainState):
         await self._load_stats()
 
     @rx.event
+    async def refresh_role_context(self):
+        """Re-evaluate role context — called when preview mode is toggled while on this page."""
+        await self._load_role_context()
+
+    @rx.event
     async def set_filter_account(self, value: str):
         self.filter_account_id = value if value != "ALL" else ""
         await self._load_stats()
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
+    @staticmethod
+    def _roles_to_context(roles: list[str]) -> str:
+        """Map a list of role strings to a dashboard context key."""
+        if not roles:
+            return "unknown"
+        if any(r in roles for r in ("SUPER_ADMIN_PSC", "ADMIN_PSC", "DIRECTEUR_PSC")):
+            return "admin"
+        if any(r in roles for r in ("OPERATEUR_TERRAIN", "OPERATEUR_LABO")):
+            return "operator"
+        if "MEDECIN_PSC" in roles:
+            return "doctor_psc"
+        if "MEDECIN_ENTREPRISE" in roles:
+            return "doctor_enterprise"
+        if "RH_ENTREPRISE" in roles:
+            return "rh"
+        return "unknown"
+
     async def _load_role_context(self):
-        """Detect the current user's role context for adaptive display."""
+        """Detect the current user's role context for adaptive display.
+
+        When preview mode is active (admin is previewing another user's view),
+        derive the context from the previewed roles instead of the DB.
+        """
         try:
+            # -- Preview mode: reflect the roles being simulated ----------------
+            nav_state = await self.get_state(NavRoleState)
+            if nav_state.preview_roles:
+                self.user_role_context = self._roles_to_context(list(nav_state.preview_roles))
+                self.user_display_name = f"Aperçu : {nav_state.preview_user_name}"
+                self.is_preview_mode = True
+                return
+
+            # -- Normal mode: read actual roles from DB -------------------------
+            self.is_preview_mode = False
             with await self.authenticate_user() as auth_user:
                 from gws_care.role.user_role_service import UserRoleService
                 from gws_care.user.user import User
                 roles = [r.value for r in UserRoleService.get_roles_for_user(str(auth_user.id))]
-                if not roles:
-                    self.user_role_context = "unknown"
-                elif any(r in roles for r in ("SUPER_ADMIN_PSC", "ADMIN_PSC", "DIRECTEUR_PSC")):
-                    self.user_role_context = "admin"
-                elif any(r in roles for r in ("OPERATEUR_TERRAIN", "OPERATEUR_LABO")):
-                    self.user_role_context = "operator"
-                elif "MEDECIN_PSC" in roles:
-                    self.user_role_context = "doctor_psc"
-                elif "MEDECIN_ENTREPRISE" in roles:
-                    self.user_role_context = "doctor_enterprise"
-                elif "RH_ENTREPRISE" in roles:
-                    self.user_role_context = "rh"
-                else:
-                    self.user_role_context = "unknown"
+                self.user_role_context = self._roles_to_context(roles)
                 try:
                     u = User.get_by_id(str(auth_user.id))
                     self.user_display_name = f"{u.first_name} {u.last_name}".strip() or u.email
-                except Exception:
+                except Exception as exc:
+                    print(f"[dashboard] Erreur chargement nom utilisateur: {exc}")
                     self.user_display_name = auth_user.email or ""
-        except Exception:
+        except Exception as exc:
+            print(f"[dashboard] Erreur chargement contexte utilisateur: {exc}")
             self.user_role_context = "unknown"
+            self.is_preview_mode = False
 
     async def _load_accounts(self):
         try:
@@ -142,7 +171,8 @@ class DashboardState(ReflexMainState):
                     AccountOption(id=str(a.id), name=a.name)
                     for a in AccountService.list_accounts()
                 ]
-        except Exception:
+        except Exception as exc:
+            print(f"[dashboard] Erreur chargement comptes: {exc}")
             self.accounts = []
 
     async def _load_stats(self):
@@ -167,7 +197,7 @@ class DashboardState(ReflexMainState):
 
                 cid = self.filter_account_id or None
 
-                # ── Core counts ───────────────────────────────────────────────
+                # ── Core counts (3 simple scalar queries) ─────────────────────
                 camp_q = Campaign.select()
                 patient_q = Patient.select()
                 appt_q = Appointment.select()
@@ -180,24 +210,39 @@ class DashboardState(ReflexMainState):
                     appt_q = appt_q.where(Appointment.billing_account == cid)
                     exam_q = exam_q.where(Exam.billing_account == cid)
 
-                self.total_campaigns = camp_q.count()
                 self.total_patients = patient_q.count()
                 self.total_appointments = appt_q.count()
                 self.total_certificates = cert_q.count()
 
-                # ── Presence stats from CampaignPatient ───────────────────────
+                # ── Campaign counts via one GROUP BY (replaces 4 separate COUNTs) ──
+                camp_status_map: dict[str, int] = {}
+                for row in (
+                    camp_q.select(Campaign.status, fn.COUNT(Campaign.id).alias("cnt"))
+                    .group_by(Campaign.status)
+                    .namedtuples()
+                ):
+                    camp_status_map[row.status] = row.cnt
+                self.total_campaigns = sum(camp_status_map.values())
+                self.dossiers_awaiting_psc = camp_status_map.get(CampaignStatus.LABO_VALIDE.value, 0)
+                self.dossiers_available_medecin_entreprise = camp_status_map.get(
+                    CampaignStatus.PUBLIE_MEDECIN_ENTREPRISE.value, 0
+                )
+                self.dossiers_published_patient = camp_status_map.get(CampaignStatus.PUBLIE_PATIENT.value, 0)
+
+                # ── Presence stats via one GROUP BY (replaces 3 separate COUNTs) ─
                 cp_q = CampaignPatient.select()
                 if cid:
-                    cp_q = (
-                        CampaignPatient.select()
-                        .join(Campaign)
-                        .where(Campaign.account == cid)
-                    )
-                self.total_convocations_sent = cp_q.count()
-                present_q = cp_q.where(CampaignPatient.presence_status == "PRESENT")
-                absent_q = cp_q.where(CampaignPatient.presence_status == "ABSENT")
-                self.total_present = present_q.count() if self.total_convocations_sent else 0
-                self.total_absent = absent_q.count() if self.total_convocations_sent else 0
+                    cp_q = CampaignPatient.select().join(Campaign).where(Campaign.account == cid)
+                cp_presence_map: dict[str, int] = {}
+                for row in (
+                    cp_q.select(CampaignPatient.presence_status, fn.COUNT(CampaignPatient.id).alias("cnt"))
+                    .group_by(CampaignPatient.presence_status)
+                    .namedtuples()
+                ):
+                    cp_presence_map[row.presence_status] = row.cnt
+                self.total_convocations_sent = sum(cp_presence_map.values())
+                self.total_present = cp_presence_map.get("PRESENT", 0)
+                self.total_absent = cp_presence_map.get("ABSENT", 0)
                 if self.total_convocations_sent > 0:
                     self.participation_rate = round(
                         self.total_present * 100 / self.total_convocations_sent
@@ -205,75 +250,88 @@ class DashboardState(ReflexMainState):
                 else:
                     self.participation_rate = 0
 
-                # ── Exam status breakdown ─────────────────────────────────────
-                self.exams_done = exam_q.where(Exam.status == "interpreted").count()
-                self.exams_to_enter = exam_q.where(Exam.status == "draft").count()
+                # ── Exam counts via one GROUP BY (replaces 2 separate COUNTs) ────
+                exam_status_map: dict[str, int] = {}
+                for row in (
+                    exam_q.select(Exam.status, fn.COUNT(Exam.id).alias("cnt"))
+                    .group_by(Exam.status)
+                    .namedtuples()
+                ):
+                    exam_status_map[row.status] = row.cnt
+                self.exams_done = exam_status_map.get("interpreted", 0)
+                self.exams_to_enter = exam_status_map.get("draft", 0)
                 self.exams_labo_validated = self.exams_done  # alias
 
-                # ── Campaign status breakdown (for dossiers awaiting) ─────────
-                self.dossiers_awaiting_psc = camp_q.where(
-                    Campaign.status == CampaignStatus.LABO_VALIDE
-                ).count()
-                self.dossiers_available_medecin_entreprise = camp_q.where(
-                    Campaign.status == CampaignStatus.PUBLIE_MEDECIN_ENTREPRISE
-                ).count()
-                self.dossiers_published_patient = camp_q.where(
-                    Campaign.status == CampaignStatus.PUBLIE_PATIENT
-                ).count()
+                # ── Notification counts via one GROUP BY (replaces 2 COUNTs) ─────
+                notif_status_map: dict[str, int] = {}
+                for row in (
+                    NotificationLog.select(NotificationLog.status, fn.COUNT(NotificationLog.id).alias("cnt"))
+                    .group_by(NotificationLog.status)
+                    .namedtuples()
+                ):
+                    notif_status_map[row.status] = row.cnt
+                self.notifications_sent = notif_status_map.get(NotificationStatus.SENT.value, 0)
+                self.notifications_failed = notif_status_map.get(NotificationStatus.FAILED.value, 0)
 
-                # ── Notifications ─────────────────────────────────────────────
-                notif_q = NotificationLog.select()
-                self.notifications_sent = notif_q.where(
-                    NotificationLog.status == NotificationStatus.SENT
-                ).count()
-                self.notifications_failed = notif_q.where(
-                    NotificationLog.status == NotificationStatus.FAILED
-                ).count()
+                # ── Role-specific pending counts via one GROUP BY (replaces 3 COUNTs) ──
+                medical_status_map: dict[str, int] = {}
+                for row in (
+                    CampaignPatient.select(CampaignPatient.medical_status, fn.COUNT(CampaignPatient.id).alias("cnt"))
+                    .group_by(CampaignPatient.medical_status)
+                    .namedtuples()
+                ):
+                    medical_status_map[row.medical_status] = row.cnt
+                self.my_pending_interpretations = medical_status_map.get("LAB_VALIDATED", 0)
+                self.my_pending_validation = medical_status_map.get("PSC_INTERPRETED", 0)
+                self.my_enterprise_pending = medical_status_map.get("PSC_VALIDATED", 0)
 
-                # ── Role-specific pending counts ──────────────────────────────
-                cp_all = CampaignPatient.select()
-                self.my_pending_interpretations = cp_all.where(
-                    CampaignPatient.medical_status == "LAB_VALIDATED"
-                ).count()
-                self.my_pending_validation = cp_all.where(
-                    CampaignPatient.medical_status == "PSC_INTERPRETED"
-                ).count()
-                self.my_enterprise_pending = cp_all.where(
-                    CampaignPatient.medical_status == "PSC_VALIDATED"
-                ).count()
-
-                # ── Campaigns by status ───────────────────────────────────────
-                status_rows = (
-                    camp_q.select(Campaign.status, fn.COUNT(Campaign.id).alias("cnt"))
-                    .group_by(Campaign.status)
-                )
+                # ── Campaigns by status (chart) ───────────────────────────────
                 self.campaigns_by_status = [
                     CampaignStatusStat(
-                        status=row.status,
-                        label=CampaignStatus(row.status).get_label(),
-                        color=CampaignStatus(row.status).get_color(),
-                        count=row.cnt,
+                        status=status,
+                        label=CampaignStatus(status).get_label(),
+                        color=CampaignStatus(status).get_color(),
+                        count=count,
                     )
-                    for row in status_rows
+                    for status, count in camp_status_map.items()
+                    if status in {s.value for s in CampaignStatus}
                 ]
 
-                # ── Recent campaigns (last 10) ────────────────────────────────
-                recent_q = (
-                    camp_q.order_by(Campaign.last_modified_at.desc()).limit(10)
-                )
+                # ── Recent campaigns — pre-aggregate patient counts (fix N+1) ──
+                recent_list = list(camp_q.order_by(Campaign.last_modified_at.desc()).limit(20))
+                recent_ids = [c.id for c in recent_list]
+                cp_counts_map: dict[str, int] = {}
+                if recent_ids:
+                    for row in (
+                        CampaignPatient.select(
+                            CampaignPatient.campaign_id,
+                            fn.COUNT(CampaignPatient.id).alias("cnt"),
+                        )
+                        .where(CampaignPatient.campaign.in_(recent_ids))
+                        .group_by(CampaignPatient.campaign_id)
+                        .namedtuples()
+                    ):
+                        cp_counts_map[str(row.campaign_id)] = row.cnt
+                # Pre-load account names (avoids N+1)
+                from gws_care.account.account import Account
+                recent_account_ids = [c.account_id for c in recent_list if c.account_id]
+                recent_account_names: dict[str, str] = {}
+                if recent_account_ids:
+                    for ac in Account.select(Account.id, Account.name).where(Account.id.in_(recent_account_ids)):
+                        recent_account_names[str(ac.id)] = ac.name
+
                 rows = []
-                for c in recent_q:
-                    cp_count = CampaignPatient.select().where(CampaignPatient.campaign == c).count()
+                for c in recent_list:
                     status_enum = CampaignStatus(c.status)
                     rows.append(
                         RecentCampaignRow(
                             id=str(c.id),
                             name=c.name,
-                            account_name=c.account.name if c.account_id else "",
+                            account_name=recent_account_names.get(str(c.account_id), "") if c.account_id else "",
                             status=c.status,
                             status_label=status_enum.get_label(),
                             status_color=status_enum.get_color(),
-                            patient_count=cp_count,
+                            patient_count=cp_counts_map.get(str(c.id), 0),
                             start_date=str(c.start_date) if c.start_date else "-",
                             end_date=str(c.end_date) if c.end_date else "-",
                         )

@@ -57,6 +57,10 @@ class ExamType(Enum):
 class ExamStatus(Enum):
     """Interpretation status of an exam."""
 
-    PENDING = "pending"          # Results entered, awaiting doctor interpretation
-    INTERPRETED = "interpreted"  # Doctor has written interpretation
-    DRAFT = "draft"              # Exam session created, results not yet entered
+    DRAFT = "draft"                # Exam session created, results not yet entered
+    COLLECTED = "collected"        # Sample collected by terrain operator
+    LAB_RECEIVED = "lab_received"  # Sample received by the lab
+    LAB_VALIDATED = "lab_validated"  # Lab has validated the results — awaiting doctor
+    PENDING = "pending"            # Results entered, awaiting doctor interpretation
+    INTERPRETED = "interpreted"    # Doctor has written interpretation
+    CANCELLED = "cancelled"        # Exam cancelled / voided

@@ -12,6 +12,8 @@ class CampaignDetailDTO(BaseModel):
     name: str
     account_id: str
     account_name: str
+    company_id: str = ""
+    company_name: str = ""
     status: str
     status_label: str
     status_color: str
@@ -71,6 +73,23 @@ class CampaignDetailState(ReflexMainState):
     is_loading: bool = False
     error: str = ""
     success: str = ""
+
+    # ── Patient list pagination ──────────────────────────────────────────
+    patients_page: int = 1
+    patients_page_size: int = 100
+    patients_total_count: int = 0
+
+    @rx.var
+    def patients_total_pages(self) -> int:
+        return max(1, (self.patients_total_count + self.patients_page_size - 1) // self.patients_page_size)
+
+    @rx.var
+    def patients_has_prev(self) -> bool:
+        return self.patients_page > 1
+
+    @rx.var
+    def patients_has_next(self) -> bool:
+        return self.patients_page < self.patients_total_pages
 
     # Workflow action dialog (refuse reason)
     refuse_dialog_open: bool = False
@@ -136,7 +155,7 @@ class CampaignDetailState(ReflexMainState):
     @rx.event
     def go_back(self):
         if self.campaign:
-            return rx.redirect(f"/account/{self.campaign.account_id}")
+            return rx.redirect(f"/company/{self.campaign.company_id}")
         return rx.redirect("/campaigns")
 
     # ── Workflow actions ──────────────────────────────────────────────────
@@ -349,6 +368,20 @@ class CampaignDetailState(ReflexMainState):
         except Exception as e:
             self.error = str(e)
 
+    # ── Patient list pagination events ────────────────────────────────────
+
+    @rx.event
+    async def patients_prev_page(self):
+        if self.patients_has_prev:
+            self.patients_page -= 1
+            await self._load_patients()
+
+    @rx.event
+    async def patients_next_page(self):
+        if self.patients_has_next:
+            self.patients_page += 1
+            await self._load_patients()
+
     # ── Add patient dialog ───────────────────────────────────────────────
 
     @rx.event
@@ -403,30 +436,32 @@ class CampaignDetailState(ReflexMainState):
                     )
                 )
 
-                # Mécanisme 3 : patients liés par company_id via existing patients
+                # Mécanisme 3 : patients liés directement via company_id de la campagne
                 ids_company: set[str] = set()
                 try:
                     from gws_care.patient.patient import Patient as _Patient
-                    from gws_care.company.company_service import CompanyService
-                    from gws_care.company.company import Company
-                    from gws_care.account.account import Account as _Account
-                    # a) via patients déjà liés à ce compte avec un company_id
-                    company_id = CompanyService.get_company_id_for_account(self.campaign.account_id)
-                    # b) fallback : trouver une Company dont le nom correspond au compte
-                    if not company_id:
-                        acct = _Account.get_or_none(_Account.id == self.campaign.account_id)
-                        if acct:
-                            comp = Company.get_or_none(Company.name == acct.name)
-                            if comp:
-                                company_id = str(comp.id)
-                    if company_id:
+                    # Utiliser directement le company_id de la campagne si disponible
+                    direct_company_id = self.campaign.company_id if self.campaign else None
+                    if not direct_company_id:
+                        # Fallback pour anciennes campagnes avec account_id
+                        from gws_care.company.company_service import CompanyService
+                        from gws_care.company.company import Company
+                        from gws_care.account.account import Account as _Account
+                        direct_company_id = CompanyService.get_company_id_for_account(self.campaign.account_id) if self.campaign.account_id else None
+                        if not direct_company_id and self.campaign.account_id:
+                            acct = _Account.get_or_none(_Account.id == self.campaign.account_id)
+                            if acct:
+                                comp = Company.get_or_none(Company.name == acct.name)
+                                if comp:
+                                    direct_company_id = str(comp.id)
+                    if direct_company_id:
                         ids_company = set(
                             str(p.id)
                             for p in _Patient.select(_Patient.id)
-                            .where(_Patient.company_id == company_id)
+                            .where(_Patient.company_id == direct_company_id)
                         )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(f"[campaign_detail] Erreur chargement patients entreprise: {exc}")
 
                 candidate_ids = (ids_fk | ids_m2m | ids_company) - already_in
 
@@ -441,7 +476,7 @@ class CampaignDetailState(ReflexMainState):
                         | Patient.first_name.contains(query)
                         | Patient.patient_number.contains(query)
                     )
-                base_q = base_q.order_by(Patient.last_name, Patient.first_name).limit(50)
+                base_q = base_q.order_by(Patient.last_name, Patient.first_name).limit(500)
 
                 self.patient_options = [
                     PatientSearchOptionDTO(
@@ -450,7 +485,8 @@ class CampaignDetailState(ReflexMainState):
                     )
                     for p in base_q
                 ]
-        except Exception:
+        except Exception as exc:
+            print(f"[campaign_detail] Erreur chargement options patient: {exc}")
             self.patient_options = []
 
     @rx.event
@@ -472,7 +508,7 @@ class CampaignDetailState(ReflexMainState):
                 for pid in self.selected_patient_ids:
                     try:
                         CampaignService.add_patient(self.campaign.id, pid)
-                    except Exception:
+                    except Exception as exc:
                         pass
             self.add_patient_dialog_open = False
             await self._load_campaign()
@@ -537,7 +573,8 @@ class CampaignDetailState(ReflexMainState):
                     )
                     for r in refs
                 ]
-        except Exception:
+        except Exception as exc:
+            print(f"[campaign_detail] Erreur chargement types examen: {exc}")
             self.exam_type_options = []
         self.add_exam_type_dialog_open = True
 
@@ -651,8 +688,8 @@ class CampaignDetailState(ReflexMainState):
                     PatientSearchOptionDTO(id=str(r.user.id), label=f"{r.user.last_name} {r.user.first_name}")
                     for r in ent
                 ]
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[campaign_detail] Erreur chargement options RH entreprise: {exc}")
 
     @rx.event
     def close_edit_dialog(self):
@@ -806,9 +843,9 @@ class CampaignDetailState(ReflexMainState):
                                             f"Cordialement,\nPSC Care"
                                         ),
                                     )
-                                except Exception:
+                                except Exception as exc:
                                     pass
-                    except Exception:
+                    except Exception as exc:
                         pass  # notifications non bloquantes
 
             await self._load_campaign()
@@ -850,19 +887,21 @@ class CampaignDetailState(ReflexMainState):
                 if c.psc_doctor_id:
                     try:
                         psc_name = f"{c.psc_doctor.first_name} {c.psc_doctor.last_name}"
-                    except Exception:
+                    except Exception as exc:
                         pass
                 ent_name = ""
                 if c.enterprise_doctor_id:
                     try:
                         ent_name = f"{c.enterprise_doctor.first_name} {c.enterprise_doctor.last_name}"
-                    except Exception:
+                    except Exception as exc:
                         pass
                 self.campaign = CampaignDetailDTO(
                     id=str(c.id),
                     name=c.name,
-                    account_id=str(c.account_id),
+                    account_id=str(c.account_id) if c.account_id else "",
                     account_name=c.account.name if c.account_id else "",
+                    company_id=str(c.company_id) if c.company_id else "",
+                    company_name=c.company.name if c.company_id else (c.account.name if c.account_id else ""),
                     status=c.status,
                     status_label=status_e.get_label(),
                     status_color=status_e.get_color(),
@@ -888,16 +927,33 @@ class CampaignDetailState(ReflexMainState):
         if not self.campaign:
             return
         with await self.authenticate_user():
+            from peewee import fn
             from gws_care.campaign.campaign_patient import CampaignPatient, MedicalRecordStatus, PresenceStatus
             from gws_care.patient.patient import Patient
-            rows = (
+
+            base_q = (
                 CampaignPatient.select(CampaignPatient, Patient)
                 .join(Patient)
                 .where(CampaignPatient.campaign == self.campaign.id)
+            )
+            if self.patient_search and len(self.patient_search) >= 1:
+                term = f"%{self.patient_search}%"
+                base_q = base_q.where(
+                    Patient.last_name ** term
+                    | Patient.first_name ** term
+                    | Patient.patient_number ** term
+                )
+            self.patients_total_count = base_q.count()
+            self.patients_page = max(1, min(self.patients_page, self.patients_total_pages))
+
+            rows_q = (
+                base_q
                 .order_by(Patient.last_name)
+                .limit(self.patients_page_size)
+                .offset((self.patients_page - 1) * self.patients_page_size)
             )
             result = []
-            for cp in rows:
+            for cp in rows_q:
                 try:
                     ps = PresenceStatus(cp.presence_status)
                 except ValueError:

@@ -28,22 +28,23 @@ class RoleState(ReflexMainState):
 
     @rx.var
     def is_admin(self) -> bool:
-        # TODO: remove dev bypass before production
-        return True
+        return (
+            "SUPER_ADMIN_PSC" in self._care_roles
+            or "ADMIN_PSC" in self._care_roles
+            or self._is_platform_admin
+        )
 
     @rx.var
     def is_doctor(self) -> bool:
-        # TODO: remove dev bypass before production
-        return True
+        return "MEDECIN_PSC" in self._care_roles or "MEDECIN_ENTREPRISE" in self._care_roles
 
     @rx.var
     def is_operator(self) -> bool:
-        # TODO: remove dev bypass before production
-        return True
+        return "OPERATEUR_TERRAIN" in self._care_roles or "OPERATEUR_LABO" in self._care_roles
 
     @rx.var
     def has_any_role(self) -> bool:
-        return True
+        return len(self._care_roles) > 0 or self._is_platform_admin
 
     @rx.var
     def is_account_admin(self) -> bool:
@@ -84,9 +85,9 @@ class RoleState(ReflexMainState):
                 try:
                     local_user = User.get_by_id(str(auth_user.id))
                     self._is_platform_admin = local_user.group == UserGroup.ADMIN
-                except Exception:
+                except Exception as exc:
                     self._is_platform_admin = False
-        except Exception:
+        except Exception as exc:
             self._care_roles = []
             self._linked_account_id = ""
             self._linked_patient_id = ""

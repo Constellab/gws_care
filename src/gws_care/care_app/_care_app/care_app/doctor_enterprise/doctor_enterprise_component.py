@@ -154,6 +154,16 @@ def doctor_enterprise_page() -> rx.Component:
                                on_click=DoctorEnterpriseState.dismiss_messages, style={"cursor": "pointer"}),
                 ),
                 rx.cond(
+                    DoctorEnterpriseState.dossiers_truncated,
+                    rx.callout(
+                        "Résultats limités à 500 dossiers. Utilisez les filtres Campagne ou Statut pour affiner la sélection.",
+                        icon="triangle-alert",
+                        color_scheme="orange",
+                        size="1",
+                    ),
+                    rx.fragment(),
+                ),
+                rx.cond(
                     DoctorEnterpriseState.is_loading,
                     rx.center(rx.spinner(size="3"), padding="4rem"),
                     rx.cond(

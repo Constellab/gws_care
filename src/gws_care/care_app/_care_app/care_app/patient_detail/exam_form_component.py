@@ -3,25 +3,7 @@
 import reflex as rx
 from gws_reflex_base import form_dialog_component
 
-from .exam_form_state import ExamFormState, StagedFile
-
-_EXAM_TYPE_OPTIONS = [
-    ("biology", "Biology"),
-    ("radiology", "Radiology"),
-    ("ophthalmology", "Ophthalmology"),
-    ("orl", "ORL"),
-    ("ecg", "ECG"),
-    ("spirometry", "Spirometry"),
-    ("clinical", "Clinical Exam"),
-    ("hormones", "Hormones"),
-    ("hematology", "Hematology"),
-    ("bacteriology", "Bacteriology"),
-    ("parasitology", "Parasitology"),
-    ("drug_test", "Drug Test"),
-    ("immunology", "Immunology"),
-    ("hepatic_markers", "Hepatic Markers"),
-    ("other", "Other"),
-]
+from .exam_form_state import ExamFormState, ExamParamOption, StagedFile
 
 _DOC_TYPE_OPTIONS = [
     ("medical_certificate", "Medical Certificate"),
@@ -156,11 +138,60 @@ def _upload_section() -> rx.Component:
     )
 
 
+def _param_checkbox_row(param: ExamParamOption) -> rx.Component:
+    """One checkbox row for a requested lab parameter."""
+    return rx.hstack(
+        rx.checkbox(
+            checked=ExamFormState.selected_param_ids.contains(param.id),
+            on_change=lambda _: ExamFormState.toggle_param_selection(param.id),
+            size="2",
+        ),
+        rx.text(param.name, size="2", flex="1"),
+        rx.cond(
+            param.unit != "",
+            rx.text(param.unit, size="1", color="var(--gray-9)"),
+        ),
+        spacing="2",
+        align="center",
+        width="100%",
+    )
+
+
+def _params_section() -> rx.Component:
+    """Parameter selection section — shown only when the selected exam type has ExamParameters."""
+    return rx.cond(
+        ExamFormState.available_exam_params,
+        rx.vstack(
+            rx.hstack(
+                rx.icon("flask-conical", size=14, color="var(--blue-9)"),
+                rx.text("Analyses à prescrire", size="2", weight="medium"),
+                spacing="2",
+                align="center",
+            ),
+            rx.box(
+                rx.foreach(ExamFormState.available_exam_params, _param_checkbox_row),
+                padding="0.75rem",
+                background="var(--blue-2)",
+                border_radius="8px",
+                width="100%",
+            ),
+            rx.text(
+                rx.icon("info", size=11, display="inline"),
+                " Le laborantin sera notifié et recevra la liste des analyses à effectuer.",
+                size="1",
+                color="var(--gray-8)",
+            ),
+            width="100%",
+            spacing="2",
+        ),
+    )
+
+
 def _form_fields() -> rx.Component:
     return rx.vstack(
         rx.grid(
             _field(
-                "Exam Date *",
+                "Date *",
                 rx.input(
                     value=ExamFormState.form_exam_date,
                     on_change=ExamFormState.set_form_exam_date,
@@ -170,11 +201,17 @@ def _form_fields() -> rx.Component:
                 ),
             ),
             _field(
-                "Exam Type *",
+                "Type d'examen *",
                 rx.select.root(
-                    rx.select.trigger(width="100%"),
+                    rx.select.trigger(width="100%", placeholder="Sélectionner un examen..."),
                     rx.select.content(
-                        *[rx.select.item(label, value=value) for value, label in _EXAM_TYPE_OPTIONS],
+                        rx.foreach(
+                            ExamFormState.exam_type_options,
+                            lambda o: rx.select.item(
+                                o.name + " (" + o.category_label + ")",
+                                value=o.id,
+                            ),
+                        ),
                     ),
                     value=ExamFormState.form_exam_type,
                     on_change=ExamFormState.set_form_exam_type,
@@ -187,114 +224,44 @@ def _form_fields() -> rx.Component:
             width="100%",
         ),
         _field(
-            "Reason for visit",
+            "Motif",
             rx.text_area(
                 value=ExamFormState.form_reason_for_visit,
                 on_change=ExamFormState.set_form_reason_for_visit,
-                placeholder="Reason for visit...",
+                placeholder="Motif de la consultation...",
                 size="2",
                 width="100%",
                 rows="2",
             ),
         ),
-        _field(
-            "Medical history",
-            rx.text_area(
-                value=ExamFormState.form_medical_history,
-                on_change=ExamFormState.set_form_medical_history,
-                placeholder="Relevant medical history...",
-                size="2",
-                width="100%",
-                rows="3",
+        _params_section(),
+        rx.cond(
+            ExamFormState.load_error != "",
+            rx.callout(
+                ExamFormState.load_error,
+                icon="triangle-alert",
+                color_scheme="red",
+                size="1",
             ),
+            rx.fragment(),
         ),
-        rx.vstack(
-            rx.text("Physical examination", size="2", weight="medium"),
-            rx.grid(
-                _field(
-                    "Weight (kg)",
-                    rx.input(
-                        value=ExamFormState.form_weight,
-                        on_change=ExamFormState.set_form_weight,
-                        placeholder="e.g. 70",
-                        type="number",
-                        size="2",
-                        width="100%",
-                    ),
-                ),
-                _field(
-                    "Height (cm)",
-                    rx.input(
-                        value=ExamFormState.form_height,
-                        on_change=ExamFormState.set_form_height,
-                        placeholder="e.g. 175",
-                        type="number",
-                        size="2",
-                        width="100%",
-                    ),
-                ),
-                _field(
-                    "BMI",
-                    rx.input(
-                        value=ExamFormState.form_bmi,
-                        on_change=ExamFormState.set_form_bmi,
-                        placeholder="e.g. 22.9",
-                        type="number",
-                        size="2",
-                        width="100%",
-                    ),
-                ),
-                _field(
-                    "Blood pressure",
-                    rx.input(
-                        value=ExamFormState.form_blood_pressure,
-                        on_change=ExamFormState.set_form_blood_pressure,
-                        placeholder="e.g. 120/80",
-                        size="2",
-                        width="100%",
-                    ),
-                ),
-                _field(
-                    "Heart rate (bpm)",
-                    rx.input(
-                        value=ExamFormState.form_heart_rate,
-                        on_change=ExamFormState.set_form_heart_rate,
-                        placeholder="e.g. 72",
-                        type="number",
-                        size="2",
-                        width="100%",
-                    ),
-                ),
-                _field(
-                    "Temperature (°C)",
-                    rx.input(
-                        value=ExamFormState.form_temperature,
-                        on_change=ExamFormState.set_form_temperature,
-                        placeholder="e.g. 37.0",
-                        type="number",
-                        size="2",
-                        width="100%",
-                    ),
-                ),
-                columns="3",
-                spacing="3",
-                width="100%",
+        _field("Pièces jointes", _upload_section()),
+        rx.cond(
+            ExamFormState.form_error != "",
+            rx.callout(
+                ExamFormState.form_error,
+                icon="triangle-alert",
+                color_scheme="red",
+                size="1",
             ),
-            width="100%",
-            spacing="2",
+            rx.fragment(),
         ),
-        _field(
-            "Conclusion and recommendations",
-            rx.text_area(
-                value=ExamFormState.form_conclusion,
-                on_change=ExamFormState.set_form_conclusion,
-                placeholder="Conclusion and recommendations...",
-                size="2",
-                width="100%",
-                rows="3",
-            ),
+        rx.text(
+            rx.icon("info", size=12, display="inline"),
+            " Les données cliniques (poids, tension, résultats…) se saisissent depuis la fiche de l'examen.",
+            size="1",
+            color="var(--gray-8)",
         ),
-        _field("Attachments", _upload_section()),
         width="100%",
         spacing="4",
     )

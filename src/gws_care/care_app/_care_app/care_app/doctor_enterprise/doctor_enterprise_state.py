@@ -24,6 +24,7 @@ class EntDossierRowDTO(BaseModel):
 
 class DoctorEnterpriseState(ReflexMainState):
     dossiers: list[EntDossierRowDTO] = []
+    dossiers_truncated: bool = False  # True when result capped at 500
     is_loading: bool = False
     error: str = ""
     success: str = ""
@@ -150,7 +151,7 @@ class DoctorEnterpriseState(ReflexMainState):
                 if linked_account_id:
                     query = query.where(Campaign.account == linked_account_id)
                 rows = []
-                for cp in query:
+                for cp in query.limit(500):
                     try:
                         ms = MedicalRecordStatus(cp.medical_status)
                     except ValueError:
@@ -174,6 +175,7 @@ class DoctorEnterpriseState(ReflexMainState):
                         published_at=cp.published_at.isoformat() if cp.published_at else "",
                     ))
                 self.dossiers = rows
+                self.dossiers_truncated = len(rows) >= 500
         except Exception as e:
             self.error = str(e)
         finally:

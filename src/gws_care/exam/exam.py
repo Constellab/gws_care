@@ -4,7 +4,7 @@ from datetime import date
 
 from gws_core import EnumField
 from gws_core.core.model.db_field import JSONField
-from peewee import CharField, DateField, FloatField, ForeignKeyField, TextField
+from peewee import CharField, DateField, FloatField, ForeignKeyField, TextField  # noqa: F401 (CharField used for exam_type_ref_id)
 
 from gws_care.account.account import Account
 from gws_care.core.care_db_manager import CareDbManager
@@ -21,12 +21,18 @@ class Exam(ModelWithUser):
 
     An exam session covers a single exam type performed on a given date.
     Results are stored in ExamResult records linked to this exam.
+
+    When consultation_id is set, the clinical context (reason, history, vitals)
+    is shared with the parent Consultation record and should not be edited per-exam.
     """
 
     patient: Patient = ForeignKeyField(Patient, null=False, backref="exams", on_delete="CASCADE")
     billing_account: Account = ForeignKeyField(Account, null=True, backref="exams", on_delete="SET NULL")
+    # consultation_id links this exam to a parent Consultation (nullable for standalone exams)
+    consultation_id: str = CharField(max_length=36, null=True, default=None, index=True)
     exam_date: date = DateField(null=False, index=True)
     exam_type: ExamType = EnumField(choices=ExamType, null=False)
+    exam_type_ref_id: str = CharField(max_length=36, null=True, default=None)
     status: ExamStatus = EnumField(choices=ExamStatus, default=ExamStatus.DRAFT, null=False)
     reason_for_visit: str = TextField(null=True)
     medical_history: str = TextField(null=True)
@@ -38,6 +44,9 @@ class Exam(ModelWithUser):
     temperature: float = FloatField(null=True)   # °C
     conclusion: str = TextField(null=True)
     lab_results: list = JSONField(null=True)  # list of {parameter, value, reference_range, status}
+    requested_param_ids: list = JSONField(null=True)  # list of ExamParameter.id strings — tests requested by doctor
+    # ExamTypeRef.id strings prescribed by doctor for follow-up (blood test, X-ray, etc.)
+    prescribed_exam_ref_ids: list = JSONField(null=True)
     interpretation: str = TextField(null=True)
     interpreted_by: User = ForeignKeyField(User, null=True, backref="+")
 
@@ -61,8 +70,11 @@ class Exam(ModelWithUser):
             temperature=self.temperature,
             conclusion=self.conclusion,
             lab_results=self.lab_results or [],
+            requested_param_ids=self.requested_param_ids or [],
+            prescribed_exam_ref_ids=self.prescribed_exam_ref_ids or [],
             interpretation=self.interpretation,
             interpreted_by_id=str(self.interpreted_by_id) if self.interpreted_by_id else None,
+            consultation_id=self.consultation_id or "",
         )
 
     class Meta:

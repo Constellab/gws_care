@@ -89,7 +89,7 @@ def audit_page() -> rx.Component:
                 rx.hstack(
                     rx.vstack(
                         rx.heading("Journal d'audit", size="6"),
-                        rx.text("Traçabilité des actions sensibles — 200 dernières entrées", size="2", color="var(--gray-9)"),
+                        rx.text("Traçabilité des actions sensibles", size="2", color="var(--gray-9)"),
                         spacing="0",
                     ),
                     rx.spacer(),
@@ -108,11 +108,14 @@ def audit_page() -> rx.Component:
                             value=AuditState.filter_action,
                             on_change=AuditState.set_filter_action,
                         ),
-                        rx.input(
-                            placeholder="Email utilisateur…",
-                            value=AuditState.filter_user,
-                            on_change=AuditState.set_filter_user,
-                            flex="1",
+                        rx.debounce_input(
+                            rx.input(
+                                placeholder="Email utilisateur…",
+                                value=AuditState.filter_user,
+                                on_change=AuditState.set_filter_user,
+                                flex="1",
+                            ),
+                            debounce_timeout=400,
                         ),
                         rx.button("Filtrer", on_click=AuditState.apply_filters, size="2", variant="solid"),
                         spacing="3", width="100%", align="center",
@@ -150,6 +153,39 @@ def audit_page() -> rx.Component:
                             padding="4rem",
                         ),
                     ),
+                ),
+                # Pagination controls
+                rx.cond(
+                    AuditState.total_count > 0,
+                    rx.hstack(
+                        rx.text(
+                            AuditState.total_count.to(str)
+                            + " entrée(s) — page "
+                            + AuditState.page.to(str)
+                            + " / "
+                            + AuditState.total_pages.to(str),
+                            size="2",
+                            color="var(--gray-9)",
+                        ),
+                        rx.spacer(),
+                        rx.button(
+                            rx.icon("chevron-left", size=14),
+                            on_click=AuditState.prev_page,
+                            variant="soft",
+                            size="2",
+                            disabled=~AuditState.has_prev_page,
+                        ),
+                        rx.button(
+                            rx.icon("chevron-right", size=14),
+                            on_click=AuditState.next_page,
+                            variant="soft",
+                            size="2",
+                            disabled=~AuditState.has_next_page,
+                        ),
+                        width="100%",
+                        align="center",
+                    ),
+                    rx.fragment(),
                 ),
                 spacing="4", width="100%",
             )

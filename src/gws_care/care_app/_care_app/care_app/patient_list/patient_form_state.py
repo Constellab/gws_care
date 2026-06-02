@@ -3,14 +3,22 @@
 from typing import AsyncGenerator
 
 import reflex as rx
+from pydantic import BaseModel
 from gws_reflex_base import FormDialogState
 from gws_reflex_main import ReflexMainState
 
 
-class CompanyOption(rx.Base):
+class CompanyOption(BaseModel):
     """Lightweight company option for dropdown."""
     id: str
     name: str
+
+
+class DoctorOption(BaseModel):
+    """Doctor available for selection as primary physician."""
+    user_id: str = ""
+    name: str = ""
+    role_label: str = ""
 
 
 class PatientFormState(FormDialogState, rx.State):
@@ -32,6 +40,9 @@ class PatientFormState(FormDialogState, rx.State):
     form_city: str = ""
     form_primary_physician_name: str = ""
     form_primary_physician_phone: str = ""
+    # Doctor directory dropdown
+    doctor_options: list[DoctorOption] = []
+    form_physician_user_id: str = ""  # "" = free text mode
 
     # Set when editing an existing patient
     _editing_patient_id: str = ""
@@ -45,6 +56,7 @@ class PatientFormState(FormDialogState, rx.State):
     # Company dropdown (shown in standalone create dialog)
     form_company_id: str = ""
     company_options: list[CompanyOption] = []
+    form_error: str = ""
 
     # ── Setters ───────────────────────────────────────────────────────────────
 
@@ -95,6 +107,21 @@ class PatientFormState(FormDialogState, rx.State):
     @rx.event
     def set_form_primary_physician_phone(self, value: str):
         self.form_primary_physician_phone = value
+
+    @rx.event
+    def select_physician_from_directory(self, user_id: str):
+        """Select a doctor from the directory; populate name from stored options."""
+        if user_id == "__other__":
+            self.form_physician_user_id = "__other__"
+            self.form_primary_physician_name = ""
+            return
+        for opt in self.doctor_options:
+            if opt.user_id == user_id:
+                self.form_physician_user_id = user_id
+                self.form_primary_physician_name = opt.name
+                return
+        # Fallback
+        self.form_physician_user_id = user_id
     @rx.event
     def set_form_company_id(self, value: str):
         self.form_company_id = "" if value == "__none__" else value
@@ -116,6 +143,7 @@ class PatientFormState(FormDialogState, rx.State):
                 CompanyOption(id=str(c.id), name=c.name)
                 for c in sorted(companies, key=lambda c: c.name)
             ]
+            await self._load_doctor_options(_main)
         self.dialog_opened = True
 
     @rx.event
@@ -138,6 +166,9 @@ class PatientFormState(FormDialogState, rx.State):
         await self._clear_form_state()
         # Set AFTER _clear_form_state so it is not wiped
         self._context_company_id = company_id
+        _main = await self.get_state(ReflexMainState)
+        with await _main.authenticate_user():
+            await self._load_doctor_options(_main)
         self.dialog_opened = True
 
     @rx.event
@@ -167,6 +198,9 @@ class PatientFormState(FormDialogState, rx.State):
             self.form_primary_physician_name = p.primary_physician_name or ""
             self.form_primary_physician_phone = p.primary_physician_phone or ""
             self._form_account_id = str(p.billing_account_id) if p.billing_account_id else ""
+            self.form_company_id = str(p.company_id) if p.company_id else ""
+            self.form_physician_user_id = ""
+            await self._load_doctor_options(_main)
 
         self.dialog_opened = True
 
@@ -185,12 +219,56 @@ class PatientFormState(FormDialogState, rx.State):
         self.form_city = ""
         self.form_primary_physician_name = ""
         self.form_primary_physician_phone = ""
+        self.form_physician_user_id = ""
         self._editing_patient_id = ""
         self._form_account_id = ""
         self.form_company_id = ""
         self.is_update_mode = False
+        self.form_error = ""
         # Note: _context_account_id and _context_company_id are NOT cleared here
         # — they are set by the open_create_for_* methods and must survive until _create runs.
+
+    async def _load_doctor_options(self, _main=None) -> None:
+        """Load all doctors from the staff directory for the physician dropdown."""
+        try:
+            from gws_care.role.care_role import CareRole
+            from gws_care.role.user_role_service import UserRoleService
+
+            rows = UserRoleService.list_users_with_roles()
+            options: list[DoctorOption] = []
+            doctor_roles = {CareRole.MEDECIN_PSC.value, CareRole.MEDECIN_ENTREPRISE.value}
+            seen: set[str] = set()
+            doctor_rows = [
+                row for row in rows
+                if any(r in doctor_roles for r in row.get("roles", []))
+            ]
+            for row in doctor_rows:
+                uid = row["id"]
+                if uid in seen:
+                    continue
+                seen.add(uid)
+                full_name = row.get("full_name", "").strip()
+                if not full_name:
+                    full_name = row.get("email", "Médecin")
+                role_label = ", ".join(
+                    CareRole(r).get_label()
+                    for r in row.get("roles", [])
+                    if r in doctor_roles
+                )
+                specialty = row.get("specialty", "") or ""
+                display = full_name
+                if specialty:
+                    display = f"{full_name} — {specialty}"
+                options.append(DoctorOption(
+                    user_id=uid,
+                    name=display,
+                    role_label=role_label,
+                ))
+            self.doctor_options = options
+        except Exception as exc:
+            from gws_core.core.utils.logger import Logger
+            Logger.error(f"[patient_form] _load_doctor_options failed: {exc}")
+            self.doctor_options = []
 
     async def _create(self, form_data: dict) -> AsyncGenerator:
         """Create a new patient from form data."""
@@ -199,20 +277,26 @@ class PatientFormState(FormDialogState, rx.State):
         from gws_care.patient.patient_dto import SavePatientDTO
         from gws_care.patient.patient_service import PatientService
 
+        async with self:
+            self.form_error = ""
         last_name = self.form_last_name.strip()
         first_name = self.form_first_name.strip()
 
         if not last_name:
-            yield rx.toast.error("Last name is required")
+            async with self:
+                self.form_error = "Last name is required"
             return
         if not first_name:
-            yield rx.toast.error("First name is required")
+            async with self:
+                self.form_error = "First name is required"
             return
         if not self.form_date_of_birth:
-            yield rx.toast.error("Date of birth is required")
+            async with self:
+                self.form_error = "Date of birth is required"
             return
         if not self.form_email.strip():
-            yield rx.toast.error("L'adresse email est obligatoire")
+            async with self:
+                self.form_error = "L'adresse email est obligatoire"
             return
 
         dto = SavePatientDTO(
@@ -263,20 +347,26 @@ class PatientFormState(FormDialogState, rx.State):
         from gws_care.patient.patient_dto import SavePatientDTO
         from gws_care.patient.patient_service import PatientService
 
+        async with self:
+            self.form_error = ""
         last_name = self.form_last_name.strip()
         first_name = self.form_first_name.strip()
 
         if not last_name:
-            yield rx.toast.error("Last name is required")
+            async with self:
+                self.form_error = "Last name is required"
             return
         if not first_name:
-            yield rx.toast.error("First name is required")
+            async with self:
+                self.form_error = "First name is required"
             return
         if not self.form_date_of_birth:
-            yield rx.toast.error("Date of birth is required")
+            async with self:
+                self.form_error = "Date of birth is required"
             return
         if not self.form_email.strip():
-            yield rx.toast.error("L'adresse email est obligatoire")
+            async with self:
+                self.form_error = "L'adresse email est obligatoire"
             return
 
         dto = SavePatientDTO(
@@ -299,6 +389,8 @@ class PatientFormState(FormDialogState, rx.State):
             _main = await self.get_state(ReflexMainState)
         with await _main.authenticate_user():
             PatientService.update_patient(self._editing_patient_id, dto)
+            company_id = self.form_company_id or None
+            PatientService.assign_company(self._editing_patient_id, company_id)
 
         yield rx.toast.success("Patient updated successfully")
 

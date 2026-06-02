@@ -3,6 +3,7 @@ from gws_core import BaseModelDTO, ModelDTO
 
 class AccountDTO(ModelDTO):
     account_type: str = "COMPANY"
+    company_id: str | None = None  # FK to Company (employer) — populated when account_type==COMPANY
     name: str
     registration_number: str | None
     address: str | None
@@ -16,6 +17,7 @@ class AccountDTO(ModelDTO):
 
 class SaveAccountDTO(BaseModelDTO):
     account_type: str = "COMPANY"
+    company_id: str | None = None  # FK to Company — set when creating a billing account from a Company
     name: str
     registration_number: str | None = None
     address: str | None = None

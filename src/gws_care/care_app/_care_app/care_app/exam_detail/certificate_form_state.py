@@ -16,6 +16,7 @@ class CertificateFormState(FormDialogState, rx.State):
     form_conclusion: str = ""
     form_is_fit_for_work: bool = True
     form_restrictions: str = ""
+    form_error: str = ""
 
     # Context
     _patient_id: str = ""
@@ -63,11 +64,15 @@ class CertificateFormState(FormDialogState, rx.State):
         self._patient_id = ""
         self._exam_id = ""
         self.is_update_mode = False
+        self.form_error = ""
 
     async def _create(self, form_data: dict) -> AsyncGenerator:
         """Issue a medical certificate."""
+        async with self:
+            self.form_error = ""
         if not self.form_conclusion.strip():
-            yield rx.toast.error("Conclusion is required.")
+            async with self:
+                self.form_error = "Conclusion is required."
             return
 
         async with self:
@@ -96,4 +101,7 @@ class CertificateFormState(FormDialogState, rx.State):
 
     async def _update(self, form_data: dict) -> AsyncGenerator:
         """Certificates cannot be edited."""
-        yield rx.toast.error("Certificates cannot be edited.")
+        async with self:
+            self.form_error = "Certificates cannot be edited."
+        return
+        yield  # make it a generator

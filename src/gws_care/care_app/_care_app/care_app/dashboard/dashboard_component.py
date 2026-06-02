@@ -4,6 +4,7 @@ import reflex as rx
 from gws_reflex_main import main_component
 
 from ..common.language_state import LanguageState
+from ..common.nav_role_state import NavRoleState
 from ..common.page_layout import page_layout
 from .dashboard_state import (
     AccountOption,
@@ -211,20 +212,29 @@ def _filter_account_option(opt: AccountOption) -> rx.Component:
 
 def _filter_bar() -> rx.Component:
     return rx.hstack(
-        rx.hstack(
-            rx.icon("search", size=16, color=_C_NEUTRAL),
-            rx.text("Filtrer par entreprise", size="2", color=_C_NEUTRAL),
-            spacing="1",
-            align="center",
-        ),
-        rx.select.root(
-            rx.select.trigger(placeholder="Toutes les entreprises", width="260px"),
-            rx.select.content(
-                rx.select.item("Toutes les entreprises", value="ALL"),
-                rx.foreach(DashboardState.accounts, _filter_account_option),
+        # Enterprise filter: only relevant for admin role context
+        rx.cond(
+            DashboardState.user_role_context == "admin",
+            rx.hstack(
+                rx.hstack(
+                    rx.icon("search", size=16, color=_C_NEUTRAL),
+                    rx.text("Filtrer par entreprise", size="2", color=_C_NEUTRAL),
+                    spacing="1",
+                    align="center",
+                ),
+                rx.select.root(
+                    rx.select.trigger(placeholder="Toutes les entreprises", width="260px"),
+                    rx.select.content(
+                        rx.select.item("Toutes les entreprises", value="ALL"),
+                        rx.foreach(DashboardState.accounts, _filter_account_option),
+                    ),
+                    on_change=DashboardState.set_filter_account,
+                    value=rx.cond(DashboardState.filter_account_id != "", DashboardState.filter_account_id, "ALL"),
+                ),
+                spacing="2",
+                align="center",
             ),
-            on_change=DashboardState.set_filter_account,
-            value=rx.cond(DashboardState.filter_account_id != "", DashboardState.filter_account_id, "ALL"),
+            rx.fragment(),
         ),
         rx.cond(
             DashboardState.is_loading,
@@ -377,6 +387,86 @@ def _pipeline_strip() -> rx.Component:
     )
 
 
+def _role_kpi_section() -> rx.Component:
+    """Render KPI grids adapted to the current user's role context."""
+    return rx.match(
+        DashboardState.user_role_context,
+        # Admin: priorité — 4 KPIs essentiels + détail secondaire
+        ("admin", rx.vstack(
+            rx.grid(
+                _kpi_card("Campagnes actives", DashboardState.total_campaigns, "list", _C_PRIMARY),
+                _kpi_card("En attente médecin PSC", DashboardState.dossiers_awaiting_psc, "shield", _C_PURPLE),
+                _kpi_card("Taux de participation", DashboardState.participation_rate.to(str) + " %", "flag", _C_DONE),
+                _kpi_card("Notifs \u00e9chou\u00e9es", DashboardState.notifications_failed, "x", _C_DANGER),
+                columns="4", spacing="4", width="100%",
+            ),
+            _kpi_grid_1(),
+            _kpi_grid_3(),
+            spacing="4", width="100%",
+        )),
+        # Doctor PSC: personal interpretation queue + pipeline overview
+        ("doctor_psc", rx.vstack(
+            rx.grid(
+                _kpi_card("À interpréter", DashboardState.my_pending_interpretations, "shield", _C_PURPLE),
+                _kpi_card("À valider", DashboardState.my_pending_validation, "check-circle", _C_DONE),
+                _kpi_card("En attente PSC (global)", DashboardState.dossiers_awaiting_psc, "clock", _C_WARN),
+                _kpi_card("Campagnes actives", DashboardState.total_campaigns, "list", _C_PRIMARY),
+                columns="4", spacing="4", width="100%",
+            ),
+            rx.grid(
+                _kpi_card("Examens à saisir", DashboardState.exams_to_enter, "pen-line", _C_WARN),
+                _kpi_card("Examens réalisés", DashboardState.exams_done, "eye", _C_INFO),
+                _kpi_card("Labo validés", DashboardState.exams_labo_validated, "file", _C_DONE),
+                _kpi_card("Certificats générés", DashboardState.total_certificates, "award", _C_PURPLE),
+                columns="4", spacing="4", width="100%",
+            ),
+            spacing="4", width="100%",
+        )),
+        # Doctor enterprise: dossiers available for interpretation
+        ("doctor_enterprise", rx.vstack(
+            rx.grid(
+                _kpi_card("Dossiers à traiter", DashboardState.my_enterprise_pending, "building-2", _C_PURPLE),
+                _kpi_card("Publiés patients", DashboardState.dossiers_published_patient, "users", _C_DONE),
+                _kpi_card("Total patients", DashboardState.total_patients, "users", _C_INFO),
+                _kpi_card("Taux de participation", DashboardState.participation_rate.to(str) + " %", "flag", _C_DONE),
+                columns="4", spacing="4", width="100%",
+            ),
+            spacing="4", width="100%",
+        )),
+        # RH: participation statistics
+        ("rh", rx.vstack(
+            _kpi_grid_1(),
+            _kpi_grid_2(),
+            spacing="4", width="100%",
+        )),
+        # Operator (terrain / labo): exam-centric view
+        ("operator", rx.vstack(
+            rx.grid(
+                _kpi_card("Campagnes", DashboardState.total_campaigns, "list", _C_PRIMARY),
+                _kpi_card("Patients", DashboardState.total_patients, "users", _C_INFO),
+                _kpi_card("Présents", DashboardState.total_present, "check", _C_DONE),
+                _kpi_card("Absents", DashboardState.total_absent, "ban", _C_DANGER),
+                columns="4", spacing="4", width="100%",
+            ),
+            rx.grid(
+                _kpi_card("Examens à saisir", DashboardState.exams_to_enter, "pen-line", _C_WARN),
+                _kpi_card("Examens réalisés", DashboardState.exams_done, "eye", _C_INFO),
+                _kpi_card("Labo validés", DashboardState.exams_labo_validated, "file", _C_DONE),
+                _kpi_card(
+                    "Taux de participation",
+                    DashboardState.participation_rate.to(str) + " %",
+                    "flag",
+                    _C_DONE,
+                ),
+                columns="4", spacing="4", width="100%",
+            ),
+            spacing="4", width="100%",
+        )),
+        # Default / unknown: basic overview only
+        _kpi_grid_1(),
+    )
+
+
 # ── Role-adaptive header banner ───────────────────────────────────────────────
 
 def _role_banner() -> rx.Component:
@@ -388,7 +478,7 @@ def _role_banner() -> rx.Component:
                 rx.box(rx.icon("shield", size=20, color=_C_PURPLE),
                        padding="0.5rem", border_radius="8px", background="var(--violet-3)"),
                 rx.vstack(
-                    rx.text(f"Bonjour {DashboardState.user_display_name} — Médecin PSC", size="3", weight="bold"),
+                    rx.text("Bonjour " + DashboardState.user_display_name + " — Médecin PSC", size="3", weight="bold"),
                     rx.text("Dossiers en attente de votre interprétation", size="2", color="var(--gray-9)"),
                     spacing="0",
                 ),
@@ -433,7 +523,7 @@ def _role_banner() -> rx.Component:
                 rx.box(rx.icon("heart", size=20, color="var(--green-9)"),
                        padding="0.5rem", border_radius="8px", background="var(--green-3)"),
                 rx.vstack(
-                    rx.text(f"Bonjour {DashboardState.user_display_name} — Médecin Entreprise", size="3", weight="bold"),
+                    rx.text("Bonjour " + DashboardState.user_display_name + " — Médecin Entreprise", size="3", weight="bold"),
                     rx.text("Dossiers disponibles pour votre interprétation", size="2", color="var(--gray-9)"),
                     spacing="0",
                 ),
@@ -453,7 +543,7 @@ def _role_banner() -> rx.Component:
                     rx.button(
                         rx.icon("arrow-right", size=14), "Voir les dossiers",
                         color_scheme="green", size="2",
-                        on_click=rx.redirect("/doctor-enterprise"),
+                        on_click=rx.redirect("/doctor-psc"),
                     ),
                     spacing="3", align="center",
                 ),
@@ -467,7 +557,7 @@ def _role_banner() -> rx.Component:
                 rx.box(rx.icon("user-plus", size=20, color="var(--blue-9)"),
                        padding="0.5rem", border_radius="8px", background="var(--blue-3)"),
                 rx.vstack(
-                    rx.text(f"Bonjour {DashboardState.user_display_name} — Responsable RH", size="3", weight="bold"),
+                    rx.text("Bonjour " + DashboardState.user_display_name + " — Responsable RH", size="3", weight="bold"),
                     rx.text("Suivi administratif de vos campagnes de santé", size="2", color="var(--gray-9)"),
                     spacing="0",
                 ),
@@ -495,11 +585,6 @@ def _role_banner() -> rx.Component:
                         border_radius="10px",
                         background="var(--teal-2)",
                     ),
-                    rx.button(
-                        rx.icon("arrow-right", size=14), "Espace RH",
-                        color_scheme="blue", size="2",
-                        on_click=rx.redirect("/hr"),
-                    ),
                     spacing="3", align="center",
                 ),
                 spacing="3", align="center", width="100%",
@@ -512,7 +597,7 @@ def _role_banner() -> rx.Component:
                 rx.box(rx.icon("flask-conical", size=20, color="var(--teal-9)"),
                        padding="0.5rem", border_radius="8px", background="var(--teal-3)"),
                 rx.vstack(
-                    rx.text(f"Bonjour {DashboardState.user_display_name} — Opérateur", size="3", weight="bold"),
+                    rx.text("Bonjour " + DashboardState.user_display_name + " — Opérateur", size="3", weight="bold"),
                     rx.text("Campagnes en cours à gérer", size="2", color="var(--gray-9)"),
                     spacing="0",
                 ),
@@ -531,13 +616,75 @@ def _role_banner() -> rx.Component:
     )
 
 
+# ── Preview mode callout ──────────────────────────────────────────────────────
+
+def _preview_mode_banner() -> rx.Component:
+    """Amber callout shown when an admin is previewing another user's dashboard."""
+    return rx.cond(
+        DashboardState.is_preview_mode,
+        rx.callout(
+            rx.hstack(
+                rx.text("Mode aperçu — tableau de bord affiché tel que le voit ", size="2"),
+                rx.text(DashboardState.user_display_name, size="2", weight="bold"),
+                rx.spacer(),
+                rx.button(
+                    rx.icon("x", size=13),
+                    "Quitter l'aperçu",
+                    size="1",
+                    variant="soft",
+                    color_scheme="amber",
+                    on_click=[NavRoleState.stop_preview, DashboardState.refresh_role_context],
+                ),
+                spacing="1",
+                align="center",
+                width="100%",
+            ),
+            icon="eye",
+            color_scheme="amber",
+            width="100%",
+        ),
+        rx.fragment(),
+    )
+
+
 # ── Page assembly ─────────────────────────────────────────────────────────────
+
+def _patient_access_block() -> rx.Component:
+    """Shown to pure-patient users who navigate to /dashboard by URL."""
+    return rx.center(
+        rx.vstack(
+            rx.icon("lock", size=40, color="var(--gray-8)"),
+            rx.heading("Accès non autorisé", size="5", weight="medium"),
+            rx.text(
+                "Cette page est réservée au personnel PSC.",
+                size="2",
+                color="var(--gray-9)",
+                text_align="center",
+            ),
+            rx.link(
+                rx.button("Aller à Mon espace", color_scheme="teal"),
+                href="/patient-portal",
+            ),
+            spacing="4",
+            align="center",
+        ),
+        padding="6rem 2rem",
+        width="100%",
+    )
+
 
 def dashboard_page() -> rx.Component:
     return main_component(
         page_layout(
-            # Header
-            rx.vstack(
+            rx.cond(
+                NavRoleState.is_pure_patient,
+                _patient_access_block(),
+                rx.vstack(
+                    # Preview mode indicator (visible only when admin simulates another role)
+                    _preview_mode_banner(),
+
+                    # Header
+                    rx.vstack(
                 rx.hstack(
                     rx.vstack(
                         rx.heading("Dashboard opérationnel", size="6", weight="bold"),
@@ -563,10 +710,8 @@ def dashboard_page() -> rx.Component:
             # Role-specific banner
             _role_banner(),
 
-            # KPI rows
-            _kpi_grid_1(),
-            _kpi_grid_2(),
-            _kpi_grid_3(),
+            # Role-adaptive KPI rows
+            _role_kpi_section(),
 
             # Two-column middle section
             rx.grid(
@@ -609,5 +754,9 @@ def dashboard_page() -> rx.Component:
                 title="Campagnes récentes",
                 icon="list",
             ),
+                    spacing="4",
+                    width="100%",
+                ),   # closes rx.vstack (else branch of rx.cond)
+            ),       # closes rx.cond
         )
     )

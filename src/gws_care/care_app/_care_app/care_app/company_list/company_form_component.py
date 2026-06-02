@@ -115,6 +115,16 @@ def _form_fields() -> rx.Component:
             spacing="3",
             width="100%",
         ),
+        rx.cond(
+            CompanyFormState.form_error != "",
+            rx.callout(
+                CompanyFormState.form_error,
+                icon="triangle-alert",
+                color_scheme="red",
+                size="1",
+            ),
+            rx.fragment(),
+        ),
         rx.hstack(
             rx.button(
                 LanguageState.tr["cancel_btn"],

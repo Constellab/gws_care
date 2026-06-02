@@ -59,3 +59,4 @@ class SaveExamTypeRefDTO(BaseModel):
     is_active: bool = True
     allows_attachment: bool = True
     requires_attachment: bool = False
+    required_sample_type: str | None = None

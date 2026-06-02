@@ -10,6 +10,8 @@ class CampaignDTO(BaseModel):
     name: str
     account_id: str
     account_name: str
+    company_id: str = ""
+    company_name: str = ""
     status: str
     status_label: str
     status_color: str
@@ -25,7 +27,8 @@ class CampaignDTO(BaseModel):
 
 class SaveCampaignDTO(BaseModel):
     name: str
-    account_id: str
+    account_id: str = ""
+    company_id: str = ""
     start_date: date | None = None
     end_date: date | None = None
     location: str | None = None

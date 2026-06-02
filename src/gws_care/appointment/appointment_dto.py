@@ -40,8 +40,12 @@ class SaveAppointmentDTO(BaseModelDTO):
     patient_id: str
     account_id: str | None = None
     scheduled_at: str          # ISO datetime string (YYYY-MM-DDTHH:MM)
-    exam_type: str
+    exam_type: str = "other"   # kept for backward-compat; use exam_type_ref_id for new records
+    exam_type_ref_id: str | None = None   # ExamTypeRef.id — set by forms using the referential
     notes: str | None = None
+    assigned_doctor_id: str | None = None
+    duration_minutes: int = 20
+    room: str | None = None
 
 
 class UpdateAppointmentStatusDTO(BaseModelDTO):

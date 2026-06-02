@@ -16,15 +16,16 @@ _EN: dict[str, str] = {
     "nav_patients": "Patients",
     "nav_appointments": "Appointments",
     "nav_accounts": "Accounts",
-    "nav_notifications": "Notifications",
+    "nav_notifications": "Communications & Outbox",
     "nav_settings": "Settings",
     # ── Settings page ──────────────────────────────────────────────────────────
     "settings_title": "Settings",
     "settings_admin_only": "Admin Only",
-    "settings_tab_general": "General",
+    "settings_tab_general": "Users & Roles",
     "settings_tab_import": "Import",
     "settings_tab_roles": "User Roles",
-    "settings_tab_notifications": "Notifications",
+    "settings_tab_notifications": "Messaging & Reminders",
+    "settings_tab_smtp": "Mail Server",
     # ── General / Language tab ─────────────────────────────────────────────────
     "general_title": "General",
     "language_label": "Language",
@@ -251,7 +252,7 @@ _EN: dict[str, str] = {
     "tooltip_view_patient": "View patient",
     "tooltip_remove_from_account": "Remove from account",
     # ── Notifications page ────────────────────────────────────────────────────
-    "notifications_page_title": "Notifications",
+    "notifications_page_title": "Communications & Outbox",
     "tab_compose": "Compose",
     "tab_history": "History",
     "compose_card_title": "Compose Message",
@@ -375,6 +376,16 @@ _EN: dict[str, str] = {
     "lab_group_thyroid": "Thyroid",
     "lab_group_inflammation": "Inflammation",
     "lab_group_coagulation": "Coagulation",
+    # ── Patient deletion ─────────────────────────────────────────────────────
+    "tooltip_delete_patient": "Delete patient",
+    "patient_delete_title": "Delete patient",
+    "patient_delete_irreversible": "This action is irreversible.",
+    "patient_delete_warning_prefix": "Patient \u00ab\u00a0",
+    "patient_delete_warning_suffix": "\u00a0\u00bb will be permanently deleted along with all their data.",
+    "patient_delete_reason_label": "Reason for deletion *",
+    "patient_delete_reason_placeholder": "Specify the reason (required)\u2026",
+    "patient_delete_reason_required": "A reason is required before confirming the deletion.",
+    "patient_delete_confirm_btn": "Delete permanently",
 }
 
 _FR: dict[str, str] = {
@@ -383,15 +394,16 @@ _FR: dict[str, str] = {
     "nav_patients": "Patients",
     "nav_appointments": "Rendez-vous",
     "nav_accounts": "Comptes",
-    "nav_notifications": "Notifications",
+    "nav_notifications": "Communications & envois",
     "nav_settings": "Paramètres",
     # ── Settings page ──────────────────────────────────────────────────────────
     "settings_title": "Paramètres",
     "settings_admin_only": "Admin uniquement",
-    "settings_tab_general": "Général",
+    "settings_tab_general": "Utilisateurs & rôles",
     "settings_tab_import": "Import",
     "settings_tab_roles": "Rôles utilisateurs",
-    "settings_tab_notifications": "Notifications",
+    "settings_tab_notifications": "Messagerie & rappels",
+    "settings_tab_smtp": "Serveur mail",
     # ── General / Language tab ─────────────────────────────────────────────────
     "general_title": "Général",
     "language_label": "Langue",
@@ -618,7 +630,7 @@ _FR: dict[str, str] = {
     "tooltip_view_patient": "Voir le patient",
     "tooltip_remove_from_account": "Retirer du compte",
     # ── Notifications page ────────────────────────────────────────────────────
-    "notifications_page_title": "Notifications",
+    "notifications_page_title": "Communications & envois",
     "tab_compose": "Composer",
     "tab_history": "Historique",
     "compose_card_title": "Composer un message",
@@ -742,6 +754,16 @@ _FR: dict[str, str] = {
     "lab_group_thyroid": "Thyroïde",
     "lab_group_inflammation": "Inflammation",
     "lab_group_coagulation": "Coagulation",
+    # ── Suppression patient ──────────────────────────────────────────────
+    "tooltip_delete_patient": "Supprimer le patient",
+    "patient_delete_title": "Supprimer le patient",
+    "patient_delete_irreversible": "Cette action est irréversible.",
+    "patient_delete_warning_prefix": "Le patient \u00ab\u00a0",
+    "patient_delete_warning_suffix": "\u00a0\u00bb sera définitivement supprimé ainsi que toutes ses données.",
+    "patient_delete_reason_label": "Motif de suppression *",
+    "patient_delete_reason_placeholder": "Précisez le motif (obligatoire)\u2026",
+    "patient_delete_reason_required": "Un motif est obligatoire avant de confirmer la suppression.",
+    "patient_delete_confirm_btn": "Supprimer définitivement",
 }
 
 

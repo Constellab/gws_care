@@ -19,6 +19,7 @@ class CompanyFormState(FormDialogState, rx.State):
     form_phone: str = ""
     form_email: str = ""
     form_contact_name: str = ""
+    form_error: str = ""
 
     # Set when editing an existing company
     _editing_company_id: str = ""
@@ -105,18 +106,19 @@ class CompanyFormState(FormDialogState, rx.State):
         self.form_contact_name = ""
         self._editing_company_id = ""
         self.is_update_mode = False
+        self.form_error = ""
 
     async def _create(self, form_data: dict) -> AsyncGenerator:
         """Create a new company from form data."""
         from gws_care.company.company_dto import SaveCompanyDTO
         from gws_care.company.company_service import CompanyService
 
+        async with self:
+            self.form_error = ""
         name = self.form_name.strip()
         if not name:
-            yield rx.toast.error("Company name is required")
-            return
-        if not self.form_email.strip():
-            yield rx.toast.error("L'email du responsable est obligatoire")
+            async with self:
+                self.form_error = "Le nom de l'entreprise est obligatoire"
             return
 
         dto = SaveCompanyDTO(
@@ -126,7 +128,7 @@ class CompanyFormState(FormDialogState, rx.State):
             postal_code=self.form_postal_code or None,
             city=self.form_city or None,
             phone=self.form_phone or None,
-            email=self.form_email.strip(),
+            email=self.form_email.strip() or None,
             contact_name=self.form_contact_name or None,
         )
 
@@ -135,7 +137,7 @@ class CompanyFormState(FormDialogState, rx.State):
         with await _main.authenticate_user():
             company = CompanyService.create_company(dto)
 
-        yield rx.toast.success(f"Company '{company.name}' created")
+        yield rx.toast.success(f"Entreprise '{company.name}' créée")
 
         from ..company_list.company_list_state import CompanyListState
         yield CompanyListState.on_load()
@@ -145,12 +147,12 @@ class CompanyFormState(FormDialogState, rx.State):
         from gws_care.company.company_dto import SaveCompanyDTO
         from gws_care.company.company_service import CompanyService
 
+        async with self:
+            self.form_error = ""
         name = self.form_name.strip()
         if not name:
-            yield rx.toast.error("Company name is required")
-            return
-        if not self.form_email.strip():
-            yield rx.toast.error("L'email du responsable est obligatoire")
+            async with self:
+                self.form_error = "Le nom de l'entreprise est obligatoire"
             return
 
         dto = SaveCompanyDTO(
@@ -160,7 +162,7 @@ class CompanyFormState(FormDialogState, rx.State):
             postal_code=self.form_postal_code or None,
             city=self.form_city or None,
             phone=self.form_phone or None,
-            email=self.form_email.strip(),
+            email=self.form_email.strip() or None,
             contact_name=self.form_contact_name or None,
         )
 

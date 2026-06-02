@@ -44,7 +44,7 @@ class BellState(ReflexMainState):
                     )
                     for b in bells[:10]
                 ]
-        except Exception:
+        except Exception as exc:
             pass
 
     @rx.event
@@ -72,5 +72,5 @@ class BellState(ReflexMainState):
                 self.unread_count = 0
                 for entry in self.bell_entries:
                     entry.is_read = True
-        except Exception:
+        except Exception as exc:
             pass

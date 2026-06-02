@@ -49,6 +49,8 @@ class ExamService:
         exam.billing_account_id = dto.account_id
         exam.exam_date = dto.exam_date
         exam.exam_type = dto.exam_type
+        exam.exam_type_ref_id = dto.exam_type_ref_id
+        exam.requested_param_ids = dto.requested_param_ids if dto.requested_param_ids else None
         exam.status = ExamStatus.DRAFT
         exam.reason_for_visit = dto.reason_for_visit
         exam.medical_history = dto.medical_history
@@ -76,6 +78,8 @@ class ExamService:
         exam.temperature = dto.temperature
         exam.conclusion = dto.conclusion
         exam.lab_results = dto.lab_results
+        if dto.prescribed_exam_ref_ids is not None:
+            exam.prescribed_exam_ref_ids = dto.prescribed_exam_ref_ids or None
         exam.save()
         return exam
 
@@ -84,6 +88,8 @@ class ExamService:
         exam = cls.get_exam(exam_id)
         exam.exam_date = dto.exam_date
         exam.exam_type = dto.exam_type
+        exam.exam_type_ref_id = dto.exam_type_ref_id
+        exam.requested_param_ids = dto.requested_param_ids or None
         exam.billing_account_id = dto.account_id
         exam.reason_for_visit = dto.reason_for_visit
         exam.medical_history = dto.medical_history

@@ -36,8 +36,11 @@ class ExamDTO(ModelDTO):
     temperature: float | None = None
     conclusion: str | None = None
     lab_results: list[dict] = []
+    requested_param_ids: list[str] = []
+    prescribed_exam_ref_ids: list[str] = []  # follow-up exams prescribed by doctor
     interpretation: str | None = None
     interpreted_by_id: str | None = None
+    consultation_id: str = ""   # non-empty when this exam belongs to a Consultation
 
 
 class ExamRowDTO(BaseModelDTO):
@@ -56,7 +59,9 @@ class SaveExamDTO(BaseModelDTO):
     patient_id: str
     account_id: str | None = None
     exam_date: date
-    exam_type: ExamType
+    exam_type: ExamType = ExamType.OTHER   # kept for backward-compat; use exam_type_ref_id for new records
+    exam_type_ref_id: str | None = None    # ExamTypeRef.id — set by forms using the referential
+    requested_param_ids: list[str] = []    # ExamParameter.id list — tests requested by doctor
     reason_for_visit: str | None = None
     medical_history: str | None = None
     weight: float | None = None
@@ -81,6 +86,7 @@ class UpdateExamSectionsDTO(BaseModelDTO):
     temperature: float | None = None
     conclusion: str | None = None
     lab_results: list[dict] | None = None
+    prescribed_exam_ref_ids: list[str] | None = None  # follow-up exams prescribed by doctor
 
 
 class InterpretExamDTO(BaseModelDTO):

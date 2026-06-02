@@ -6,6 +6,7 @@ from gws_care.account.account import Account
 from gws_care.campaign.campaign import Campaign
 from gws_care.campaign.campaign_patient import CampaignPatient, MedicalRecordStatus, PresenceStatus
 from gws_care.campaign.campaign_status import CampaignStatus
+from gws_care.company.company import Company
 from gws_care.user.user import User
 
 
@@ -21,8 +22,9 @@ class CampaignService:
     @classmethod
     def create_campaign(
         cls,
-        account_id: str,
         name: str,
+        company_id: str | None = None,
+        account_id: str | None = None,
         start_date: date | None = None,
         end_date: date | None = None,
         location: str | None = None,
@@ -31,13 +33,19 @@ class CampaignService:
         requires_medical_review: bool = False,
         notes: str | None = None,
     ) -> Campaign:
-        account = Account.get_by_id_and_check(account_id)
-        if not account.is_active:
-            raise CampaignValidationError("Impossible de créer une campagne pour un compte archivé.")
+        if not company_id and not account_id:
+            raise CampaignValidationError("Une entreprise est obligatoire pour créer une campagne.")
         if start_date and end_date and end_date < start_date:
             raise CampaignValidationError("La date de fin doit être ≥ à la date de début.")
         campaign = Campaign()
-        campaign.account = account
+        if company_id:
+            company = Company.get_by_id_and_check(company_id)
+            campaign.company = company
+        if account_id:
+            account = Account.get_by_id_and_check(account_id)
+            if not account.is_active:
+                raise CampaignValidationError("Impossible de créer une campagne pour un compte archivé.")
+            campaign.account = account
         campaign.name = name
         campaign.status = CampaignStatus.DRAFT
         campaign.start_date = start_date
@@ -100,10 +108,29 @@ class CampaignService:
         )
 
     @classmethod
-    def list_all_campaigns(cls, status: str | None = None) -> list[Campaign]:
+    def count_all_campaigns(cls, status: str | None = None, search: str = "") -> int:
+        q = Campaign.select()
+        if status:
+            q = q.where(Campaign.status == status)
+        if search:
+            q = q.where(Campaign.name ** f"%{search}%")
+        return q.count()
+
+    @classmethod
+    def list_all_campaigns(
+        cls,
+        status: str | None = None,
+        search: str = "",
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Campaign]:
         q = Campaign.select().order_by(Campaign.created_at.desc())
         if status:
             q = q.where(Campaign.status == status)
+        if search:
+            q = q.where(Campaign.name ** f"%{search}%")
+        if limit is not None:
+            q = q.limit(limit).offset(offset)
         return list(q)
 
     @classmethod
@@ -130,7 +157,8 @@ class CampaignService:
         affiliated_m2m = PatientAccountService.is_patient_affiliated_to_account(patient_id, account_id)
         try:
             affiliated_fk = str(Patient.get_by_id_and_check(patient_id).billing_account_id) == account_id
-        except Exception:
+        except Exception as exc:
+            print(f"[campaign_service] billing_account_id check for patient={patient_id}: {exc}")
             affiliated_fk = False
 
         if not (affiliated_m2m or affiliated_fk):
@@ -336,6 +364,16 @@ class CampaignService:
         campaign.status = CampaignStatus.LABO_VALIDE
         campaign.save()
         return campaign
+
+    @classmethod
+    def save_psc_notes_draft(cls, campaign_id: str, patient_id: str, notes: str) -> CampaignPatient:
+        """Save PSC notes without changing the workflow status (draft mode)."""
+        cp = CampaignPatient.get(
+            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
+        )
+        cp.psc_notes = notes
+        cp.save()
+        return cp
 
     @classmethod
     def add_psc_interpretation(cls, campaign_id: str, patient_id: str, notes: str) -> CampaignPatient:

@@ -5,6 +5,8 @@ from gws_reflex_main import main_component
 
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
+from .patient_delete_component import patient_delete_dialog
+from .patient_delete_state import PatientDeleteState
 from .patient_form_component import patient_form_dialog
 from .patient_form_state import PatientFormState
 from .patient_list_state import AccountOptionDTO, PatientListState, PatientRowDTO
@@ -37,11 +39,31 @@ def _patient_row(patient: PatientRowDTO) -> rx.Component:
             rx.cond(patient.phone, rx.text(patient.phone, size="2"), rx.text("—", color="var(--gray-8)", size="2"))
         ),
         rx.table.cell(
-            rx.icon_button(
-                rx.icon("chevron-right", size=16),
-                variant="ghost",
-                size="1",
-                on_click=lambda: PatientListState.go_to_patient(patient.id),
+            rx.hstack(
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("chevron-right", size=16),
+                        variant="ghost",
+                        size="1",
+                        on_click=lambda: PatientListState.go_to_patient(patient.id),
+                    ),
+                    content=LanguageState.tr["tooltip_view_patient"],
+                ),
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("trash-2", size=14),
+                        variant="ghost",
+                        size="1",
+                        color_scheme="red",
+                        on_click=lambda: PatientDeleteState.open_delete_dialog(
+                            patient.id,
+                            patient.first_name + " " + patient.last_name,
+                            "/",
+                        ),
+                    ),
+                    content=LanguageState.tr["tooltip_delete_patient"],
+                ),
+                spacing="1",
             )
         ),
         style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
@@ -78,26 +100,35 @@ def _sortable_header(label: str, column: str) -> rx.Component:
 def _filter_bar() -> rx.Component:
     return rx.vstack(
         rx.hstack(
-            rx.input(
-                placeholder=LanguageState.tr["search_patient_number"],
-                value=PatientListState.search_patient_number,
-                on_change=PatientListState.handle_patient_number_change,
-                min_width="180px",
-                size="2",
+            rx.debounce_input(
+                rx.input(
+                    placeholder=LanguageState.tr["search_patient_number"],
+                    value=PatientListState.search_patient_number,
+                    on_change=PatientListState.handle_patient_number_change,
+                    min_width="180px",
+                    size="2",
+                ),
+                debounce_timeout=300,
             ),
-            rx.input(
-                placeholder=LanguageState.tr["search_name_placeholder"],
-                value=PatientListState.search_name,
-                on_change=PatientListState.handle_name_change,
-                min_width="220px",
-                size="2",
+            rx.debounce_input(
+                rx.input(
+                    placeholder=LanguageState.tr["search_name_placeholder"],
+                    value=PatientListState.search_name,
+                    on_change=PatientListState.handle_name_change,
+                    min_width="220px",
+                    size="2",
+                ),
+                debounce_timeout=300,
             ),
-            rx.input(
-                placeholder=LanguageState.tr["search_phone_placeholder"],
-                value=PatientListState.search_phone,
-                on_change=PatientListState.handle_phone_change,
-                min_width="160px",
-                size="2",
+            rx.debounce_input(
+                rx.input(
+                    placeholder=LanguageState.tr["search_phone_placeholder"],
+                    value=PatientListState.search_phone,
+                    on_change=PatientListState.handle_phone_change,
+                    min_width="160px",
+                    size="2",
+                ),
+                debounce_timeout=300,
             ),
             rx.select.root(
                 rx.select.trigger(placeholder=LanguageState.tr["all_accounts"]),
@@ -146,60 +177,6 @@ def _filter_bar() -> rx.Component:
     )
 
 
-def _confirm_delete_dialog() -> rx.Component:
-    """Double-confirmation dialog before deleting a patient."""
-    return rx.dialog.root(
-        rx.dialog.content(
-            rx.vstack(
-                rx.hstack(
-                    rx.icon("trash-2", size=20, color="var(--red-9)"),
-                    rx.dialog.title("Supprimer le patient"),
-                    spacing="2",
-                    align="center",
-                ),
-                rx.callout(
-                    rx.vstack(
-                        rx.text.strong("Cette action est irréversible."),
-                        rx.text(
-                            "Le patient ",
-                            rx.text.strong(PatientListState.confirm_delete_patient_name),
-                            " sera définitivement supprimé.",
-                        ),
-                        spacing="1",
-                    ),
-                    icon="triangle-alert",
-                    color_scheme="red",
-                    variant="soft",
-                ),
-                rx.hstack(
-                    rx.dialog.close(
-                        rx.button(
-                            "Annuler",
-                            variant="outline",
-                            on_click=PatientListState.dismiss_confirm_delete,
-                        ),
-                    ),
-                    rx.button(
-                        rx.icon("trash-2", size=14),
-                        "Supprimer définitivement",
-                        color_scheme="red",
-                        on_click=PatientListState.confirmed_delete_patient,
-                        loading=PatientListState.is_deleting,
-                    ),
-                    justify="end",
-                    spacing="3",
-                    width="100%",
-                ),
-                spacing="4",
-                width="100%",
-            ),
-            max_width="420px",
-        ),
-        open=PatientListState.confirm_delete_patient_open,
-        on_open_change=lambda _: PatientListState.dismiss_confirm_delete(),
-    )
-
-
 def patient_list_page() -> rx.Component:
     """Patient list page."""
     return main_component(
@@ -217,7 +194,7 @@ def patient_list_page() -> rx.Component:
                 align="center",
             ),
             patient_form_dialog(),
-            _confirm_delete_dialog(),
+            patient_delete_dialog(),
             _filter_bar(),
             rx.cond(
                 PatientListState.error_message != "",
@@ -261,6 +238,35 @@ def patient_list_page() -> rx.Component:
                         padding="3rem",
                     ),
                 ),
+            ),
+            # ── Pagination controls ───────────────────────────────────────────
+            rx.hstack(
+                rx.text(
+                    PatientListState.total_count.to(str) + " patient(s) — page ",
+                    PatientListState.page.to(str),
+                    " / ",
+                    PatientListState.total_pages.to(str),
+                    size="2",
+                    color="var(--gray-9)",
+                ),
+                rx.spacer(),
+                rx.button(
+                    rx.icon("chevron-left", size=14),
+                    on_click=PatientListState.prev_page,
+                    variant="soft",
+                    size="2",
+                    disabled=~PatientListState.has_prev_page,
+                ),
+                rx.button(
+                    rx.icon("chevron-right", size=14),
+                    on_click=PatientListState.next_page,
+                    variant="soft",
+                    size="2",
+                    disabled=~PatientListState.has_next_page,
+                ),
+                width="100%",
+                align="center",
+                padding_top="0.5rem",
             ),
         )
     )

@@ -34,6 +34,8 @@ class ExamParamEntry(BaseModel):
     critical_high_raw: str = ""
     # Computed status: "" | "normal" | "low" | "high" | "critical_low" | "critical_high"
     value_status: str = ""
+    # Whether this param is included in the saved results (default True = all selected)
+    is_selected: bool = True
 
 
 def _compute_param_status(
@@ -63,7 +65,7 @@ def _compute_param_status(
         if rl is not None or rh is not None:
             return "normal"
         return ""
-    except Exception:
+    except Exception as exc:
         return ""
 
 
@@ -85,6 +87,7 @@ class ExamSectionVM(BaseModel):
     category_label: str
     param_count: int = 0
     is_saved: bool = False
+    is_transmitted: bool = False   # True once results have been sent to the doctor
     saved_exam_id: str = ""
     allows_attachment: bool = True
 
@@ -105,6 +108,7 @@ class CampaignPatientExamsState(ReflexMainState):
     active_section_id: str = ""
     active_section_name: str = ""
     active_section_is_saved: bool = False
+    active_section_is_transmitted: bool = False   # True if section was already transmitted
     active_params: list[ExamParamEntry] = []
 
     # UI state
@@ -153,6 +157,7 @@ class CampaignPatientExamsState(ReflexMainState):
         sec = next((s for s in self.sections if s.exam_type_ref_id == section_id), None)
         self.active_section_name = sec.name if sec else ""
         self.active_section_is_saved = sec.is_saved if sec else False
+        self.active_section_is_transmitted = sec.is_transmitted if sec else False
         await self._load_active_params(section_id)
         await self._load_section_files()
 
@@ -176,6 +181,31 @@ class CampaignPatientExamsState(ReflexMainState):
             else:
                 updated.append(p)
         self.active_params = updated
+
+    @rx.event
+    def toggle_param_selection(self, param_id: str):
+        """Toggle whether a parameter is included in the saved results."""
+        self.active_params = [
+            ExamParamEntry(**{**p.model_dump(), "is_selected": not p.is_selected})
+            if p.param_id == param_id else p
+            for p in self.active_params
+        ]
+
+    @rx.event
+    def select_all_params(self):
+        """Mark all parameters as selected."""
+        self.active_params = [
+            ExamParamEntry(**{**p.model_dump(), "is_selected": True})
+            for p in self.active_params
+        ]
+
+    @rx.event
+    def deselect_all_params(self):
+        """Mark all non-required parameters as deselected."""
+        self.active_params = [
+            ExamParamEntry(**{**p.model_dump(), "is_selected": p.is_required})
+            for p in self.active_params
+        ]
 
     # ── Save section ──────────────────────────────────────────────────────
 
@@ -213,6 +243,7 @@ class CampaignPatientExamsState(ReflexMainState):
                         ) if p.value_type == "NUMERIC" else ("normal" if p.value else ""),
                     }
                     for p in self.active_params
+                    if p.is_selected   # only save params that are selected
                 ]
 
                 # Marker in reason_for_visit to identify this exam uniquely
@@ -235,6 +266,7 @@ class CampaignPatientExamsState(ReflexMainState):
                     e.billing_account_id = campaign.account_id
                     e.exam_date = date.today()
                     e.exam_type = ExamType.OTHER
+                    e.exam_type_ref_id = section_id   # link to ExamTypeRef for label resolution
                     e.status = ExamStatus.DRAFT
                     e.reason_for_visit = f"{marker}|{section_name}"
                     e.lab_results = lab_results
@@ -259,6 +291,25 @@ class CampaignPatientExamsState(ReflexMainState):
         finally:
             self.is_saving = False
 
+    # ── Internal helpers ─────────────────────────────────────────────────
+
+    def _mark_campaign_exams_pending(
+        self, campaign_id: str, patient_id: str, marker_prefix: str
+    ) -> None:
+        """Set matching DRAFT campaign exams to PENDING status."""
+        from gws_care.exam.exam import Exam
+        from gws_care.exam.exam_type import ExamStatus
+        for exam in list(
+            Exam.select().where(
+                Exam.patient == patient_id,
+                Exam.reason_for_visit % f"CAMP:{campaign_id}|%",
+            )
+        ):
+            rv = exam.reason_for_visit or ""
+            if rv.startswith(marker_prefix) and exam.status == ExamStatus.DRAFT:
+                exam.status = ExamStatus.PENDING
+                exam.save()
+
     # ── Transmit section ─────────────────────────────────────────────────
 
     @rx.event
@@ -271,21 +322,24 @@ class CampaignPatientExamsState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
-                from gws_care.exam.exam import Exam
-                from gws_care.exam.exam_type import ExamStatus
 
                 # Move this section's draft exam to PENDING
                 marker = f"CAMP:{campaign_id}|REF:{section_id}"
-                for exam in list(Exam.select().where(Exam.patient == patient_id)):
-                    rv = exam.reason_for_visit or ""
-                    if rv.startswith(marker) and exam.status == ExamStatus.DRAFT:
-                        exam.status = ExamStatus.PENDING
-                        exam.save()
+                self._mark_campaign_exams_pending(campaign_id, patient_id, marker)
 
                 # Mark campaign patient as LAB_ENTERED if not already further along
                 CampaignService.mark_lab_entered(campaign_id, patient_id)
 
             self.medical_status = "LAB_ENTERED"
+            # Mark this section as transmitted in local state
+            self.sections = [
+                ExamSectionVM(**{**s.dict(), "is_transmitted": True})
+                if s.exam_type_ref_id == section_id
+                else s
+                for s in self.sections
+            ]
+            if self.active_section_id == section_id:
+                self.active_section_is_transmitted = True
             sec = next((s for s in self.sections if s.exam_type_ref_id == section_id), None)
             section_name = sec.name if sec else "cet examen"
             self.success = f'Résultats "{section_name}" transmis au médecin PSC.'
@@ -309,15 +363,9 @@ class CampaignPatientExamsState(ReflexMainState):
                 from gws_care.exam.exam import Exam
                 from gws_care.exam.exam_type import ExamStatus
 
-                CampaignService.mark_lab_entered(campaign_id, patient_id)
-
                 # Move all draft campaign exams for this patient to PENDING
                 marker_prefix = f"CAMP:{campaign_id}|"
-                for exam in list(Exam.select().where(Exam.patient == patient_id)):
-                    rv = exam.reason_for_visit or ""
-                    if rv.startswith(marker_prefix) and exam.status == ExamStatus.DRAFT:
-                        exam.status = ExamStatus.PENDING
-                        exam.save()
+                self._mark_campaign_exams_pending(campaign_id, patient_id, marker_prefix)
 
             self.medical_status = "LAB_ENTERED"
             self.success = "Résultats transmis au médecin PSC. Le dossier passe en « Résultats saisis »."
@@ -347,9 +395,9 @@ class CampaignPatientExamsState(ReflexMainState):
                                     f"Cordialement,\nPSC Care"
                                 ),
                             )
-                        except Exception:
+                        except Exception as exc:
                             pass  # notification non bloquante
-            except Exception:
+            except Exception as exc:
                 pass
         except Exception as e:
             self.error = str(e)
@@ -428,7 +476,7 @@ class CampaignPatientExamsState(ReflexMainState):
                         mime_type=f.mime_type or "",
                     ))
                 self.section_attached_files = result
-        except Exception:
+        except Exception as exc:
             self.section_attached_files = []
 
     @rx.event
@@ -477,7 +525,7 @@ class CampaignPatientExamsState(ReflexMainState):
                                 "Vous pouvez maintenant ajouter votre interprétation.\n\nCordialement,\nConstellab Care"
                             ),
                         )
-            except Exception:
+            except Exception as exc:
                 pass
         except Exception as e:
             self.error = str(e)
@@ -535,6 +583,7 @@ class CampaignPatientExamsState(ReflexMainState):
                 from gws_care.campaign.campaign_exam import CampaignExam
                 from gws_care.campaign.campaign_patient import CampaignPatient
                 from gws_care.exam.exam import Exam
+                from gws_care.exam.exam_type import ExamStatus
                 from gws_care.exam_type_ref.exam_parameter import ExamParameter
                 from gws_care.patient.patient import Patient
 
@@ -560,22 +609,53 @@ class CampaignPatientExamsState(ReflexMainState):
                 with await self.authenticate_user() as auth_user:
                     roles = UserRoleService.get_roles_for_user(str(auth_user.id))
                     role_vals = [r.value for r in roles]
-                self.viewer_is_psc = _CareRole.MEDECIN_PSC.value in role_vals
-                self.viewer_is_enterprise = _CareRole.MEDECIN_ENTREPRISE.value in role_vals
+                self.viewer_is_psc = (
+                    _CareRole.MEDECIN_PSC.value in role_vals
+                    or _CareRole.SUPER_ADMIN_PSC.value in role_vals
+                    or _CareRole.ADMIN_PSC.value in role_vals
+                    or _CareRole.DIRECTEUR_PSC.value in role_vals
+                    or len(role_vals) == 0  # no role → show all (dev mode)
+                )
+                self.viewer_is_enterprise = (
+                    _CareRole.MEDECIN_ENTREPRISE.value in role_vals
+                    or _CareRole.SUPER_ADMIN_PSC.value in role_vals
+                    or _CareRole.ADMIN_PSC.value in role_vals
+                    or _CareRole.DIRECTEUR_PSC.value in role_vals
+                    or len(role_vals) == 0
+                )
 
-                # Index existing saved exams {marker → exam_id}
+                # Index existing saved exams {marker → (exam_id, is_transmitted)}
+                # is_transmitted = exam.status == PENDING (was submitted)
                 marker_prefix = f"CAMP:{campaign_id}|"
-                existing_map: dict[str, str] = {}
+                existing_map: dict[str, tuple[str, bool]] = {}
                 for exam in Exam.select().where(Exam.patient == patient_id):
                     rv = exam.reason_for_visit or ""
                     if rv.startswith(marker_prefix):
-                        existing_map[rv] = str(exam.id)
+                        is_tx = exam.status == ExamStatus.PENDING
+                        existing_map[rv] = (str(exam.id), is_tx)
+
+                from peewee import fn
 
                 campaign_exams = list(
                     CampaignExam.select()
                     .where(CampaignExam.campaign == campaign_id)
                     .order_by(CampaignExam.id)
                 )
+
+                # Pre-aggregate ExamParameter counts by ref_id (one GROUP BY query)
+                ce_ref_ids = [str(ce.exam_type_ref_id) for ce in campaign_exams]
+                param_counts: dict[str, int] = {}
+                if ce_ref_ids:
+                    for row in (
+                        ExamParameter.select(
+                            ExamParameter.exam_type_ref,
+                            fn.COUNT(ExamParameter.id).alias("cnt"),
+                        )
+                        .where(ExamParameter.exam_type_ref.in_(ce_ref_ids))
+                        .group_by(ExamParameter.exam_type_ref)
+                        .namedtuples()
+                    ):
+                        param_counts[str(row.exam_type_ref)] = row.cnt
 
                 sections: list[ExamSectionVM] = []
                 for ce in campaign_exams:
@@ -584,21 +664,21 @@ class CampaignPatientExamsState(ReflexMainState):
                     marker = f"CAMP:{campaign_id}|REF:{ref_id}"
                     saved_exam_id = ""
                     is_saved = False
-                    for rv_key, eid in existing_map.items():
+                    is_transmitted = False
+                    for rv_key, (eid, is_tx) in existing_map.items():
                         if rv_key.startswith(marker):
                             saved_exam_id = eid
                             is_saved = True
+                            is_transmitted = is_tx
                             break
-                    param_count = ExamParameter.select().where(
-                        ExamParameter.exam_type_ref == ref_id
-                    ).count()
                     sections.append(
                         ExamSectionVM(
                             exam_type_ref_id=ref_id,
                             name=ref.name,
                             category_label=ref.get_category_label(),
-                            param_count=param_count,
+                            param_count=param_counts.get(ref_id, 0),
                             is_saved=is_saved,
+                            is_transmitted=is_transmitted,
                             saved_exam_id=saved_exam_id,
                             allows_attachment=ref.allows_attachment,
                         )
@@ -611,6 +691,7 @@ class CampaignPatientExamsState(ReflexMainState):
                     self.active_section_id = first.exam_type_ref_id
                     self.active_section_name = first.name
                     self.active_section_is_saved = first.is_saved
+                    self.active_section_is_transmitted = first.is_transmitted
                     await self._load_active_params(first.exam_type_ref_id)
                     await self._load_section_files()
         except Exception as e:
@@ -627,16 +708,20 @@ class CampaignPatientExamsState(ReflexMainState):
                 from gws_care.exam.exam import Exam
                 from gws_care.exam_type_ref.exam_parameter import ExamParameter
 
-                # Load existing saved values
+                # Load existing saved values and track which params were saved
                 marker = f"CAMP:{campaign_id}|REF:{section_id}"
                 saved_values: dict[str, str] = {}  # param_name → value
+                saved_param_names: set[str] = set()  # names that were explicitly saved
                 existing = Exam.get_or_none(
                     (Exam.patient == patient_id)
                     & Exam.reason_for_visit.startswith(marker)
                 )
+                has_existing = existing is not None
                 if existing and existing.lab_results:
                     for row in existing.lab_results:
-                        saved_values[row.get("parameter", "")] = str(row.get("value", ""))
+                        name = row.get("parameter", "")
+                        saved_values[name] = str(row.get("value", ""))
+                        saved_param_names.add(name)
 
                 params = list(
                     ExamParameter.select()
@@ -676,6 +761,9 @@ class CampaignPatientExamsState(ReflexMainState):
                             is_required=p.is_required,
                             value_type=p.value_type,
                             value=saved_values.get(p.name, ""),
+                            # If a previous save exists, restore selection state:
+                            # selected if was in saved results OR if no save exists yet (first load)
+                            is_selected=(not has_existing) or (p.name in saved_param_names) or p.is_required,
                             value_status=(
                                 _compute_param_status(
                                     saved_values.get(p.name, ""),
@@ -687,5 +775,5 @@ class CampaignPatientExamsState(ReflexMainState):
                         )
                     )
                 self.active_params = entries
-        except Exception:
+        except Exception as exc:
             self.active_params = []

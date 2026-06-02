@@ -147,48 +147,19 @@ def _user_row(user: UserRoleRowDTO) -> rx.Component:
 
 
 def _user_roles_tab() -> rx.Component:
-    """Replaced by the dedicated /users page — show a redirect card."""
+    """Redirect to the dedicated /staff page."""
     return rx.vstack(
         rx.callout(
-            "La gestion des utilisateurs a été déplacée sur une page dédiée pour plus de clarté.",
+            "La gestion des rôles et des comptes utilisateurs se fait sur la page dédiée.",
             icon="info",
             color_scheme="blue",
             size="2",
         ),
         rx.button(
             rx.icon("users", size=16),
-            "Aller à la gestion des utilisateurs",
+            "Gestion des utilisateurs →",
             size="3",
-            on_click=rx.redirect("/users"),
-        ),
-        rx.separator(width="100%"),
-        rx.text("Utilisateurs actuels", size="3", weight="bold"),
-        rx.cond(
-            AdminState.error_message != "",
-            rx.callout(AdminState.error_message, icon="triangle-alert", color_scheme="red"),
-        ),
-        rx.cond(
-            AdminState.is_loading,
-            rx.center(rx.spinner(size="3"), padding="3rem"),
-            rx.cond(
-                AdminState.users,
-                rx.table.root(
-                    rx.table.header(
-                        rx.table.row(
-                            rx.table.column_header_cell("Nom"),
-                            rx.table.column_header_cell("Email"),
-                            rx.table.column_header_cell("Rôles"),
-                        )
-                    ),
-                    rx.table.body(rx.foreach(AdminState.users, _user_row)),
-                    width="100%",
-                    variant="surface",
-                ),
-                rx.center(
-                    rx.text(LanguageState.tr["no_users_found"], size="2", color="var(--gray-8)"),
-                    padding="3rem",
-                ),
-            ),
+            on_click=rx.redirect("/staff"),
         ),
         width="100%",
         spacing="3",
@@ -312,22 +283,25 @@ def _staff_directory_tab() -> rx.Component:
             size="1",
         ),
         rx.cond(
-            AdminState.staff_contacts.length() == 0,
-            rx.center(
-                rx.vstack(
-                    rx.icon("users", size=36, color="var(--gray-5)"),
-                    rx.text(
-                        "Aucun médecin ou contact RH trouvé.",
-                        size="2", color="var(--gray-9)",
+            AdminState.is_loading,
+            rx.center(rx.spinner(size="3"), padding="3rem"),
+            rx.cond(
+                AdminState.staff_contacts.length() == 0,
+                rx.center(
+                    rx.vstack(
+                        rx.icon("users", size=36, color="var(--gray-5)"),
+                        rx.text(
+                            "Aucun médecin ou contact RH trouvé.",
+                            size="2", color="var(--gray-9)",
+                        ),
+                        rx.text(
+                            "Allez dans Gestion utilisateurs pour en créer un.",
+                            size="2", color="var(--gray-8)",
+                        ),
+                        spacing="2", align="center",
                     ),
-                    rx.text(
-                        "Allez dans Gestion utilisateurs pour en créer un.",
-                        size="2", color="var(--gray-8)",
-                    ),
-                    spacing="2", align="center",
+                    padding="4rem",
                 ),
-                padding="4rem",
-            ),
             rx.vstack(
                 # PSC doctors section
                 rx.vstack(
@@ -388,6 +362,7 @@ def _staff_directory_tab() -> rx.Component:
                 width="100%",
                 spacing="3",
             ),
+        ),
         ),
         width="100%",
         spacing="3",
@@ -525,7 +500,7 @@ def _notifications_tab() -> rx.Component:
                 ),
                 rx.separator(width="100%"),
                 rx.hstack(
-                    rx.text("Enable email reminders", size="2", weight="medium"),
+                    rx.text("Activer les rappels email", size="2", weight="medium"),
                     rx.spacer(),
                     rx.switch(
                         checked=NotificationsState.pref_enabled,
@@ -535,7 +510,7 @@ def _notifications_tab() -> rx.Component:
                     align="center",
                 ),
                 rx.vstack(
-                    rx.text("Remind patients N days before appointment:", size="2", weight="medium"),
+                    rx.text("Rappeler les patients N jours avant le RDV :", size="2", weight="medium"),
                     rx.hstack(
                         rx.foreach(NotificationsState.pref_days, _day_chip),
                         wrap="wrap",
@@ -543,7 +518,7 @@ def _notifications_tab() -> rx.Component:
                     ),
                     rx.hstack(
                         rx.input(
-                            placeholder="e.g. 15",
+                            placeholder="ex. 15",
                             value=NotificationsState.pref_new_day,
                             on_change=NotificationsState.set_pref_new_day,
                             type="number",
@@ -553,7 +528,7 @@ def _notifications_tab() -> rx.Component:
                         ),
                         rx.button(
                             rx.icon("plus", size=14),
-                            "Add",
+                            "Ajouter",
                             on_click=NotificationsState.add_reminder_day,
                             size="2",
                             variant="soft",
@@ -575,7 +550,7 @@ def _notifications_tab() -> rx.Component:
                 rx.hstack(
                     rx.button(
                         rx.icon("save", size=14),
-                        "Save Preferences",
+                        "Enregistrer",
                         on_click=NotificationsState.save_preferences,
                         loading=NotificationsState.is_saving_pref,
                         size="2",
@@ -590,16 +565,16 @@ def _notifications_tab() -> rx.Component:
         # ── Send reminders manually ───────────────────────────────────────────
         rx.card(
             rx.vstack(
-                rx.heading("Send Reminders Now", size="4"),
+                rx.heading("Envoyer les rappels maintenant", size="4"),
                 rx.text(
-                    "Trigger reminder processing immediately for all upcoming appointments matching your configured reminder days.",
+                    "Déclencher immédiatement le traitement des rappels pour tous les RDV à venir selon les jours configurés.",
                     size="2",
                     color="var(--gray-10)",
                 ),
                 rx.hstack(
                     rx.button(
                         rx.icon("send", size=14),
-                        "Process Reminders",
+                        "Déclencher les rappels",
                         on_click=NotificationsState.process_reminders,
                         loading=NotificationsState.is_processing_reminders,
                         size="2",
@@ -617,19 +592,37 @@ def _notifications_tab() -> rx.Component:
             ),
             width="100%",
         ),
+        spacing="4",
+        width="100%",
+    )
+
+
+# ── Mail server (SMTP / Brevo) config tab ────────────────────────────────────
+
+def _smtp_tab() -> rx.Component:
+    return rx.vstack(
         # ── SMTP server configuration ─────────────────────────────────────────
         rx.card(
             rx.vstack(
-                rx.heading("SMTP Server Configuration", size="4"),
+                rx.hstack(
+                    rx.heading("Serveur SMTP", size="4"),
+                    rx.spacer(),
+                    rx.cond(
+                        NotificationsState.brevo_credentials_name == "",
+                        rx.badge("✅ Actif", color_scheme="green", variant="soft", size="1"),
+                        rx.badge("⏸ Inactif (Brevo prioritaire)", color_scheme="gray", variant="soft", size="1"),
+                    ),
+                    width="100%", align="center",
+                ),
                 rx.text(
-                    "Configure the outgoing mail server used to deliver notification emails.",
+                    "Configurer le serveur mail sortant. Brevo prend le dessus sur SMTP si une clé API est renseignée.",
                     size="2",
                     color="var(--gray-10)",
                 ),
                 rx.separator(width="100%"),
                 rx.grid(
                     rx.vstack(
-                        rx.text("SMTP Host", size="2", weight="medium"),
+                        rx.text("Hôte SMTP", size="2", weight="medium"),
                         rx.input(
                             placeholder="smtp.example.com",
                             value=NotificationsState.smtp_host,
@@ -661,7 +654,7 @@ def _notifications_tab() -> rx.Component:
                 ),
                 rx.grid(
                     rx.vstack(
-                        rx.text("Username", size="2", weight="medium"),
+                        rx.text("Utilisateur", size="2", weight="medium"),
                         rx.input(
                             placeholder="user@example.com",
                             value=NotificationsState.smtp_username,
@@ -673,16 +666,16 @@ def _notifications_tab() -> rx.Component:
                         width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Credentials Name", size="2", weight="medium"),
+                        rx.text("Identifiants", size="2", weight="medium"),
                         rx.input(
-                            placeholder="e.g. smtp-care",
+                            placeholder="ex. smtp-care",
                             value=NotificationsState.smtp_credentials_name,
                             on_change=NotificationsState.set_smtp_credentials_name,
                             size="2",
                             width="100%",
                         ),
                         rx.text(
-                            "Name of a Constellab Credentials (type Basic) that holds the SMTP password. The password is never stored in the app database.",
+                            "Nom d'un Credentials Constellab (type Basic) contenant le mot de passe SMTP. Le mot de passe n'est jamais stocké en base de données.",
                             size="1",
                             color="var(--gray-9)",
                         ),
@@ -695,7 +688,7 @@ def _notifications_tab() -> rx.Component:
                 ),
                 rx.grid(
                     rx.vstack(
-                        rx.text("From Email", size="2", weight="medium"),
+                        rx.text("Email expéditeur", size="2", weight="medium"),
                         rx.input(
                             placeholder="noreply@example.com",
                             value=NotificationsState.smtp_from_email,
@@ -707,7 +700,7 @@ def _notifications_tab() -> rx.Component:
                         width="100%",
                     ),
                     rx.vstack(
-                        rx.text("From Name", size="2", weight="medium"),
+                        rx.text("Nom expéditeur", size="2", weight="medium"),
                         rx.input(
                             placeholder="Constellab Care",
                             value=NotificationsState.smtp_from_name,
@@ -723,7 +716,7 @@ def _notifications_tab() -> rx.Component:
                     width="100%",
                 ),
                 rx.hstack(
-                    rx.text("Use TLS", size="2", weight="medium"),
+                    rx.text("Utiliser TLS", size="2", weight="medium"),
                     rx.spacer(),
                     rx.switch(
                         checked=NotificationsState.smtp_use_tls,
@@ -742,7 +735,7 @@ def _notifications_tab() -> rx.Component:
                 ),
                 rx.button(
                     rx.icon("save", size=14),
-                    "Save SMTP Settings",
+                    "Enregistrer SMTP",
                     on_click=NotificationsState.save_smtp_config,
                     loading=NotificationsState.is_saving_smtp,
                     size="2",
@@ -757,27 +750,34 @@ def _notifications_tab() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.icon("message-circle", size=18, color="var(--accent-9)"),
-                    rx.heading("Brevo Configuration", size="4"),
+                    rx.heading("Configuration Brevo", size="4"),
+                    rx.spacer(),
+                    rx.cond(
+                        NotificationsState.brevo_credentials_name != "",
+                        rx.badge("✅ Actif", color_scheme="green", variant="soft", size="1"),
+                        rx.badge("⏸ Non configuré", color_scheme="gray", variant="soft", size="1"),
+                    ),
                     spacing="2",
                     align="center",
+                    width="100%",
                 ),
                 rx.text(
-                    "Configure Brevo to send emails, SMS, and WhatsApp messages. When a Brevo API key is configured, Brevo is used for email delivery instead of SMTP.",
+                    "Configurer Brevo pour l'envoi d'emails, SMS et WhatsApp. Si une clé API Brevo est renseignée, Brevo remplace SMTP pour les emails.",
                     size="2",
                     color="var(--gray-10)",
                 ),
                 rx.separator(width="100%"),
                 rx.vstack(
-                    rx.text("API Key Credentials Name", size="2", weight="medium"),
+                    rx.text("Identifiants clé API", size="2", weight="medium"),
                     rx.input(
-                        placeholder="e.g. brevo-care",
+                        placeholder="ex. brevo-care",
                         value=NotificationsState.brevo_credentials_name,
                         on_change=NotificationsState.set_brevo_credentials_name,
                         size="2",
                         width="100%",
                     ),
                     rx.text(
-                        "Name of a Constellab Credentials (type Basic) whose password field holds the Brevo API key.",
+                        "Nom d'un Credentials Constellab (type Basic) dont le champ mot de passe contient la clé API Brevo.",
                         size="1",
                         color="var(--gray-9)",
                     ),
@@ -786,7 +786,7 @@ def _notifications_tab() -> rx.Component:
                 ),
                 rx.grid(
                     rx.vstack(
-                        rx.text("From Email", size="2", weight="medium"),
+                        rx.text("Email expéditeur", size="2", weight="medium"),
                         rx.input(
                             placeholder="noreply@example.com",
                             value=NotificationsState.brevo_from_email,
@@ -799,7 +799,7 @@ def _notifications_tab() -> rx.Component:
                         width="100%",
                     ),
                     rx.vstack(
-                        rx.text("From Name", size="2", weight="medium"),
+                        rx.text("Nom expéditeur", size="2", weight="medium"),
                         rx.input(
                             placeholder="Constellab Care",
                             value=NotificationsState.brevo_from_name,
@@ -815,7 +815,7 @@ def _notifications_tab() -> rx.Component:
                     width="100%",
                 ),
                 rx.vstack(
-                    rx.text("SMS / WhatsApp Sender Name", size="2", weight="medium"),
+                    rx.text("Expéditeur SMS / WhatsApp", size="2", weight="medium"),
                     rx.input(
                         placeholder="ConstellCare",
                         value=NotificationsState.brevo_sms_sender,
@@ -825,7 +825,7 @@ def _notifications_tab() -> rx.Component:
                         width="200px",
                     ),
                     rx.text(
-                        "Alphanumeric sender ID shown on the recipient's device (max 11 characters). Must be registered with Brevo.",
+                        "Identifiant alphanumérique affiché sur l'appareil du destinataire (max 11 caractères). Doit être enregistré chez Brevo.",
                         size="1",
                         color="var(--gray-9)",
                     ),
@@ -842,7 +842,7 @@ def _notifications_tab() -> rx.Component:
                 ),
                 rx.button(
                     rx.icon("save", size=14),
-                    "Save Brevo Settings",
+                    "Enregistrer Brevo",
                     on_click=NotificationsState.save_brevo_config,
                     loading=NotificationsState.is_saving_brevo,
                     size="2",
@@ -854,6 +854,124 @@ def _notifications_tab() -> rx.Component:
         ),
         spacing="4",
         width="100%",
+    )
+
+
+# ── Reset data tab ────────────────────────────────────────────────────────────
+
+def _reset_tab() -> rx.Component:
+    return rx.vstack(
+        rx.callout(
+            "Cette action est irréversible. Elle supprime toutes les données de l'application "
+            "(patients, campagnes, entreprises, comptes, examens, utilisateurs) "
+            "en conservant uniquement les référentiels d'examens.",
+            icon="triangle-alert",
+            color_scheme="red",
+            size="2",
+        ),
+        rx.cond(
+            AdminState.reset_success != "",
+            rx.callout(AdminState.reset_success, icon="check", color_scheme="green", size="2"),
+            rx.fragment(),
+        ),
+        rx.card(
+            rx.vstack(
+                rx.hstack(
+                    rx.icon("trash-2", size=18, color="var(--red-9)"),
+                    rx.heading("Remise à zéro des données", size="4"),
+                    spacing="2",
+                    align="center",
+                ),
+                rx.text(
+                    "Supprime intégralement : patients, campagnes, entreprises, comptes de facturation, "
+                    "examens, rôles utilisateurs, pré-facturations, corrections, logs d'audit, etc.",
+                    size="2",
+                    color="var(--gray-10)",
+                ),
+                rx.text(
+                    "Conserve : référentiel des types d'examens et leurs paramètres.",
+                    size="2",
+                    color="var(--gray-10)",
+                    weight="medium",
+                ),
+                rx.separator(width="100%"),
+                rx.button(
+                    rx.icon("trash-2", size=14),
+                    "Réinitialiser toutes les données…",
+                    on_click=AdminState.open_reset_confirm,
+                    color_scheme="red",
+                    variant="outline",
+                    size="2",
+                ),
+                spacing="3",
+                width="100%",
+            ),
+            width="100%",
+        ),
+        # ── Confirm dialog ────────────────────────────────────────────────────
+        rx.dialog.root(
+            rx.dialog.content(
+                rx.dialog.title(
+                    rx.hstack(
+                        rx.icon("triangle-alert", size=18, color="var(--red-9)"),
+                        rx.text("Confirmer la remise à zéro"),
+                        spacing="2",
+                    ),
+                ),
+                rx.vstack(
+                    rx.text(
+                        "Cette opération est définitive et irréversible.",
+                        size="2",
+                        weight="bold",
+                        color="var(--red-9)",
+                    ),
+                    rx.text(
+                        "Tapez SUPPRIMER dans le champ ci-dessous pour confirmer :",
+                        size="2",
+                    ),
+                    rx.input(
+                        placeholder="SUPPRIMER",
+                        value=AdminState.reset_confirm_input,
+                        on_change=AdminState.set_reset_confirm_input,
+                        size="2",
+                        width="100%",
+                    ),
+                    rx.cond(
+                        AdminState.reset_error != "",
+                        rx.callout(AdminState.reset_error, icon="triangle-alert", color_scheme="red", size="1"),
+                        rx.fragment(),
+                    ),
+                    rx.hstack(
+                        rx.dialog.close(
+                            rx.button(
+                                "Annuler",
+                                variant="soft",
+                                color_scheme="gray",
+                                on_click=AdminState.close_reset_confirm,
+                            ),
+                        ),
+                        rx.button(
+                            rx.icon("trash-2", size=14),
+                            "Supprimer toutes les données",
+                            on_click=AdminState.execute_reset,
+                            loading=AdminState.is_resetting,
+                            color_scheme="red",
+                        ),
+                        justify="end",
+                        spacing="2",
+                        margin_top="0.5rem",
+                        width="100%",
+                    ),
+                    spacing="3",
+                    width="100%",
+                ),
+                max_width="480px",
+            ),
+            open=AdminState.show_reset_confirm,
+            on_open_change=lambda _: AdminState.close_reset_confirm(),
+        ),
+        width="100%",
+        spacing="4",
     )
 
 
@@ -880,8 +998,17 @@ def settings_page() -> rx.Component:
                         width="100%",
                         align="center",
                         spacing="2",
-                    ),
-                    rx.tabs.root(
+                    ),                    rx.cond(
+                        AdminState.error_message != "",
+                        rx.callout(
+                            AdminState.error_message,
+                            icon="triangle-alert",
+                            color_scheme="red",
+                            variant="soft",
+                            width="100%",
+                        ),
+                        rx.fragment(),
+                    ),                    rx.tabs.root(
                         rx.hstack(
                             rx.tabs.list(
                                 rx.tabs.trigger(
@@ -908,34 +1035,34 @@ def settings_page() -> rx.Component:
                                 ),
                                 rx.tabs.trigger(
                                     rx.hstack(
-                                        rx.icon("shield", size=15),
-                                        rx.text(LanguageState.tr["settings_tab_roles"]),
-                                        spacing="2",
-                                        align="center",
-                                    ),
-                                    value="roles",
-                                    width="100%",
-                                    justify="start",
-                                ),
-                                rx.tabs.trigger(
-                                    rx.hstack(
-                                        rx.icon("book-user", size=15),
-                                        rx.text("Annuaire"),
-                                        spacing="2",
-                                        align="center",
-                                    ),
-                                    value="annuaire",
-                                    width="100%",
-                                    justify="start",
-                                ),
-                                rx.tabs.trigger(
-                                    rx.hstack(
                                         rx.icon("bell", size=15),
                                         rx.text(LanguageState.tr["settings_tab_notifications"]),
                                         spacing="2",
                                         align="center",
                                     ),
                                     value="notifications",
+                                    width="100%",
+                                    justify="start",
+                                ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("mail", size=15),
+                                        rx.text(LanguageState.tr["settings_tab_smtp"]),
+                                        spacing="2",
+                                        align="center",
+                                    ),
+                                    value="smtp",
+                                    width="100%",
+                                    justify="start",
+                                ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("trash-2", size=15, color="var(--red-9)"),
+                                        rx.text("Remise à zéro", color="var(--red-9)"),
+                                        spacing="2",
+                                        align="center",
+                                    ),
+                                    value="reset",
                                     width="100%",
                                     justify="start",
                                 ),
@@ -949,9 +1076,9 @@ def settings_page() -> rx.Component:
                             rx.box(
                                 rx.tabs.content(_general_tab(), value="general", padding_left="1rem"),
                                 rx.tabs.content(_import_tab(), value="import", padding_left="1rem"),
-                                rx.tabs.content(_user_roles_tab(), value="roles", padding_left="1rem"),
-                                rx.tabs.content(_staff_directory_tab(), value="annuaire", padding_left="1rem"),
                                 rx.tabs.content(_notifications_tab(), value="notifications", padding_left="1rem"),
+                                rx.tabs.content(_smtp_tab(), value="smtp", padding_left="1rem"),
+                                rx.tabs.content(_reset_tab(), value="reset", padding_left="1rem"),
                                 flex="1",
                                 min_width="0",
                             ),

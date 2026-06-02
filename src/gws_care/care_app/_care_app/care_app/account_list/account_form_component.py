@@ -80,10 +80,38 @@ def _fill_from_patient_section() -> rx.Component:
     )
 
 
+def _company_selector() -> rx.Component:
+    """Select the linked Entreprise (only for COMPANY accounts)."""
+    return rx.cond(
+        AccountFormState.form_account_type == "COMPANY",
+        _field(
+            rx.hstack(
+                rx.icon("building-2", size=13, color="var(--accent-9)"),
+                rx.text("Entreprise liée", size="2", weight="medium"),
+                spacing="1", align="center",
+            ),
+            rx.select.root(
+                rx.select.trigger(placeholder="Sélectionner une entreprise…", width="100%"),
+                rx.select.content(
+                    rx.select.item("— Aucune —", value=""),
+                    rx.foreach(
+                        AccountFormState.company_options,
+                        lambda c: rx.select.item(c.name, value=c.id),
+                    ),
+                ),
+                value=AccountFormState.form_company_id,
+                on_change=AccountFormState.set_form_company_id,
+                width="100%",
+            ),
+        ),
+    )
+
+
 def _form_fields() -> rx.Component:
     """Build the form content with all account fields."""
     return rx.vstack(
         _type_selector(),
+        _company_selector(),
         _fill_from_patient_section(),
         rx.separator(width="100%"),
         _field(
@@ -198,6 +226,16 @@ def _form_fields() -> rx.Component:
             columns="2",
             spacing="3",
             width="100%",
+        ),
+        rx.cond(
+            AccountFormState.form_error != "",
+            rx.callout(
+                AccountFormState.form_error,
+                icon="triangle-alert",
+                color_scheme="red",
+                size="1",
+            ),
+            rx.fragment(),
         ),
         rx.hstack(
             rx.button(

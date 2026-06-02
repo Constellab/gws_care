@@ -18,6 +18,7 @@ Layout:
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.nav_role_state import NavRoleState
 from ..common.page_layout import page_layout
 from .campaign_patient_exams_state import (
     CampaignPatientExamsState,
@@ -174,14 +175,36 @@ def _attachment_zone() -> rx.Component:
 # ── Parameter table ───────────────────────────────────────────────────────────
 
 def _param_row(p: ExamParamEntry) -> rx.Component:
-    """One parameter row with an input field."""
+    """One parameter row with a selection checkbox and an input field."""
+    value_cell_bg = rx.match(
+        p.value_status,
+        ("critical_low",  "var(--red-4)"),
+        ("critical_high", "var(--red-4)"),
+        ("low",           "var(--orange-4)"),
+        ("high",          "var(--orange-4)"),
+        ("normal",        "var(--green-4)"),
+        "transparent",
+    )
     return rx.table.row(
+        # Checkbox: deselected rows are greyed out and their value won't be saved
+        rx.table.cell(
+            rx.checkbox(
+                checked=p.is_selected,
+                on_change=lambda _: CampaignPatientExamsState.toggle_param_selection(p.param_id),
+                size="2",
+                disabled=p.is_required,  # required params cannot be deselected
+            ),
+            width="36px",
+        ),
         rx.table.cell(
             rx.hstack(
-                rx.text(p.name, size="2", weight="medium"),
+                rx.text(
+                    p.name, size="2", weight="medium",
+                    color=rx.cond(p.is_selected, "inherit", "var(--gray-7)"),
+                ),
                 rx.cond(
                     p.is_required,
-                    rx.badge("*", color_scheme="red", size="1", variant="surface"),
+                    rx.text("*", size="2", color="var(--gray-9)", weight="bold"),
                     rx.fragment(),
                 ),
                 spacing="1", align="center",
@@ -190,7 +213,7 @@ def _param_row(p: ExamParamEntry) -> rx.Component:
         rx.table.cell(
             rx.cond(
                 p.unit != "",
-                rx.text(p.unit, size="2"),
+                rx.text(p.unit, size="2", color=rx.cond(p.is_selected, "inherit", "var(--gray-6)")),
                 rx.text("—", size="2", color="var(--gray-7)"),
             )
         ),
@@ -204,61 +227,86 @@ def _param_row(p: ExamParamEntry) -> rx.Component:
         rx.table.cell(
             rx.cond(
                 p.critical_range != "",
-                rx.badge(p.critical_range, color_scheme="red", size="1", variant="soft"),
+                rx.text(p.critical_range, size="2", color="var(--gray-11)"),
                 rx.text("—", size="2", color="var(--gray-7)"),
             )
         ),
+        # Value cell — disabled visually when not selected
         rx.table.cell(
             rx.cond(
-                p.value_type == "NUMERIC",
-                rx.input(
-                    placeholder="0.0",
-                    type="number",
-                    value=p.value,
-                    on_change=CampaignPatientExamsState.set_param_value(p.param_id),
-                    width="130px",
-                    size="2",
-                    color_scheme=rx.cond(
-                        (p.value_status == "critical_low") | (p.value_status == "critical_high"),
-                        "red",
-                        rx.cond(
-                            (p.value_status == "low") | (p.value_status == "high"),
-                            "orange",
-                            rx.cond(p.value_status == "normal", "green", "gray"),
-                        ),
-                    ),
-                ),
+                p.is_selected,
                 rx.cond(
-                    p.value_type == "BOOLEAN",
-                    rx.select.root(
-                        rx.select.trigger(
-                            placeholder="— choisir",
-                            size="2",
-                            width="160px",
-                            color_scheme=rx.cond(
-                                p.value == "Positif", "red",
-                                rx.cond(p.value == "Négatif", "green", "gray"),
-                            ),
-                        ),
-                        rx.select.content(
-                            rx.select.item("Négatif", value="Négatif"),
-                            rx.select.item("Positif", value="Positif"),
-                        ),
-                        value=p.value,
-                        on_change=CampaignPatientExamsState.set_param_value(p.param_id),
-                        size="2",
-                    ),
+                    p.value_type == "NUMERIC",
                     rx.input(
-                        placeholder="Résultat…",
+                        placeholder="0.0",
+                        type="number",
                         value=p.value,
                         on_change=CampaignPatientExamsState.set_param_value(p.param_id),
-                        width="180px",
+                        width="130px",
                         size="2",
+                        style={"background": "transparent"},
+                    ),
+                    rx.cond(
+                        p.value_type == "BOOLEAN",
+                        rx.select.root(
+                            rx.select.trigger(
+                                placeholder="— choisir",
+                                size="2",
+                                width="160px",
+                            ),
+                            rx.select.content(
+                                rx.select.item("Négatif", value="Négatif"),
+                                rx.select.item("Positif", value="Positif"),
+                            ),
+                            value=p.value,
+                            on_change=CampaignPatientExamsState.set_param_value(p.param_id),
+                            size="2",
+                        ),
+                        rx.input(
+                            placeholder="Résultat…",
+                            value=p.value,
+                            on_change=CampaignPatientExamsState.set_param_value(p.param_id),
+                            width="180px",
+                            size="2",
+                            style={"background": "transparent"},
+                        ),
                     ),
                 ),
-            )
+                rx.text("— non saisi", size="1", color="var(--gray-6)", font_style="italic"),
+            ),
+            style={"background": rx.cond(p.is_selected, value_cell_bg, "transparent"), "border_radius": "4px"},
         ),
         align="center",
+        opacity=rx.cond(p.is_selected, "1", "0.45"),
+    )
+
+
+def _color_legend() -> rx.Component:
+    """Color coding legend shown below the param table."""
+    return rx.hstack(
+        rx.text("Code couleur :", size="1", weight="medium", color="var(--gray-10)"),
+        rx.hstack(
+            rx.box(width="14px", height="14px", border_radius="3px", background="var(--green-4)", flex_shrink="0"),
+            rx.text("Normal", size="1", color="var(--gray-11)"),
+            spacing="1", align="center",
+        ),
+        rx.hstack(
+            rx.box(width="14px", height="14px", border_radius="3px", background="var(--orange-4)", flex_shrink="0"),
+            rx.text("Hors norme (au-dessus ou en-dessous du seuil normal)", size="1", color="var(--gray-11)"),
+            spacing="1", align="center",
+        ),
+        rx.hstack(
+            rx.box(width="14px", height="14px", border_radius="3px", background="var(--red-4)", flex_shrink="0"),
+            rx.text("Valeur critique", size="1", color="var(--gray-11)"),
+            spacing="1", align="center",
+        ),
+        spacing="4",
+        align="center",
+        padding="0.5rem 0.75rem",
+        border="1px solid var(--gray-4)",
+        border_radius="8px",
+        background="var(--gray-1)",
+        wrap="wrap",
     )
 
 
@@ -274,23 +322,54 @@ def _param_form() -> rx.Component:
         # Params table or empty state
         rx.cond(
             CampaignPatientExamsState.active_params.length() > 0,
-            rx.table.root(
-                rx.table.header(
-                    rx.table.row(
-                        rx.table.column_header_cell("Paramètre"),
-                        rx.table.column_header_cell("Unité"),
-                        rx.table.column_header_cell("Réf."),
-                        rx.table.column_header_cell("Seuil critique"),
-                        rx.table.column_header_cell("Résultat"),
-                    )
+            # True branch: table + legend
+            rx.vstack(
+                # Select / Deselect all buttons
+                rx.hstack(
+                    rx.text("Sélection des paramètres :", size="2", color="var(--gray-9)"),
+                    rx.button(
+                        rx.icon("check-square", size=13),
+                        "Tout sélectionner",
+                        variant="ghost",
+                        size="1",
+                        color_scheme="blue",
+                        on_click=CampaignPatientExamsState.select_all_params,
+                    ),
+                    rx.button(
+                        rx.icon("square", size=13),
+                        "Tout désélectionner",
+                        variant="ghost",
+                        size="1",
+                        color_scheme="gray",
+                        on_click=CampaignPatientExamsState.deselect_all_params,
+                    ),
+                    spacing="2",
+                    align="center",
+                    width="100%",
                 ),
-                rx.table.body(
-                    rx.foreach(CampaignPatientExamsState.active_params, _param_row)
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            rx.table.column_header_cell("", width="36px"),
+                            rx.table.column_header_cell("Paramètre"),
+                            rx.table.column_header_cell("Unité"),
+                            rx.table.column_header_cell("Réf."),
+                            rx.table.column_header_cell("Seuil critique"),
+                            rx.table.column_header_cell("Résultat"),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(CampaignPatientExamsState.active_params, _param_row)
+                    ),
+                    width="100%",
+                    variant="surface",
+                    size="2",
                 ),
+                _color_legend(),
                 width="100%",
-                variant="surface",
-                size="2",
+                spacing="2",
             ),
+            # False branch: empty state
             rx.center(
                 rx.vstack(
                     rx.icon("circle-check", size=32, color="var(--gray-5)"),
@@ -323,28 +402,55 @@ def _param_form() -> rx.Component:
         # Save + per-section transmit buttons
         rx.hstack(
             rx.spacer(),
-            rx.button(
-                rx.icon("save", size=14),
-                "Enregistrer ces résultats",
-                variant="soft",
-                size="2",
-                loading=CampaignPatientExamsState.is_saving,
-                on_click=CampaignPatientExamsState.save_active_section,
-            ),
             rx.cond(
-                CampaignPatientExamsState.active_section_is_saved,
-                rx.button(
-                    rx.icon("send", size=14),
-                    "Transmettre cet examen",
+                CampaignPatientExamsState.active_section_is_transmitted,
+                rx.badge(
+                    rx.icon("check", size=13),
+                    "Transmis au médecin",
                     color_scheme="teal",
                     variant="soft",
                     size="2",
-                    loading=CampaignPatientExamsState.is_saving,
-                    on_click=CampaignPatientExamsState.transmit_section(
-                        CampaignPatientExamsState.active_section_id
-                    ),
                 ),
-                rx.fragment(),
+                rx.hstack(
+                    rx.cond(
+                        CampaignPatientExamsState.active_section_is_saved,
+                        rx.fragment(),
+                        rx.button(
+                            rx.icon("save", size=14),
+                            "Enregistrer ces résultats",
+                            variant="soft",
+                            size="2",
+                            loading=CampaignPatientExamsState.is_saving,
+                            on_click=CampaignPatientExamsState.save_active_section,
+                        ),
+                    ),
+                    rx.cond(
+                        CampaignPatientExamsState.active_section_is_saved,
+                        rx.hstack(
+                            rx.button(
+                                rx.icon("save", size=14),
+                                "Mettre à jour",
+                                variant="soft",
+                                size="2",
+                                loading=CampaignPatientExamsState.is_saving,
+                                on_click=CampaignPatientExamsState.save_active_section,
+                            ),
+                            rx.button(
+                                rx.icon("send", size=14),
+                                "Transmettre cet examen",
+                                color_scheme="teal",
+                                size="2",
+                                loading=CampaignPatientExamsState.is_saving,
+                                on_click=CampaignPatientExamsState.transmit_section(
+                                    CampaignPatientExamsState.active_section_id
+                                ),
+                            ),
+                            spacing="2",
+                        ),
+                        rx.fragment(),
+                    ),
+                    spacing="2",
+                ),
             ),
             width="100%",
             padding_top="0.25rem",
@@ -632,9 +738,17 @@ def campaign_patient_exams_page() -> rx.Component:
                             # Transmit panel
                             _transmit_panel(),
                             # PSC interpretation
-                            _psc_interpretation_panel(),
+                            rx.cond(
+                                NavRoleState.can_see_interpretation,
+                                _psc_interpretation_panel(),
+                                rx.fragment(),
+                            ),
                             # Enterprise interpretation
-                            _enterprise_interpretation_panel(),
+                            rx.cond(
+                                NavRoleState.can_see_interpretation,
+                                _enterprise_interpretation_panel(),
+                                rx.fragment(),
+                            ),
                             spacing="4",
                             width="100%",
                         ),

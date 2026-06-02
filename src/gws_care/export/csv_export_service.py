@@ -11,9 +11,12 @@ def generate_exam_history_csv(patient_id: str) -> bytes:
     """
     from gws_care.exam.exam import Exam
     from gws_care.exam.exam_result_service import ExamResultService
+    from gws_care.account.account import Account
+    from peewee import JOIN
 
     exams = list(
-        Exam.select()
+        Exam.select(Exam, Account)
+        .join(Account, JOIN.LEFT_OUTER, on=(Exam.billing_account == Account.id))
         .where(Exam.patient == patient_id)
         .order_by(Exam.exam_date.asc())
     )

@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 
-from peewee import BooleanField, CharField, DateTimeField, ForeignKeyField, TextField
+from peewee import BooleanField, CharField, DateTimeField, FloatField, ForeignKeyField, TextField
 
 from gws_care.campaign.campaign import Campaign
 from gws_care.core.care_db_manager import CareDbManager
@@ -43,7 +43,7 @@ class TubeQR(ModelWithUser):
     """
 
     campaign: Campaign = ForeignKeyField(
-        Campaign, null=False, backref="tubes", on_delete="CASCADE"
+        Campaign, null=True, backref="tubes", on_delete="SET NULL"
     )
     qr_code: str = CharField(max_length=100, unique=True, null=False)
     short_id: str = CharField(max_length=20, null=False)
@@ -55,6 +55,8 @@ class TubeQR(ModelWithUser):
         ExamTypeRef, null=True, backref="tubes", on_delete="SET NULL"
     )
     sample_type: str = CharField(max_length=100, null=True)
+    volume_ml: float = FloatField(null=True)
+    collector_notes: str = TextField(null=True)
     associated_at: datetime = DateTimeField(null=True)
     collected_at: datetime = DateTimeField(null=True)
     cancelled_reason: str = TextField(null=True)

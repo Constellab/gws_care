@@ -41,16 +41,28 @@ class PrebillingService:
 
     @classmethod
     def list_for_account(cls, account_id: str) -> list["PrebillingDTO"]:
+        from peewee import JOIN
         rows = (
-            Prebilling.select()
+            Prebilling.select(Prebilling, Account, Campaign)
+            .join(Account, join_type=JOIN.LEFT_OUTER)
+            .switch(Prebilling)
+            .join(Campaign, join_type=JOIN.LEFT_OUTER)
             .where(Prebilling.account == account_id)
             .order_by(Prebilling.created_at.desc())
         )
         return [PrebillingDTO(pb) for pb in rows]
 
     @classmethod
-    def list_all(cls) -> list["PrebillingDTO"]:
-        rows = Prebilling.select().order_by(Prebilling.created_at.desc())
+    def list_all(cls, limit: int = 500) -> list["PrebillingDTO"]:
+        from peewee import JOIN
+        rows = (
+            Prebilling.select(Prebilling, Account, Campaign)
+            .join(Account, join_type=JOIN.LEFT_OUTER)
+            .switch(Prebilling)
+            .join(Campaign, join_type=JOIN.LEFT_OUTER)
+            .order_by(Prebilling.created_at.desc())
+            .limit(limit)
+        )
         return [PrebillingDTO(pb) for pb in rows]
 
     @classmethod

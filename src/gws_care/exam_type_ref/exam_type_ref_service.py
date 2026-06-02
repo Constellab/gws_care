@@ -51,6 +51,7 @@ class ExamTypeRefService:
         ref.is_active = dto.is_active
         ref.allows_attachment = dto.allows_attachment
         ref.requires_attachment = dto.requires_attachment
+        ref.required_sample_type = dto.required_sample_type or None
         ref.save()
         return cls.get(str(ref.id))
 
@@ -63,6 +64,7 @@ class ExamTypeRefService:
         ref.is_active = dto.is_active
         ref.allows_attachment = dto.allows_attachment
         ref.requires_attachment = dto.requires_attachment
+        ref.required_sample_type = dto.required_sample_type or None
         ref.save()
         return cls.get(exam_type_ref_id)
 

@@ -22,6 +22,15 @@ class AccountService:
         return list(query.order_by(Account.name))
 
     @classmethod
+    def list_accounts_for_company(cls, company_id: str) -> list[Account]:
+        """Return all (active) billing accounts linked to a company."""
+        return list(
+            Account.select()
+            .where(Account.company_id == company_id, Account.is_active == True)
+            .order_by(Account.name)
+        )
+
+    @classmethod
     def create_account(cls, dto: SaveAccountDTO) -> Account:
         if not dto.name or not dto.name.strip():
             raise BadRequestException("Account name is required")
@@ -47,6 +56,7 @@ class AccountService:
     @classmethod
     def _apply_dto(cls, account: Account, dto: SaveAccountDTO) -> None:
         account.account_type = dto.account_type
+        account.company_id = dto.company_id or None
         account.name = dto.name.strip()
         account.registration_number = dto.registration_number
         account.address = dto.address

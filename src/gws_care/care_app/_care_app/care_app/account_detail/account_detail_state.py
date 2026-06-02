@@ -111,16 +111,18 @@ class AccountDetailState(ReflexMainState):
         if not await self.check_authentication():
             return
         with await self.authenticate_user():
-            from gws_care.patient.patient_service import PatientService
-            all_patients = PatientService.search_patients()
-            # Keep only those without an account
+            from gws_care.patient.patient import Patient
+            unassigned = list(
+                Patient.select()
+                .where(Patient.billing_account.is_null(True))
+                .order_by(Patient.last_name, Patient.first_name)
+            )
             self.unassigned_patients = [
                 UnassignedPatientOptionDTO(
                     id=str(p.id),
                     label=f"{p.last_name} {p.first_name} ({p.patient_number})",
                 )
-                for p in all_patients
-                if not p.billing_account_id
+                for p in unassigned
             ]
         self.assign_patient_id = ""
         self.assign_dialog_open = True
@@ -230,23 +232,45 @@ class AccountDetailState(ReflexMainState):
         if not self.account:
             return
         with await self.authenticate_user():
+            from peewee import fn
+            from gws_care.campaign.campaign_patient import CampaignPatient
             from gws_care.campaign.campaign_service import CampaignService
             from gws_care.campaign.campaign_status import CampaignStatus
             campaigns = CampaignService.list_campaigns_for_account(self.account.id)
-            self.campaigns = [
-                CampaignRowDTO(
+            ids = [c.id for c in campaigns]
+            count_map: dict[str, int] = {}
+            if ids:
+                for row in (
+                    CampaignPatient.select(
+                        CampaignPatient.campaign_id,
+                        fn.COUNT(CampaignPatient.id).alias("cnt"),
+                    )
+                    .where(CampaignPatient.campaign.in_(ids))
+                    .group_by(CampaignPatient.campaign_id)
+                    .namedtuples()
+                ):
+                    count_map[str(row.campaign_id)] = row.cnt
+            rows: list[CampaignRowDTO] = []
+            for c in campaigns:
+                try:
+                    status_enum = CampaignStatus(c.status)
+                    status_label = status_enum.get_label()
+                    status_color = status_enum.get_color()
+                except Exception:
+                    status_label = c.status
+                    status_color = "gray"
+                rows.append(CampaignRowDTO(
                     id=str(c.id),
                     name=c.name,
                     status=c.status,
-                    status_label=CampaignStatus(c.status).get_label(),
-                    status_color=CampaignStatus(c.status).get_color(),
+                    status_label=status_label,
+                    status_color=status_color,
                     start_date=c.start_date.isoformat() if c.start_date else "-",
                     end_date=c.end_date.isoformat() if c.end_date else "-",
-                    patient_count=CampaignService.patient_count(str(c.id)),
+                    patient_count=count_map.get(str(c.id), 0),
                     location=c.location or "",
-                )
-                for c in campaigns
-            ]
+                ))
+            self.campaigns = rows
 
     # ── Campaign dialog events ─────────────────────────────────────────────
 
@@ -286,7 +310,7 @@ class AccountDetailState(ReflexMainState):
                     DoctorOptionDTO(id=str(r.user.id), label=f"{r.user.last_name} {r.user.first_name}")
                     for r in ent_rows
                 ]
-        except Exception:
+        except Exception as exc:
             self.psc_doctor_options = []
             self.enterprise_doctor_options = []
 

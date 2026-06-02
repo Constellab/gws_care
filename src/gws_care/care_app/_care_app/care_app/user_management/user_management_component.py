@@ -45,6 +45,13 @@ def _user_row(u: UserRowDTO) -> rx.Component:
         ),
         rx.table.cell(
             rx.cond(
+                u.specialty != "",
+                rx.badge(u.specialty, size="1", variant="soft", color_scheme="blue"),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
+        rx.table.cell(
+            rx.cond(
                 u.linked_account_name != "",
                 rx.text(u.linked_account_name, size="2"),
                 rx.text("—", size="2", color="var(--gray-7)"),
@@ -53,6 +60,26 @@ def _user_row(u: UserRowDTO) -> rx.Component:
         rx.table.cell(_status_badge(u.is_active)),
         rx.table.cell(
             rx.hstack(
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("eye", size=14),
+                        variant="ghost",
+                        size="1",
+                        color_scheme="blue",
+                        on_click=UserManagementState.preview_user(u.id),
+                    ),
+                    content="Prévisualiser la navigation de cet utilisateur",
+                ),
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("pencil", size=14),
+                        variant="ghost",
+                        size="1",
+                        color_scheme="gray",
+                        on_click=UserManagementState.open_edit_dialog(u.id),
+                    ),
+                    content="Modifier la spécialité / le rôle",
+                ),
                 rx.tooltip(
                     rx.icon_button(
                         rx.icon("power", size=14),
@@ -84,9 +111,15 @@ def _user_dialog() -> rx.Component:
     role_options = _PSC_ROLES + _ENTERPRISE_ROLES
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Ajouter un utilisateur"),
+            rx.dialog.title(
+                rx.cond(UserManagementState.is_editing, "Modifier l'utilisateur", "Ajouter un utilisateur")
+            ),
             rx.dialog.description(
-                "Saisissez l'adresse email de la personne et son rôle. L'utilisateur sera créé automatiquement.",
+                rx.cond(
+                    UserManagementState.is_editing,
+                    "Modifiez la spécialité, le rôle ou le compte lié.",
+                    "Saisissez l'adresse email de la personne et son rôle. L'utilisateur sera créé automatiquement.",
+                ),
                 size="2",
                 color="var(--gray-9)",
             ),
@@ -166,6 +199,45 @@ def _user_dialog() -> rx.Component:
                     spacing="1",
                     width="100%",
                 ),
+                # Specialty — shown only for doctor roles
+                rx.cond(
+                    (UserManagementState.form.role == "MEDECIN_PSC")
+                    | (UserManagementState.form.role == "MEDECIN_ENTREPRISE"),
+                    rx.vstack(
+                        rx.text("Spécialité", size="2", weight="medium"),
+                        # Quick-pick from existing specialties
+                        rx.cond(
+                            UserManagementState.specialty_suggestions.length() > 0,
+                            rx.select.root(
+                                rx.select.trigger(
+                                    placeholder="Choisir une spécialité existante…",
+                                    width="100%",
+                                ),
+                                rx.select.content(
+                                    rx.foreach(
+                                        UserManagementState.specialty_suggestions,
+                                        lambda s: rx.select.item(s, value=s),
+                                    ),
+                                ),
+                                value=UserManagementState.form.specialty,
+                                on_change=UserManagementState.set_specialty,
+                            ),
+                        ),
+                        rx.input(
+                            placeholder="Ou saisir librement : Médecine du travail, Cardiologie…",
+                            value=UserManagementState.form.specialty,
+                            on_change=UserManagementState.set_specialty,
+                            width="100%",
+                        ),
+                        rx.text(
+                            "Permet au patient de filtrer par spécialité lors d'une prise de RDV.",
+                            size="1",
+                            color="var(--gray-9)",
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                ),
                 rx.hstack(
                     rx.text("Statut actif", size="2"),
                     rx.switch(
@@ -211,7 +283,7 @@ def _user_dialog() -> rx.Component:
 
 def _users_table(users: list[UserRowDTO]) -> rx.Component:
     return rx.cond(
-        rx.Var.create(len).call(users) > 0,  # type: ignore[arg-type]
+        users.length() > 0,
         rx.table.root(
             rx.table.header(
                 rx.table.row(
@@ -234,78 +306,6 @@ def _users_table(users: list[UserRowDTO]) -> rx.Component:
     )
 
 
-def _filtered_users(tab: str) -> rx.Component:
-    psc_users = rx.Var.create([
-        u for u in UserManagementState.users
-        if any(r in ["SUPER_ADMIN_PSC", "ADMIN_PSC", "OPERATEUR_TERRAIN", "OPERATEUR_LABO", "MEDECIN_PSC"]
-               for r in u.roles)
-    ])
-    return rx.tabs.root(
-        rx.tabs.list(
-            rx.tabs.trigger("Utilisateurs PSC", value="psc"),
-            rx.tabs.trigger("Utilisateurs Entreprise", value="enterprise"),
-        ),
-        rx.tabs.content(
-            rx.vstack(
-                rx.table.root(
-                    rx.table.header(
-                        rx.table.row(
-                            rx.table.column_header_cell("Nom"),
-                            rx.table.column_header_cell("Email"),
-                            rx.table.column_header_cell("Rôles"),
-                            rx.table.column_header_cell("Compte lié"),
-                            rx.table.column_header_cell("Statut"),
-                            rx.table.column_header_cell(""),
-                        )
-                    ),
-                    rx.table.body(
-                        rx.foreach(
-                            UserManagementState.users.filter(  # type: ignore[attr-defined]
-                                lambda u: u.roles.contains("SUPER_ADMIN_PSC")
-                                | u.roles.contains("ADMIN_PSC")
-                                | u.roles.contains("OPERATEUR_TERRAIN")
-                                | u.roles.contains("OPERATEUR_LABO")
-                                | u.roles.contains("MEDECIN_PSC")
-                            ),
-                            _user_row,
-                        )
-                    ),
-                    width="100%",
-                    variant="surface",
-                ),
-                width="100%",
-            ),
-            value="psc",
-        ),
-        rx.tabs.content(
-            rx.table.root(
-                rx.table.header(
-                    rx.table.row(
-                        rx.table.column_header_cell("Nom"),
-                        rx.table.column_header_cell("Email"),
-                        rx.table.column_header_cell("Rôles"),
-                        rx.table.column_header_cell("Compte lié"),
-                        rx.table.column_header_cell("Statut"),
-                        rx.table.column_header_cell(""),
-                    )
-                ),
-                rx.table.body(
-                    rx.foreach(
-                        UserManagementState.users.filter(  # type: ignore[attr-defined]
-                            lambda u: u.roles.contains("MEDECIN_ENTREPRISE")
-                            | u.roles.contains("RH_ENTREPRISE")
-                        ),
-                        _user_row,
-                    )
-                ),
-                width="100%",
-                variant="surface",
-            ),
-            value="enterprise",
-        ),
-        default_value="psc",
-        width="100%",
-    )
 
 
 def user_management_page() -> rx.Component:
@@ -333,8 +333,28 @@ def user_management_page() -> rx.Component:
                     UserManagementState.error != "",
                     rx.callout(UserManagementState.error, icon="info", color_scheme="red", size="2"),
                 ),
+                # ── Context banner: explain difference with /staff ────────────────
+                rx.callout(
+                    rx.hstack(
+                        rx.text(
+                            "Cette page gère les comptes, rôles et prévisualisations. "
+                            "Pour consulter l'annuaire visuel groupé par poste, voir ",
+                            size="2",
+                        ),
+                        rx.link("l'Annuaire du personnel →", href="/staff", size="2"),
+                        spacing="1",
+                        align="center",
+                        flex_wrap="wrap",
+                    ),
+                    icon="users",
+                    color_scheme="blue",
+                    size="1",
+                ),
                 # Tabs: PSC / Enterprise
-                rx.tabs.root(
+                rx.cond(
+                    UserManagementState.is_loading,
+                    rx.center(rx.spinner(size="3"), padding="3rem"),
+                    rx.tabs.root(
                     rx.tabs.list(
                         rx.tabs.trigger(
                             rx.hstack(rx.icon("shield", size=14), rx.text("Équipe PSC"), spacing="1"),
@@ -347,83 +367,119 @@ def user_management_page() -> rx.Component:
                     ),
                     # PSC tab
                     rx.tabs.content(
-                        rx.table.root(
-                            rx.table.header(
-                                rx.table.row(
-                                    rx.table.column_header_cell("Nom"),
-                                    rx.table.column_header_cell("Email"),
-                                    rx.table.column_header_cell("Rôles"),
-                                    rx.table.column_header_cell("Compte lié"),
-                                    rx.table.column_header_cell("Statut"),
-                                    rx.table.column_header_cell(""),
-                                )
+                        rx.cond(
+                            UserManagementState.psc_tab_users.length() > 0,
+                            rx.table.root(
+                                rx.table.header(
+                                    rx.table.row(
+                                        rx.table.column_header_cell("Nom"),
+                                        rx.table.column_header_cell("Email"),
+                                        rx.table.column_header_cell("Rôles"),
+                                        rx.table.column_header_cell("Spécialité"),
+                                        rx.table.column_header_cell("Compte lié"),
+                                        rx.table.column_header_cell("Statut"),
+                                        rx.table.column_header_cell(""),
+                                    )
+                                ),
+                                rx.table.body(
+                                    rx.foreach(UserManagementState.psc_tab_users, _user_row),
+                                ),
+                                width="100%",
+                                variant="surface",
                             ),
-                            rx.table.body(
-                                rx.foreach(UserManagementState.users, _user_row),
+                            rx.center(
+                                rx.text("Aucun utilisateur PSC trouvé.", size="2", color="var(--gray-9)"),
+                                padding="2rem",
                             ),
-                            width="100%",
-                            variant="surface",
                         ),
                         value="psc",
                     ),
                     # Enterprise tab
                     rx.tabs.content(
-                        rx.table.root(
-                            rx.table.header(
-                                rx.table.row(
-                                    rx.table.column_header_cell("Nom"),
-                                    rx.table.column_header_cell("Email"),
-                                    rx.table.column_header_cell("Rôles"),
-                                    rx.table.column_header_cell("Compte lié"),
-                                    rx.table.column_header_cell("Statut"),
-                                    rx.table.column_header_cell(""),
-                                )
+                        rx.cond(
+                            UserManagementState.enterprise_tab_users.length() > 0,
+                            rx.table.root(
+                                rx.table.header(
+                                    rx.table.row(
+                                        rx.table.column_header_cell("Nom"),
+                                        rx.table.column_header_cell("Email"),
+                                        rx.table.column_header_cell("Rôles"),
+                                        rx.table.column_header_cell("Spécialité"),
+                                        rx.table.column_header_cell("Compte lié"),
+                                        rx.table.column_header_cell("Statut"),
+                                        rx.table.column_header_cell(""),
+                                    )
+                                ),
+                                rx.table.body(
+                                    rx.foreach(UserManagementState.enterprise_tab_users, _user_row),
+                                ),
+                                width="100%",
+                                variant="surface",
                             ),
-                            rx.table.body(
-                                rx.foreach(UserManagementState.users, _user_row),
+                            rx.center(
+                                rx.text("Aucun utilisateur entreprise trouvé.", size="2", color="var(--gray-9)"),
+                                padding="2rem",
                             ),
-                            width="100%",
-                            variant="surface",
                         ),
                         value="enterprise",
                     ),
                     default_value="psc",
                     width="100%",
-                ),
+                ),  # end rx.tabs.root
+                ),  # end rx.cond(is_loading)
                 spacing="4",
                 width="100%",
             ),
             _user_dialog(),
-            # ── Confirm révocation rôles ─────────────────────────────────────────
+            # ── Confirm suppression utilisateur ─────────────────────────────────
             rx.dialog.root(
                 rx.dialog.content(
                     rx.dialog.title(
-                        rx.hstack(rx.icon("trash-2", size=18, color="var(--red-9)"),
-                                  rx.text("Révoquer les accès ?"), spacing="2"),
+                        rx.hstack(rx.icon("user-x", size=18, color="var(--red-9)"),
+                                  rx.text("Supprimer l'utilisateur ?"), spacing="2"),
                     ),
-                    rx.dialog.description(
+                    rx.vstack(
+                        rx.text(
+                            "Vous allez révoquer tous les rôles de ",
+                            rx.text.strong(UserManagementState.confirm_revoke_user_email),
+                            ". Cette action est irréversible.",
+                            size="2",
+                        ),
                         rx.vstack(
-                            rx.text(
-                                "Tous les rôles de « ",
-                                rx.text.strong(UserManagementState.confirm_revoke_user_email),
-                                " » seront révoqués.",
-                                size="2",
+                            rx.text("Motif *", size="2", weight="medium"),
+                            rx.text_area(
+                                placeholder="Indiquez le motif (départ, faute, erreur de saisie…)",
+                                value=UserManagementState.confirm_revoke_motif,
+                                on_change=UserManagementState.set_confirm_revoke_motif,
+                                rows="3",
+                                width="100%",
                             ),
-                            rx.text("L'utilisateur ne pourra plus accéder à Constellab Care.",
-                                    size="2", color="var(--gray-9)"),
-                            spacing="2",
+                            rx.text(
+                                "Le motif est obligatoire et sera enregistré dans les logs.",
+                                size="1",
+                                color="var(--gray-9)",
+                            ),
+                            spacing="1",
+                            width="100%",
                         ),
-                    ),
-                    rx.hstack(
-                        rx.dialog.close(
-                            rx.button("Annuler", variant="soft", color_scheme="gray",
-                                      on_click=UserManagementState.dismiss_confirm_revoke),
+                        rx.hstack(
+                            rx.dialog.close(
+                                rx.button("Annuler", variant="soft", color_scheme="gray",
+                                          on_click=UserManagementState.dismiss_confirm_revoke),
+                            ),
+                            rx.button(
+                                "Supprimer",
+                                color_scheme="red",
+                                disabled=UserManagementState.confirm_revoke_motif.strip() == "",
+                                on_click=UserManagementState.confirmed_revoke,
+                            ),
+                            justify="end", spacing="2", width="100%",
                         ),
-                        rx.button("Révoquer", color_scheme="red",
-                                  on_click=UserManagementState.confirmed_revoke),
-                        justify="end", spacing="2", margin_top="1rem", width="100%",
+                        spacing="4",
+                        width="100%",
+                        margin_top="0.5rem",
                     ),
-                    max_width="440px",
+                    max_width="480px",
                 ),
                 open=UserManagementState.confirm_revoke_open,
                 on_open_change=lambda _: UserManagementState.dismiss_confirm_revoke(),

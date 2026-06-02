@@ -13,11 +13,20 @@ class PatientFillOption(BaseModel):
     display: str   # "First Last"
 
 
+class CompanyOption(BaseModel):
+    id: str
+    name: str
+
+
 class AccountFormState(FormDialogState, rx.State):
     """Manages the create / update account dialog."""
 
     # Account type: "COMPANY" or "INDIVIDUAL"
     form_account_type: str = "COMPANY"
+
+    # Linked company (when account type is COMPANY)
+    form_company_id: str = ""
+    company_options: list[CompanyOption] = []
 
     # Form fields (public — bound to inputs in the UI)
     form_name: str = ""
@@ -28,6 +37,7 @@ class AccountFormState(FormDialogState, rx.State):
     form_phone: str = ""
     form_email: str = ""
     form_contact_name: str = ""
+    form_error: str = ""
 
     # Fill-from-patient
     patient_fill_options: list[PatientFillOption] = []
@@ -41,6 +51,16 @@ class AccountFormState(FormDialogState, rx.State):
     @rx.event
     def set_form_account_type(self, value: str):
         self.form_account_type = value
+
+    @rx.event
+    def set_form_company_id(self, value: str):
+        self.form_company_id = value
+        # Auto-fill form name from company if empty
+        if value and not self.form_name.strip():
+            for c in self.company_options:
+                if c.id == value:
+                    self.form_name = c.name
+                    break
 
     @rx.event
     def set_form_name(self, value: str):
@@ -89,7 +109,7 @@ class AccountFormState(FormDialogState, rx.State):
             self.form_city = patient.city or ""
             self.form_phone = patient.phone or ""
             self.form_email = patient.email or ""
-        except Exception:
+        except Exception as exc:
             pass
 
     async def _load_patient_fill_options(self) -> None:
@@ -101,6 +121,15 @@ class AccountFormState(FormDialogState, rx.State):
             for p in patients
         ]
 
+    async def _load_company_options(self) -> None:
+        """Load list of active companies for the company selector."""
+        from gws_care.company.company_service import CompanyService
+        companies = CompanyService.list_companies(active_only=True)
+        self.company_options = [
+            CompanyOption(id=str(c.id), name=c.name)
+            for c in companies
+        ]
+
     # ── Dialog open helpers ───────────────────────────────────────────────────
 
     @rx.event
@@ -110,6 +139,19 @@ class AccountFormState(FormDialogState, rx.State):
         self._editing_account_id = ""
         await self._clear_form_state()
         await self._load_patient_fill_options()
+        await self._load_company_options()
+        self.dialog_opened = True
+
+    @rx.event
+    async def open_create_dialog_for_company(self, company_id: str, company_name: str):
+        """Open account creation dialog pre-linked to a specific company."""
+        self.is_update_mode = False
+        self._editing_account_id = ""
+        await self._clear_form_state()
+        await self._load_company_options()
+        self.form_company_id = company_id
+        self.form_name = company_name
+        self.form_account_type = "COMPANY"
         self.dialog_opened = True
 
     @rx.event
@@ -123,6 +165,7 @@ class AccountFormState(FormDialogState, rx.State):
             from gws_care.account.account_service import AccountService
             a = AccountService.get_account(account_id)
             self.form_account_type = a.account_type or "COMPANY"
+            self.form_company_id = a.company_id or ""
             self.form_name = a.name or ""
             self.form_registration_number = a.registration_number or ""
             self.form_address = a.address or ""
@@ -133,12 +176,14 @@ class AccountFormState(FormDialogState, rx.State):
             self.form_contact_name = a.contact_name or ""
 
         await self._load_patient_fill_options()
+        await self._load_company_options()
         self.dialog_opened = True
 
     # ── FormDialogState abstract method implementations ───────────────────────
 
     async def _clear_form_state(self) -> None:
         self.form_account_type = "COMPANY"
+        self.form_company_id = ""
         self.form_name = ""
         self.form_registration_number = ""
         self.form_address = ""
@@ -150,12 +195,14 @@ class AccountFormState(FormDialogState, rx.State):
         self.selected_patient_fill = ""
         self._editing_account_id = ""
         self.is_update_mode = False
+        self.form_error = ""
 
     def _build_save_dto(self):
         from gws_care.account.account_dto import SaveAccountDTO
         name = self.form_name.strip()
         return name, SaveAccountDTO(
             account_type=self.form_account_type,
+            company_id=self.form_company_id or None,
             name=name,
             registration_number=self.form_registration_number or None,
             address=self.form_address or None,
@@ -170,9 +217,12 @@ class AccountFormState(FormDialogState, rx.State):
         """Create a new account from form data."""
         from gws_care.account.account_service import AccountService
 
+        async with self:
+            self.form_error = ""
         name, dto = self._build_save_dto()
         if not name:
-            yield rx.toast.error("Account name is required")
+            async with self:
+                self.form_error = "Account name is required"
             return
 
         async with self:
@@ -189,9 +239,12 @@ class AccountFormState(FormDialogState, rx.State):
         """Update an existing account from form data."""
         from gws_care.account.account_service import AccountService
 
+        async with self:
+            self.form_error = ""
         name, dto = self._build_save_dto()
         if not name:
-            yield rx.toast.error("Account name is required")
+            async with self:
+                self.form_error = "Account name is required"
             return
 
         async with self:

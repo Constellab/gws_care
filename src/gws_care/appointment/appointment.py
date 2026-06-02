@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from gws_core import EnumField
-from peewee import DateTimeField, ForeignKeyField, TextField
+from peewee import CharField, DateTimeField, ForeignKeyField, IntegerField, TextField
 
 from gws_care.account.account import Account
 from gws_care.appointment.appointment_status import AppointmentStatus
@@ -27,10 +27,16 @@ class Appointment(ModelWithUser):
     )
     scheduled_at: datetime = DateTimeField(null=False, index=True)
     exam_type: ExamType = EnumField(choices=ExamType, null=False)
+    exam_type_ref_id: str = CharField(max_length=36, null=True, default=None)
     status: AppointmentStatus = EnumField(
         choices=AppointmentStatus, default=AppointmentStatus.SCHEDULED, null=False
     )
     notes: str = TextField(null=True)
+    # Doctor assignment (set via planning view)
+    assigned_doctor_id: str = CharField(max_length=36, null=True, default=None)
+    assigned_doctor_name: str = CharField(max_length=255, null=True, default=None)
+    duration_minutes: int = IntegerField(default=20, null=False)
+    room: str = CharField(max_length=100, null=True, default=None)
 
     class Meta:
         table_name = "gws_care_appointment"

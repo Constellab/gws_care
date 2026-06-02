@@ -31,8 +31,8 @@ class AuditService:
             entry.ip_address = ip_address
             entry.created_at = datetime.now()
             entry.save()
-        except Exception:
-            pass  # audit failures must never break the main flow
+        except Exception as exc:
+            print(f"[audit] Failed to write log entry (action={action}): {exc}")
 
     @classmethod
     def query(

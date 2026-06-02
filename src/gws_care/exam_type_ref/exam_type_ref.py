@@ -41,6 +41,7 @@ class ExamTypeRef(ModelWithUser):
     is_active: bool = BooleanField(default=True, null=False)
     allows_attachment: bool = BooleanField(default=True, null=False)
     requires_attachment: bool = BooleanField(default=False, null=False)
+    required_sample_type: str = CharField(max_length=200, null=True)  # e.g. "Sang total (EDTA)"
 
     def get_category_label(self) -> str:
         try:

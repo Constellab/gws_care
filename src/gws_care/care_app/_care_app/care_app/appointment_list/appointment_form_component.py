@@ -6,24 +6,6 @@ from gws_reflex_base import form_dialog_component
 from ..common.language_state import LanguageState
 from .appointment_form_state import AppointmentFormState
 
-_EXAM_TYPE_KEYS = [
-    ("biology", "exam_type_biology"),
-    ("radiology", "exam_type_radiology"),
-    ("ophthalmology", "exam_type_ophthalmology"),
-    ("orl", "exam_type_orl"),
-    ("ecg", "exam_type_ecg"),
-    ("spirometry", "exam_type_spirometry"),
-    ("clinical", "exam_type_clinical"),
-    ("hormones", "exam_type_hormones"),
-    ("hematology", "exam_type_hematology"),
-    ("bacteriology", "exam_type_bacteriology"),
-    ("parasitology", "exam_type_parasitology"),
-    ("drug_test", "exam_type_drug_test"),
-    ("immunology", "exam_type_immunology"),
-    ("hepatic_markers", "exam_type_hepatic_markers"),
-    ("other", "exam_type_other"),
-]
-
 
 def _field(label: str, input_component: rx.Component) -> rx.Component:
     return rx.vstack(
@@ -85,9 +67,15 @@ def _form_fields() -> rx.Component:
             _field(
                 LanguageState.tr["field_exam_type_required"],
                 rx.select.root(
-                    rx.select.trigger(width="100%"),
+                    rx.select.trigger(width="100%", placeholder="Sélectionner un examen..."),
                     rx.select.content(
-                        *[rx.select.item(LanguageState.tr[key], value=value) for value, key in _EXAM_TYPE_KEYS],
+                        rx.foreach(
+                            AppointmentFormState.exam_type_options,
+                            lambda o: rx.select.item(
+                                o.name + " (" + o.category_label + ")",
+                                value=o.id,
+                            ),
+                        ),
                     ),
                     value=AppointmentFormState.form_exam_type,
                     on_change=AppointmentFormState.set_form_exam_type,
@@ -109,6 +97,63 @@ def _form_fields() -> rx.Component:
                 width="100%",
                 rows="3",
             ),
+        ),
+        rx.grid(
+            _field(
+                "Médecin assigné",
+                rx.select.root(
+                    rx.select.trigger(width="100%", placeholder="Aucun médecin..."),
+                    rx.select.content(
+                        rx.select.item("— Aucun —", value="_none_"),
+                        rx.foreach(
+                            AppointmentFormState.doctor_options,
+                            lambda d: rx.select.item(
+                                rx.cond(d.specialty != "", d.name + " — " + d.specialty, d.name),
+                                value=d.id,
+                            ),
+                        ),
+                    ),
+                    value=AppointmentFormState.form_doctor_id,
+                    on_change=AppointmentFormState.set_form_doctor_id,
+                    size="2",
+                    width="100%",
+                ),
+            ),
+            _field(
+                "Cabinet / salle",
+                rx.input(
+                    value=AppointmentFormState.form_room,
+                    on_change=AppointmentFormState.set_form_room,
+                    placeholder="Ex : Cabinet 3",
+                    size="2",
+                    width="100%",
+                ),
+            ),
+            _field(
+                "Durée (min)",
+                rx.input(
+                    value=AppointmentFormState.form_duration,
+                    on_change=AppointmentFormState.set_form_duration,
+                    type="number",
+                    min="5",
+                    max="240",
+                    size="2",
+                    width="100%",
+                ),
+            ),
+            columns="3",
+            spacing="3",
+            width="100%",
+        ),
+        rx.cond(
+            AppointmentFormState.form_error != "",
+            rx.callout(
+                AppointmentFormState.form_error,
+                icon="triangle-alert",
+                color_scheme="red",
+                size="1",
+            ),
+            rx.fragment(),
         ),
         width="100%",
         spacing="4",

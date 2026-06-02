@@ -1,6 +1,6 @@
 from datetime import date
 
-from peewee import CharField, DateField, ForeignKeyField
+from peewee import CharField, DateField, ForeignKeyField, TextField
 
 from gws_care.account.account import Account
 from gws_care.core.care_db_manager import CareDbManager
@@ -32,6 +32,8 @@ class Patient(ModelWithUser):
     billing_account: Account = ForeignKeyField(Account, null=True, backref="patients", on_delete="SET NULL")
     # company_id: plain string FK — column managed via migration, not a Peewee FK constraint
     company_id: str = CharField(max_length=36, null=True)
+    # Permanent token used to generate the patient's identity QR code
+    qr_token: str = CharField(max_length=12, unique=True, null=True, index=True)
 
     def get_full_name(self) -> str:
         return f"{self.first_name} {self.last_name}"

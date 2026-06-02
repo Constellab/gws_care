@@ -13,9 +13,13 @@ def _prebilling_row(p: PrebillingRowVM) -> rx.Component:
         rx.table.cell(rx.text(p.campaign_name, size="2")),
         rx.table.cell(rx.text(rx.cond(p.period_start != "", p.period_start, "—"), size="2")),
         rx.table.cell(
-            rx.text(
-                rx.cond(p.total_amount > 0, f"{p.total_amount:.2f} €", "0,00 €"),
-                size="2", weight="medium",
+            rx.vstack(
+                rx.cond(
+                    p.total_amount > 0,
+                    rx.text(p.total_amount.to(str), " €", size="2", weight="medium"),
+                    rx.text("0,00 €", size="2", weight="medium"),
+                ),
+                spacing="0",
             )
         ),
         rx.table.cell(

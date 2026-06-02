@@ -42,7 +42,7 @@ class LanguageState(ReflexMainState):
                 )
                 if pref:
                     self.language = pref.language
-        except Exception:
+        except Exception as exc:
             pass
 
     async def _save_language(self, lang: str) -> None:
@@ -54,5 +54,5 @@ class LanguageState(ReflexMainState):
                 )
                 pref.language = lang
                 pref.save()
-        except Exception:
+        except Exception as exc:
             pass

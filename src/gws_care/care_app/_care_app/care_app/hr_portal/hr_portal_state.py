@@ -73,18 +73,31 @@ class HRPortalState(ReflexMainState):
                         .order_by(Campaign.start_date.desc())
                     )
                 else:
-                    campaigns = CampaignService.list_all_campaigns()
+                    campaigns = CampaignService.list_all_campaigns(limit=500)
                 rows = []
+                # Pre-aggregate CampaignPatient counts by (campaign_id, presence_status)
+                # to avoid N+1 (was 3 COUNT queries per campaign)
+                campaign_ids = [c.id for c in campaigns]
+                counts_by_campaign: dict[str, dict[str, int]] = {}
+                if campaign_ids:
+                    from peewee import fn
+                    for row in (
+                        CampaignPatient.select(
+                            CampaignPatient.campaign_id.alias("campaign_id"),
+                            CampaignPatient.presence_status,
+                            fn.COUNT(CampaignPatient.id).alias("cnt"),
+                        )
+                        .where(CampaignPatient.campaign.in_(campaign_ids))
+                        .group_by(CampaignPatient.campaign_id, CampaignPatient.presence_status)
+                        .namedtuples()
+                    ):
+                        cid_str = str(row.campaign_id)
+                        counts_by_campaign.setdefault(cid_str, {})[row.presence_status] = row.cnt
                 for c in campaigns:
-                    total = CampaignPatient.select().where(CampaignPatient.campaign == c.id).count()
-                    present = CampaignPatient.select().where(
-                        (CampaignPatient.campaign == c.id)
-                        & (CampaignPatient.presence_status == PresenceStatus.PRESENT.value)
-                    ).count()
-                    absent = CampaignPatient.select().where(
-                        (CampaignPatient.campaign == c.id)
-                        & (CampaignPatient.presence_status == PresenceStatus.ABSENT.value)
-                    ).count()
+                    stat_map = counts_by_campaign.get(str(c.id), {})
+                    total = sum(stat_map.values())
+                    present = stat_map.get(PresenceStatus.PRESENT.value, 0)
+                    absent = stat_map.get(PresenceStatus.ABSENT.value, 0)
                     try:
                         status_e = CampaignStatus(c.status)
                     except ValueError:

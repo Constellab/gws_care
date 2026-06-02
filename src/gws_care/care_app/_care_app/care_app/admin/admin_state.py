@@ -182,7 +182,7 @@ class AdminState(RoleState):
                     )
                     for p in patients
                 ]
-        except Exception:
+        except Exception as exc:
             pass
 
     async def _load_staff_contacts(self):
@@ -210,20 +210,20 @@ class AdminState(RoleState):
                     .order_by(User.last_name)
                 )
 
+                # Batch-load linked account names (avoids N+1)
+                acct_ids_needed = {row.linked_account_id for row in rows if row.linked_account_id}
+                acct_names_map: dict[str, str] = {}
+                if acct_ids_needed:
+                    from gws_care.account.account import Account
+                    for a in Account.select(Account.id, Account.name).where(Account.id.in_(acct_ids_needed)):
+                        acct_names_map[str(a.id)] = a.name
+
                 for row in rows:
                     user = row.user
-                    role_label = _role_labels.get(row.role, row.role)
-                    acct_name = ""
-                    if row.linked_account_id:
-                        try:
-                            a = AccountService.get_account(row.linked_account_id)
-                            acct_name = a.name
-                        except Exception:
-                            pass
-                    # role may be a CareRole enum or a plain string depending on Peewee version
                     raw_role = row.role
                     role_key = raw_role if isinstance(raw_role, CareRole) else CareRole(raw_role)
                     role_label = _role_labels.get(role_key, str(raw_role))
+                    acct_name = acct_names_map.get(str(row.linked_account_id), "") if row.linked_account_id else ""
                     contacts.append(StaffContactDTO(
                         id=str(user.id),
                         full_name=f"{user.first_name} {user.last_name}",
@@ -233,5 +233,95 @@ class AdminState(RoleState):
                         linked_account_name=acct_name,
                     ))
                 self.staff_contacts = contacts
-        except Exception:
+        except Exception as exc:
             pass
+
+    # ── Reset data ────────────────────────────────────────────────────────────
+
+    show_reset_confirm: bool = False
+    reset_confirm_input: str = ""
+    is_resetting: bool = False
+    reset_error: str = ""
+    reset_success: str = ""
+
+    @rx.event
+    def open_reset_confirm(self):
+        self.show_reset_confirm = True
+        self.reset_confirm_input = ""
+        self.reset_error = ""
+        self.reset_success = ""
+
+    @rx.event
+    def close_reset_confirm(self):
+        self.show_reset_confirm = False
+        self.reset_confirm_input = ""
+
+    @rx.event
+    def set_reset_confirm_input(self, v: str):
+        self.reset_confirm_input = v
+
+    @rx.event
+    async def execute_reset(self):
+        """Delete all data except exam type referentials (gws_care_exam_type_ref, gws_care_exam_parameter)."""
+        if self.reset_confirm_input != "SUPPRIMER":
+            self.reset_error = "Tapez exactement SUPPRIMER pour confirmer."
+            return
+        self.is_resetting = True
+        self.reset_error = ""
+        self.reset_success = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.core.care_db_manager import CareDbManager
+                db = CareDbManager.get_instance().db
+                tables_to_clear = [
+                    "gws_care_exam_parameter_result",
+                    "gws_care_exam_result",
+                    "gws_care_exam_file",
+                    "gws_care_exam",
+                    "gws_care_campaign_patient",
+                    "gws_care_campaign_exam",
+                    "gws_care_campaign",
+                    "gws_care_correction_request",
+                    "gws_care_audit_log",
+                    "gws_care_patient_deletion_log",
+                    "gws_care_patient_document",
+                    "gws_care_patient_note",
+                    "gws_care_patient_account",
+                    "gws_care_patient_consent",
+                    "gws_care_patient_message",
+                    "gws_care_patient_invoice_line",
+                    "gws_care_patient_invoice",
+                    "gws_care_medical_certificate",
+                    "gws_care_prescription_line",
+                    "gws_care_prescription",
+                    "gws_care_consultation",
+                    "gws_care_appointment",
+                    "gws_care_tube_qr",
+                    "gws_care_prebilling_line",
+                    "gws_care_invoice",
+                    "gws_care_prebilling",
+                    "gws_care_notification_bell",
+                    "gws_care_notification_log",
+                    "gws_care_dashboard_snapshot",
+                    "gws_care_doctor_schedule",
+                    "gws_care_patient",
+                    "gws_care_company",
+                    "gws_care_price_list",
+                    "gws_care_account",
+                    "gws_care_user_role",
+                    "gws_care_user_language_pref",
+                ]
+                db.execute_sql("SET FOREIGN_KEY_CHECKS = 0")
+                for table in tables_to_clear:
+                    try:
+                        db.execute_sql(f"DELETE FROM `{table}`")
+                    except Exception:
+                        pass  # table may not exist yet
+                db.execute_sql("SET FOREIGN_KEY_CHECKS = 1")
+                self.reset_success = "Remise à zéro effectuée. Toutes les données ont été supprimées sauf les référentiels d'examens."
+                self.show_reset_confirm = False
+                self.reset_confirm_input = ""
+        except Exception as e:
+            self.reset_error = f"Erreur lors de la remise à zéro : {e}"
+        finally:
+            self.is_resetting = False
