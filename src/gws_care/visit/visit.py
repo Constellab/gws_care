@@ -54,8 +54,9 @@ class Visit(ModelWithUser):
 
     # Appointment fields — set when a patient self-books a consultation visit
     doctor: MedicalDoctor = ForeignKeyField(MedicalDoctor, null=True, backref="visits", on_delete="SET NULL")
-    appointment_mode: AppointmentMode = EnumField(choices=AppointmentMode, default=AppointmentMode.ONSITE, null=True)
+    appointment_mode: AppointmentMode = EnumField(choices=AppointmentMode, default=AppointmentMode.AT_WORK, null=True)
     patient_notes: str = TextField(null=True)
+    appointment_address: str = TextField(null=True)
 
     # Interpretation text — kept on CampaignVisit for fast access; authorship is in CampaignVisitValidationWorkflow
     doctor_clinic_interpretation: str = TextField(null=True)

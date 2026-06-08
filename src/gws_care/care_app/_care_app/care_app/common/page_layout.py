@@ -140,7 +140,7 @@ def _sidebar_content() -> rx.Component:
             align="center",
             padding="1em",
         ),
-        # Nav items — shown / hidden based on the user's CareRole
+        # Nav items — scrollable, shown / hidden based on the user's CareRole
         rx.vstack(
             # ── Patient portal — new interface ───────────────────────────────
             rx.cond(
@@ -173,6 +173,11 @@ def _sidebar_content() -> rx.Component:
                     _nav_group_label(LanguageState.tr["nav_group_essentials"]),
                     menu_item_component("layout-dashboard", LanguageState.tr["nav_dashboard"], "/dashboard"),
                     menu_item_component("users", LanguageState.tr["nav_patients"], "/"),
+                    menu_item_component(
+                        "calendar-clock",
+                        LanguageState.tr["nav_appointments"],
+                        "/appointments",
+                    ),
                     menu_item_component(
                         "stethoscope",
                         LanguageState.tr["nav_consultations"],
@@ -209,6 +214,22 @@ def _sidebar_content() -> rx.Component:
                 ),
             ),
 
+            # ── "Documents" — Operator, Doctor, Admin ────────────────────────
+            rx.cond(
+                RoleState.is_operator | RoleState.is_doctor | RoleState.is_admin,
+                rx.vstack(
+                    _nav_group_label(LanguageState.tr["nav_group_documents"]),
+                    menu_item_component(
+                        "folder-open",
+                        LanguageState.tr["nav_admin_documents"],
+                        "/documents",
+                    ),
+                    width="100%",
+                    spacing="1",
+                    align_items="start",
+                ),
+            ),
+
             # ── "Administration" — Operator, Doctor, Admin, Account Admin ────
             rx.cond(
                 RoleState.is_operator | RoleState.is_doctor | RoleState.is_admin | RoleState.is_account_admin,
@@ -235,9 +256,10 @@ def _sidebar_content() -> rx.Component:
             spacing="1",
             align_items="start",
             padding="0 1rem",
+            overflow_y="auto",
+            flex="1",
+            min_height="0",
         ),
-        # Push user menu to the bottom
-        rx.spacer(),
         rx.box(
             user_menu_button(),
             width="100%",
@@ -266,6 +288,6 @@ def page_layout(*children: rx.Component, **kwargs) -> rx.Component:
         page_sidebar_component(
             sidebar_content=_sidebar_content(),
             content=rx.vstack(*children, **vstack_props),
-            sidebar_width="280px",
+            sidebar_width="300px",
         ),
     )

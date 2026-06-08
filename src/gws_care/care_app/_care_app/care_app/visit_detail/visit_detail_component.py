@@ -111,22 +111,6 @@ def _workflow_lifeline_visit() -> rx.Component:
     )
 
 
-def _appreciation_badge(row: ExamResultRowDTO) -> rx.Component:
-    """Color-coded badge for appreciation level."""
-    return rx.match(
-        row.appreciation,
-        ("critical_low", rx.badge(row.appreciation_label, color_scheme="red", variant="solid", size="1")),
-        ("low", rx.badge(row.appreciation_label, color_scheme="blue", variant="soft", size="1")),
-        ("normal", rx.badge(row.appreciation_label, color_scheme="green", variant="soft", size="1")),
-        ("high", rx.badge(row.appreciation_label, color_scheme="orange", variant="soft", size="1")),
-        ("critical_high", rx.badge(row.appreciation_label, color_scheme="red", variant="solid", size="1")),
-        rx.cond(
-            row.appreciation != "",
-            rx.badge(row.appreciation_label, color_scheme="gray", variant="soft", size="1"),
-            rx.text("—", size="2", color="var(--gray-8)"),
-        ),
-    )
-
 
 def _visit_status_badge() -> rx.Component:
     return rx.match(
@@ -140,10 +124,18 @@ def _visit_status_badge() -> rx.Component:
     )
 
 
-def _exam_result_row(row: ExamResultRowDTO) -> rx.Component:
-    can_edit = (VisitDetailState.visit.campaign_visit_status == "visit_done") & (
-        VisitDetailState.is_operator | VisitDetailState.is_admin
+def _exam_status_badge(status: str) -> rx.Component:
+    return rx.match(
+        status,
+        ("todo", rx.badge(LanguageState.tr["exam_status_todo"], color_scheme="gray", variant="soft", size="1")),
+        ("in_progress_results", rx.badge(LanguageState.tr["exam_status_in_progress_results"], color_scheme="orange", variant="soft", size="1")),
+        ("in_progress_interpretation", rx.badge(LanguageState.tr["exam_status_in_progress_interpretation"], color_scheme="blue", variant="soft", size="1")),
+        ("done", rx.badge(LanguageState.tr["exam_status_done"], color_scheme="green", variant="soft", size="1")),
+        rx.badge("—", color_scheme="gray", variant="soft", size="1"),
     )
+
+
+def _exam_result_row(row: ExamResultRowDTO) -> rx.Component:
     return rx.table.row(
         rx.table.cell(
             rx.vstack(
@@ -157,45 +149,9 @@ def _exam_result_row(row: ExamResultRowDTO) -> rx.Component:
         ),
         rx.table.cell(
             rx.cond(
-                can_edit,
-                rx.hstack(
-                    rx.input(
-                        value=row.edit_value,
-                        on_change=lambda v: VisitDetailState.set_exam_edit_value(row.exam_type_model_id, v),
-                        size="1",
-                        width="90px",
-                        placeholder="—",
-                    ),
-                    rx.icon_button(
-                        rx.icon("check", size=12),
-                        size="1",
-                        variant="soft",
-                        color_scheme="blue",
-                        on_click=lambda: VisitDetailState.save_exam_result(row.exam_type_model_id),
-                        loading=VisitDetailState.is_saving_exam,
-                    ),
-                    spacing="1",
-                    align="center",
-                ),
-                rx.cond(
-                    row.primary_value != "",
-                    rx.text(row.primary_value, size="2"),
-                    rx.text("—", size="2", color="var(--gray-8)"),
-                ),
-            )
-        ),
-        rx.table.cell(
-            rx.hstack(
-                _appreciation_badge(row),
-                rx.cond(
-                    row.appreciation_override,
-                    rx.tooltip(
-                        rx.icon("pencil", size=11, color="var(--gray-9)"),
-                        content="Manually overridden by doctor",
-                    ),
-                ),
-                spacing="1",
-                align="center",
+                row.exam_id != "",
+                _exam_status_badge(row.status),
+                rx.badge("—", color_scheme="gray", variant="soft", size="1"),
             )
         ),
         rx.table.cell(
@@ -421,15 +377,12 @@ def visit_detail_page() -> rx.Component:
                     rx.vstack(
                         # Back + download header
                         rx.hstack(
-                            rx.cond(
-                                VisitDetailState.visit.campaign_id != "",
-                                rx.button(
-                                    rx.icon("arrow-left", size=14),
-                                    LanguageState.tr["back_to_campaign"],
-                                    variant="ghost",
-                                    size="2",
-                                    on_click=VisitDetailState.go_back,
-                                ),
+                            rx.button(
+                                rx.icon("arrow-left", size=14),
+                                LanguageState.tr["btn_back"],
+                                variant="ghost",
+                                size="2",
+                                on_click=VisitDetailState.go_back,
                             ),
                             rx.spacer(),
                             rx.button(
@@ -538,8 +491,7 @@ def visit_detail_page() -> rx.Component:
                                         rx.table.header(
                                             rx.table.row(
                                                 rx.table.column_header_cell(LanguageState.tr["col_exam_name"]),
-                                                rx.table.column_header_cell(LanguageState.tr["col_value"]),
-                                                rx.table.column_header_cell(LanguageState.tr["col_appreciation"]),
+                                                rx.table.column_header_cell(LanguageState.tr["col_status"]),
                                                 rx.table.column_header_cell(""),
                                             )
                                         ),

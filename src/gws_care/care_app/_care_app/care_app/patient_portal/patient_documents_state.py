@@ -67,6 +67,7 @@ class PatientDocumentsState(RoleState):
     exam_filter_from: str = ""
     exam_filter_to: str = ""
     exam_filter_type: str = ""
+    exam_filter_status: str = ""
     exam_type_options: list[str] = []
     exam_sort_column: str = "exam_date"
     exam_sort_ascending: bool = False
@@ -167,10 +168,15 @@ class PatientDocumentsState(RoleState):
         self.exam_filter_type = "" if value == "ALL" else value
 
     @rx.event
+    def set_exam_filter_status(self, value: str):
+        self.exam_filter_status = "" if value == "ALL" else value
+
+    @rx.event
     def clear_exam_filters(self):
         self.exam_filter_from = ""
         self.exam_filter_to = ""
         self.exam_filter_type = ""
+        self.exam_filter_status = ""
 
     @rx.event
     def set_exam_sort(self, column: str):
@@ -189,6 +195,8 @@ class PatientDocumentsState(RoleState):
             rows = [r for r in rows if r.exam_date <= self.exam_filter_to]
         if self.exam_filter_type:
             rows = [r for r in rows if r.exam_type_label == self.exam_filter_type]
+        if self.exam_filter_status:
+            rows = [r for r in rows if r.status == self.exam_filter_status]
         col = self.exam_sort_column
         return sorted(rows, key=lambda r: str(getattr(r, col) or "").lower(), reverse=not self.exam_sort_ascending)
 

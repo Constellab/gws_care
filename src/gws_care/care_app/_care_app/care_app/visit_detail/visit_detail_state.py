@@ -99,9 +99,7 @@ class VisitDetailState(RoleState):
 
     @rx.event
     def go_back(self):
-        if self.visit and self.visit.campaign_id:
-            return rx.redirect(f"/campaign/{self.visit.campaign_id}")
-        return rx.redirect("/campaigns")
+        return rx.call_script("window.history.back()")
 
     @rx.event
     def go_to_terrain(self):

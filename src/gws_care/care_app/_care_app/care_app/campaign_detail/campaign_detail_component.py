@@ -633,7 +633,7 @@ def campaign_detail_page() -> rx.Component:
                         rx.hstack(
                             rx.button(
                                 rx.icon("arrow-left", size=14),
-                                LanguageState.tr["back_to_campaigns"],
+                                LanguageState.tr["btn_back"],
                                 variant="ghost", size="2",
                                 on_click=CampaignDetailState.go_back,
                             ),

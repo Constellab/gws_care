@@ -97,8 +97,7 @@ class AccountDetailState(PatientPickerState):
 
     @rx.event
     def go_back(self):
-        """Navigate back to the account list."""
-        return rx.redirect("/accounts")
+        return rx.call_script("window.history.back()")
 
     @rx.event
     def go_to_patient(self, patient_id: str):

@@ -84,5 +84,6 @@ class BookAppointmentDTO(BaseModelDTO):
 
     scheduled_at: str                   # ISO datetime string (YYYY-MM-DDTHH:MM)
     doctor_id: str | None = None
-    appointment_mode: str = "onsite"    # AppointmentMode value
+    appointment_mode: str = "at_work"    # AppointmentMode value
+    appointment_address: str | None = None
     patient_notes: str | None = None

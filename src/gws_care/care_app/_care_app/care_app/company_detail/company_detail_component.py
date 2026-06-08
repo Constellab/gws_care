@@ -256,7 +256,7 @@ def company_detail_page() -> rx.Component:
         page_layout(
             rx.button(
                 rx.icon("arrow-left", size=16),
-                LanguageState.tr["back_to_companies"],
+                LanguageState.tr["btn_back"],
                 on_click=CompanyDetailState.go_back,
                 variant="ghost",
                 size="2",

@@ -155,7 +155,7 @@ class CampaignDetailState(PatientPickerState):
 
     @rx.event
     def go_back(self):
-        return rx.redirect("/campaigns")
+        return rx.call_script("window.history.back()")
 
     @rx.event
     def go_to_visit(self, visit_id: str):

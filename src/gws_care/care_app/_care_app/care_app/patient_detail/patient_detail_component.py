@@ -96,6 +96,8 @@ def _section(title: str, *rows: rx.Component) -> rx.Component:
     )
 
 
+
+
 def _patient_card(patient: PatientDetailDTO) -> rx.Component:
     return rx.vstack(
         # Header
@@ -166,6 +168,61 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
             columns="2",
             spacing="4",
             width="100%",
+        ),
+        # Measurements section
+        rx.cond(
+            (patient.weight != None) | (patient.height != None),  # noqa: E711
+            _section(
+                LanguageState.tr["section_measurements"],
+                rx.hstack(
+                    # Weight
+                    rx.cond(
+                        patient.weight,
+                        rx.vstack(
+                            rx.text(LanguageState.tr["field_weight"], size="1", color="var(--gray-9)", weight="medium"),
+                            rx.text(patient.weight.to_string() + " kg", size="3", weight="bold"),
+                            spacing="0", align_items="start",
+                        ),
+                    ),
+                    # Height
+                    rx.cond(
+                        patient.height,
+                        rx.vstack(
+                            rx.text(LanguageState.tr["field_height"], size="1", color="var(--gray-9)", weight="medium"),
+                            rx.text(patient.height.to_string() + " cm", size="3", weight="bold"),
+                            spacing="0", align_items="start",
+                        ),
+                    ),
+                    # BMI badge
+                    rx.cond(
+                        PatientDetailState.patient_bmi,
+                        rx.vstack(
+                            rx.text(LanguageState.tr["bmi_label"], size="1", color="var(--gray-9)", weight="medium"),
+                            rx.match(
+                                PatientDetailState.patient_bmi_category,
+                                ("underweight", rx.badge(
+                                    PatientDetailState.patient_bmi.to_string() + " — " + LanguageState.tr["bmi_underweight"],
+                                    color_scheme="blue", variant="soft", size="2")),
+                                ("normal", rx.badge(
+                                    PatientDetailState.patient_bmi.to_string() + " — " + LanguageState.tr["bmi_normal"],
+                                    color_scheme="green", variant="soft", size="2")),
+                                ("overweight", rx.badge(
+                                    PatientDetailState.patient_bmi.to_string() + " — " + LanguageState.tr["bmi_overweight"],
+                                    color_scheme="orange", variant="soft", size="2")),
+                                ("obese", rx.badge(
+                                    PatientDetailState.patient_bmi.to_string() + " — " + LanguageState.tr["bmi_obese"],
+                                    color_scheme="red", variant="solid", size="2")),
+                                rx.fragment(),
+                            ),
+                            rx.text(LanguageState.tr["bmi_auto"], size="1", color="var(--gray-7)"),
+                            spacing="1", align_items="start",
+                        ),
+                    ),
+                    spacing="6", align="end", flex_wrap="wrap",
+                ),
+                rx.text(LanguageState.tr["bmi_alert_desc"], size="1", color="var(--gray-7)", margin_top="0.5rem"),
+                rx.text(LanguageState.tr["patient_measurements_from_exam"], size="1", color="var(--gray-6)"),
+            ),
         ),
         width="100%",
         spacing="4",
@@ -382,6 +439,18 @@ def _visit_status_badge(status: str) -> rx.Component:
     )
 
 
+def _visit_mode_badge(mode: str) -> rx.Component:
+    return rx.match(
+        mode,
+        ("at_work", rx.badge(LanguageState.tr["appt_mode_at_work"], color_scheme="blue", variant="soft", size="1")),
+        ("at_home", rx.badge(LanguageState.tr["appt_mode_at_home"], color_scheme="green", variant="soft", size="1")),
+        ("address", rx.badge(LanguageState.tr["appt_mode_address"], color_scheme="orange", variant="soft", size="1")),
+        ("visio", rx.badge(LanguageState.tr["appt_mode_visio"], color_scheme="purple", variant="soft", size="1")),
+        ("hospital", rx.badge(LanguageState.tr["appt_mode_hospital"], color_scheme="teal", variant="soft", size="1")),
+        rx.fragment(),
+    )
+
+
 def _patient_visit_row(visit: PatientVisitRowDTO) -> rx.Component:
     return rx.table.row(
         rx.table.cell(rx.text(visit.visit_number, size="2")),
@@ -401,6 +470,20 @@ def _patient_visit_row(visit: PatientVisitRowDTO) -> rx.Component:
             rx.cond(
                 visit.scheduled_at,
                 rx.text(visit.scheduled_at[:16].replace("T", " "), size="2"),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
+        rx.table.cell(
+            rx.cond(
+                visit.appointment_mode != "",
+                _visit_mode_badge(visit.appointment_mode),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
+        rx.table.cell(
+            rx.cond(
+                visit.doctor_name != "",
+                rx.text(visit.doctor_name, size="2"),
                 rx.text("—", size="2", color="var(--gray-7)"),
             )
         ),
@@ -518,8 +601,74 @@ def _visits_section() -> rx.Component:
             width="100%",
             align="center",
         ),
+        # Filter bar
+        rx.hstack(
+            rx.input(
+                type="date",
+                value=PatientDetailState.visit_filter_from,
+                on_change=PatientDetailState.set_visit_filter_from,
+                size="1",
+                width="130px",
+                placeholder=LanguageState.tr["placeholder_date_from"],
+            ),
+            rx.text("→", size="2", color="var(--gray-8)"),
+            rx.input(
+                type="date",
+                value=PatientDetailState.visit_filter_to,
+                on_change=PatientDetailState.set_visit_filter_to,
+                size="1",
+                width="130px",
+                placeholder=LanguageState.tr["placeholder_date_to"],
+            ),
+            rx.select.root(
+                rx.select.trigger(placeholder=LanguageState.tr["col_mode"], size="1", width="130px"),
+                rx.select.content(
+                    rx.select.item(LanguageState.tr["all_modes_option"], value="ALL"),
+                    rx.select.item(LanguageState.tr["appt_mode_at_work"], value="at_work"),
+                    rx.select.item(LanguageState.tr["appt_mode_at_home"], value="at_home"),
+                    rx.select.item(LanguageState.tr["appt_mode_address"], value="address"),
+                    rx.select.item(LanguageState.tr["appt_mode_visio"], value="visio"),
+                    rx.select.item(LanguageState.tr["appt_mode_hospital"], value="hospital"),
+                ),
+                value=rx.cond(PatientDetailState.visit_filter_mode != "", PatientDetailState.visit_filter_mode, "ALL"),
+                on_change=PatientDetailState.set_visit_filter_mode,
+            ),
+            rx.cond(
+                PatientDetailState.visit_doctor_options.length() > 0,
+                rx.select.root(
+                    rx.select.trigger(placeholder=LanguageState.tr["col_doctor"], size="1", width="160px"),
+                    rx.select.content(
+                        rx.select.item(LanguageState.tr["all_doctors_option"], value="ALL"),
+                        rx.foreach(
+                            PatientDetailState.visit_doctor_options,
+                            lambda d: rx.select.item(d, value=d),
+                        ),
+                    ),
+                    value=rx.cond(PatientDetailState.visit_filter_doctor != "", PatientDetailState.visit_filter_doctor, "ALL"),
+                    on_change=PatientDetailState.set_visit_filter_doctor,
+                ),
+            ),
+            rx.select.root(
+                rx.select.trigger(placeholder=LanguageState.tr["col_status"], size="1", width="160px"),
+                rx.select.content(
+                    rx.select.item(LanguageState.tr["all_statuses_option"], value="ALL"),
+                    rx.select.item(LanguageState.tr["status_pending"], value="pending"),
+                    rx.select.item(LanguageState.tr["status_visit_done"], value="visit_done"),
+                    rx.select.item(LanguageState.tr["status_lab_done"], value="lab_done"),
+                    rx.select.item(LanguageState.tr["status_doctor_clinic_validated"], value="doctor_clinic_validated"),
+                    rx.select.item(LanguageState.tr["status_doctor_company_validated"], value="doctor_company_validated"),
+                    rx.select.item(LanguageState.tr["status_cancelled"], value="cancelled"),
+                ),
+                value=rx.cond(PatientDetailState.visit_filter_status != "", PatientDetailState.visit_filter_status, "ALL"),
+                on_change=PatientDetailState.set_visit_filter_status,
+            ),
+            width="100%",
+            align="center",
+            spacing="2",
+            flex_wrap="wrap",
+        ),
         rx.cond(
-            PatientDetailState.patient_visits,
+            PatientDetailState.filtered_sorted_visits,
             rx.box(
                 rx.table.root(
                     rx.table.header(
@@ -527,12 +676,14 @@ def _visits_section() -> rx.Component:
                             _visit_sortable_header(LanguageState.tr["col_visit_number"], "visit_number"),
                             _visit_sortable_header(LanguageState.tr["nav_campaigns"], "campaign_name"),
                             _visit_sortable_header(LanguageState.tr["col_scheduled"], "scheduled_at"),
-                            _visit_sortable_header(LanguageState.tr["col_status"], "status"),
+                            _visit_sortable_header(LanguageState.tr["col_mode"], "appointment_mode"),
+                            _visit_sortable_header(LanguageState.tr["col_doctor"], "doctor_name"),
+                            _visit_sortable_header(LanguageState.tr["col_status"], "campaign_visit_status"),
                             rx.table.column_header_cell(""),
                         )
                     ),
                     rx.table.body(
-                        rx.foreach(PatientDetailState.sorted_visits, _patient_visit_row),
+                        rx.foreach(PatientDetailState.filtered_sorted_visits, _patient_visit_row),
                     ),
                     width="100%",
                     variant="surface",
@@ -553,11 +704,13 @@ def _visits_section() -> rx.Component:
     )
 
 
-def _exam_status_badge(status: str) -> rx.Component:    return rx.match(
+def _exam_status_badge(status: str) -> rx.Component:
+    return rx.match(
         status,
-        ("DRAFT", rx.badge(LanguageState.tr["exam_status_draft"], color_scheme="gray", variant="soft", size="1")),
-        ("PENDING", rx.badge(LanguageState.tr["exam_status_pending"], color_scheme="orange", variant="soft", size="1")),
-        ("INTERPRETED", rx.badge(LanguageState.tr["exam_status_interpreted"], color_scheme="green", variant="soft", size="1")),
+        ("todo", rx.badge(LanguageState.tr["exam_status_todo"], color_scheme="gray", variant="soft", size="1")),
+        ("in_progress_results", rx.badge(LanguageState.tr["exam_status_in_progress_results"], color_scheme="orange", variant="soft", size="1")),
+        ("in_progress_interpretation", rx.badge(LanguageState.tr["exam_status_in_progress_interpretation"], color_scheme="blue", variant="soft", size="1")),
+        ("done", rx.badge(LanguageState.tr["exam_status_done"], color_scheme="green", variant="soft", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -629,6 +782,22 @@ def _exams_section() -> rx.Component:
                 ),
                 value=rx.cond(PatientDetailState.exam_filter_type != "", PatientDetailState.exam_filter_type, "ALL"),
                 on_change=PatientDetailState.set_exam_filter_type,
+            ),
+            rx.select.root(
+                rx.select.trigger(
+                    placeholder=LanguageState.tr["filter_by_status_placeholder"],
+                    size="1",
+                    width="160px",
+                ),
+                rx.select.content(
+                    rx.select.item(LanguageState.tr["all_statuses_option"], value="ALL"),
+                    rx.select.item(LanguageState.tr["exam_status_todo"], value="todo"),
+                    rx.select.item(LanguageState.tr["exam_status_in_progress_results"], value="in_progress_results"),
+                    rx.select.item(LanguageState.tr["exam_status_in_progress_interpretation"], value="in_progress_interpretation"),
+                    rx.select.item(LanguageState.tr["exam_status_done"], value="done"),
+                ),
+                value=rx.cond(PatientDetailState.exam_filter_status != "", PatientDetailState.exam_filter_status, "ALL"),
+                on_change=PatientDetailState.set_exam_filter_status,
             ),
             width="100%",
             align="center",
@@ -843,6 +1012,13 @@ def _certificate_row(cert: CertificateRowDTO) -> rx.Component:
                 rx.text("—", size="2", color="var(--gray-7)"),
             )
         ),
+        rx.table.cell(
+            rx.cond(
+                cert.is_fit_for_work,
+                rx.badge(LanguageState.tr["fit_for_work"], color_scheme="green", variant="soft", size="1"),
+                rx.badge(LanguageState.tr["not_fit_for_work"], color_scheme="red", variant="soft", size="1"),
+            )
+        ),
         rx.table.cell(rx.text(cert.issued_by_name, size="2", color="var(--gray-9)")),
         rx.table.cell(
             rx.hstack(
@@ -921,6 +1097,9 @@ def _certificates_tab() -> rx.Component:
                             _cert_sortable_header(LanguageState.tr["cert_form_date_label"], "issue_date"),
                             _cert_sortable_header(LanguageState.tr["col_cert_type"], "certificate_type_label"),
                             _cert_sortable_header(LanguageState.tr["cert_form_conclusion_label"], "conclusion"),
+                            rx.table.column_header_cell(
+                                rx.text(LanguageState.tr["cert_fit_for_work"], size="2")
+                            ),
                             _cert_sortable_header(LanguageState.tr["col_issued_by"], "issued_by_name"),
                             rx.table.column_header_cell(""),
                         )
@@ -1242,7 +1421,7 @@ def patient_detail_page() -> rx.Component:
             _create_visit_dialog(),
             rx.button(
                 rx.icon("arrow-left", size=16),
-                LanguageState.tr["back_to_patients"],
+                LanguageState.tr["btn_back"],
                 on_click=PatientDetailState.go_back,
                 variant="ghost",
                 size="2",
@@ -1266,8 +1445,8 @@ def patient_detail_page() -> rx.Component:
                             rx.tabs.list(
                                 rx.tabs.trigger(
                                     rx.hstack(
-                                        rx.icon("stethoscope", size=15),
-                                        rx.text(LanguageState.tr["tab_visits"]),
+                                        rx.icon("calendar-clock", size=15),
+                                        rx.text(LanguageState.tr["appointments_section_title"]),
                                         spacing="1",
                                         align="center",
                                     ),

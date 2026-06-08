@@ -38,8 +38,11 @@ def user_menu_button() -> rx.Component:
         rx.popover.trigger(
             rx.box(
                 rx.hstack(
-                    rx.box(
-                        rx.icon("circle-user", size=22, color="var(--accent-9)"),
+                    rx.avatar(
+                        src=RoleState.user_photo,
+                        fallback=RoleState.user_initials,
+                        size="2",
+                        radius="full",
                         flex_shrink="0",
                     ),
                     rx.vstack(
@@ -118,8 +121,11 @@ def user_menu_button() -> rx.Component:
         rx.popover.trigger(
             rx.box(
                 rx.hstack(
-                    rx.box(
-                        rx.icon("circle-user", size=22, color="var(--accent-9)"),
+                    rx.avatar(
+                        src=RoleState.user_photo,
+                        fallback=RoleState.user_initials,
+                        size="2",
+                        radius="full",
                         flex_shrink="0",
                     ),
                     rx.vstack(

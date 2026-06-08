@@ -24,6 +24,8 @@ class PatientDetailDTO(BaseModel):
     # Medical / identity fields
     social_security_number: str | None = None
     sex: str | None = None
+    weight: float | None = None
+    height: float | None = None
     qr_code: str | None = None
     account_id: str = ""
     account_name: str = ""
@@ -54,6 +56,8 @@ class PatientVisitRowDTO(BaseModel):
     scheduled_at: str = ""
     campaign_visit_status: str = ""
     status_label: str = ""
+    appointment_mode: str = ""
+    doctor_name: str = ""
 
 
 class AccountForVisitDTO(BaseModel):
@@ -162,9 +166,15 @@ class PatientDetailState(ReflexMainState):
     cert_filter_to: str = ""
     cert_show_archived: bool = False
 
-    # ── Sort state ─────────────────────────────────────────────
+    # ── Visit sort / filter state ──────────────────────────────
     visit_sort_column: str = "scheduled_at"
     visit_sort_ascending: bool = False
+    visit_filter_from: str = ""
+    visit_filter_to: str = ""
+    visit_filter_mode: str = ""
+    visit_filter_doctor: str = ""
+    visit_filter_status: str = ""
+    visit_doctor_options: list[str] = []
 
     @rx.event
     async def set_visit_sort(self, column: str):
@@ -173,6 +183,26 @@ class PatientDetailState(ReflexMainState):
         else:
             self.visit_sort_column = column
             self.visit_sort_ascending = True
+
+    @rx.event
+    def set_visit_filter_from(self, value: str):
+        self.visit_filter_from = value
+
+    @rx.event
+    def set_visit_filter_to(self, value: str):
+        self.visit_filter_to = value
+
+    @rx.event
+    def set_visit_filter_mode(self, value: str):
+        self.visit_filter_mode = "" if value == "ALL" else value
+
+    @rx.event
+    def set_visit_filter_doctor(self, value: str):
+        self.visit_filter_doctor = "" if value == "ALL" else value
+
+    @rx.event
+    def set_visit_filter_status(self, value: str):
+        self.visit_filter_status = "" if value == "ALL" else value
 
     @rx.var
     def sorted_visits(self) -> list[PatientVisitRowDTO]:
@@ -183,11 +213,32 @@ class PatientDetailState(ReflexMainState):
             reverse=not self.visit_sort_ascending,
         )
 
+    @rx.var
+    def filtered_sorted_visits(self) -> list[PatientVisitRowDTO]:
+        rows = self.patient_visits
+        if self.visit_filter_from:
+            rows = [v for v in rows if v.scheduled_at >= self.visit_filter_from]
+        if self.visit_filter_to:
+            rows = [v for v in rows if v.scheduled_at <= self.visit_filter_to]
+        if self.visit_filter_mode:
+            rows = [v for v in rows if v.appointment_mode == self.visit_filter_mode]
+        if self.visit_filter_doctor:
+            rows = [v for v in rows if v.doctor_name == self.visit_filter_doctor]
+        if self.visit_filter_status:
+            rows = [v for v in rows if v.campaign_visit_status == self.visit_filter_status]
+        col = self.visit_sort_column
+        return sorted(
+            rows,
+            key=lambda v: (getattr(v, col) or "").lower(),
+            reverse=not self.visit_sort_ascending,
+        )
+
     exam_sort_column: str = "exam_date"
     exam_sort_ascending: bool = False
     exam_filter_from: str = ""
     exam_filter_to: str = ""
     exam_filter_type: str = ""
+    exam_filter_status: str = ""
 
     @rx.event
     async def set_exam_sort(self, column: str):
@@ -209,6 +260,38 @@ class PatientDetailState(ReflexMainState):
     def set_exam_filter_type(self, value: str):
         self.exam_filter_type = "" if value == "ALL" else value
 
+    @rx.event
+    def set_exam_filter_status(self, value: str):
+        self.exam_filter_status = "" if value == "ALL" else value
+
+    @rx.var
+    def patient_bmi(self) -> float | None:
+        """Auto-calculate patient BMI from stored weight and height."""
+        if self.patient is None:
+            return None
+        try:
+            w = self.patient.weight
+            h = self.patient.height
+            if w and h:
+                h_m = float(h) / 100.0
+                return round(float(w) / (h_m * h_m), 1)
+        except Exception:
+            pass
+        return None
+
+    @rx.var
+    def patient_bmi_category(self) -> str:
+        bmi = self.patient_bmi
+        if bmi is None:
+            return ""
+        if bmi < 18.5:
+            return "underweight"
+        if bmi < 25.0:
+            return "normal"
+        if bmi < 30.0:
+            return "overweight"
+        return "obese"
+
     @rx.var
     def filtered_sorted_exams(self) -> list[ExamRowDTO]:
         rows = self.exams
@@ -218,6 +301,8 @@ class PatientDetailState(ReflexMainState):
             rows = [e for e in rows if e.exam_date <= self.exam_filter_to]
         if self.exam_filter_type:
             rows = [e for e in rows if e.exam_type_label == self.exam_filter_type]
+        if self.exam_filter_status:
+            rows = [e for e in rows if e.status == self.exam_filter_status]
         col = self.exam_sort_column
         return sorted(
             rows,
@@ -320,8 +405,7 @@ class PatientDetailState(ReflexMainState):
 
     @rx.event
     def go_back(self):
-        """Navigate back to the patient list."""
-        return rx.redirect("/")
+        return rx.call_script("window.history.back()")
 
     @rx.event
     def open_id_card(self):
@@ -631,6 +715,8 @@ class PatientDetailState(ReflexMainState):
                     email=p.email,
                     social_security_number=p.social_security_number,
                     sex=p.sex,
+                    weight=float(p.weight) if p.weight is not None else None,
+                    height=float(p.height) if p.height is not None else None,
                     qr_code=p.qr_code,
                     primary_physician_id=physician_id,
                     primary_physician_full_name=physician_full_name,
@@ -667,9 +753,19 @@ class PatientDetailState(ReflexMainState):
                         scheduled_at=v.scheduled_at.isoformat() if v.scheduled_at else "",
                         campaign_visit_status=v.campaign_visit_status.value,
                         status_label=v.campaign_visit_status.get_label(),
+                        appointment_mode=v.appointment_mode.value if v.appointment_mode else "",
+                        doctor_name=v.doctor.get_full_name() if v.doctor_id else "",
                     )
                     for v in visits
                 ]
+                seen_doctors: set[str] = set()
+                doctor_options: list[str] = []
+                for v in visits:
+                    name = v.doctor.get_full_name() if v.doctor_id else ""
+                    if name and name not in seen_doctors:
+                        seen_doctors.add(name)
+                        doctor_options.append(name)
+                self.visit_doctor_options = sorted(doctor_options)
                 from gws_care.patient.patient_account import PatientAccount
                 links = list(PatientAccount.select().where(PatientAccount.patient == patient_id))
                 self.patient_accounts = [
@@ -730,9 +826,19 @@ class PatientDetailState(ReflexMainState):
                         scheduled_at=v.scheduled_at.isoformat() if v.scheduled_at else "",
                         campaign_visit_status=v.campaign_visit_status.value,
                         status_label=v.campaign_visit_status.get_label(),
+                        appointment_mode=v.appointment_mode.value if v.appointment_mode else "",
+                        doctor_name=v.doctor.get_full_name() if v.doctor_id else "",
                     )
                     for v in visits
                 ]
+                seen_doctors: set[str] = set()
+                doctor_options: list[str] = []
+                for v in visits:
+                    name = v.doctor.get_full_name() if v.doctor_id else ""
+                    if name and name not in seen_doctors:
+                        seen_doctors.add(name)
+                        doctor_options.append(name)
+                self.visit_doctor_options = sorted(doctor_options)
         except Exception:
             pass
 

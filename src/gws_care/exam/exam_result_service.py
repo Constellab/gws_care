@@ -58,9 +58,9 @@ class ExamResultService:
 
         result.save()
 
-        # Advance status to PENDING if still DRAFT
-        if exam.status == ExamStatus.DRAFT:
-            ExamService.set_pending(exam_id)
+        # Advance to IN_PROGRESS_INTERPRETATION when results are saved via campaign/visit flow
+        if exam.status in (ExamStatus.TODO, ExamStatus.IN_PROGRESS_RESULTS):
+            ExamService.set_in_progress_interpretation(exam_id)
 
         return result
 
@@ -101,7 +101,7 @@ class ExamResultService:
         if result:
             result.delete_instance()
             exam = ExamService.get_exam(exam_id)
-            exam.status = ExamStatus.DRAFT
+            exam.status = ExamStatus.TODO
             exam.interpretation = None
             exam.interpreted_by = None
             exam.save()

@@ -61,8 +61,7 @@ class CompanyDetailState(ReflexMainState):
 
     @rx.event
     def go_back(self):
-        """Navigate back to the company list."""
-        return rx.redirect("/companies")
+        return rx.call_script("window.history.back()")
 
     @rx.event
     def go_to_patient(self, patient_id: str):

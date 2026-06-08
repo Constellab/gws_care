@@ -34,6 +34,9 @@ class NotificationService:
         Reads SmtpConfig from the database. Returns True on success, False on failure.
         If no SMTP host is configured, logs a warning and returns False.
         """
+        # SMTP disabled — remove this line once credentials are configured
+        return False
+
         import smtplib
         from email.mime.text import MIMEText
 
@@ -59,9 +62,7 @@ class NotificationService:
             else:
                 server = smtplib.SMTP(config.host, port, timeout=15)
 
-            # Resolve credentials from Constellab Credentials store
-            smtp_username = config.username
-            smtp_password = None
+            # Resolve username + password from Constellab BASIC Credentials
             if config.credentials_name:
                 try:
                     from gws_core.credentials.credentials import Credentials
@@ -70,13 +71,9 @@ class NotificationService:
                         config.credentials_name, CredentialsType.BASIC
                     )
                     basic = creds.get_data_object()
-                    smtp_username = basic.username or smtp_username
-                    smtp_password = basic.password
+                    server.login(basic.username, basic.password)
                 except Exception as cred_exc:
                     print(f"[NotificationService] Could not load credentials '{config.credentials_name}': {cred_exc}")
-
-            if smtp_username and smtp_password:
-                server.login(smtp_username, smtp_password)
 
             server.sendmail(from_addr, [to_email], msg.as_string())
             server.quit()
@@ -95,6 +92,9 @@ class NotificationService:
         filename: str,
     ) -> bool:
         """Send an email with a PDF attachment via the configured SMTP server."""
+        # SMTP disabled — remove this line once credentials are configured
+        return False
+
         import smtplib
         from email import encoders
         from email.mime.base import MIMEBase
@@ -130,8 +130,7 @@ class NotificationService:
             else:
                 server = smtplib.SMTP(config.host, port, timeout=15)
 
-            smtp_username = config.username
-            smtp_password = None
+            # Resolve username + password from Constellab BASIC Credentials
             if config.credentials_name:
                 try:
                     from gws_core.credentials.credentials import Credentials
@@ -140,13 +139,9 @@ class NotificationService:
                         config.credentials_name, CredentialsType.BASIC
                     )
                     basic = creds.get_data_object()
-                    smtp_username = basic.username or smtp_username
-                    smtp_password = basic.password
+                    server.login(basic.username, basic.password)
                 except Exception as cred_exc:
                     print(f"[NotificationService] Could not load credentials '{config.credentials_name}': {cred_exc}")
-
-            if smtp_username and smtp_password:
-                server.login(smtp_username, smtp_password)
 
             server.sendmail(from_addr, [to_email], msg.as_string())
             server.quit()
@@ -921,13 +916,12 @@ class NotificationService:
         from gws_care.notification.notification_dto import SmtpConfigDTO
         from gws_care.notification.notification_models import SmtpConfig
 
-        record = SmtpConfig.get_or_none()
+        record = SmtpConfig.select().first()
         if record is None:
             return SmtpConfigDTO()
         return SmtpConfigDTO(
             host=record.host or "",
             port=record.port if record.port is not None else 587,
-            username=record.username or "",
             credentials_name=record.credentials_name or "",
             use_tls=record.use_tls,
             from_email=record.from_email or "",
@@ -939,12 +933,11 @@ class NotificationService:
         """Persist the SMTP configuration (creates or updates the singleton record)."""
         from gws_care.notification.notification_models import SmtpConfig
 
-        record = SmtpConfig.get_or_none()
+        record = SmtpConfig.select().first()
         if record is None:
             record = SmtpConfig()
         record.host = dto.host
         record.port = dto.port
-        record.username = dto.username
         record.credentials_name = dto.credentials_name
         record.use_tls = dto.use_tls
         record.from_email = dto.from_email

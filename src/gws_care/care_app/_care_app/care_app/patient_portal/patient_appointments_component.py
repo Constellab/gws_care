@@ -26,17 +26,52 @@ def _status_badge(status: str) -> rx.Component:
     )
 
 
+def _mode_badge(mode: str) -> rx.Component:
+    return rx.match(
+        mode,
+        ("at_work", rx.badge(LanguageState.tr["appt_mode_at_work"], color_scheme="blue", variant="soft", size="1")),
+        ("at_home", rx.badge(LanguageState.tr["appt_mode_at_home"], color_scheme="green", variant="soft", size="1")),
+        ("address", rx.badge(LanguageState.tr["appt_mode_address"], color_scheme="orange", variant="soft", size="1")),
+        ("visio", rx.badge(LanguageState.tr["appt_mode_visio"], color_scheme="purple", variant="soft", size="1")),
+        ("hospital", rx.badge(LanguageState.tr["appt_mode_hospital"], color_scheme="teal", variant="soft", size="1")),
+        rx.fragment(),
+    )
+
+
 def _mode_icon(mode: str) -> rx.Component:
     return rx.match(
         mode,
-        ("onsite", rx.icon("building-2", size=13, color="var(--gray-9)")),
-        ("visio", rx.icon("video", size=13, color="var(--blue-9)")),
-        ("hospital", rx.icon("hospital", size=13, color="var(--purple-9)")),
+        ("at_work", rx.icon("briefcase", size=13, color="var(--blue-9)")),
+        ("at_home", rx.icon("home", size=13, color="var(--green-9)")),
+        ("address", rx.icon("map-pin", size=13, color="var(--orange-9)")),
+        ("visio", rx.icon("video", size=13, color="var(--purple-9)")),
+        ("hospital", rx.icon("hospital", size=13, color="var(--teal-9)")),
         rx.icon("calendar", size=13, color="var(--gray-9)"),
     )
 
 
 # ── List view ─────────────────────────────────────────────────────────────────
+
+def _sortable_col(label, column: str) -> rx.Component:
+    return rx.table.column_header_cell(
+        rx.hstack(
+            rx.text(label, size="2"),
+            rx.cond(
+                PatientAppointmentsState.sort_column == column,
+                rx.cond(
+                    PatientAppointmentsState.sort_ascending,
+                    rx.icon("chevron-up", size=13, color="var(--accent-9)"),
+                    rx.icon("chevron-down", size=13, color="var(--accent-9)"),
+                ),
+                rx.icon("chevrons-up-down", size=13, color="var(--gray-7)"),
+            ),
+            spacing="1",
+            align="center",
+        ),
+        on_click=lambda: PatientAppointmentsState.set_sort(column),
+        style={"cursor": "pointer"},
+    )
+
 
 def _appt_row(appt: AppointmentRowDTO) -> rx.Component:
     return rx.table.row(
@@ -64,7 +99,7 @@ def _appt_row(appt: AppointmentRowDTO) -> rx.Component:
         ),
         rx.table.cell(_status_badge(appt.status)),
         style={":hover": {"background_color": "var(--gray-2)", "cursor": "pointer"}},
-        on_click=lambda: PatientAppointmentsState.go_to_consultation(appt.id),
+        on_click=lambda: PatientAppointmentsState.go_to_appointment(appt.id),
     )
 
 
@@ -72,14 +107,14 @@ def _list_view() -> rx.Component:
     return rx.table.root(
         rx.table.header(
             rx.table.row(
-                rx.table.column_header_cell(LanguageState.tr["col_date"], size="2"),
-                rx.table.column_header_cell(LanguageState.tr["appt_mode"], size="2"),
-                rx.table.column_header_cell(LanguageState.tr["appt_doctor"], size="2"),
-                rx.table.column_header_cell(LanguageState.tr["col_status"], size="2"),
+                _sortable_col(LanguageState.tr["col_date"], "scheduled_at"),
+                _sortable_col(LanguageState.tr["appt_mode"], "appointment_mode"),
+                _sortable_col(LanguageState.tr["appt_doctor"], "doctor_name"),
+                _sortable_col(LanguageState.tr["col_status"], "status"),
             )
         ),
         rx.table.body(
-            rx.foreach(PatientAppointmentsState.appointments, _appt_row)
+            rx.foreach(PatientAppointmentsState.filtered_sorted_appointments, _appt_row)
         ),
         width="100%",
         variant="surface",
@@ -120,7 +155,7 @@ def _cal_pill(appt: AppointmentRowDTO) -> rx.Component:
         width="100%",
         overflow="hidden",
         cursor="pointer",
-        on_click=lambda: PatientAppointmentsState.go_to_consultation(appt.id),
+        on_click=lambda: PatientAppointmentsState.go_to_appointment(appt.id),
     )
 
 
@@ -241,23 +276,43 @@ def _booking_dialog() -> rx.Component:
                 ),
                 # Mode
                 rx.vstack(
-                    rx.text(LanguageState.tr["appt_mode_label"], size="2", weight="medium"),
-                    rx.radio_group.root(
-                        rx.hstack(
-                            rx.radio_group.item(value="onsite"),
-                            rx.hstack(rx.icon("building-2", size=13), rx.text(LanguageState.tr["appt_mode_onsite"], size="2"), spacing="1", align="center"),
-                            rx.radio_group.item(value="visio"),
-                            rx.hstack(rx.icon("video", size=13), rx.text(LanguageState.tr["appt_mode_visio"], size="2"), spacing="1", align="center"),
-                            rx.radio_group.item(value="hospital"),
-                            rx.hstack(rx.icon("hospital", size=13), rx.text(LanguageState.tr["appt_mode_hospital"], size="2"), spacing="1", align="center"),
-                            spacing="2",
-                            align="center",
-                            wrap="wrap",
+                    rx.text(LanguageState.tr["place_of_appointment_label"], size="2", weight="medium"),
+                    rx.select.root(
+                        rx.select.trigger(width="100%"),
+                        rx.select.content(
+                            rx.select.item(LanguageState.tr["appt_mode_at_home"], value="at_home"),
+                            rx.select.item(LanguageState.tr["appt_mode_address"], value="address"),
+                            rx.select.item(LanguageState.tr["appt_mode_visio"], value="visio"),
+                            rx.select.item(LanguageState.tr["appt_mode_hospital"], value="hospital"),
                         ),
                         value=PatientAppointmentsState.booking_mode,
                         on_change=PatientAppointmentsState.set_booking_mode,
+                        size="2",
+                        width="100%",
                     ),
                     spacing="1", width="100%",
+                ),
+                rx.cond(
+                    PatientAppointmentsState.booking_mode == "address",
+                    rx.vstack(
+                        rx.text(LanguageState.tr["appt_address_label"], size="2", weight="medium"),
+                        rx.input(
+                            placeholder=LanguageState.tr["appt_address_placeholder"],
+                            value=PatientAppointmentsState.booking_address,
+                            on_change=PatientAppointmentsState.set_booking_address,
+                            size="2",
+                            width="100%",
+                        ),
+                        rx.button(
+                            rx.icon("map-pin", size=14),
+                            LanguageState.tr["open_in_google_maps_btn"],
+                            on_click=PatientAppointmentsState.open_booking_address_in_google_maps,
+                            variant="soft",
+                            size="1",
+                        ),
+                        spacing="2",
+                        width="100%",
+                    ),
                 ),
                 # Notes
                 rx.vstack(
@@ -358,6 +413,61 @@ def patient_appointments_page() -> rx.Component:
                     ),
                     rx.fragment(),
                 ),
+                # Filter bar (list view only)
+                rx.cond(
+                    PatientAppointmentsState.view_mode == "list",
+                    rx.hstack(
+                        rx.input(
+                            type="date",
+                            value=PatientAppointmentsState.filter_from,
+                            on_change=PatientAppointmentsState.set_filter_from,
+                            size="2",
+                            width="140px",
+                        ),
+                        rx.text(LanguageState.tr["date_range_arrow"], size="2", color="var(--gray-8)"),
+                        rx.input(
+                            type="date",
+                            value=PatientAppointmentsState.filter_to,
+                            on_change=PatientAppointmentsState.set_filter_to,
+                            size="2",
+                            width="140px",
+                        ),
+                        rx.select.root(
+                            rx.select.trigger(
+                                placeholder=LanguageState.tr["all_statuses"],
+                                width="160px",
+                            ),
+                            rx.select.content(
+                                rx.select.item(LanguageState.tr["all_statuses"], value="ALL"),
+                                rx.select.item(LanguageState.tr["appt_status_scheduled"], value="scheduled"),
+                                rx.select.item(LanguageState.tr["appt_status_in_progress"], value="in_progress"),
+                                rx.select.item(LanguageState.tr["appt_status_done"], value="done"),
+                                rx.select.item(LanguageState.tr["appt_status_cancelled"], value="cancelled"),
+                            ),
+                            value=rx.cond(
+                                PatientAppointmentsState.filter_status != "",
+                                PatientAppointmentsState.filter_status,
+                                "ALL",
+                            ),
+                            on_change=PatientAppointmentsState.set_filter_status,
+                            size="2",
+                        ),
+                        rx.tooltip(
+                            rx.icon_button(
+                                rx.icon("x", size=14),
+                                on_click=PatientAppointmentsState.clear_filters,
+                                variant="ghost",
+                                color_scheme="gray",
+                                size="2",
+                            ),
+                            content=LanguageState.tr["clear_filters_tooltip"],
+                        ),
+                        spacing="3",
+                        wrap="wrap",
+                        width="100%",
+                        align="center",
+                    ),
+                ),
                 # Loading / content
                 rx.cond(
                     PatientAppointmentsState.is_loading,
@@ -366,7 +476,7 @@ def patient_appointments_page() -> rx.Component:
                         PatientAppointmentsState.view_mode == "calendar",
                         _calendar_view(),
                         rx.cond(
-                            PatientAppointmentsState.appointments,
+                            PatientAppointmentsState.filtered_sorted_appointments,
                             _list_view(),
                             rx.center(
                                 rx.vstack(

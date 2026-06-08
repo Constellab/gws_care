@@ -148,14 +148,154 @@ class NotificationsState(CombinedPickerState):
     reminder_result: str = ""
     is_processing_reminders: bool = False
 
+    # ── SMTP configuration (admin only) ───────────────────────────────────────
+    smtp_host: str = ""
+    smtp_port: str = "587"
+    smtp_credentials_name: str = ""
+    smtp_use_tls: bool = True
+    smtp_from_email: str = ""
+    smtp_from_name: str = ""
+    smtp_is_loading: bool = False
+    smtp_is_saving: bool = False
+    smtp_success: str = ""
+    smtp_error: str = ""
+    smtp_test_result: str = ""
+    smtp_is_testing: bool = False
+
     # ── Active tab ────────────────────────────────────────────────────────────
     active_tab: str = "inbox"
 
     @rx.event
     async def on_load(self):
+        await self._load_roles()
         await self._load_inbox_logs()
         await self._load_sent_logs()
         await self._load_preferences()
+        if self.is_admin:
+            await self._load_smtp_config()
+
+    @rx.event
+    async def load_settings(self):
+        """Load preferences and SMTP config for the /settings admin panel."""
+        await self._load_roles()
+        await self._load_preferences()
+        if self.is_admin:
+            await self._load_smtp_config()
+
+    # ── SMTP configuration events (admin only) ────────────────────────────────
+
+    async def _load_smtp_config(self) -> None:
+        self.smtp_is_loading = True
+        self.smtp_error = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.notification.notification_service import NotificationService
+                dto = NotificationService.get_smtp_config()
+                self.smtp_host = dto.host or ""
+                self.smtp_port = str(dto.port) if dto.port else "587"
+                self.smtp_credentials_name = dto.credentials_name or ""
+                self.smtp_use_tls = dto.use_tls
+                self.smtp_from_email = dto.from_email or ""
+                self.smtp_from_name = dto.from_name or ""
+        except Exception as e:
+            print(f"[NotificationsState] Failed to load SMTP config: {e}")
+            self.smtp_error = f"Failed to load SMTP config: {e}"
+        finally:
+            self.smtp_is_loading = False
+
+    @rx.event
+    def smtp_set_host(self, value: str):
+        self.smtp_host = value
+        self.smtp_success = ""
+        self.smtp_error = ""
+
+    @rx.event
+    def smtp_set_port(self, value: str):
+        self.smtp_port = value
+        self.smtp_success = ""
+        self.smtp_error = ""
+
+    @rx.event
+    def smtp_set_credentials_name(self, value: str):
+        self.smtp_credentials_name = value
+        self.smtp_success = ""
+        self.smtp_error = ""
+
+    @rx.event
+    def smtp_set_use_tls(self, value: bool):
+        self.smtp_use_tls = value
+
+    @rx.event
+    def smtp_set_from_email(self, value: str):
+        self.smtp_from_email = value
+        self.smtp_success = ""
+        self.smtp_error = ""
+
+    @rx.event
+    def smtp_set_from_name(self, value: str):
+        self.smtp_from_name = value
+        self.smtp_success = ""
+        self.smtp_error = ""
+
+    @rx.event
+    async def save_smtp_config(self):
+        if not self.is_admin:
+            return
+        if not self.smtp_host.strip():
+            self.smtp_error = "Host is required."
+            return
+        self.smtp_is_saving = True
+        self.smtp_success = ""
+        self.smtp_error = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.notification.notification_dto import SmtpConfigDTO
+                from gws_care.notification.notification_service import NotificationService
+                try:
+                    port = int(self.smtp_port)
+                except (ValueError, TypeError):
+                    port = 587
+                dto = SmtpConfigDTO(
+                    host=self.smtp_host.strip(),
+                    port=port,
+                    credentials_name=self.smtp_credentials_name.strip(),
+                    use_tls=self.smtp_use_tls,
+                    from_email=self.smtp_from_email.strip(),
+                    from_name=self.smtp_from_name.strip(),
+                )
+                NotificationService.save_smtp_config(dto)
+                self.smtp_success = "SMTP configuration saved."
+        except Exception as e:
+            self.smtp_error = f"Error: {e}"
+        finally:
+            self.smtp_is_saving = False
+
+    @rx.event
+    async def test_smtp_connection(self):
+        if not self.is_admin:
+            return
+        if not self.smtp_host.strip():
+            self.smtp_test_result = "Error: host is required."
+            return
+        self.smtp_is_testing = True
+        self.smtp_test_result = ""
+        try:
+            import smtplib
+            try:
+                port = int(self.smtp_port)
+            except (ValueError, TypeError):
+                port = 587
+            if self.smtp_use_tls:
+                server = smtplib.SMTP(self.smtp_host.strip(), port, timeout=10)
+                server.starttls()
+            else:
+                server = smtplib.SMTP(self.smtp_host.strip(), port, timeout=10)
+            server.quit()
+            self.smtp_test_result = "Connection successful."
+        except Exception as e:
+            self.smtp_test_result = f"Connection failed: {e}"
+        finally:
+            self.smtp_is_testing = False
 
     @rx.event
     async def set_active_tab(self, tab: str):
@@ -250,6 +390,7 @@ class NotificationsState(CombinedPickerState):
     # ── Preferences ───────────────────────────────────────────────────────────
 
     async def _load_preferences(self):
+        self.pref_error = ""
         try:
             with await self.authenticate_user():
                 from gws_care.notification.notification_service import NotificationService
@@ -259,8 +400,9 @@ class NotificationsState(CombinedPickerState):
                 pref = NotificationService.get_or_create_preference(str(user.id))
                 self.pref_enabled = pref.email_reminders_enabled
                 self.pref_days = list(pref.reminder_days or [])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[NotificationsState] Failed to load preferences: {e}")
+            self.pref_error = f"Failed to load preferences: {e}"
 
     async def _get_current_user(self):
         from gws_care.user.user import User

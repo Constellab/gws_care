@@ -34,9 +34,8 @@ class ExamDTO(ModelDTO):
     blood_pressure: str | None = None
     heart_rate: float | None = None
     temperature: float | None = None
-    conclusion: str | None = None
-    lab_results: list[dict] = []
     interpretation: str | None = None
+    lab_results: list[dict] = []
     interpreted_by_id: str | None = None
 
 
@@ -66,7 +65,6 @@ class SaveExamDTO(BaseModelDTO):
     blood_pressure: str | None = None
     heart_rate: float | None = None
     temperature: float | None = None
-    conclusion: str | None = None
 
 
 class UpdateExamSectionsDTO(BaseModelDTO):
@@ -80,7 +78,6 @@ class UpdateExamSectionsDTO(BaseModelDTO):
     blood_pressure: str | None = None
     heart_rate: float | None = None
     temperature: float | None = None
-    conclusion: str | None = None
     lab_results: list[dict] | None = None
 
 

@@ -232,7 +232,6 @@ class ExamFormState(FormDialogState, rx.State):
                 blood_pressure=self.form_blood_pressure or None,
                 heart_rate=_to_float(self.form_heart_rate),
                 temperature=_to_float(self.form_temperature),
-                conclusion=self.form_conclusion or None,
             )
             exam = ExamService.create_exam(dto)
             exam_id = str(exam.id)

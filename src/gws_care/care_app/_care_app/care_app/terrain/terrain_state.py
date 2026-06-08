@@ -89,7 +89,7 @@ class TerrainState(RoleState):
 
     @rx.event
     def go_back(self):
-        return rx.redirect(f"/campaign/{self.campaign_id}")
+        return rx.call_script("window.history.back()")
 
     @rx.event
     def set_search_query(self, value: str):
@@ -218,7 +218,7 @@ class TerrainState(RoleState):
                     exam.exam_type = ExamType(exam_type_code)
                     exam.exam_date = exam_date
                     exam.visit_id = visit_id
-                    exam.status = ExamStatus.DRAFT
+                    exam.status = ExamStatus.TODO
                     exam.is_done_on_site = True
                     exam.save()
                     exam_id = str(exam.id)

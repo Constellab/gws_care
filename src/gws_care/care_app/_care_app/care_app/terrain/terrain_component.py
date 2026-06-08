@@ -191,7 +191,7 @@ def terrain_page() -> rx.Component:
             rx.hstack(
                 rx.button(
                     rx.icon("arrow-left", size=14),
-                    LanguageState.tr["terrain_back_to_campaign"],
+                    LanguageState.tr["btn_back"],
                     variant="ghost",
                     size="2",
                     on_click=TerrainState.go_back,

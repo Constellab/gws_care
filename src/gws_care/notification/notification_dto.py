@@ -60,12 +60,11 @@ class SmtpConfigDTO(BaseModelDTO):
     """DTO for SMTP server configuration.
 
     credentials_name: name of a Constellab Credentials (type BASIC) that holds
-    the SMTP username/password. The password is never stored directly here.
+    the SMTP username and password. Neither is stored directly here.
     """
 
     host: str = ""
     port: int = 587
-    username: str = ""
     credentials_name: str = ""
     use_tls: bool = True
     from_email: str = ""

@@ -30,6 +30,8 @@ class RoleState(ReflexMainState):
 
     # public — displayed in the user menu button
     user_full_name: str = ""
+    user_photo: str = ""      # URL from Constellab Space, empty when not set
+    user_initials: str = ""   # fallback: first letter of first + last name
 
     # ── Computed role shortcuts (public — read by frontend) ───────────────────
 
@@ -224,13 +226,18 @@ class RoleState(ReflexMainState):
                     )
                 except Exception:
                     self.user_full_name = ""
-                # Check if the user is a gws_core platform admin
+                # Check if the user is a gws_core platform admin; also read photo
                 try:
                     local_user = User.get_by_id(user_id)
                     if local_user is not None:
                         self._is_platform_admin = local_user.group == UserGroup.ADMIN
+                        self.user_photo = local_user.photo or ""
                 except Exception:
                     self._is_platform_admin = False
+                    self.user_photo = ""
+                first = (effective_user.first_name or "")[:1].upper()
+                last = (effective_user.last_name or "")[:1].upper()
+                self.user_initials = (first + last) or "?"
                 # Resolve linked MedicalDoctor (for DOCTOR-role scoping)
                 try:
                     from gws_care.doctor.medical_doctor import MedicalDoctor
@@ -246,6 +253,8 @@ class RoleState(ReflexMainState):
             self._linked_patient_id = ""
             self._linked_doctor_id = ""
             self._is_platform_admin = False
+            self.user_photo = ""
+            self.user_initials = "?"
 
     async def _require_any_of(self, *role_checks: bool, redirect_to: str = "/dashboard"):
         """Redirect to *redirect_to* if none of the given role conditions are True.

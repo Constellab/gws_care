@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .consultation_detail_state import (
     CertificateRowDTO,
@@ -646,7 +647,7 @@ def consultation_detail_page() -> rx.Component:
                         # Back button
                         rx.button(
                             rx.icon("arrow-left", size=14),
-                            "Retour",
+                            LanguageState.tr["btn_back"],
                             variant="ghost",
                             color_scheme="gray",
                             size="2",

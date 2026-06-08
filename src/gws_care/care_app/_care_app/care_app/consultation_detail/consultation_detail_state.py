@@ -104,11 +104,7 @@ class ConsultationDetailState(RoleState):
 
     @rx.event
     def go_back(self):
-        if self.is_patient_user:
-            return rx.redirect("/my-consultations")
-        if self.consultation and self.consultation.patient_id:
-            return rx.redirect(f"/patient/{self.consultation.patient_id}")
-        return rx.redirect("/consultations")
+        return rx.call_script("window.history.back()")
 
     @rx.event
     def open_close_dialog(self):
@@ -204,7 +200,7 @@ class ConsultationDetailState(RoleState):
                 exam.visit_id = self.consultation.id
                 exam.exam_date = date.fromisoformat(self.new_exam_date)
                 exam.exam_type = ExamType(self.new_exam_type)
-                exam.status = ExamStatus.DRAFT
+                exam.status = ExamStatus.TODO
                 exam.save()
                 exam_id = str(exam.id)
             self.show_new_exam_dialog = False

@@ -256,28 +256,34 @@ def _doctors_tab() -> rx.Component:
     )
 
 
+
+
 # ── My Info tab ───────────────────────────────────────────────────────────────
 
 def _my_info_tab(p: PatientOwnDetailsDTO) -> rx.Component:
-    return rx.grid(
-        _section(
-            LanguageState.tr["section_personal_info"],
-            _info_row(LanguageState.tr["field_ssn"], p.social_security_number),
-            _info_row(LanguageState.tr["info_dob"], p.date_of_birth),
-            _info_row(LanguageState.tr["info_birth_name"], p.birth_name),
-            _info_row(LanguageState.tr["info_gender"], p.gender),
+    return rx.vstack(
+        rx.grid(
+            _section(
+                LanguageState.tr["section_personal_info"],
+                _info_row(LanguageState.tr["field_ssn"], p.social_security_number),
+                _info_row(LanguageState.tr["info_dob"], p.date_of_birth),
+                _info_row(LanguageState.tr["info_birth_name"], p.birth_name),
+                _info_row(LanguageState.tr["info_gender"], p.gender),
+            ),
+            _section(
+                LanguageState.tr["section_contact"],
+                _info_row(LanguageState.tr["info_phone"], p.phone),
+                _info_row(LanguageState.tr["info_email"], p.email),
+                _info_row(LanguageState.tr["info_address"], p.address),
+                _info_row(LanguageState.tr["info_postal_code"], p.postal_code),
+                _info_row(LanguageState.tr["info_city"], p.city),
+            ),
+            columns="2",
+            spacing="4",
+            width="100%",
         ),
-        _section(
-            LanguageState.tr["section_contact"],
-            _info_row(LanguageState.tr["info_phone"], p.phone),
-            _info_row(LanguageState.tr["info_email"], p.email),
-            _info_row(LanguageState.tr["info_address"], p.address),
-            _info_row(LanguageState.tr["info_postal_code"], p.postal_code),
-            _info_row(LanguageState.tr["info_city"], p.city),
-        ),
-        columns="2",
-        spacing="4",
         width="100%",
+        spacing="4",
     )
 
 

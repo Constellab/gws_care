@@ -636,6 +636,164 @@ def _notifications_tab() -> rx.Component:
             ),
             width="100%",
         ),
+        # ── SMTP server configuration ────────────────────────────────────────
+        rx.card(
+            rx.vstack(
+                rx.hstack(
+                    rx.icon("mail", size=18, color="var(--accent-9)"),
+                    rx.heading("SMTP Configuration", size="4"),
+                    rx.spacer(),
+                    rx.cond(
+                        NotificationsState.smtp_is_loading,
+                        rx.spinner(size="2"),
+                    ),
+                    width="100%",
+                    align="center",
+                ),
+                rx.text(
+                    "Configure the outgoing SMTP server used for email notifications. "
+                    "The password is stored securely via a Constellab Credentials record (type BASIC) — "
+                    "never entered here directly.",
+                    size="2",
+                    color="var(--gray-10)",
+                ),
+                rx.separator(width="100%"),
+                # Row 1: host + port
+                rx.hstack(
+                    rx.vstack(
+                        rx.text("Host", size="2", weight="medium"),
+                        rx.input(
+                            placeholder="smtp.example.com",
+                            value=NotificationsState.smtp_host,
+                            on_change=NotificationsState.smtp_set_host,
+                            size="2",
+                            width="100%",
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text("Port", size="2", weight="medium"),
+                        rx.input(
+                            placeholder="587",
+                            value=NotificationsState.smtp_port,
+                            on_change=NotificationsState.smtp_set_port,
+                            type="number",
+                            min="1",
+                            max="65535",
+                            size="2",
+                            width="120px",
+                        ),
+                        spacing="1",
+                    ),
+                    spacing="3",
+                    width="100%",
+                    align="end",
+                ),
+                # Row 2: from_email + from_name
+                rx.hstack(
+                    rx.vstack(
+                        rx.text("From email", size="2", weight="medium"),
+                        rx.input(
+                            placeholder="noreply@example.com",
+                            value=NotificationsState.smtp_from_email,
+                            on_change=NotificationsState.smtp_set_from_email,
+                            size="2",
+                            width="100%",
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text("From name", size="2", weight="medium"),
+                        rx.input(
+                            placeholder="Constellab Care",
+                            value=NotificationsState.smtp_from_name,
+                            on_change=NotificationsState.smtp_set_from_name,
+                            size="2",
+                            width="100%",
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                    spacing="3",
+                    width="100%",
+                    align="end",
+                ),
+                # Row 3: credentials name + TLS toggle
+                rx.hstack(
+                    rx.vstack(
+                        rx.text("Credentials name", size="2", weight="medium"),
+                        rx.input(
+                            placeholder="my-smtp-credentials",
+                            value=NotificationsState.smtp_credentials_name,
+                            on_change=NotificationsState.smtp_set_credentials_name,
+                            size="2",
+                            width="100%",
+                        ),
+                        rx.text(
+                            "Name of a Constellab BASIC Credentials record (type BASIC) — provides the login and password",
+                            size="1",
+                            color="var(--gray-9)",
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text("Use TLS", size="2", weight="medium"),
+                        rx.switch(
+                            checked=NotificationsState.smtp_use_tls,
+                            on_change=NotificationsState.smtp_set_use_tls,
+                        ),
+                        spacing="1",
+                        align="center",
+                    ),
+                    spacing="3",
+                    width="100%",
+                    align="end",
+                ),
+                # Feedback
+                rx.cond(
+                    NotificationsState.smtp_error != "",
+                    rx.callout(NotificationsState.smtp_error, icon="triangle-alert", color_scheme="red", size="1"),
+                ),
+                rx.cond(
+                    NotificationsState.smtp_success != "",
+                    rx.callout(NotificationsState.smtp_success, icon="check", color_scheme="green", size="1"),
+                ),
+                rx.cond(
+                    NotificationsState.smtp_test_result.contains("successful"),
+                    rx.callout(NotificationsState.smtp_test_result, icon="circle-check", color_scheme="green", size="1"),
+                    rx.cond(
+                        NotificationsState.smtp_test_result != "",
+                        rx.callout(NotificationsState.smtp_test_result, icon="triangle-alert", color_scheme="red", size="1"),
+                    ),
+                ),
+                # Buttons
+                rx.hstack(
+                    rx.button(
+                        rx.icon("plug", size=14),
+                        "Test Connection",
+                        on_click=NotificationsState.test_smtp_connection,
+                        loading=NotificationsState.smtp_is_testing,
+                        size="2",
+                        variant="soft",
+                        color_scheme="blue",
+                    ),
+                    rx.button(
+                        rx.icon("save", size=14),
+                        "Save",
+                        on_click=NotificationsState.save_smtp_config,
+                        loading=NotificationsState.smtp_is_saving,
+                        size="2",
+                    ),
+                    spacing="2",
+                ),
+                spacing="3",
+                width="100%",
+            ),
+            width="100%",
+        ),
         # ── Send reminders manually ───────────────────────────────────────────
         rx.card(
             rx.vstack(

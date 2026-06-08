@@ -85,9 +85,10 @@ def _sortable_col(label: rx.Var | str, sort_col_var: rx.Var, sort_asc_var: rx.Va
 def _exam_status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
-        ("draft", rx.badge(LanguageState.tr["exam_status_draft"], color_scheme="gray", variant="soft", size="1")),
-        ("pending", rx.badge(LanguageState.tr["exam_status_pending"], color_scheme="orange", variant="soft", size="1")),
-        ("interpreted", rx.badge(LanguageState.tr["exam_status_interpreted"], color_scheme="green", variant="soft", size="1")),
+        ("todo", rx.badge(LanguageState.tr["exam_status_todo"], color_scheme="gray", variant="soft", size="1")),
+        ("in_progress_results", rx.badge(LanguageState.tr["exam_status_in_progress_results"], color_scheme="orange", variant="soft", size="1")),
+        ("in_progress_interpretation", rx.badge(LanguageState.tr["exam_status_in_progress_interpretation"], color_scheme="blue", variant="soft", size="1")),
+        ("done", rx.badge(LanguageState.tr["exam_status_done"], color_scheme="green", variant="soft", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -144,6 +145,26 @@ def my_exams_page() -> rx.Component:
                         "ALL",
                     ),
                     on_change=PatientDocumentsState.set_exam_filter_type,
+                    size="2",
+                ),
+                rx.select.root(
+                    rx.select.trigger(
+                        placeholder=LanguageState.tr["all_statuses"],
+                        width="180px",
+                    ),
+                    rx.select.content(
+                        rx.select.item(LanguageState.tr["all_statuses"], value="ALL"),
+                        rx.select.item(LanguageState.tr["exam_status_todo"], value="todo"),
+                        rx.select.item(LanguageState.tr["exam_status_in_progress_results"], value="in_progress_results"),
+                        rx.select.item(LanguageState.tr["exam_status_in_progress_interpretation"], value="in_progress_interpretation"),
+                        rx.select.item(LanguageState.tr["exam_status_done"], value="done"),
+                    ),
+                    value=rx.cond(
+                        PatientDocumentsState.exam_filter_status != "",
+                        PatientDocumentsState.exam_filter_status,
+                        "ALL",
+                    ),
+                    on_change=PatientDocumentsState.set_exam_filter_status,
                     size="2",
                 ),
                 rx.spacer(),
@@ -507,6 +528,7 @@ def _doc_type_badge(doc_type: str) -> rx.Component:
         ("exam", rx.badge(LanguageState.tr["doc_type_exam"], color_scheme="blue", variant="soft", size="1")),
         ("prescription", rx.badge(LanguageState.tr["doc_type_prescription"], color_scheme="green", variant="soft", size="1")),
         ("certificate", rx.badge(LanguageState.tr["doc_type_certificate"], color_scheme="teal", variant="soft", size="1")),
+        ("uploaded", rx.badge(LanguageState.tr["upload_doc_type_uploaded"], color_scheme="orange", variant="soft", size="1")),
         rx.badge(doc_type, color_scheme="gray", variant="soft", size="1"),
     )
 

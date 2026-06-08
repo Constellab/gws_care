@@ -28,7 +28,7 @@ class Exam(ModelWithUser):
     billing_account: Account = ForeignKeyField(Account, null=True, backref="exams", on_delete="SET NULL")
     exam_date: date = DateField(null=False, index=True)
     exam_type: ExamType = EnumField(choices=ExamType, null=False)
-    status: ExamStatus = EnumField(choices=ExamStatus, default=ExamStatus.DRAFT, null=False)
+    status: ExamStatus = EnumField(choices=ExamStatus, default=ExamStatus.TODO, null=False)
     reason_for_visit: str = TextField(null=True)
     medical_history: str = TextField(null=True)
     weight: float = FloatField(null=True)        # kg
@@ -37,7 +37,6 @@ class Exam(ModelWithUser):
     blood_pressure: str = CharField(max_length=50, null=True)
     heart_rate: float = FloatField(null=True)    # bpm
     temperature: float = FloatField(null=True)   # °C
-    conclusion: str = TextField(null=True)
     lab_results: list = JSONField(null=True)  # list of {parameter, value, reference_range, status}
     interpretation: str = TextField(null=True)
     interpreted_by: User = ForeignKeyField(User, null=True, backref="+")
@@ -65,7 +64,6 @@ class Exam(ModelWithUser):
             blood_pressure=self.blood_pressure,
             heart_rate=self.heart_rate,
             temperature=self.temperature,
-            conclusion=self.conclusion,
             lab_results=self.lab_results or [],
             interpretation=self.interpretation,
             interpreted_by_id=str(self.interpreted_by_id) if self.interpreted_by_id else None,

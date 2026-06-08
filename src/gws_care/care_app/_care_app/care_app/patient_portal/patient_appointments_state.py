@@ -17,6 +17,7 @@ class AppointmentRowDTO(BaseModel):
     status: str = ""
     status_label: str = ""
     doctor_name: str = ""
+    doctor_id: str = ""
     appointment_mode: str = ""
     appointment_mode_label: str = ""
 
@@ -49,11 +50,21 @@ class PatientAppointmentsState(RoleState):
     calendar_month_label: str = ""
     calendar_days: list[CalendarDayDTO] = []
 
+    # ── Filters (list view only) ──────────────────────────────────────────────
+    filter_from: str = ""
+    filter_to: str = ""
+    filter_status: str = ""
+
+    # ── Sort ──────────────────────────────────────────────────────────────────
+    sort_column: str = "scheduled_at"
+    sort_ascending: bool = True
+
     # ── Booking dialog ────────────────────────────────────────────────────────
     show_booking_dialog: bool = False
     booking_scheduled_at: str = ""
     booking_doctor_id: str = ""
-    booking_mode: str = "onsite"
+    booking_mode: str = "at_home"
+    booking_address: str = ""
     booking_notes: str = ""
     booking_error: str = ""
     booking_is_saving: bool = False
@@ -107,7 +118,53 @@ class PatientAppointmentsState(RoleState):
             self.calendar_month += 1
         await self._load_appointments()
 
+    # ── Filter / sort events ──────────────────────────────────────────────────
+
+    @rx.event
+    def set_filter_from(self, value: str):
+        self.filter_from = value
+
+    @rx.event
+    def set_filter_to(self, value: str):
+        self.filter_to = value
+
+    @rx.event
+    def set_filter_status(self, value: str):
+        self.filter_status = "" if value == "ALL" else value
+
+    @rx.event
+    def set_sort(self, column: str):
+        if self.sort_column == column:
+            self.sort_ascending = not self.sort_ascending
+        else:
+            self.sort_column = column
+            self.sort_ascending = True
+
+    @rx.event
+    def clear_filters(self):
+        self.filter_from = ""
+        self.filter_to = ""
+        self.filter_status = ""
+
+    # ── Computed var ──────────────────────────────────────────────────────────
+
+    @rx.var
+    def filtered_sorted_appointments(self) -> list[AppointmentRowDTO]:
+        rows = self.appointments
+        if self.filter_from:
+            rows = [r for r in rows if r.scheduled_at >= self.filter_from]
+        if self.filter_to:
+            rows = [r for r in rows if r.scheduled_at <= self.filter_to + "T23:59:59"]
+        if self.filter_status:
+            rows = [r for r in rows if r.status == self.filter_status]
+        col = self.sort_column
+        return sorted(rows, key=lambda r: (getattr(r, col) or "").lower(), reverse=not self.sort_ascending)
+
     # ── Navigation ────────────────────────────────────────────────────────────
+
+    @rx.event
+    def go_to_appointment(self, appt_id: str):
+        return rx.redirect(f"/appointment/{appt_id}")
 
     @rx.event
     def go_to_consultation(self, visit_id: str):
@@ -119,7 +176,8 @@ class PatientAppointmentsState(RoleState):
     async def open_booking_dialog(self):
         self.booking_scheduled_at = ""
         self.booking_doctor_id = ""
-        self.booking_mode = "onsite"
+        self.booking_mode = "at_home"
+        self.booking_address = ""
         self.booking_notes = ""
         self.booking_error = ""
         self.booking_is_saving = False
@@ -140,6 +198,19 @@ class PatientAppointmentsState(RoleState):
     @rx.event
     def set_booking_mode(self, value: str):
         self.booking_mode = value
+
+    @rx.event
+    def set_booking_address(self, value: str):
+        self.booking_address = value
+
+    @rx.event
+    def open_booking_address_in_google_maps(self):
+        from urllib.parse import quote
+        if self.booking_address:
+            encoded = quote(self.booking_address, safe="")
+            return rx.call_script(
+                f"window.open('https://www.google.com/maps/search/?api=1&query={encoded}', '_blank')"
+            )
 
     @rx.event
     def set_booking_notes(self, value: str):
@@ -178,6 +249,7 @@ class PatientAppointmentsState(RoleState):
                     scheduled_at=self.booking_scheduled_at,
                     doctor_id=self.booking_doctor_id or None,
                     appointment_mode=self.booking_mode,
+                    appointment_address=self.booking_address or None,
                     patient_notes=self.booking_notes or None,
                 )
                 ConsultationService.create_from_patient_booking(dto, patient_id)
@@ -242,6 +314,7 @@ class PatientAppointmentsState(RoleState):
                         status=cvs.value if cvs else "",
                         status_label=cvs.get_label() if cvs else "",
                         doctor_name=doctor_name,
+                        doctor_id=str(v.doctor_id) if v.doctor_id else "",
                         appointment_mode=mode.value if mode else "",
                         appointment_mode_label=mode_label,
                     ))

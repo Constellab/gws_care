@@ -119,9 +119,9 @@ class ConsultationService:
             raise BadRequestException(f"Invalid scheduled_at format: '{dto.scheduled_at}'")
 
         try:
-            mode = AppointmentMode(dto.appointment_mode) if dto.appointment_mode else AppointmentMode.ONSITE
+            mode = AppointmentMode(dto.appointment_mode) if dto.appointment_mode else AppointmentMode.AT_WORK
         except ValueError:
-            mode = AppointmentMode.ONSITE
+            mode = AppointmentMode.AT_WORK
 
         doctor_id = None
         if dto.doctor_id:
@@ -138,6 +138,7 @@ class ConsultationService:
         visit.scheduled_at = scheduled_at
         visit.doctor_id = doctor_id
         visit.appointment_mode = mode
+        visit.appointment_address = dto.appointment_address or None
         visit.patient_notes = dto.patient_notes or None
         visit.save()
         return visit

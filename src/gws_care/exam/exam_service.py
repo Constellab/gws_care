@@ -1,5 +1,7 @@
 """CRUD + domain service for Exam sessions."""
 
+from datetime import datetime
+
 from gws_core import BadRequestException, NotFoundException
 
 from gws_care.exam.exam import Exam
@@ -7,6 +9,8 @@ from gws_care.exam.exam_dto import ExamRowDTO, InterpretExamDTO, SaveExamDTO, Up
 from gws_care.exam.exam_type import ExamStatus
 from gws_care.patient.patient import Patient
 from gws_care.user.user import User
+from gws_care.workflow.exam_validation_step import ExamValidationStep
+from gws_care.workflow.exam_validation_workflow import ExamValidationWorkflow
 
 
 class ExamService:
@@ -66,7 +70,7 @@ class ExamService:
         exam.billing_account_id = dto.account_id
         exam.exam_date = dto.exam_date
         exam.exam_type = dto.exam_type
-        exam.status = ExamStatus.DRAFT
+        exam.status = ExamStatus.TODO
         exam.reason_for_visit = dto.reason_for_visit
         exam.medical_history = dto.medical_history
         exam.weight = dto.weight
@@ -75,7 +79,6 @@ class ExamService:
         exam.blood_pressure = dto.blood_pressure
         exam.heart_rate = dto.heart_rate
         exam.temperature = dto.temperature
-        exam.conclusion = dto.conclusion
         exam.save()
         return exam
 
@@ -91,7 +94,6 @@ class ExamService:
         exam.blood_pressure = dto.blood_pressure
         exam.heart_rate = dto.heart_rate
         exam.temperature = dto.temperature
-        exam.conclusion = dto.conclusion
         exam.lab_results = dto.lab_results
         exam.save()
         return exam
@@ -110,28 +112,89 @@ class ExamService:
         exam.blood_pressure = dto.blood_pressure
         exam.heart_rate = dto.heart_rate
         exam.temperature = dto.temperature
-        exam.conclusion = dto.conclusion
         exam.save()
         return exam
 
     @classmethod
-    def set_pending(cls, exam_id: str) -> Exam:
-        """Mark exam as PENDING (results entered, awaiting interpretation)."""
+    def update_reason_and_history(cls, exam_id: str, reason: str | None, history: str | None) -> Exam:
         exam = cls.get_exam(exam_id)
-        exam.status = ExamStatus.PENDING
+        exam.reason_for_visit = reason
+        exam.medical_history = history
         exam.save()
+        return exam
+
+    @classmethod
+    def update_physical(
+        cls,
+        exam_id: str,
+        weight: float | None,
+        height: float | None,
+        bmi: float | None,
+        blood_pressure: str | None,
+        heart_rate: float | None,
+        temperature: float | None,
+    ) -> Exam:
+        exam = cls.get_exam(exam_id)
+        exam.weight = weight
+        exam.height = height
+        exam.bmi = bmi
+        exam.blood_pressure = blood_pressure
+        exam.heart_rate = heart_rate
+        exam.temperature = temperature
+        exam.save()
+        return exam
+
+    @classmethod
+    def update_lab_results(cls, exam_id: str, lab_results: list[dict]) -> Exam:
+        exam = cls.get_exam(exam_id)
+        exam.lab_results = lab_results
+        exam.save()
+        return exam
+
+    @classmethod
+    def set_in_progress_results(cls, exam_id: str, user: User | None = None) -> Exam:
+        """Advance exam from TODO → IN_PROGRESS_RESULTS (informations saved)."""
+        exam = cls.get_exam(exam_id)
+        exam.status = ExamStatus.IN_PROGRESS_RESULTS
+        exam.save()
+        record = ExamValidationWorkflow()
+        record.exam = exam
+        record.step = ExamValidationStep.IN_PROGRESS_RESULTS
+        record.reached_by = user
+        record.reached_at = datetime.utcnow()
+        record.save()
+        return exam
+
+    @classmethod
+    def set_in_progress_interpretation(cls, exam_id: str, user: User | None = None) -> Exam:
+        """Advance exam to IN_PROGRESS_INTERPRETATION (results submitted for review)."""
+        exam = cls.get_exam(exam_id)
+        exam.status = ExamStatus.IN_PROGRESS_INTERPRETATION
+        exam.save()
+        record = ExamValidationWorkflow()
+        record.exam = exam
+        record.step = ExamValidationStep.IN_PROGRESS_INTERPRETATION
+        record.reached_by = user
+        record.reached_at = datetime.utcnow()
+        record.save()
         return exam
 
     @classmethod
     def interpret_exam(cls, exam_id: str, dto: InterpretExamDTO, doctor: User) -> Exam:
-        """Save doctor's interpretation and mark exam as INTERPRETED."""
+        """Save doctor's interpretation and mark exam as DONE."""
         if not dto.interpretation or not dto.interpretation.strip():
             raise BadRequestException("Interpretation text is required")
         exam = cls.get_exam(exam_id)
         exam.interpretation = dto.interpretation.strip()
         exam.interpreted_by = doctor
-        exam.status = ExamStatus.INTERPRETED
+        exam.status = ExamStatus.DONE
         exam.save()
+        record = ExamValidationWorkflow()
+        record.exam = exam
+        record.step = ExamValidationStep.DONE
+        record.reached_by = doctor
+        record.reached_at = datetime.utcnow()
+        record.save()
         return exam
 
     @classmethod

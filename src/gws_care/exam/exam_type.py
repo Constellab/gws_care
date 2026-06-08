@@ -55,8 +55,9 @@ class ExamType(Enum):
 
 
 class ExamStatus(Enum):
-    """Interpretation status of an exam."""
+    """Workflow status of an exam."""
 
-    PENDING = "pending"          # Results entered, awaiting doctor interpretation
-    INTERPRETED = "interpreted"  # Doctor has written interpretation
-    DRAFT = "draft"              # Exam session created, results not yet entered
+    TODO = "todo"                                              # Created, informations not yet filled
+    IN_PROGRESS_RESULTS = "in_progress_results"               # Informations saved, entering results
+    IN_PROGRESS_INTERPRETATION = "in_progress_interpretation" # Results submitted, awaiting interpretation
+    DONE = "done"                                              # Interpretation complete

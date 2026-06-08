@@ -104,7 +104,6 @@ class SmtpConfig(Model):
 
     host: str = CharField(max_length=255, null=True)
     port: int = IntegerField(default=587, null=False)
-    username: str = CharField(max_length=255, null=True)
     credentials_name: str = CharField(max_length=255, null=True)
     use_tls: bool = BooleanField(default=True, null=False)
     from_email: str = CharField(max_length=255, null=True)

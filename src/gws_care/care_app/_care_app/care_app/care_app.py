@@ -61,6 +61,14 @@ from .visit_list.visit_list_component import visit_list_page
 from .visit_list.visit_list_state import VisitListState
 from .doctor_list.doctor_list_component import doctor_list_page
 from .doctor_list.doctor_list_state import DoctorListState
+from .admin_documents.admin_documents_component import admin_documents_page
+from .admin_documents.admin_documents_state import AdminDocumentsState
+from .appointments_list.appointments_list_component import appointments_list_page
+from .appointments_list.appointments_list_state import AppointmentsListState
+from .appointment_detail.appointment_detail_component import appointment_detail_page
+from .appointment_detail.appointment_detail_state import AppointmentDetailState
+from .document_upload.document_upload_component import document_upload_page
+from .document_upload.document_upload_state import DocumentUploadState
 
 
 app = register_gws_reflex_app()
@@ -103,6 +111,12 @@ def visits():
     return visit_list_page()
 
 
+@rx.page(route="/appointments", on_load=[AppointmentsListState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def appointments():
+    """Appointments page — scheduling view of consultation visits."""
+    return appointments_list_page()
+
+
 @rx.page(route="/consultations", on_load=[VisitListState.on_load_consultations, LanguageState.on_load, GeneralSettingsState.load_color_theme])
 def consultations():
     """Consultations page — visit list pre-filtered to consultation type."""
@@ -121,7 +135,7 @@ def doctors():
     return doctor_list_page()
 
 
-@rx.page(route="/settings", on_load=[AdminState.on_load, GeneralSettingsState.on_load])
+@rx.page(route="/settings", on_load=[AdminState.on_load, NotificationsState.load_settings, GeneralSettingsState.on_load])
 def settings():
     """Settings page — import, user roles, and notification configuration."""
     return settings_page()
@@ -155,6 +169,12 @@ def campaign_detail():
 def visit_detail():
     """Campaign visit detail page with exam results and interpretation workflow."""
     return visit_detail_page()
+
+
+@rx.page(route="/appointment/[visit_id_param]", on_load=[AppointmentDetailState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def appointment_detail():
+    """Appointment detail page — view, edit, cancel/delete a single appointment."""
+    return appointment_detail_page()
 
 
 @rx.page(route="/consultation/[visit_id_param]", on_load=[ConsultationDetailState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
@@ -239,6 +259,18 @@ def my_all_documents():
 def my_patient_accounts():
     """Patient portal — my associated accounts."""
     return patient_accounts_page()
+
+
+@rx.page(route="/documents", on_load=[AdminDocumentsState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def documents():
+    """Admin documents page — browse all patient documents across the platform."""
+    return admin_documents_page()
+
+
+@rx.page(route="/documents/upload", on_load=[DocumentUploadState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def documents_upload():
+    """Document upload page — drop a file, AI analysis, manual annotation, save."""
+    return document_upload_page()
 
 
 @rx.page(route="/no-access", on_load=[LanguageState.on_load])
