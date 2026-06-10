@@ -80,16 +80,6 @@ def prescription_detail_page() -> rx.Component:
                 rx.hstack(
                     rx.tooltip(
                         rx.icon_button(
-                            rx.icon("plane", size=16),
-                            on_click=PrescriptionDetailState.send_pdf_email,
-                            loading=PrescriptionDetailState.is_sending_email,
-                            variant="outline",
-                            size="2",
-                        ),
-                        content=LanguageState.tr["send_pdf_email_btn"],
-                    ),
-                    rx.tooltip(
-                        rx.icon_button(
                             rx.icon("eye", size=16),
                             on_click=PrescriptionDetailState.view_pdf,
                             variant="outline",
@@ -105,32 +95,6 @@ def prescription_detail_page() -> rx.Component:
                             size="2",
                         ),
                         content=LanguageState.tr["download_pdf_btn"],
-                    ),
-                    rx.tooltip(
-                        rx.icon_button(
-                            rx.icon(
-                                rx.cond(
-                                    PrescriptionDetailState.prescription & PrescriptionDetailState.prescription.is_archived,
-                                    "archive-restore",
-                                    "archive",
-                                ),
-                                size=16,
-                            ),
-                            on_click=PrescriptionDetailState.toggle_archive,
-                            loading=PrescriptionDetailState.is_archiving,
-                            variant="outline",
-                            color_scheme=rx.cond(
-                                PrescriptionDetailState.prescription & PrescriptionDetailState.prescription.is_archived,
-                                "accent",
-                                "gray",
-                            ),
-                            size="2",
-                        ),
-                        content=rx.cond(
-                            PrescriptionDetailState.prescription & PrescriptionDetailState.prescription.is_archived,
-                            LanguageState.tr["unarchive_btn"],
-                            LanguageState.tr["archive_btn"],
-                        ),
                     ),
                     spacing="2",
                 ),

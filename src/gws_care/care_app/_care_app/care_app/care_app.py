@@ -69,6 +69,8 @@ from .appointment_detail.appointment_detail_component import appointment_detail_
 from .appointment_detail.appointment_detail_state import AppointmentDetailState
 from .document_upload.document_upload_component import document_upload_page
 from .document_upload.document_upload_state import DocumentUploadState
+from .uploaded_document_detail.uploaded_document_detail_component import uploaded_document_detail_page
+from .uploaded_document_detail.uploaded_document_detail_state import UploadedDocumentDetailState
 
 
 app = register_gws_reflex_app()
@@ -271,6 +273,12 @@ def documents():
 def documents_upload():
     """Document upload page — drop a file, AI analysis, manual annotation, save."""
     return document_upload_page()
+
+
+@rx.page(route="/document/[doc_id]", on_load=[UploadedDocumentDetailState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def uploaded_document_detail():
+    """Uploaded document detail page — view metadata and open the file."""
+    return uploaded_document_detail_page()
 
 
 @rx.page(route="/no-access", on_load=[LanguageState.on_load])

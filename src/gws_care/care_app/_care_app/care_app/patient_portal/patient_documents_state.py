@@ -22,6 +22,7 @@ class PatientExamRowDTO(BaseModel):
     exam_type_label: str = ""
     status: str = ""
     status_label: str = ""
+    interpretation: str = ""
 
 
 class PatientPrescriptionRowDTO(BaseModel):
@@ -47,11 +48,12 @@ class AllDocumentRowDTO(BaseModel):
     """Unified row for the All Documents view."""
 
     id: str
-    doc_type: str  # "exam" | "prescription" | "certificate"
+    doc_type: str  # "exam" | "prescription" | "certificate" | "uploaded"
     date: str = ""
     description: str = ""
     sub_label: str = ""   # exam type / drug count / cert type
-    extra: str = ""       # e.g. issued_by / prescribed_by
+    extra: str = ""       # e.g. issued_by / prescribed_by / patient name
+    icon: str = "file"    # Lucide icon name based on doc type / file extension
 
 
 # ── State ─────────────────────────────────────────────────────────────────────
@@ -375,6 +377,7 @@ class PatientDocumentsState(RoleState):
                         exam_type_label=lbl,
                         status=e.status.value,
                         status_label=e.status.get_label() if hasattr(e.status, "get_label") else e.status.value,
+                        interpretation=e.interpretation or "",
                     ))
                 self.exams = rows
                 self.exam_type_options = sorted(options)
@@ -484,8 +487,9 @@ class PatientDocumentsState(RoleState):
                     doc_type="exam",
                     date=e.exam_date,
                     description=e.exam_type_label,
-                    sub_label=e.status_label,
+                    sub_label=e.interpretation or e.status_label,
                     extra="",
+                    icon="stethoscope",
                 ))
 
             for p in self.prescriptions:
@@ -496,6 +500,7 @@ class PatientDocumentsState(RoleState):
                     description=p.diagnosis or "(no diagnosis)",
                     sub_label=f"{p.drug_count} drug(s)" if p.drug_count else "",
                     extra=p.prescribed_by_name,
+                    icon="pill",
                 ))
 
             for c in self.certificates:
@@ -506,6 +511,7 @@ class PatientDocumentsState(RoleState):
                     description=c.certificate_type_label,
                     sub_label=c.conclusion[:80] if c.conclusion else "",
                     extra=c.issued_by_name,
+                    icon="award",
                 ))
 
             # Sort all by date desc

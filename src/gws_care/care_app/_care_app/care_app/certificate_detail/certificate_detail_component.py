@@ -79,16 +79,6 @@ def certificate_detail_page() -> rx.Component:
                 rx.hstack(
                     rx.tooltip(
                         rx.icon_button(
-                            rx.icon("plane", size=16),
-                            on_click=CertificateDetailState.send_pdf_email,
-                            loading=CertificateDetailState.is_sending_email,
-                            variant="outline",
-                            size="2",
-                        ),
-                        content=LanguageState.tr["send_pdf_email_btn"],
-                    ),
-                    rx.tooltip(
-                        rx.icon_button(
                             rx.icon("eye", size=16),
                             on_click=CertificateDetailState.view_pdf,
                             variant="outline",
@@ -104,32 +94,6 @@ def certificate_detail_page() -> rx.Component:
                             size="2",
                         ),
                         content=LanguageState.tr["download_pdf_btn"],
-                    ),
-                    rx.tooltip(
-                        rx.icon_button(
-                            rx.icon(
-                                rx.cond(
-                                    CertificateDetailState.certificate & CertificateDetailState.certificate.is_archived,
-                                    "archive-restore",
-                                    "archive",
-                                ),
-                                size=16,
-                            ),
-                            on_click=CertificateDetailState.toggle_archive,
-                            loading=CertificateDetailState.is_archiving,
-                            variant="outline",
-                            color_scheme=rx.cond(
-                                CertificateDetailState.certificate & CertificateDetailState.certificate.is_archived,
-                                "accent",
-                                "gray",
-                            ),
-                            size="2",
-                        ),
-                        content=rx.cond(
-                            CertificateDetailState.certificate & CertificateDetailState.certificate.is_archived,
-                            LanguageState.tr["unarchive_btn"],
-                            LanguageState.tr["archive_btn"],
-                        ),
                     ),
                     spacing="2",
                 ),

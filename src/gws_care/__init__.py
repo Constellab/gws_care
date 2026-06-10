@@ -19,6 +19,7 @@ from gws_care.core.migration_6 import Migration0250
 from gws_care.core.migration_7 import Migration0260
 from gws_care.core.migration_8 import Migration0270
 from gws_care.core.migration_9 import Migration0280
+from gws_care.core.migration_10 import Migration0290
 from gws_care.document_upload.document_bulk_import_task import DocumentBulkImportTask
 from gws_care.document_upload.document_text import DocumentText
 from gws_care.document_upload.document_text_extraction_task import DocumentTextExtractionTask

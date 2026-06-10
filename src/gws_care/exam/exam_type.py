@@ -61,3 +61,12 @@ class ExamStatus(Enum):
     IN_PROGRESS_RESULTS = "in_progress_results"               # Informations saved, entering results
     IN_PROGRESS_INTERPRETATION = "in_progress_interpretation" # Results submitted, awaiting interpretation
     DONE = "done"                                              # Interpretation complete
+
+    def get_label(self) -> str:
+        labels = {
+            ExamStatus.TODO: "À faire",
+            ExamStatus.IN_PROGRESS_RESULTS: "En cours — Résultats",
+            ExamStatus.IN_PROGRESS_INTERPRETATION: "En cours — Interprétation",
+            ExamStatus.DONE: "Terminé",
+        }
+        return labels.get(self, self.value)

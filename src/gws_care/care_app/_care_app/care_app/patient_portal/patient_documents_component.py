@@ -666,7 +666,7 @@ def my_all_documents_page() -> rx.Component:
                         rx.table.header(
                             rx.table.row(
                                 _sortable_col(
-                                    LanguageState.tr["col_type"],
+                                    LanguageState.tr["col_source"],
                                     PatientDocumentsState.all_docs_sort_column,
                                     PatientDocumentsState.all_docs_sort_ascending,
                                     "doc_type",
@@ -687,7 +687,7 @@ def my_all_documents_page() -> rx.Component:
                                     lambda: PatientDocumentsState.set_all_docs_sort("description"),
                                 ),
                                 rx.table.column_header_cell(
-                                    rx.text(LanguageState.tr["col_status"], size="2")
+                                    rx.text(LanguageState.tr["col_details"], size="2")
                                 ),
                                 _sortable_col(
                                     LanguageState.tr["col_sent_by"],

@@ -13,7 +13,6 @@ class UploadedDocument(ModelWithUser):
     """A document uploaded directly by staff (not linked to an Exam).
 
     The file is stored in the gws_core file store (resource_id).
-    ``detected_*`` fields hold the raw AI pipeline output for audit purposes.
     ``doc_type`` / ``doc_date`` / ``description`` are the user-confirmed values.
     """
 
@@ -26,10 +25,6 @@ class UploadedDocument(ModelWithUser):
     notes: str = TextField(null=True)
     original_name: str = CharField(max_length=500, null=False, default="")
     resource_id: str = CharField(max_length=36, null=True)
-    # Raw AI detection output (for audit / debugging)
-    detected_type: str = CharField(max_length=80, null=True)
-    detected_date: str = CharField(max_length=20, null=True)
-    detected_patient_name: str = TextField(null=True)
 
     class Meta:
         table_name = "gws_care_uploaded_document"

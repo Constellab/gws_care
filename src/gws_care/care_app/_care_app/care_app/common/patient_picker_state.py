@@ -70,11 +70,10 @@ class PatientPickerState(RoleState):
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     async def _open_picker(self, account_id: str = ""):
-        """Reset picker state and load initial list."""
+        """Reset filters and load patient list. Does not clear current selection so that
+        closing the picker without choosing a patient preserves the existing link."""
         self.picker_filter_name = ""
         self.picker_filter_number = ""
-        self.picker_selected_id = ""
-        self.picker_selected_label = ""
         self.picker_account_id = account_id
         self.picker_error = ""
         self.picker_patients = []

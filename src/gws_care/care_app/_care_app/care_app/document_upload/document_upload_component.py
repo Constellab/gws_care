@@ -349,6 +349,8 @@ def _annotation_dialog() -> rx.Component:
                 spacing="4",
                 width="100%",
             ),
+            # Nested picker dialog — must be inside dialog.content so Radix focus trap allows interaction
+            patient_picker_dialog(DocumentUploadState),
             on_interact_outside=DocumentUploadState.close_annotation_dialog,
             on_escape_key_down=DocumentUploadState.close_annotation_dialog,
             max_width="520px",
@@ -400,6 +402,5 @@ def document_upload_page() -> rx.Component:
             ),
             # Dialogs
             _annotation_dialog(),
-            patient_picker_dialog(DocumentUploadState),
         )
     )

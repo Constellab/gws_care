@@ -45,6 +45,7 @@ class DocumentAnnotationItemDTO(BaseModel):
     suggested_patient_id: str = ""
     suggested_patient_label: str = ""
     analysis_hints: list[str] = []
+    uploaded_document_id: str = ""
     is_saved: bool = False
     save_error: str = ""
 
@@ -326,7 +327,7 @@ class DocumentUploadState(PatientPickerState, ResourceSelectState):
 
     @rx.event
     async def save_document(self):
-        """Save the annotated document as an UploadedDocument DB record."""
+        """Create or update an UploadedDocument DB record."""
         if self.editing_index < 0 or self.editing_index >= len(self.annotation_items):
             return
         self.is_saving = True
@@ -338,22 +339,35 @@ class DocumentUploadState(PatientPickerState, ResourceSelectState):
                 from gws_care.document_upload.uploaded_document import UploadedDocument
 
                 doc_date_str = self.form_date or None
-                doc = UploadedDocument()
+                doc_date = date.fromisoformat(doc_date_str) if doc_date_str else None
+
+                if item.uploaded_document_id:
+                    doc = UploadedDocument.get_by_id(item.uploaded_document_id)
+                else:
+                    doc = UploadedDocument()
+                    doc.original_name = item.original_name
+                    doc.resource_id = item.file_resource_id or None
+
                 doc.patient_id = self.picker_selected_id or None
                 doc.doc_type = self.form_doc_type or None
-                doc.doc_date = date.fromisoformat(doc_date_str) if doc_date_str else None
+                doc.doc_date = doc_date
                 doc.description = self.form_description or None
                 doc.notes = self.form_notes or None
-                doc.original_name = item.original_name
-                doc.resource_id = item.file_resource_id or None
-                doc.detected_type = item.detected_type or None
-                doc.detected_date = item.detected_date or None
-                doc.detected_patient_name = item.detected_patient_name or None
                 doc.save()
 
             updated = list(self.annotation_items)
             updated[self.editing_index] = DocumentAnnotationItemDTO(
-                **{**item.dict(), "is_saved": True, "save_error": ""}
+                **{
+                    **item.dict(),
+                    "uploaded_document_id": str(doc.id),
+                    "is_saved": True,
+                    "save_error": "",
+                    # Override AI hints with the confirmed values so re-opening the dialog shows them
+                    "detected_type": self.form_doc_type,
+                    "detected_date": self.form_date,
+                    "suggested_patient_id": self.picker_selected_id,
+                    "suggested_patient_label": self.picker_selected_label,
+                }
             )
             self.annotation_items = updated
             self.annotation_dialog_open = False

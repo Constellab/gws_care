@@ -34,6 +34,16 @@ class PatientDoctorTabState(rx.State):
     picker_is_loading: bool = False
     picker_error: str = ""
 
+    # Unlink confirmation dialog
+    confirm_unlink_open: bool = False
+    confirm_unlink_doctor_id: str = ""
+    confirm_unlink_doctor_name: str = ""
+
+    # Remove referent confirmation dialog
+    confirm_clear_referent_open: bool = False
+    confirm_clear_referent_doctor_id: str = ""
+    confirm_clear_referent_doctor_name: str = ""
+
     _patient_id: str = ""
 
     # ── Load ─────────────────────────────────────────────────────────────────
@@ -74,7 +84,20 @@ class PatientDoctorTabState(rx.State):
             self.error_message = str(e)
 
     @rx.event
+    def open_confirm_unlink(self, doctor_id: str, doctor_name: str):
+        self.confirm_unlink_doctor_id = doctor_id
+        self.confirm_unlink_doctor_name = doctor_name
+        self.confirm_unlink_open = True
+
+    @rx.event
+    def close_confirm_unlink(self):
+        self.confirm_unlink_open = False
+        self.confirm_unlink_doctor_id = ""
+        self.confirm_unlink_doctor_name = ""
+
+    @rx.event
     async def unlink_doctor(self, doctor_id: str):
+        self.confirm_unlink_open = False
         try:
             _main = await self.get_state(ReflexMainState)
             with await _main.authenticate_user():
@@ -83,6 +106,18 @@ class PatientDoctorTabState(rx.State):
             await self._load_linked()
         except Exception as e:
             self.error_message = str(e)
+
+    @rx.event
+    def open_confirm_clear_referent(self, doctor_id: str, doctor_name: str):
+        self.confirm_clear_referent_doctor_id = doctor_id
+        self.confirm_clear_referent_doctor_name = doctor_name
+        self.confirm_clear_referent_open = True
+
+    @rx.event
+    def close_confirm_clear_referent(self):
+        self.confirm_clear_referent_open = False
+        self.confirm_clear_referent_doctor_id = ""
+        self.confirm_clear_referent_doctor_name = ""
 
     @rx.event
     async def set_referent(self, doctor_id: str):
@@ -97,6 +132,7 @@ class PatientDoctorTabState(rx.State):
 
     @rx.event
     async def clear_referent(self, doctor_id: str):
+        self.confirm_clear_referent_open = False
         try:
             _main = await self.get_state(ReflexMainState)
             with await _main.authenticate_user():

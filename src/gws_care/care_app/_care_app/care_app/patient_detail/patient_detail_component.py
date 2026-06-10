@@ -1216,7 +1216,7 @@ def _linked_doctor_row(doc: LinkedDoctorRowDTO) -> rx.Component:
                     doc.is_referent,
                     rx.tooltip(
                         rx.icon_button(rx.icon("star-off", size=13), variant="ghost", color_scheme="amber", size="1",
-                                       on_click=lambda: PatientDoctorTabState.clear_referent(doc.doctor_id)),
+                                       on_click=lambda: PatientDoctorTabState.open_confirm_clear_referent(doc.doctor_id, doc.full_name)),
                         content=LanguageState.tr["doctor_remove_referent_tooltip"],
                     ),
                     rx.tooltip(
@@ -1227,7 +1227,7 @@ def _linked_doctor_row(doc: LinkedDoctorRowDTO) -> rx.Component:
                 ),
                 rx.tooltip(
                     rx.icon_button(rx.icon("unlink", size=13), variant="ghost", color_scheme="red", size="1",
-                                   on_click=lambda: PatientDoctorTabState.unlink_doctor(doc.doctor_id)),
+                                   on_click=lambda: PatientDoctorTabState.open_confirm_unlink(doc.doctor_id, doc.full_name)),
                     content=LanguageState.tr["doctor_unlink_tooltip"],
                 ),
                 spacing="1",
@@ -1236,9 +1236,81 @@ def _linked_doctor_row(doc: LinkedDoctorRowDTO) -> rx.Component:
     )
 
 
+def _doctor_confirm_unlink_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title(LanguageState.tr["doctor_unlink_tooltip"]),
+            rx.alert_dialog.description(
+                rx.text(
+                    LanguageState.tr["confirm_unlink_doctor_msg"],
+                    " ",
+                    rx.text.strong(PatientDoctorTabState.confirm_unlink_doctor_name),
+                    " ?",
+                    size="2",
+                ),
+            ),
+            rx.hstack(
+                rx.alert_dialog.cancel(
+                    rx.button(
+                        LanguageState.tr["cancel_btn"],
+                        variant="outline", color_scheme="gray", size="2",
+                        on_click=PatientDoctorTabState.close_confirm_unlink,
+                    ),
+                ),
+                rx.alert_dialog.action(
+                    rx.button(
+                        LanguageState.tr["confirm_btn"],
+                        color_scheme="red", size="2",
+                        on_click=lambda: PatientDoctorTabState.unlink_doctor(PatientDoctorTabState.confirm_unlink_doctor_id),
+                    ),
+                ),
+                spacing="3", justify="end", margin_top="1rem",
+            ),
+        ),
+        open=PatientDoctorTabState.confirm_unlink_open,
+    )
+
+
+def _doctor_confirm_clear_referent_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title(LanguageState.tr["doctor_remove_referent_tooltip"]),
+            rx.alert_dialog.description(
+                rx.text(
+                    LanguageState.tr["confirm_clear_referent_msg"],
+                    " ",
+                    rx.text.strong(PatientDoctorTabState.confirm_clear_referent_doctor_name),
+                    " ?",
+                    size="2",
+                ),
+            ),
+            rx.hstack(
+                rx.alert_dialog.cancel(
+                    rx.button(
+                        LanguageState.tr["cancel_btn"],
+                        variant="outline", color_scheme="gray", size="2",
+                        on_click=PatientDoctorTabState.close_confirm_clear_referent,
+                    ),
+                ),
+                rx.alert_dialog.action(
+                    rx.button(
+                        LanguageState.tr["confirm_btn"],
+                        color_scheme="amber", size="2",
+                        on_click=lambda: PatientDoctorTabState.clear_referent(PatientDoctorTabState.confirm_clear_referent_doctor_id),
+                    ),
+                ),
+                spacing="3", justify="end", margin_top="1rem",
+            ),
+        ),
+        open=PatientDoctorTabState.confirm_clear_referent_open,
+    )
+
+
 def _doctors_tab() -> rx.Component:
     return rx.vstack(
         _doctor_picker_dialog(),
+        _doctor_confirm_unlink_dialog(),
+        _doctor_confirm_clear_referent_dialog(),
         rx.hstack(
             rx.spacer(),
             rx.button(
@@ -1355,16 +1427,52 @@ def _linked_account_row(acct: LinkedAccountRowDTO) -> rx.Component:
         rx.table.cell(
             rx.tooltip(
                 rx.icon_button(rx.icon("unlink", size=13), variant="ghost", color_scheme="red", size="1",
-                               on_click=lambda: PatientAccountTabState.unlink_account(acct.account_id)),
+                               on_click=lambda: PatientAccountTabState.open_confirm_unlink(acct.account_id, acct.name)),
                 content=LanguageState.tr["account_unlink_tooltip"],
             )
         ),
     )
 
 
+def _account_confirm_unlink_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title(LanguageState.tr["account_unlink_tooltip"]),
+            rx.alert_dialog.description(
+                rx.text(
+                    LanguageState.tr["confirm_unlink_account_msg"],
+                    " ",
+                    rx.text.strong(PatientAccountTabState.confirm_unlink_account_name),
+                    " ?",
+                    size="2",
+                ),
+            ),
+            rx.hstack(
+                rx.alert_dialog.cancel(
+                    rx.button(
+                        LanguageState.tr["cancel_btn"],
+                        variant="outline", color_scheme="gray", size="2",
+                        on_click=PatientAccountTabState.close_confirm_unlink,
+                    ),
+                ),
+                rx.alert_dialog.action(
+                    rx.button(
+                        LanguageState.tr["confirm_btn"],
+                        color_scheme="red", size="2",
+                        on_click=lambda: PatientAccountTabState.unlink_account(PatientAccountTabState.confirm_unlink_account_id),
+                    ),
+                ),
+                spacing="3", justify="end", margin_top="1rem",
+            ),
+        ),
+        open=PatientAccountTabState.confirm_unlink_open,
+    )
+
+
 def _accounts_tab() -> rx.Component:
     return rx.vstack(
         _account_picker_dialog_tab(),
+        _account_confirm_unlink_dialog(),
         rx.hstack(
             rx.spacer(),
             rx.button(

@@ -35,6 +35,11 @@ class PatientAccountTabState(rx.State):
     picker_is_loading: bool = False
     picker_error: str = ""
 
+    # Unlink confirmation dialog
+    confirm_unlink_open: bool = False
+    confirm_unlink_account_id: str = ""
+    confirm_unlink_account_name: str = ""
+
     _patient_id: str = ""
 
     # ── Load ─────────────────────────────────────────────────────────────────
@@ -75,7 +80,20 @@ class PatientAccountTabState(rx.State):
             self.error_message = str(e)
 
     @rx.event
+    def open_confirm_unlink(self, account_id: str, account_name: str):
+        self.confirm_unlink_account_id = account_id
+        self.confirm_unlink_account_name = account_name
+        self.confirm_unlink_open = True
+
+    @rx.event
+    def close_confirm_unlink(self):
+        self.confirm_unlink_open = False
+        self.confirm_unlink_account_id = ""
+        self.confirm_unlink_account_name = ""
+
+    @rx.event
     async def unlink_account(self, account_id: str):
+        self.confirm_unlink_open = False
         try:
             _main = await self.get_state(ReflexMainState)
             with await _main.authenticate_user():
