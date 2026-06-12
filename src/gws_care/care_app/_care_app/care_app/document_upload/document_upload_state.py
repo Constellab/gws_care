@@ -38,6 +38,8 @@ class DocumentAnnotationItemDTO(BaseModel):
     index: int
     text_resource_id: str = ""
     file_resource_id: str = ""
+    # Absolute path to the staged file on disk (set during upload, used in save)
+    staged_file_path: str = ""
     original_name: str = ""
     detected_type: str = ""
     detected_date: str = ""
@@ -164,6 +166,11 @@ class DocumentUploadState(PatientPickerState, ResourceSelectState):
 
             patients = list(Patient.select().order_by(Patient.last_name))
 
+            import uuid
+
+            upload_dir = rx.get_upload_dir()
+            upload_dir.mkdir(parents=True, exist_ok=True)
+
             for uf in files:
                 data = await uf.read()
                 name = uf.filename or f"document_{len(self.annotation_items) + 1}"
@@ -175,11 +182,18 @@ class DocumentUploadState(PatientPickerState, ResourceSelectState):
                     pid, plabel = DocumentAnalysisService.match_patient(
                         result.patient_name, patients
                     )
+                # Stage the raw file bytes so save_document can register them as a gws_core resource
+                safe_name = "".join(c for c in name if c.isalnum() or c in "._-")
+                staged_filename = f"{uuid.uuid4().hex}_{safe_name}"
+                staged_path = upload_dir / staged_filename
+                staged_path.write_bytes(data)
+
                 idx = len(self.annotation_items)
                 self.annotation_items = self.annotation_items + [
                     DocumentAnnotationItemDTO(
                         index=idx,
                         original_name=name,
+                        staged_file_path=str(staged_path),
                         detected_type=result.doc_type,
                         detected_date=result.doc_date,
                         detected_patient_name=result.patient_name,
@@ -255,6 +269,7 @@ class DocumentUploadState(PatientPickerState, ResourceSelectState):
                             DocumentAnnotationItemDTO(
                                 index=idx,
                                 original_name=name,
+                                staged_file_path=path,
                                 detected_type=result.doc_type,
                                 detected_date=result.doc_date,
                                 detected_patient_name=result.patient_name,
@@ -346,7 +361,17 @@ class DocumentUploadState(PatientPickerState, ResourceSelectState):
                 else:
                     doc = UploadedDocument()
                     doc.original_name = item.original_name
-                    doc.resource_id = item.file_resource_id or None
+                    # Register the staged file as a gws_core resource so it can be viewed/downloaded
+                    resource_id = None
+                    if item.staged_file_path:
+                        import os
+                        from gws_care.exam.exam_file_service import ExamFileService
+                        staged = item.staged_file_path
+                        if os.path.exists(staged):
+                            with open(staged, "rb") as fh:
+                                file_bytes = fh.read()
+                            resource_id, _ = ExamFileService._save_bytes_as_gws_resource(file_bytes, item.original_name)
+                    doc.resource_id = resource_id
 
                 doc.patient_id = self.picker_selected_id or None
                 doc.doc_type = self.form_doc_type or None
@@ -377,6 +402,55 @@ class DocumentUploadState(PatientPickerState, ResourceSelectState):
                 **{**item.dict(), "save_error": str(exc)}
             )
             self.annotation_items = updated
+        finally:
+            self.is_saving = False
+
+    @rx.var
+    def has_unsaved_items(self) -> bool:
+        return any(not item.is_saved for item in self.annotation_items)
+
+    @rx.event
+    async def save_all_documents(self):
+        """Save all pending documents using their detected/suggested values."""
+        self.is_saving = True
+        try:
+            import os
+            from datetime import date
+            from gws_care.document_upload.uploaded_document import UploadedDocument
+            from gws_care.exam.exam_file_service import ExamFileService
+
+            with await self.authenticate_user():
+                for i, item in enumerate(self.annotation_items):
+                    if item.is_saved:
+                        continue
+                    try:
+                        doc_date = date.fromisoformat(item.detected_date) if item.detected_date else None
+                        if item.uploaded_document_id:
+                            doc = UploadedDocument.get_by_id(item.uploaded_document_id)
+                        else:
+                            doc = UploadedDocument()
+                            doc.original_name = item.original_name
+                            resource_id = None
+                            if item.staged_file_path and os.path.exists(item.staged_file_path):
+                                with open(item.staged_file_path, "rb") as fh:
+                                    file_bytes = fh.read()
+                                resource_id, _ = ExamFileService._save_bytes_as_gws_resource(file_bytes, item.original_name)
+                            doc.resource_id = resource_id
+                        doc.patient_id = item.suggested_patient_id or None
+                        doc.doc_type = item.detected_type or None
+                        doc.doc_date = doc_date
+                        doc.save()
+                        updated = list(self.annotation_items)
+                        updated[i] = DocumentAnnotationItemDTO(
+                            **{**item.dict(), "uploaded_document_id": str(doc.id), "is_saved": True, "save_error": ""}
+                        )
+                        self.annotation_items = updated
+                    except Exception as exc:
+                        updated = list(self.annotation_items)
+                        updated[i] = DocumentAnnotationItemDTO(**{**item.dict(), "save_error": str(exc)})
+                        self.annotation_items = updated
+        except Exception:
+            pass
         finally:
             self.is_saving = False
 

@@ -21,9 +21,11 @@ class UploadedDocumentDetailState(RoleState):
     patient_id: str = ""
     download_url: str = ""
     has_file: bool = False
+    viewer_open: bool = False
 
-    # Backend var — not exposed to frontend, avoids route-param shadow
+    # Backend vars — not exposed to frontend, avoids route-param shadow
     _loaded_doc_id: str = ""
+    _resource_id: str = ""
 
     # ── Patient picker vars ────────────────────────────────────────────────
     picker_patients: list[PatientPickerRowDTO] = []
@@ -97,11 +99,16 @@ class UploadedDocumentDetailState(RoleState):
                     self.patient_id = ""
 
                 if doc.resource_id:
-                    self.download_url = ExamFileService.get_resource_download_url(doc.resource_id)
                     self.has_file = True
+                    self._resource_id = doc.resource_id
+                    try:
+                        self.download_url = ExamFileService.get_resource_download_url(doc.resource_id)
+                    except Exception:
+                        self.download_url = ""
                 else:
-                    self.download_url = ""
                     self.has_file = False
+                    self._resource_id = ""
+                    self.download_url = ""
 
         except Exception as e:
             self.error_message = str(e)
@@ -116,10 +123,36 @@ class UploadedDocumentDetailState(RoleState):
     def go_to_patient(self):
         return rx.redirect(f"/patient/{self.patient_id}")
 
+    @rx.var
+    def file_extension(self) -> str:
+        name = self.original_name.lower()
+        return name.rsplit(".", 1)[-1] if "." in name else ""
+
+    @rx.var
+    def viewer_type(self) -> str:
+        ext = self.file_extension
+        if ext in ("png", "jpg", "jpeg", "webp", "gif", "svg"):
+            return "image"
+        if ext == "pdf":
+            return "pdf"
+        return "other"
+
+    @rx.event
+    def open_viewer(self):
+        self.viewer_open = True
+
+    @rx.event
+    def close_viewer(self):
+        self.viewer_open = False
+
     @rx.event
     def open_file(self):
-        if self.download_url:
-            return rx.call_script(f"window.open('{self.download_url}', '_blank')")
+        url = self.download_url
+        if not url and self._resource_id:
+            from gws_care.exam.exam_file_service import ExamFileService
+            url = ExamFileService.get_resource_download_url(self._resource_id)
+        if url:
+            return rx.call_script(f"window.open('{url}', '_blank')")
 
     # ── Patient picker private helpers ─────────────────────────────────────
 

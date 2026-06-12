@@ -24,12 +24,14 @@ def _get_file_icon(original_name: str) -> str:
     ext = original_name.lower().rsplit(".", 1)[-1]
     if ext == "pdf":
         return "file-text"
-    if ext in ("png", "jpg", "jpeg", "bmp", "tiff", "webp", "gif"):
+    if ext in ("png", "jpg", "jpeg", "bmp", "tiff", "tif", "webp", "gif", "svg"):
         return "image"
     if ext in ("xlsx", "xls", "csv", "ods"):
         return "file-spreadsheet"
-    if ext in ("docx", "doc", "odt", "txt", "rtf"):
+    if ext in ("docx", "doc", "odt", "txt", "rtf", "odp", "ppt", "pptx"):
         return "file-text"
+    if ext in ("dcm", "nii"):
+        return "scan"
     return "file"
 
 

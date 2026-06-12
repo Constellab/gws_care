@@ -71,7 +71,7 @@ def _upload_card() -> rx.Component:
                         rx.vstack(
                             rx.icon("file-up", size=24, color="var(--gray-7)"),
                             rx.text(LanguageState.tr["upload_drop_hint"], size="2", color="var(--gray-8)"),
-                            rx.text("PDF, PNG, JPG, TIFF…", size="1", color="var(--gray-6)"),
+                            rx.text("PDF, images, Word, Excel, OpenOffice, CSV, DICOM…", size="1", color="var(--gray-6)"),
                             align="center",
                             spacing="1",
                         ),
@@ -84,12 +84,33 @@ def _upload_card() -> rx.Component:
                 id="doc_file_upload",
                 multiple=True,
                 accept={
+                    # PDF
                     "application/pdf": [".pdf"],
+                    # Images
                     "image/png": [".png"],
                     "image/jpeg": [".jpg", ".jpeg"],
                     "image/bmp": [".bmp"],
-                    "image/tiff": [".tiff"],
+                    "image/tiff": [".tiff", ".tif"],
                     "image/webp": [".webp"],
+                    "image/gif": [".gif"],
+                    "image/svg+xml": [".svg"],
+                    # Text / CSV
+                    "text/plain": [".txt"],
+                    "text/csv": [".csv"],
+                    # Office (Word / Excel / PowerPoint)
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+                    "application/msword": [".doc"],
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+                    "application/vnd.ms-excel": [".xls"],
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
+                    "application/vnd.ms-powerpoint": [".ppt"],
+                    # OpenDocument formats
+                    "application/vnd.oasis.opendocument.text": [".odt"],
+                    "application/vnd.oasis.opendocument.spreadsheet": [".ods"],
+                    "application/vnd.oasis.opendocument.presentation": [".odp"],
+                    # Medical imaging
+                    "application/dicom": [".dcm"],
+                    "application/octet-stream": [".dcm", ".nii"],
                 },
                 on_drop=DocumentUploadState.handle_upload(
                     rx.upload_files(upload_id="doc_file_upload")
@@ -395,6 +416,20 @@ def document_upload_page() -> rx.Component:
                 DocumentUploadState.annotation_items.length() > 0,
                 rx.vstack(
                     rx.separator(width="100%"),
+                    rx.hstack(
+                        rx.button(
+                            rx.cond(
+                                DocumentUploadState.is_saving,
+                                rx.hstack(rx.spinner(size="2"), rx.text(LanguageState.tr["upload_saving"]), spacing="2", align="center"),
+                                rx.hstack(rx.icon("save", size=15), rx.text(LanguageState.tr["upload_save_all_btn"]), spacing="2", align="center"),
+                            ),
+                            on_click=DocumentUploadState.save_all_documents,
+                            disabled=DocumentUploadState.is_saving | ~DocumentUploadState.has_unsaved_items,
+                            size="2",
+                        ),
+                        width="100%",
+                        justify="end",
+                    ),
                     _doc_list(),
                     spacing="3",
                     width="100%",
