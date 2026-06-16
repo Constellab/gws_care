@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.empty_state_component import empty_state
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .doctor_list_state import DoctorListState, DoctorRowDTO
@@ -256,10 +257,7 @@ def doctor_list_page() -> rx.Component:
                         width="100%",
                         variant="surface",
                     ),
-                    rx.center(
-                        rx.text(LanguageState.tr["no_doctors_found"], size="2", color="var(--gray-9)"),
-                        padding="3rem",
-                    ),
+                    empty_state("stethoscope", LanguageState.tr["no_doctors_found"]),
                 ),
             ),
             spacing="4",

@@ -8,6 +8,7 @@ from ..common.account_picker_component import (
     account_picker_dialog,
     account_picker_widget,
 )
+from ..common.empty_state_component import empty_state
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .campaign_list_state import CampaignFormPickerState, CampaignListState, CampaignRowStateDTO
@@ -272,56 +273,48 @@ def campaign_list_page() -> rx.Component:
             rx.cond(
                 CampaignListState.is_loading,
                 rx.center(rx.spinner(size="3"), padding="2rem"),
-                rx.vstack(
-                    rx.table.root(
-                        rx.table.header(
-                            rx.table.row(
-                                _sortable_header(LanguageState.tr["col_name"], "name"),
-                                _sortable_header(LanguageState.tr["col_account"], "account_name"),
-                                _sortable_header(LanguageState.tr["col_dates"], "start_date"),
-                                rx.table.column_header_cell(LanguageState.tr["col_patients"] + " / " + LanguageState.tr["col_exam_types"]),
-                                _sortable_header(LanguageState.tr["col_status"], "status_label"),
-                                rx.table.column_header_cell(LanguageState.tr["col_actions"]),
-                            )
-                        ),
-                        rx.table.body(
-                            rx.cond(
-                                CampaignListState.programs.length() == 0,
+                rx.cond(
+                    CampaignListState.programs.length() == 0,
+                    empty_state("layout-list", LanguageState.tr["no_campaigns_found"]),
+                    rx.vstack(
+                        rx.table.root(
+                            rx.table.header(
                                 rx.table.row(
-                                    rx.table.cell(
-                                        rx.center(
-                                            rx.text(LanguageState.tr["no_campaigns_found"], color="var(--gray-9)", size="2"),
-                                            padding="1.5rem",
-                                        ),
-                                        col_span=6,
-                                    )
-                                ),
+                                    _sortable_header(LanguageState.tr["col_name"], "name"),
+                                    _sortable_header(LanguageState.tr["col_account"], "account_name"),
+                                    _sortable_header(LanguageState.tr["col_dates"], "start_date"),
+                                    rx.table.column_header_cell(LanguageState.tr["col_patients"] + " / " + LanguageState.tr["col_exam_types"]),
+                                    _sortable_header(LanguageState.tr["col_status"], "status_label"),
+                                    rx.table.column_header_cell(LanguageState.tr["col_actions"]),
+                                )
+                            ),
+                            rx.table.body(
                                 rx.foreach(CampaignListState.programs, _campaign_row),
-                            )
-                        ),
-                        width="100%",
-                        variant="surface",
-                    ),
-                    rx.cond(
-                        CampaignListState.has_more,
-                        rx.center(
-                            rx.button(
-                                rx.cond(
-                                    CampaignListState.is_loading_more,
-                                    rx.hstack(rx.spinner(size="2"), rx.text("Loading..."), spacing="2"),
-                                    rx.hstack(rx.icon("chevron-down", size=16), rx.text("Load more"), spacing="2"),
-                                ),
-                                variant="soft",
-                                size="2",
-                                on_click=CampaignListState.load_more_programs,
-                                disabled=CampaignListState.is_loading_more,
                             ),
                             width="100%",
-                            padding="1rem",
+                            variant="surface",
                         ),
+                        rx.cond(
+                            CampaignListState.has_more,
+                            rx.center(
+                                rx.button(
+                                    rx.cond(
+                                        CampaignListState.is_loading_more,
+                                        rx.hstack(rx.spinner(size="2"), rx.text("Loading..."), spacing="2"),
+                                        rx.hstack(rx.icon("chevron-down", size=16), rx.text("Load more"), spacing="2"),
+                                    ),
+                                    variant="soft",
+                                    size="2",
+                                    on_click=CampaignListState.load_more_programs,
+                                    disabled=CampaignListState.is_loading_more,
+                                ),
+                                width="100%",
+                                padding="1rem",
+                            ),
+                        ),
+                        width="100%",
+                        spacing="0",
                     ),
-                    width="100%",
-                    spacing="0",
                 ),
             ),
             _create_program_dialog(),

@@ -480,8 +480,8 @@ def patient_appointments_page() -> rx.Component:
                             _list_view(),
                             rx.center(
                                 rx.vstack(
-                                    rx.icon("calendar-x", size=36, color="var(--gray-7)"),
-                                    rx.text(LanguageState.tr["appt_empty"], size="3", color="var(--gray-9)"),
+                                    rx.icon("calendar-x", size=40, color="var(--gray-6)"),
+                                    rx.text(LanguageState.tr["appt_empty"], size="2", color="var(--gray-9)"),
                                     rx.button(
                                         rx.icon("calendar-plus", size=14),
                                         LanguageState.tr["appt_plan_btn"],
@@ -494,6 +494,9 @@ def patient_appointments_page() -> rx.Component:
                                     align="center",
                                 ),
                                 padding="4rem",
+                                border="1px dashed var(--gray-5)",
+                                border_radius="8px",
+                                width="100%",
                             ),
                         ),
                     ),

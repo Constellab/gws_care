@@ -84,11 +84,14 @@ def _list_view() -> rx.Component:
                 PatientConsultationsState.filtered_consultations.length() == 0,
                 rx.center(
                     rx.vstack(
-                        rx.icon("stethoscope", size=40, color="var(--gray-7)"),
-                        rx.text(LanguageState.tr["no_my_consultations"], size="3", color="var(--gray-9)"),
-                        spacing="3", align="center",
+                        rx.icon("stethoscope", size=40, color="var(--gray-6)"),
+                        rx.text(LanguageState.tr["no_my_consultations"], size="2", color="var(--gray-9)"),
+                        spacing="2", align="center",
                     ),
                     padding="4rem",
+                    border="1px dashed var(--gray-5)",
+                    border_radius="8px",
+                    width="100%",
                 ),
                 rx.table.root(
                     rx.table.header(

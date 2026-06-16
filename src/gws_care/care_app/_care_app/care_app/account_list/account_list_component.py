@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.empty_state_component import empty_state
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .account_form_component import account_form_dialog
@@ -211,15 +212,7 @@ def account_list_page() -> rx.Component:
                         width="100%",
                         spacing="0",
                     ),
-                    rx.center(
-                        rx.vstack(
-                            rx.icon("building-2", size=40, color="var(--gray-7)"),
-                            rx.text(LanguageState.tr["no_accounts_found"], color="var(--gray-9)"),
-                            align="center",
-                            spacing="2",
-                        ),
-                        padding="3rem",
-                    ),
+                    empty_state("building-2", LanguageState.tr["no_accounts_found"]),
                 ),
             ),
         )

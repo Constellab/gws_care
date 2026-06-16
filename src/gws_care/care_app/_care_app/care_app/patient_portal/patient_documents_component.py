@@ -27,12 +27,15 @@ from .patient_documents_state import (
 def _empty_state(icon: str, message: rx.Var) -> rx.Component:
     return rx.center(
         rx.vstack(
-            rx.icon(icon, size=40, color="var(--gray-7)"),
-            rx.text(message, size="3", color="var(--gray-9)"),
-            spacing="3",
+            rx.icon(icon, size=40, color="var(--gray-6)"),
+            rx.text(message, size="2", color="var(--gray-9)"),
+            spacing="2",
             align="center",
         ),
         padding="4rem",
+        border="1px dashed var(--gray-5)",
+        border_radius="8px",
+        width="100%",
     )
 
 

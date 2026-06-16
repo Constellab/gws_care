@@ -101,7 +101,7 @@ def _section(title: str, *rows: rx.Component) -> rx.Component:
 def _patient_card(patient: PatientDetailDTO) -> rx.Component:
     return rx.vstack(
         # Header
-        rx.hstack(
+        rx.flex(
             rx.vstack(
                 rx.heading(f"{patient.first_name} {patient.last_name}", size="7"),
                 rx.hstack(
@@ -118,8 +118,9 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
                 ),
                 spacing="2",
                 align_items="start",
+                flex="1",
+                min_width="0",
             ),
-            rx.spacer(),
             rx.hstack(
                 rx.button(
                     rx.icon("id-card", size=15),
@@ -143,9 +144,13 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
                     size="2",
                 ),
                 spacing="2",
+                flex_shrink="0",
+                flex_wrap="wrap",
             ),
             width="100%",
-            align="center",
+            align="start",
+            gap="3",
+            wrap="wrap",
         ),
         rx.separator(width="100%"),
         # Sections
@@ -165,7 +170,7 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
                 _info_row(LanguageState.tr["info_postal_code"], patient.postal_code),
                 _info_row(LanguageState.tr["info_city"], patient.city),
             ),
-            columns="2",
+            columns=rx.breakpoints(initial="1", sm="1", md="2"),
             spacing="4",
             width="100%",
         ),
@@ -692,7 +697,12 @@ def _visits_section() -> rx.Component:
                 width="100%",
             ),
             rx.center(
-                rx.text(LanguageState.tr["no_visits_section"], color="var(--gray-8)", size="2"),
+                rx.vstack(
+                    rx.icon("calendar-x", size=40, color="var(--gray-6)"),
+                    rx.text(LanguageState.tr["no_visits_section"], size="2", color="var(--gray-9)"),
+                    align="center",
+                    spacing="2",
+                ),
                 padding="2rem",
                 border="1px dashed var(--gray-5)",
                 border_radius="8px",
@@ -825,7 +835,12 @@ def _exams_section() -> rx.Component:
                 width="100%",
             ),
             rx.center(
-                rx.text(LanguageState.tr["no_exams_recorded"], color="var(--gray-8)", size="2"),
+                rx.vstack(
+                    rx.icon("flask-conical", size=40, color="var(--gray-6)"),
+                    rx.text(LanguageState.tr["no_exams_recorded"], size="2", color="var(--gray-9)"),
+                    align="center",
+                    spacing="2",
+                ),
                 padding="2rem",
                 border="1px dashed var(--gray-5)",
                 border_radius="8px",
@@ -964,8 +979,8 @@ def _prescriptions_tab() -> rx.Component:
             ),
             rx.center(
                 rx.vstack(
-                    rx.icon("file-text", size=36, color="var(--gray-6)"),
-                    rx.text(LanguageState.tr["no_prescriptions"], color="var(--gray-8)", size="2"),
+                    rx.icon("file-text", size=40, color="var(--gray-6)"),
+                    rx.text(LanguageState.tr["no_prescriptions"], size="2", color="var(--gray-9)"),
                     align="center",
                     spacing="2",
                 ),
@@ -1115,8 +1130,8 @@ def _certificates_tab() -> rx.Component:
             ),
             rx.center(
                 rx.vstack(
-                    rx.icon("award", size=36, color="var(--gray-6)"),
-                    rx.text(LanguageState.tr["no_certificates"], color="var(--gray-8)", size="2"),
+                    rx.icon("award", size=40, color="var(--gray-6)"),
+                    rx.text(LanguageState.tr["no_certificates"], size="2", color="var(--gray-9)"),
                     align="center",
                     spacing="2",
                 ),
@@ -1342,11 +1357,14 @@ def _doctors_tab() -> rx.Component:
                 ),
                 rx.center(
                     rx.vstack(
-                        rx.icon("user-round-x", size=36, color="var(--gray-7)"),
+                        rx.icon("user-round-x", size=40, color="var(--gray-6)"),
                         rx.text(LanguageState.tr["no_doctors_linked"], size="2", color="var(--gray-9)"),
                         spacing="2", align="center",
                     ),
-                    padding="3rem",
+                    padding="4rem",
+                    border="1px dashed var(--gray-5)",
+                    border_radius="8px",
+                    width="100%",
                 ),
             ),
         ),
@@ -1505,11 +1523,14 @@ def _accounts_tab() -> rx.Component:
                 ),
                 rx.center(
                     rx.vstack(
-                        rx.icon("building-x", size=36, color="var(--gray-7)"),
+                        rx.icon("building-x", size=40, color="var(--gray-6)"),
                         rx.text(LanguageState.tr["no_accounts_linked"], size="2", color="var(--gray-9)"),
                         spacing="2", align="center",
                     ),
-                    padding="3rem",
+                    padding="4rem",
+                    border="1px dashed var(--gray-5)",
+                    border_radius="8px",
+                    width="100%",
                 ),
             ),
         ),

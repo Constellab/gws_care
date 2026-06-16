@@ -300,8 +300,16 @@ def accounts_section_for_details() -> rx.Component:
             rx.cond(
                 PatientAccountsState.accounts.length() == 0,
                 rx.center(
-                    rx.text(LanguageState.tr["no_patient_accounts"], size="2", color="var(--gray-9)"),
-                    padding="1.5rem",
+                    rx.vstack(
+                        rx.icon("building-2", size=40, color="var(--gray-6)"),
+                        rx.text(LanguageState.tr["no_patient_accounts"], size="2", color="var(--gray-9)"),
+                        align="center",
+                        spacing="2",
+                    ),
+                    padding="4rem",
+                    border="1px dashed var(--gray-5)",
+                    border_radius="8px",
+                    width="100%",
                 ),
                 rx.table.root(
                     rx.table.header(

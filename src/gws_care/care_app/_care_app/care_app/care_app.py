@@ -71,6 +71,8 @@ from .document_upload.document_upload_component import document_upload_page
 from .document_upload.document_upload_state import DocumentUploadState
 from .uploaded_document_detail.uploaded_document_detail_component import uploaded_document_detail_page
 from .uploaded_document_detail.uploaded_document_detail_state import UploadedDocumentDetailState
+from .help.help_component import help_page
+from .help.help_state import HelpState
 
 
 app = register_gws_reflex_app()
@@ -279,6 +281,12 @@ def documents_upload():
 def uploaded_document_detail():
     """Uploaded document detail page — view metadata and open the file."""
     return uploaded_document_detail_page()
+
+
+@rx.page(route="/help", on_load=[HelpState.close_article, GeneralSettingsState.load_color_theme])
+def help():
+    """Help center — search and browse feature articles."""
+    return help_page()
 
 
 @rx.page(route="/no-access", on_load=[LanguageState.on_load])

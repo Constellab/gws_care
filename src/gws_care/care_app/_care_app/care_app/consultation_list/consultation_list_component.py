@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.empty_state_component import empty_state
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..common.patient_picker_component import patient_picker_widget
@@ -215,10 +216,7 @@ def _consultations_table() -> rx.Component:
             ),
             rx.cond(
                 ConsultationListState.consultations.length() == 0,
-                rx.center(
-                    rx.text("Aucune consultation trouvée.", size="2", color="var(--gray-8)"),
-                    padding_y="3em",
-                ),
+                empty_state("stethoscope", "Aucune consultation trouvée."),
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(

@@ -4,6 +4,7 @@ import reflex as rx
 from gws_reflex_main import main_component
 
 from ..common.account_picker_component import account_picker_button, account_picker_dialog
+from ..common.empty_state_component import empty_state
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .patient_form_component import patient_form_dialog
@@ -207,15 +208,7 @@ def patient_list_page() -> rx.Component:
                         width="100%",
                         spacing="0",
                     ),
-                    rx.center(
-                        rx.vstack(
-                            rx.icon("user-x", size=40, color="var(--gray-7)"),
-                            rx.text(LanguageState.tr["no_patients_found"], color="var(--gray-9)"),
-                            align="center",
-                            spacing="2",
-                        ),
-                        padding="3rem",
-                    ),
+                    empty_state("user-x", LanguageState.tr["no_patients_found"]),
                 ),
             ),
         )

@@ -299,6 +299,16 @@ class ImportState(ReflexMainState):
 
         try:
             with await self.authenticate_user():
+                from gws_care.user.user import User
+                if User.select().count() == 0:
+                    self.parse_error = (
+                        "⚠ La table des utilisateurs locaux est vide — "
+                        "le serveur n'a pas encore synchronisé les utilisateurs Constellab. "
+                        "Veuillez redémarrer l'application et réessayer."
+                    )
+                    self.is_importing = False
+                    return
+
                 from gws_care.core.bulk_import_service import BulkImportService
                 for i, row_data in enumerate(rows):
                     if updated_rows[i].status != "pending":

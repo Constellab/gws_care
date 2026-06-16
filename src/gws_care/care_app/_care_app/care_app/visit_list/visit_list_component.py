@@ -4,6 +4,7 @@ import reflex as rx
 from gws_reflex_main import main_component
 
 from ..common.account_picker_component import account_picker_button, account_picker_dialog
+from ..common.empty_state_component import empty_state
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..common.patient_picker_component import patient_picker_widget
@@ -587,10 +588,7 @@ def visit_list_page() -> rx.Component:
                             width="100%",
                             spacing="0",
                         ),
-                        rx.center(
-                            rx.text(LanguageState.tr["no_visits_found"], size="2", color="var(--gray-8)"),
-                            padding="3rem",
-                        ),
+                        empty_state("calendar-x", LanguageState.tr["no_visits_found"]),
                     ),
                     # ── Calendar view ──
                     _calendar_view(),

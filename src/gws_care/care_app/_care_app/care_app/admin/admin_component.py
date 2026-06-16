@@ -7,6 +7,7 @@ from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..notifications.notifications_state import NotificationsState
 from .admin_state import AdminState, EntityOption, UserRoleRowDTO
+from .database_state import FLUSH_CONFIRM_PHRASE, DatabaseState
 from .general_settings_state import GeneralSettingsState
 from .import_component import import_dialog
 from .import_state import ImportState
@@ -829,6 +830,138 @@ def _notifications_tab() -> rx.Component:
     )
 
 
+# ── Database tab (dev mode only) ───────────────────────────────────────────────
+
+def _flush_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.hstack(
+                rx.icon("triangle-alert", size=20, color="var(--red-9)"),
+                rx.dialog.title("Flush database", color="var(--red-11)"),
+                spacing="2",
+                align="center",
+                margin_bottom="0.5rem",
+            ),
+            rx.vstack(
+                rx.callout(
+                    "This will permanently erase ALL data in the database. "
+                    "This action cannot be undone.",
+                    icon="skull",
+                    color_scheme="red",
+                    size="2",
+                ),
+                rx.vstack(
+                    rx.text(
+                        "To confirm, copy and paste the following phrase exactly:",
+                        size="2",
+                        weight="medium",
+                    ),
+                    rx.code(
+                        FLUSH_CONFIRM_PHRASE,
+                        size="1",
+                        color_scheme="red",
+                        style={"user_select": "all", "word_break": "break-all"},
+                    ),
+                    rx.text_area(
+                        value=DatabaseState.db_flush_confirm_text,
+                        on_change=DatabaseState.set_flush_confirm_text,
+                        placeholder="Paste the phrase here…",
+                        size="2",
+                        width="100%",
+                        rows="3",
+                    ),
+                    spacing="2",
+                    width="100%",
+                ),
+                rx.cond(
+                    DatabaseState.db_flush_error != "",
+                    rx.callout(
+                        DatabaseState.db_flush_error,
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
+                    ),
+                ),
+                rx.hstack(
+                    rx.button(
+                        rx.cond(
+                            DatabaseState.db_flush_is_flushing,
+                            rx.hstack(rx.spinner(size="2"), rx.text("Flushing…"), spacing="2", align="center"),
+                            rx.hstack(rx.icon("trash-2", size=14), rx.text("Flush database"), spacing="2", align="center"),
+                        ),
+                        on_click=DatabaseState.flush_database,
+                        disabled=~DatabaseState.flush_confirm_valid | DatabaseState.db_flush_is_flushing,
+                        color_scheme="red",
+                        size="2",
+                    ),
+                    rx.button(
+                        "Cancel",
+                        on_click=DatabaseState.close_flush_dialog,
+                        variant="outline",
+                        color_scheme="gray",
+                        size="2",
+                    ),
+                    spacing="3",
+                    justify="end",
+                    width="100%",
+                ),
+                spacing="4",
+                width="100%",
+            ),
+            on_interact_outside=DatabaseState.close_flush_dialog,
+            on_escape_key_down=DatabaseState.close_flush_dialog,
+            max_width="520px",
+        ),
+        open=DatabaseState.db_flush_open,
+    )
+
+
+def _database_tab() -> rx.Component:
+    return rx.vstack(
+        rx.card(
+            rx.vstack(
+                rx.hstack(
+                    rx.icon("trash-2", size=18, color="var(--red-9)"),
+                    rx.heading("Flush database", size="4", color="var(--red-11)"),
+                    spacing="2",
+                    align="center",
+                ),
+                rx.text(
+                    "Delete all data from every table in the gws_care database. "
+                    "The schema is preserved — tables are kept empty. "
+                    "Only available in dev mode.",
+                    size="2",
+                    color="var(--gray-10)",
+                ),
+                rx.separator(width="100%"),
+                rx.cond(
+                    DatabaseState.db_flush_success != "",
+                    rx.callout(
+                        DatabaseState.db_flush_success,
+                        icon="circle-check",
+                        color_scheme="green",
+                        size="1",
+                    ),
+                ),
+                rx.button(
+                    rx.icon("trash-2", size=14),
+                    "Flush all data…",
+                    on_click=DatabaseState.open_flush_dialog,
+                    color_scheme="red",
+                    variant="soft",
+                    size="2",
+                ),
+                _flush_dialog(),
+                spacing="3",
+                width="100%",
+            ),
+            width="100%",
+        ),
+        width="100%",
+        spacing="4",
+    )
+
+
 # ── Page ───────────────────────────────────────────────────────────────────────
 
 def _settings_header_admin() -> rx.Component:
@@ -906,11 +1039,29 @@ def settings_page() -> rx.Component:
                                 ),
                                 value="notifications",
                             ),
+                            rx.cond(
+                                DatabaseState.is_dev_mode,
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("database", size=15),
+                                        rx.text("Database"),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="database",
+                                ),
+                                rx.fragment(),
+                            ),
                         ),
                         rx.tabs.content(_general_tab(), value="general", padding_top="1rem"),
                         rx.tabs.content(_import_tab(), value="import", padding_top="1rem"),
                         rx.tabs.content(_user_roles_tab(), value="roles", padding_top="1rem"),
                         rx.tabs.content(_notifications_tab(), value="notifications", padding_top="1rem"),
+                        rx.cond(
+                            DatabaseState.is_dev_mode,
+                            rx.tabs.content(_database_tab(), value="database", padding_top="1rem"),
+                            rx.fragment(),
+                        ),
                         default_value="general",
                         width="100%",
                     ),
