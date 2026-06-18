@@ -511,7 +511,7 @@ def visit_detail_page() -> rx.Component:
                                             on_click=VisitDetailState.validate_lab,
                                             color_scheme="blue",
                                             size="2",
-                                            disabled=~VisitDetailState.all_exams_have_values,
+                                            disabled=~VisitDetailState.all_exams_done,
                                         ),
                                         justify="end",
                                         width="100%",

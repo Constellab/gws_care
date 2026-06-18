@@ -137,11 +137,11 @@ class VisitDetailState(RoleState):
             self.error_message = str(e)
 
     @rx.var
-    def all_exams_have_values(self) -> bool:
-        """True only if there is at least one exam and every exam has a primary_value."""
+    def all_exams_done(self) -> bool:
+        """True only if there is at least one exam and every exam's status is Done."""
         if not self.exam_results:
             return False
-        return all(r.primary_value != "" for r in self.exam_results)
+        return all(r.status == "done" for r in self.exam_results)
 
     @rx.event
     def set_exam_edit_value(self, etm_id: str, value: str):

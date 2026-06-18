@@ -99,7 +99,8 @@ def user_menu_button() -> rx.Component:
                 _menu_nav_button(
                     "circle-help",
                     LanguageState.tr["user_menu_help_center"],
-                    "/help",
+                    "https://constellab.community/bricks/gws_care/latest",
+                    is_external=True,
                 ),
                 _menu_nav_button(
                     "settings",

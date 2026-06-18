@@ -280,10 +280,8 @@ class ExamDetailState(RoleState):
 
     @rx.var
     def is_results_editable(self) -> bool:
-        """True for all statuses except DONE."""
-        if self.exam is None:
-            return False
-        return self.exam.status != "done"
+        """True whenever an exam is loaded — editing remains allowed after Done."""
+        return self.exam is not None
 
     @rx.var
     def exam_status_index(self) -> int:
@@ -327,6 +325,11 @@ class ExamDetailState(RoleState):
 
     @rx.event
     async def on_load(self):
+        # Clear stale state immediately so no previous error/exam flashes on screen
+        self.exam = None
+        self.error_message = ""
+        self.is_loading = True
+        yield
         await self._load_roles()
         await self._load_exam()
         if self.exam:
@@ -357,8 +360,9 @@ class ExamDetailState(RoleState):
     @rx.event
     async def save_informations(self):
         """Save Informations. First save advances TODO→IN_PROGRESS_RESULTS and opens Results tab.
-        Subsequent saves (re-edits) just persist without changing status or tab."""
-        if self.exam is None or self.exam.status == "done":
+        Subsequent saves (re-edits, including after the exam is Done) just persist
+        without changing status or tab."""
+        if self.exam is None:
             return
         await self._persist_reason_and_history()
         await self._persist_physical()
@@ -547,7 +551,7 @@ class ExamDetailState(RoleState):
         await self._persist_lab_results()
 
     async def _persist_reason_and_history(self):
-        if self.exam is None or self.exam.status == "done":
+        if self.exam is None:
             return
         self.is_saving_reason = True
         self.error_message = ""
@@ -569,7 +573,7 @@ class ExamDetailState(RoleState):
             self.is_saving_reason = False
 
     async def _persist_physical(self):
-        if self.exam is None or self.exam.status == "done":
+        if self.exam is None:
             return
         self.is_saving_physical = True
         self.error_message = ""
@@ -621,7 +625,7 @@ class ExamDetailState(RoleState):
             self.is_saving_physical = False
 
     async def _persist_lab_results(self):
-        if self.exam is None or self.exam.status == "done":
+        if self.exam is None:
             return
         self.is_saving_lab = True
         self.error_message = ""
