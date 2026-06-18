@@ -38,6 +38,8 @@ class ExamDTO(ModelDTO):
     lab_results: list[dict] = []
     requested_param_ids: list[str] = []
     prescribed_exam_ref_ids: list[str] = []  # follow-up exams prescribed by doctor
+    follow_up_exam_ids: list[str] = []         # Exam.id list of actual follow-up Exam records created
+    is_follow_up: bool = False                 # True when exam was created as a follow-up prescription
     interpretation: str | None = None
     interpreted_by_id: str | None = None
     consultation_id: str = ""   # non-empty when this exam belongs to a Consultation
@@ -87,6 +89,7 @@ class UpdateExamSectionsDTO(BaseModelDTO):
     conclusion: str | None = None
     lab_results: list[dict] | None = None
     prescribed_exam_ref_ids: list[str] | None = None  # follow-up exams prescribed by doctor
+    follow_up_exam_ids: list[str] | None = None         # Exam.id list of actual follow-up records
 
 
 class InterpretExamDTO(BaseModelDTO):

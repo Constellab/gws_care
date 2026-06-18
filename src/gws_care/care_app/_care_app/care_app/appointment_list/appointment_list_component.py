@@ -356,6 +356,22 @@ def appointment_list_page() -> rx.Component:
                     size="1",
                 ),
             ),
+            # Doctor view banner
+            rx.cond(
+                AppointmentListState.is_doctor_view,
+                rx.callout(
+                    rx.hstack(
+                        rx.icon("stethoscope", size=14),
+                        rx.text("Affichage de vos rendez-vous uniquement", size="2"),
+                        width="100%",
+                        align="center",
+                        spacing="2",
+                    ),
+                    icon="info",
+                    color_scheme="teal",
+                    size="1",
+                ),
+            ),
             # Filters
             rx.vstack(
                 rx.hstack(

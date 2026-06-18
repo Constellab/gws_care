@@ -17,7 +17,10 @@ _ENTERPRISE_ROLES = [
     ("MEDECIN_ENTREPRISE", "Médecin entreprise"),
     ("RH_ENTREPRISE", "RH entreprise"),
 ]
-_ALL_ROLES = _PSC_ROLES + _ENTERPRISE_ROLES
+_PATIENT_ROLES = [
+    ("PATIENT", "Patient"),
+]
+_ALL_ROLES = _PSC_ROLES + _ENTERPRISE_ROLES + _PATIENT_ROLES
 
 
 def _role_badge(label: str) -> rx.Component:
@@ -174,6 +177,11 @@ def _user_dialog() -> rx.Component:
                             rx.select.group(
                                 rx.select.label("Entreprise"),
                                 *[rx.select.item(label, value=val) for val, label in _ENTERPRISE_ROLES],
+                            ),
+                            rx.select.separator(),
+                            rx.select.group(
+                                rx.select.label("Espace patient"),
+                                *[rx.select.item(label, value=val) for val, label in _PATIENT_ROLES],
                             ),
                         ),
                         value=UserManagementState.form.role,

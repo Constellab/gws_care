@@ -16,14 +16,27 @@ def _field(label: str, input_component: rx.Component) -> rx.Component:
     )
 
 
+def _slot_button(slot: str) -> rx.Component:
+    """One available time slot as a selectable button."""
+    time_str = slot[11:16]  # "HH:MM"
+    is_selected = AppointmentFormState.form_scheduled_at == slot
+    return rx.button(
+        time_str,
+        variant=rx.cond(is_selected, "solid", "soft"),
+        color_scheme=rx.cond(is_selected, "blue", "gray"),
+        size="1",
+        on_click=AppointmentFormState.set_form_slot(slot),
+        border_radius="6px",
+    )
+
+
 def _form_fields() -> rx.Component:
     return rx.vstack(
-        # Patient — read-only when pre-filled (from patient detail), selector when standalone
+        # ── 1. Patient ────────────────────────────────────────────────────────
         rx.cond(
             AppointmentFormState.form_patient_label != "",
-            # Pre-filled: show read-only
             _field(
-                LanguageState.tr["field_patient_readonly"],
+                "Patient",
                 rx.input(
                     value=AppointmentFormState.form_patient_label,
                     read_only=True,
@@ -32,12 +45,11 @@ def _form_fields() -> rx.Component:
                     color="var(--gray-9)",
                 ),
             ),
-            # Standalone: show select
             _field(
-                LanguageState.tr["field_patient_required"],
+                "Patient *",
                 rx.select.root(
                     rx.select.trigger(
-                        placeholder=LanguageState.tr["select_patient_placeholder"],
+                        placeholder="Rechercher un patient…",
                         width="100%",
                     ),
                     rx.select.content(
@@ -53,72 +65,120 @@ def _form_fields() -> rx.Component:
                 ),
             ),
         ),
-        rx.grid(
-            _field(
-                LanguageState.tr["field_datetime"],
-                rx.input(
-                    value=AppointmentFormState.form_scheduled_at,
-                    on_change=AppointmentFormState.set_form_scheduled_at,
-                    type="datetime-local",
-                    size="2",
-                    width="100%",
-                ),
-            ),
-            _field(
-                LanguageState.tr["field_exam_type_required"],
-                rx.select.root(
-                    rx.select.trigger(width="100%", placeholder="Sélectionner un examen..."),
-                    rx.select.content(
-                        rx.foreach(
-                            AppointmentFormState.exam_type_options,
-                            lambda o: rx.select.item(
-                                o.name + " (" + o.category_label + ")",
-                                value=o.id,
-                            ),
+        # ── 2. Médecin ────────────────────────────────────────────────────────
+        _field(
+            "Médecin *",
+            rx.select.root(
+                rx.select.trigger(width="100%", placeholder="Sélectionner un médecin…"),
+                rx.select.content(
+                    rx.foreach(
+                        AppointmentFormState.doctor_options,
+                        lambda d: rx.select.item(
+                            rx.cond(d.specialty != "", d.name + " — " + d.specialty, d.name),
+                            value=d.id,
                         ),
                     ),
-                    value=AppointmentFormState.form_exam_type,
-                    on_change=AppointmentFormState.set_form_exam_type,
-                    size="2",
-                    width="100%",
                 ),
-            ),
-            columns="2",
-            spacing="3",
-            width="100%",
-        ),
-        _field(
-            LanguageState.tr["field_notes"],
-            rx.text_area(
-                value=AppointmentFormState.form_notes,
-                on_change=AppointmentFormState.set_form_notes,
-                placeholder=LanguageState.tr["notes_placeholder"],
+                value=AppointmentFormState.form_doctor_id,
+                on_change=AppointmentFormState.set_form_doctor_and_reload,
                 size="2",
                 width="100%",
-                rows="3",
             ),
         ),
-        rx.grid(
-            _field(
-                "Médecin assigné",
-                rx.select.root(
-                    rx.select.trigger(width="100%", placeholder="Aucun médecin..."),
-                    rx.select.content(
-                        rx.select.item("— Aucun —", value="_none_"),
-                        rx.foreach(
-                            AppointmentFormState.doctor_options,
-                            lambda d: rx.select.item(
-                                rx.cond(d.specialty != "", d.name + " — " + d.specialty, d.name),
-                                value=d.id,
-                            ),
+        # ── 3. Date ───────────────────────────────────────────────────────────
+        _field(
+            "Date du rendez-vous *",
+            rx.input(
+                type="date",
+                value=AppointmentFormState.form_booking_date,
+                on_change=AppointmentFormState.set_form_booking_date,
+                size="2",
+                width="100%",
+            ),
+        ),
+        # ── 4. Créneaux disponibles ───────────────────────────────────────────
+        rx.cond(
+            AppointmentFormState.form_doctor_id != "",
+            rx.vstack(
+                rx.hstack(
+                    rx.text("Créneau disponible *", size="2", weight="medium"),
+                    rx.cond(
+                        AppointmentFormState.form_slots_loading,
+                        rx.spinner(size="1"),
+                        rx.fragment(),
+                    ),
+                    spacing="2", align="center",
+                ),
+                rx.cond(
+                    AppointmentFormState.form_available_slots.length() > 0,
+                    rx.box(
+                        rx.flex(
+                            rx.foreach(AppointmentFormState.form_available_slots, _slot_button),
+                            wrap="wrap",
+                            gap="0.4rem",
+                        ),
+                        width="100%",
+                    ),
+                    rx.cond(
+                        AppointmentFormState.form_booking_date != "",
+                        rx.callout(
+                            "Aucun créneau disponible pour ce médecin à cette date. "
+                            "Choisissez une autre date ou un autre médecin.",
+                            icon="calendar-x",
+                            color_scheme="orange",
+                            variant="soft",
+                            size="1",
+                        ),
+                        rx.text(
+                            "Sélectionnez une date pour voir les créneaux disponibles.",
+                            size="1", color="var(--gray-9)",
                         ),
                     ),
-                    value=AppointmentFormState.form_doctor_id,
-                    on_change=AppointmentFormState.set_form_doctor_id,
-                    size="2",
-                    width="100%",
                 ),
+                rx.cond(
+                    AppointmentFormState.form_scheduled_at != "",
+                    rx.hstack(
+                        rx.icon("circle-check", size=14, color="var(--green-9)"),
+                        rx.text(
+                            "Créneau sélectionné : " + AppointmentFormState.form_scheduled_at[0:10]
+                            + " à " + AppointmentFormState.form_scheduled_at[11:16],
+                            size="1", color="var(--green-11)", weight="medium",
+                        ),
+                        spacing="1", align="center",
+                    ),
+                    rx.fragment(),
+                ),
+                spacing="2", width="100%",
             ),
+            rx.fragment(),
+        ),
+        # ── 5. Type d'examen (optionnel) ──────────────────────────────────────
+        _field(
+            "Type d'examen",
+            rx.select.root(
+                rx.select.trigger(width="100%", placeholder="— Consultation générale —"),
+                rx.select.content(
+                    rx.select.item("— Consultation générale —", value="_none_"),
+                    rx.foreach(
+                        AppointmentFormState.exam_type_options,
+                        lambda o: rx.select.item(
+                            o.name + " (" + o.category_label + ")",
+                            value=o.id,
+                        ),
+                    ),
+                ),
+                value=rx.cond(
+                    AppointmentFormState.form_exam_type != "",
+                    AppointmentFormState.form_exam_type,
+                    "_none_",
+                ),
+                on_change=AppointmentFormState.set_form_exam_type,
+                size="2",
+                width="100%",
+            ),
+        ),
+        # ── 6. Notes + Cabinet ───────────────────────────────────────────────
+        rx.grid(
             _field(
                 "Cabinet / salle",
                 rx.input(
@@ -130,21 +190,20 @@ def _form_fields() -> rx.Component:
                 ),
             ),
             _field(
-                "Durée (min)",
+                "Notes",
                 rx.input(
-                    value=AppointmentFormState.form_duration,
-                    on_change=AppointmentFormState.set_form_duration,
-                    type="number",
-                    min="5",
-                    max="240",
+                    value=AppointmentFormState.form_notes,
+                    on_change=AppointmentFormState.set_form_notes,
+                    placeholder="Motif, informations…",
                     size="2",
                     width="100%",
                 ),
             ),
-            columns="3",
+            columns="2",
             spacing="3",
             width="100%",
         ),
+        # ── Error ────────────────────────────────────────────────────────────
         rx.cond(
             AppointmentFormState.form_error != "",
             rx.callout(
@@ -156,7 +215,7 @@ def _form_fields() -> rx.Component:
             rx.fragment(),
         ),
         width="100%",
-        spacing="4",
+        spacing="3",
     )
 
 

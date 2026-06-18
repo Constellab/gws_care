@@ -53,6 +53,10 @@ class AppointmentListState(ReflexMainState):
     patient_context_id: str = ""
     patient_context_name: str = ""
 
+    # Doctor view: when current user is a doctor, filter appointments to theirs only
+    is_doctor_view: bool = False
+    doctor_context_id: str = ""  # the doctor's user_id (assigned_doctor_id)
+
     # View mode: "list" or "calendar"
     view_mode: str = "list"
     calendar_year: int = 2026
@@ -96,6 +100,22 @@ class AppointmentListState(ReflexMainState):
         today = date.today()
         self.calendar_year = today.year
         self.calendar_month = today.month
+        # Detect if the logged-in user is a doctor — if so, scope to their appointments
+        try:
+            with await self.authenticate_user() as auth_user:
+                from gws_care.role.care_role import CareRole
+                from gws_care.role.user_role_service import UserRoleService
+                roles = UserRoleService.get_roles_for_user(str(auth_user.id))
+                _doctor_roles = {CareRole.MEDECIN_PSC, CareRole.MEDECIN_ENTREPRISE}
+                if any(r in _doctor_roles for r in roles) and CareRole.SUPER_ADMIN_PSC not in roles and CareRole.ADMIN_PSC not in roles:
+                    self.is_doctor_view = True
+                    self.doctor_context_id = str(auth_user.id)
+                else:
+                    self.is_doctor_view = False
+                    self.doctor_context_id = ""
+        except Exception:
+            self.is_doctor_view = False
+            self.doctor_context_id = ""
         await self._load_companies()
         await self._load_appointments()
 
@@ -385,6 +405,7 @@ class AppointmentListState(ReflexMainState):
                     account_id=self.filter_account_id or None,
                     date_from=self.filter_date_from or None,
                     date_to=self.filter_date_to or None,
+                    doctor_id=self.doctor_context_id or None,
                 )
 
                 if self.view_mode == "calendar":

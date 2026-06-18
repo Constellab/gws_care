@@ -6,6 +6,10 @@ from gws_reflex_main import ReflexMainState
 
 
 _DAY_LABELS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+_MONTH_LABELS = [
+    "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+]
 
 
 class ScheduleBlockDTO(BaseModel):
@@ -31,8 +35,23 @@ class UnavailableDayDTO(BaseModel):
     id: str = ""
     doctor_id: str = ""
     doctor_name: str = ""
-    date: str = ""
+    date: str = ""        # start date
+    date_end: str = ""   # end date (empty = single day)
+    half_day: str = "FULL"  # "FULL" | "AM" | "PM"
     reason: str = ""
+
+
+class CalendarDayDTO(BaseModel):
+    """One cell in the monthly calendar grid."""
+    date_str: str = ""        # "YYYY-MM-DD"; empty for padding cells
+    day_num: int = 0          # 1-31; 0 for padding
+    is_today: bool = False
+    is_padding: bool = True
+    full_blocked: bool = False   # FULL day unavailability
+    am_blocked: bool = False     # Morning unavailability
+    pm_blocked: bool = False     # Afternoon unavailability
+    # Doctor name(s) for tooltip if needed
+    blocked_reason: str = ""
 
 
 class DoctorScheduleState(ReflexMainState):
@@ -44,7 +63,7 @@ class DoctorScheduleState(ReflexMainState):
     # Create block form
     create_dialog_open: bool = False
     form_doctor_id: str = ""
-    form_day: int = 0
+    form_days: list[int] = []   # selected days of week (0=Mon … 6=Sun)
     form_start: str = "09:00"
     form_end: str = "12:00"
     form_slot: int = 30
@@ -53,9 +72,100 @@ class DoctorScheduleState(ReflexMainState):
     unavailable_days: list[UnavailableDayDTO] = []
     unavail_form_open: bool = False
     unavail_form_doctor_id: str = ""
-    unavail_form_date: str = ""
+    unavail_form_date: str = ""       # start date
+    unavail_form_date_end: str = ""   # end date (empty = same as start)
+    unavail_form_half_day: str = "FULL"  # "FULL" | "AM" | "PM"
     unavail_form_reason: str = ""
     unavail_error: str = ""
+    # Calendar view
+    cal_year: int = 2026
+    cal_month: int = 6
+
+    # ── Calendar computed vars ────────────────────────────────────────────────
+
+    @rx.var
+    def cal_month_label(self) -> str:
+        return f"{_MONTH_LABELS[self.cal_month - 1]} {self.cal_year}"
+
+    @rx.var
+    def calendar_cells(self) -> list[CalendarDayDTO]:
+        """Generate the 42-cell (6×7) calendar grid for the current month."""
+        from calendar import monthrange
+        from datetime import date, timedelta
+
+        today = date.today()
+        first_day = date(self.cal_year, self.cal_month, 1)
+        num_days = monthrange(self.cal_year, self.cal_month)[1]
+        start_weekday = first_day.weekday()  # 0=Mon
+
+        # Build blocked status per date (for filtered doctor)
+        blocked: dict[str, dict] = {}  # date_str -> {"full":bool,"am":bool,"pm":bool,"reasons":list}
+        for u in self.unavailable_days:
+            if self.selected_doctor_id != "ALL" and u.doctor_id != self.selected_doctor_id:
+                continue
+            try:
+                d = date.fromisoformat(u.date)
+                end_d = date.fromisoformat(u.date_end) if u.date_end else d
+            except ValueError:
+                continue
+            hd = u.half_day or "FULL"
+            cur = d
+            while cur <= end_d:
+                ds = cur.strftime("%Y-%m-%d")
+                entry = blocked.setdefault(ds, {"full": False, "am": False, "pm": False, "reasons": []})
+                if hd == "FULL":
+                    entry["full"] = True
+                elif hd == "AM":
+                    entry["am"] = True
+                elif hd == "PM":
+                    entry["pm"] = True
+                if u.reason:
+                    entry["reasons"].append(u.reason)
+                cur += timedelta(days=1)
+
+        cells: list[CalendarDayDTO] = []
+        # Leading padding
+        for _ in range(start_weekday):
+            cells.append(CalendarDayDTO(is_padding=True))
+        # Actual days
+        for day_n in range(1, num_days + 1):
+            d = date(self.cal_year, self.cal_month, day_n)
+            ds = d.strftime("%Y-%m-%d")
+            entry = blocked.get(ds, {})
+            full = entry.get("full", False)
+            am = entry.get("am", False)
+            pm = entry.get("pm", False)
+            reasons = entry.get("reasons", [])
+            cells.append(CalendarDayDTO(
+                date_str=ds,
+                day_num=day_n,
+                is_today=(d == today),
+                is_padding=False,
+                full_blocked=full,
+                am_blocked=am and not full,
+                pm_blocked=pm and not full,
+                blocked_reason=", ".join(reasons) if reasons else "",
+            ))
+        # Trailing padding
+        while len(cells) % 7 != 0:
+            cells.append(CalendarDayDTO(is_padding=True))
+        return cells
+
+    @rx.event
+    def prev_month(self):
+        if self.cal_month == 1:
+            self.cal_month = 12
+            self.cal_year -= 1
+        else:
+            self.cal_month -= 1
+
+    @rx.event
+    def next_month(self):
+        if self.cal_month == 12:
+            self.cal_month = 1
+            self.cal_year += 1
+        else:
+            self.cal_month += 1
 
     @rx.var
     def filtered_blocks(self) -> list[ScheduleBlockDTO]:
@@ -71,7 +181,7 @@ class DoctorScheduleState(ReflexMainState):
     def open_create_dialog(self):
         self.create_dialog_open = True
         self.form_doctor_id = ""
-        self.form_day = 0
+        self.form_days = []
         self.form_start = "09:00"
         self.form_end = "12:00"
         self.form_slot = 20
@@ -87,11 +197,12 @@ class DoctorScheduleState(ReflexMainState):
         self.form_doctor_id = v
 
     @rx.event
-    def set_form_day(self, v: str):
-        try:
-            self.form_day = int(v)
-        except ValueError:
-            pass
+    def toggle_form_day(self, day: int):
+        """Toggle a day of week in the multi-selection list."""
+        if day in self.form_days:
+            self.form_days = [d for d in self.form_days if d != day]
+        else:
+            self.form_days = sorted(self.form_days + [day])
 
     @rx.event
     def set_form_start(self, v: str):
@@ -118,17 +229,21 @@ class DoctorScheduleState(ReflexMainState):
             if not self.form_doctor_id:
                 self.error_message = "Veuillez sélectionner un médecin."
                 return
+            if not self.form_days:
+                self.error_message = "Veuillez sélectionner au moins un jour."
+                return
             with await self.authenticate_user():
                 from gws_care.scheduling.doctor_schedule import DoctorSchedule
-                DoctorSchedule.create(
-                    doctor_id=self.form_doctor_id,
-                    day_of_week=self.form_day,
-                    start_time=self.form_start,
-                    end_time=self.form_end,
-                    slot_duration_minutes=self.form_slot,
-                    room=self.form_room or None,
-                    is_active=True,
-                )
+                for day in self.form_days:
+                    DoctorSchedule.create(
+                        doctor_id=self.form_doctor_id,
+                        day_of_week=day,
+                        start_time=self.form_start,
+                        end_time=self.form_end,
+                        slot_duration_minutes=self.form_slot,
+                        room=self.form_room or None,
+                        is_active=True,
+                    )
             self.create_dialog_open = False
             await self.on_load()  # type: ignore[misc]
         except Exception as exc:
@@ -161,6 +276,11 @@ class DoctorScheduleState(ReflexMainState):
     async def on_load(self):
         self.is_loading = True
         self.error_message = ""
+        # Initialize calendar to current month
+        from datetime import date
+        today = date.today()
+        self.cal_year = today.year
+        self.cal_month = today.month
         try:
             with await self.authenticate_user():
                 from gws_care.scheduling.doctor_schedule import DoctorSchedule
@@ -228,6 +348,8 @@ class DoctorScheduleState(ReflexMainState):
                         doctor_id=str(u.doctor_id),
                         doctor_name=doc_name_map.get(str(u.doctor_id), "—"),
                         date=u.date,
+                        date_end=u.date_end or "",
+                        half_day=u.half_day or "FULL",
                         reason=u.reason or "",
                     )
                     for u in all_unavail
@@ -245,6 +367,8 @@ class DoctorScheduleState(ReflexMainState):
         self.unavail_form_open = True
         self.unavail_form_doctor_id = self.form_doctor_id or (self.doctors[0].id if self.doctors else "")
         self.unavail_form_date = ""
+        self.unavail_form_date_end = ""
+        self.unavail_form_half_day = "FULL"
         self.unavail_form_reason = ""
         self.unavail_error = ""
 
@@ -259,6 +383,17 @@ class DoctorScheduleState(ReflexMainState):
     @rx.event
     def set_unavail_date(self, v: str):
         self.unavail_form_date = v
+        # auto-fill end date if not yet set
+        if not self.unavail_form_date_end:
+            self.unavail_form_date_end = v
+
+    @rx.event
+    def set_unavail_date_end(self, v: str):
+        self.unavail_form_date_end = v
+
+    @rx.event
+    def set_unavail_half_day(self, v: str):
+        self.unavail_form_half_day = v
 
     @rx.event
     def set_unavail_reason(self, v: str):
@@ -270,7 +405,11 @@ class DoctorScheduleState(ReflexMainState):
             self.unavail_error = "Sélectionnez un médecin."
             return
         if not self.unavail_form_date:
-            self.unavail_error = "Sélectionnez une date."
+            self.unavail_error = "Sélectionnez une date de début."
+            return
+        date_end = self.unavail_form_date_end or self.unavail_form_date
+        if date_end < self.unavail_form_date:
+            self.unavail_error = "La date de fin doit être >= à la date de début."
             return
         try:
             with await self.authenticate_user():
@@ -278,7 +417,9 @@ class DoctorScheduleState(ReflexMainState):
                 DoctorScheduleService.mark_unavailable(
                     self.unavail_form_doctor_id,
                     self.unavail_form_date,
+                    date_end if date_end != self.unavail_form_date else None,
                     self.unavail_form_reason or None,
+                    self.unavail_form_half_day,
                 )
             self.unavail_form_open = False
             await self.on_load()  # type: ignore[misc]

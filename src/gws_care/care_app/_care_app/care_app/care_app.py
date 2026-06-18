@@ -424,6 +424,16 @@ def _ensure_care_db_tables() -> None:
         if not db_manager.db.table_exists("gws_care_doctor_unavailable_day"):
             db_manager.db.create_tables([DoctorUnavailableDay])
 
+        # Migration 2.5.0 — DoctorUnavailableDay: date range + half_day
+        db_manager.db.execute_sql(
+            "ALTER TABLE gws_care_doctor_unavailable_day "
+            "ADD COLUMN IF NOT EXISTS date_end VARCHAR(10) NULL DEFAULT NULL"
+        )
+        db_manager.db.execute_sql(
+            "ALTER TABLE gws_care_doctor_unavailable_day "
+            "ADD COLUMN IF NOT EXISTS half_day VARCHAR(4) NOT NULL DEFAULT 'FULL'"
+        )
+
     except Exception as exc:
         # Non-fatal: the app will log the error when a query fails
         print(f"[gws_care] Warning: could not ensure DB tables/migrations: {exc}")
@@ -572,6 +582,30 @@ def messages():
 @rx.page(route="/patient-portal", on_load=[PatientPortalState.on_load, NavRoleState.on_load])
 def patient_portal():
     """Patient personal space — exams, appointments, certificates, messages."""
+    return patient_portal_page()
+
+
+@rx.page(route="/my-exams", on_load=[PatientPortalState.set_tab("exams"), PatientPortalState.on_load, NavRoleState.on_load])
+def my_exams():
+    """Patient portal — Mes examens tab."""
+    return patient_portal_page()
+
+
+@rx.page(route="/my-appointments", on_load=[PatientPortalState.set_tab("appointments"), PatientPortalState.on_load, NavRoleState.on_load])
+def my_appointments():
+    """Patient portal — Mes rendez-vous tab."""
+    return patient_portal_page()
+
+
+@rx.page(route="/my-certificates", on_load=[PatientPortalState.set_tab("certificates"), PatientPortalState.on_load, NavRoleState.on_load])
+def my_certificates():
+    """Patient portal — Mes certificats tab."""
+    return patient_portal_page()
+
+
+@rx.page(route="/my-messages", on_load=[PatientPortalState.set_tab("messages"), PatientPortalState.on_load, NavRoleState.on_load])
+def my_messages_patient():
+    """Patient portal — Messages tab."""
     return patient_portal_page()
 
 

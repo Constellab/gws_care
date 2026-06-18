@@ -76,16 +76,19 @@ class DoctorSchedule(ModelWithUser):
 
 
 class DoctorUnavailableDay(ModelWithUser):
-    """Marks a specific calendar date as entirely unavailable for a doctor.
+    """Marks a date range as unavailable for a doctor (whole day or half day).
 
     Used to block holidays, sick leave or any ad-hoc absence so that the
-    booking engine returns zero slots for that day.
+    booking engine returns zero or partial slots for those days.
     """
 
     doctor: User = ForeignKeyField(
         User, null=False, backref="unavailable_days", on_delete="CASCADE", index=True
     )
-    date: str = CharField(max_length=10, null=False)    # "YYYY-MM-DD"
+    date: str = CharField(max_length=10, null=False)       # start date "YYYY-MM-DD"
+    date_end: str = CharField(max_length=10, null=True)    # end date (inclusive); None = single day
+    # "FULL" = whole day, "AM" = morning only, "PM" = afternoon only
+    half_day: str = CharField(max_length=4, null=False, default="FULL")
     reason: str = CharField(max_length=200, null=True)
 
     class Meta:
@@ -110,12 +113,21 @@ class DoctorScheduleService:
         )
 
     @classmethod
-    def mark_unavailable(cls, doctor_id: str, date_str: str, reason: str | None = None) -> None:
-        """Block a specific date for a doctor."""
-        DoctorUnavailableDay.get_or_create(
+    def mark_unavailable(
+        cls,
+        doctor_id: str,
+        date_from: str,
+        date_to: str | None = None,
+        reason: str | None = None,
+        half_day: str = "FULL",
+    ) -> None:
+        """Block a date (or range) for a doctor."""
+        DoctorUnavailableDay.create(
             doctor=doctor_id,
-            date=date_str,
-            defaults={"reason": reason},
+            date=date_from,
+            date_end=date_to or None,
+            half_day=half_day,
+            reason=reason,
         )
 
     @classmethod
@@ -143,13 +155,23 @@ class DoctorScheduleService:
         from gws_care.appointment.appointment import Appointment
         from gws_care.appointment.appointment_status import AppointmentStatus
 
-        # If the whole day is blocked, return nothing immediately
+        # Check unavailability records for this date
         date_str = on_date.strftime("%Y-%m-%d")
-        if DoctorUnavailableDay.get_or_none(
-            (DoctorUnavailableDay.doctor == doctor_id)
-            & (DoctorUnavailableDay.date == date_str)
-        ):
-            return []
+        unavail_records = list(
+            DoctorUnavailableDay.select()
+            .where(DoctorUnavailableDay.doctor == doctor_id)
+        )
+        am_blocked = False
+        pm_blocked = False
+        for rec in unavail_records:
+            end = rec.date_end if rec.date_end else rec.date
+            if rec.date <= date_str <= end:
+                if rec.half_day == "FULL":
+                    return []
+                elif rec.half_day == "AM":
+                    am_blocked = True
+                elif rec.half_day == "PM":
+                    pm_blocked = True
 
         blocks = [
             b for b in cls.list_for_doctor(doctor_id)
@@ -158,6 +180,12 @@ class DoctorScheduleService:
         all_slots: list[datetime] = []
         for block in blocks:
             all_slots.extend(block.get_slots(on_date))
+
+        # Apply half-day filtering
+        if am_blocked:
+            all_slots = [s for s in all_slots if s.hour >= 12]
+        if pm_blocked:
+            all_slots = [s for s in all_slots if s.hour < 12]
 
         # Fetch already-booked slots for this doctor/date
         booked = set()

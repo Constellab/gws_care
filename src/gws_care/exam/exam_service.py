@@ -80,6 +80,8 @@ class ExamService:
         exam.lab_results = dto.lab_results
         if dto.prescribed_exam_ref_ids is not None:
             exam.prescribed_exam_ref_ids = dto.prescribed_exam_ref_ids or None
+        if dto.follow_up_exam_ids is not None:
+            exam.follow_up_exam_ids = dto.follow_up_exam_ids or None
         exam.save()
         return exam
 
@@ -120,6 +122,14 @@ class ExamService:
         exam.interpretation = dto.interpretation.strip()
         exam.interpreted_by = doctor
         exam.status = ExamStatus.INTERPRETED
+        exam.save()
+        return exam
+
+    @classmethod
+    def update_requested_params(cls, exam_id: str, param_ids: list[str]) -> Exam:
+        """Update which specific parameters the doctor wants tested for this exam."""
+        exam = cls.get_exam(exam_id)
+        exam.requested_param_ids = param_ids if param_ids else None
         exam.save()
         return exam
 

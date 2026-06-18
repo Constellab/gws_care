@@ -195,6 +195,21 @@ def patient_list_page() -> rx.Component:
             ),
             patient_form_dialog(),
             patient_delete_dialog(),
+            rx.cond(
+                PatientListState.is_doctor_view,
+                rx.callout(
+                    rx.hstack(
+                        rx.icon("stethoscope", size=14),
+                        rx.text("Affichage de vos patients uniquement (rendez-vous assignés)", size="2"),
+                        spacing="2",
+                        align="center",
+                    ),
+                    icon="info",
+                    color_scheme="teal",
+                    size="1",
+                    margin_bottom="0.5rem",
+                ),
+            ),
             _filter_bar(),
             rx.cond(
                 PatientListState.error_message != "",

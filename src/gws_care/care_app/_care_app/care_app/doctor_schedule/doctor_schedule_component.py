@@ -165,22 +165,24 @@ def _create_dialog() -> rx.Component:
                     on_change=DoctorScheduleState.set_form_doctor,
                     width="100%",
                 ),
-                # Day
-                rx.text("Jour de la semaine *", size="2", weight="medium"),
-                rx.select.root(
-                    rx.select.trigger(placeholder="Choisir le jour...", width="100%"),
-                    rx.select.content(
-                        rx.select.item("Lundi", value="0"),
-                        rx.select.item("Mardi", value="1"),
-                        rx.select.item("Mercredi", value="2"),
-                        rx.select.item("Jeudi", value="3"),
-                        rx.select.item("Vendredi", value="4"),
-                        rx.select.item("Samedi", value="5"),
-                        rx.select.item("Dimanche", value="6"),
-                    ),
-                    value=DoctorScheduleState.form_day.to_string(),
-                    on_change=DoctorScheduleState.set_form_day,
-                    width="100%",
+                # Days (multi-select toggle buttons)
+                rx.text("Jours de la semaine *", size="2", weight="medium"),
+                rx.hstack(
+                    *[
+                        rx.button(
+                            label,
+                            variant=rx.cond(DoctorScheduleState.form_days.contains(day_num), "solid", "soft"),
+                            color_scheme=rx.cond(DoctorScheduleState.form_days.contains(day_num), "blue", "gray"),
+                            size="2",
+                            on_click=DoctorScheduleState.toggle_form_day(day_num),
+                            border_radius="6px",
+                        )
+                        for day_num, label in [
+                            (0, "Lu"), (1, "Ma"), (2, "Me"), (3, "Je"),
+                            (4, "Ve"), (5, "Sa"), (6, "Di"),
+                        ]
+                    ],
+                    spacing="1", width="100%", wrap="wrap",
                 ),
                 # Times
                 rx.grid(
@@ -261,11 +263,12 @@ def _create_dialog() -> rx.Component:
 
 
 def _unavail_dialog() -> rx.Component:
-    """Dialog to add a new unavailable day for a doctor."""
+    """Dialog to add an unavailability period for a doctor (date range + half day)."""
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Ajouter un jour d'indisponibilité"),
+            rx.dialog.title("Ajouter une indisponibilité"),
             rx.vstack(
+                # Doctor
                 rx.text("Médecin *", size="2", weight="medium"),
                 rx.select.root(
                     rx.select.trigger(placeholder="Sélectionner un médecin...", width="100%"),
@@ -276,13 +279,44 @@ def _unavail_dialog() -> rx.Component:
                     on_change=DoctorScheduleState.set_unavail_doctor,
                     width="100%",
                 ),
-                rx.text("Date *", size="2", weight="medium"),
-                rx.input(
-                    type="date",
-                    value=DoctorScheduleState.unavail_form_date,
-                    on_change=DoctorScheduleState.set_unavail_date,
+                # Date range
+                rx.grid(
+                    rx.vstack(
+                        rx.text("Date de début *", size="2", weight="medium"),
+                        rx.input(
+                            type="date",
+                            value=DoctorScheduleState.unavail_form_date,
+                            on_change=DoctorScheduleState.set_unavail_date,
+                            width="100%",
+                        ),
+                        spacing="1", width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text("Date de fin", size="2", weight="medium"),
+                        rx.input(
+                            type="date",
+                            value=DoctorScheduleState.unavail_form_date_end,
+                            on_change=DoctorScheduleState.set_unavail_date_end,
+                            width="100%",
+                        ),
+                        spacing="1", width="100%",
+                    ),
+                    columns="2", spacing="3", width="100%",
+                ),
+                # Half-day
+                rx.text("Période", size="2", weight="medium"),
+                rx.select.root(
+                    rx.select.trigger(width="100%"),
+                    rx.select.content(
+                        rx.select.item("Journée entière", value="FULL"),
+                        rx.select.item("Matin uniquement (avant 12h)", value="AM"),
+                        rx.select.item("Après-midi uniquement (≥ 12h)", value="PM"),
+                    ),
+                    value=DoctorScheduleState.unavail_form_half_day,
+                    on_change=DoctorScheduleState.set_unavail_half_day,
                     width="100%",
                 ),
+                # Reason
                 rx.text("Raison (optionnel)", size="2", weight="medium"),
                 rx.input(
                     placeholder="Ex : Congé, Formation, ...",
@@ -313,15 +347,34 @@ def _unavail_dialog() -> rx.Component:
                 ),
                 spacing="2", justify="end", margin_top="1rem", width="100%",
             ),
-            max_width="420px",
+            max_width="480px",
         ),
         open=DoctorScheduleState.unavail_form_open,
     )
 
 
+
+
+def _half_day_badge(half_day: str) -> rx.Component:    return rx.match(
+        half_day,
+        ("AM", rx.badge("Matin", color_scheme="orange", variant="soft", size="1")),
+        ("PM", rx.badge("Après-midi", color_scheme="orange", variant="soft", size="1")),
+        rx.badge("Journée entière", color_scheme="red", variant="soft", size="1"),
+    )
+
+
 def _unavail_row(u: UnavailableDayDTO) -> rx.Component:
     return rx.hstack(
-        rx.badge(u.date, color_scheme="red", variant="soft", size="2"),
+        # Date or range
+        rx.cond(
+            (u.date_end != "") & (u.date_end != u.date),
+            rx.badge(
+                u.date + " → " + u.date_end,
+                color_scheme="red", variant="soft", size="2",
+            ),
+            rx.badge(u.date, color_scheme="red", variant="soft", size="2"),
+        ),
+        _half_day_badge(u.half_day),
         rx.text(u.doctor_name, size="2", weight="medium", flex="1"),
         rx.cond(
             u.reason != "",
@@ -345,7 +398,7 @@ def _unavailable_days_section() -> rx.Component:
     return rx.vstack(
         rx.hstack(
             rx.icon("calendar-off", size=18, color="var(--red-9)"),
-            rx.heading("Jours d'indisponibilité", size="4"),
+            rx.heading("Indisponibilités", size="4"),
             rx.spacer(),
             rx.button(
                 rx.icon("plus", size=14),
@@ -358,9 +411,10 @@ def _unavailable_days_section() -> rx.Component:
             align="center", spacing="2", width="100%",
         ),
         rx.text(
-            "Les patients ne pourront pas réserver sur ces dates.",
+            "Les patients ne pourront pas réserver sur ces périodes.",
             size="2", color="var(--gray-9)",
         ),
+        # ── List of unavailability records ────────────────────────────────
         rx.cond(
             DoctorScheduleState.filtered_unavail_days.length() > 0,
             rx.vstack(
@@ -368,7 +422,7 @@ def _unavailable_days_section() -> rx.Component:
                 spacing="2",
                 width="100%",
             ),
-            rx.text("Aucun jour bloqué.", size="2", color="var(--gray-7)"),
+            rx.text("Aucune indisponibilité configurée.", size="2", color="var(--gray-7)"),
         ),
         spacing="3",
         width="100%",

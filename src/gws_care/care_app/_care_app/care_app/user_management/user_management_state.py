@@ -238,18 +238,41 @@ class UserManagementState(ReflexMainState):
                 if not self.is_editing:
                     existing_roles = UserRoleService.get_roles_for_user(user_id)
                     if existing_roles:
-                        raise ValueError("Cet utilisateur a déjà des rôles assignés dans Constellab Care.")
+                        if role != CareRole.PATIENT:
+                            raise ValueError("Cet utilisateur a déjà des rôles assignés dans Constellab Care.")
+                        # For PATIENT role: allow adding to existing users, but prevent duplicate patient role
+                        if role in existing_roles:
+                            raise ValueError("Cet utilisateur a déjà le rôle Patient.")
 
                 # 4. Assign Care role
                 role = CareRole(self.form.role)
                 linked_account = self.form.linked_account_id or None
-                UserRoleService.assign_role_with_link(
-                    user_id=user_id,
-                    role=role,
-                    linked_account_id=linked_account,
-                    linked_patient_id=None,
-                    specialty=self.form.specialty.strip() or None,
-                )
+
+                if role == CareRole.PATIENT:
+                    # Auto-create a Patient record and link it
+                    from datetime import date
+                    from gws_care.patient.patient_service import PatientService
+                    from gws_care.patient.patient_dto import SavePatientDTO
+                    patient = PatientService.create_patient(SavePatientDTO(
+                        last_name=last_name or email,
+                        first_name=first_name or "",
+                        date_of_birth=date(2000, 1, 1),  # placeholder — edit in patient list
+                        gender="Other",
+                        email=email or None,
+                    ))
+                    UserRoleService.assign_role_with_link(
+                        user_id=user_id,
+                        role=role,
+                        linked_patient_id=str(patient.id),
+                    )
+                else:
+                    UserRoleService.assign_role_with_link(
+                        user_id=user_id,
+                        role=role,
+                        linked_account_id=linked_account,
+                        linked_patient_id=None,
+                        specialty=self.form.specialty.strip() or None,
+                    )
                 if not self.form.is_active:
                     care_user.is_active = False
                     care_user.save()

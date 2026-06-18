@@ -276,10 +276,17 @@ class LabQueueState(RoleState):
                     if len(appt_param_names) > 5:
                         appt_display += f" (+{len(appt_param_names) - 5})"
 
+                    # Check if a DRAFT exam was already created for this appointment
+                    from gws_care.exam.exam import Exam as ExamModel
+                    tag = f"APPT:{appt.id}"
+                    linked_exam = ExamModel.get_or_none(ExamModel.reason_for_visit == tag)
+                    linked_exam_id = str(linked_exam.id) if linked_exam else ""
+
                     rows.append(
                         LabQueueRowDTO(
                             source="appointment",
                             appointment_id=str(appt.id),
+                            exam_id=linked_exam_id,
                             patient_id=str(patient.id),
                             patient_name=f"{patient.first_name} {patient.last_name}",
                             exam_date=appt.scheduled_at.isoformat() if appt.scheduled_at else "",

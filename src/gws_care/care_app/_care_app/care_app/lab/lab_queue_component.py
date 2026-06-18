@@ -42,13 +42,24 @@ def _queue_row(row: LabQueueRowDTO) -> rx.Component:
         ),
         (
             "appointment",
-            rx.button(
-                rx.icon("calendar", size=13),
-                "Voir le patient",
-                on_click=rx.redirect("/patient/" + row.patient_id),
-                size="2",
-                color_scheme="teal",
-                variant="soft",
+            rx.cond(
+                row.exam_id != "",
+                rx.button(
+                    rx.icon("flask-conical", size=13),
+                    "Saisir les résultats",
+                    on_click=rx.redirect("/exam/" + row.exam_id),
+                    size="2",
+                    color_scheme="teal",
+                    variant="soft",
+                ),
+                rx.button(
+                    rx.icon("calendar", size=13),
+                    "Voir le patient",
+                    on_click=rx.redirect("/patient/" + row.patient_id),
+                    size="2",
+                    color_scheme="teal",
+                    variant="soft",
+                ),
             ),
         ),
         rx.fragment(),

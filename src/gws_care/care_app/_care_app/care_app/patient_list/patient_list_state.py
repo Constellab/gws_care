@@ -48,6 +48,10 @@ class PatientListState(ReflexMainState):
     page_size: int = 50
     total_count: int = 0
 
+    # Doctor view: when logged in as a doctor, only their own patients are shown
+    is_doctor_view: bool = False
+    doctor_context_id: str = ""
+
     @rx.var
     def total_pages(self) -> int:
         if self.total_count == 0:
@@ -65,6 +69,27 @@ class PatientListState(ReflexMainState):
     @rx.event
     async def on_load(self):
         """Load patients when the page is mounted."""
+        # Detect if the authenticated user is a doctor role (not an admin)
+        if not await self.check_authentication():
+            return
+        try:
+            with await self.authenticate_user() as auth_user:
+                from gws_care.user.user_role_service import UserRoleService
+                from gws_care.user.care_role import CareRole
+                roles = UserRoleService.get_roles_for_user(str(auth_user.id))
+                _doctor_roles = {CareRole.MEDECIN_PSC, CareRole.MEDECIN_ENTREPRISE}
+                _admin_roles = {CareRole.SUPER_ADMIN_PSC, CareRole.ADMIN_PSC}
+                is_doctor = any(r in _doctor_roles for r in roles)
+                is_admin = any(r in _admin_roles for r in roles)
+                if is_doctor and not is_admin:
+                    self.is_doctor_view = True
+                    self.doctor_context_id = str(auth_user.id)
+                else:
+                    self.is_doctor_view = False
+                    self.doctor_context_id = ""
+        except Exception:
+            self.is_doctor_view = False
+            self.doctor_context_id = ""
         await self._load_companies()
         await self._load_patients()
 
@@ -177,6 +202,7 @@ class PatientListState(ReflexMainState):
                     account_id=self.filter_account_id or None,
                     dob_from=self.filter_dob_from or None,
                     dob_to=self.filter_dob_to or None,
+                    doctor_id=self.doctor_context_id or None,
                 )
                 self.total_count = PatientService.count_patients(**filters)
                 # Clamp page to valid range after count update

@@ -34,6 +34,7 @@ class AppointmentService:
         account_id: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
+        doctor_id: str | None = None,
     ) -> list[Appointment]:
         """Return appointments ordered by scheduled_at (soonest first).
 
@@ -52,6 +53,8 @@ class AppointmentService:
             )
         if account_id:
             query = query.where(Appointment.billing_account == account_id)
+        if doctor_id:
+            query = query.where(Appointment.assigned_doctor_id == doctor_id)
         if date_from:
             from datetime import datetime
             query = query.where(
@@ -72,6 +75,7 @@ class AppointmentService:
         account_id: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
+        doctor_id: str | None = None,
     ) -> int:
         from gws_care.patient.patient import Patient
         query = Appointment.select().join(Patient)
@@ -86,6 +90,8 @@ class AppointmentService:
             )
         if account_id:
             query = query.where(Appointment.billing_account == account_id)
+        if doctor_id:
+            query = query.where(Appointment.assigned_doctor_id == doctor_id)
         if date_from:
             query = query.where(Appointment.scheduled_at >= datetime.fromisoformat(date_from))
         if date_to:
@@ -100,6 +106,7 @@ class AppointmentService:
         account_id: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
+        doctor_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Appointment]:
@@ -116,6 +123,8 @@ class AppointmentService:
             )
         if account_id:
             query = query.where(Appointment.billing_account == account_id)
+        if doctor_id:
+            query = query.where(Appointment.assigned_doctor_id == doctor_id)
         if date_from:
             query = query.where(Appointment.scheduled_at >= datetime.fromisoformat(date_from))
         if date_to:

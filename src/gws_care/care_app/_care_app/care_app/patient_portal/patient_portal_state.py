@@ -175,6 +175,25 @@ class PatientPortalState(ReflexMainState):
     def close_booking_dialog(self):
         self.booking_open = False
 
+    @rx.event
+    async def cancel_appointment(self, appt_id: str):
+        """Cancel a scheduled appointment — frees the slot for other patients."""
+        try:
+            with await self.authenticate_user():
+                from gws_care.appointment.appointment import Appointment
+                from gws_care.appointment.appointment_status import AppointmentStatus
+                appt = Appointment.get_by_id(appt_id)
+                # Security: only cancel if this appointment belongs to the linked patient
+                if str(appt.patient_id) != self.patient_id:
+                    self.error = "Action non autorisée."
+                    return
+                appt.status = AppointmentStatus.CANCELLED.value
+                appt.save()
+                # Reload appointments list
+                await self._load_all(self.patient_id)  # type: ignore[misc]
+        except Exception as exc:
+            self.error = str(exc)
+
     @rx.var
     def filtered_booking_doctors(self) -> list[BookingDoctorDTO]:
         """Doctors filtered by selected specialty (or all if no filter)."""
@@ -184,7 +203,7 @@ class PatientPortalState(ReflexMainState):
 
     @rx.event
     def set_booking_exam_type(self, ref_id: str):
-        self.booking_exam_type_ref_id = ref_id
+        self.booking_exam_type_ref_id = "" if ref_id == "__none__" else ref_id
 
     @rx.event
     def set_booking_specialty(self, specialty: str):
@@ -224,9 +243,6 @@ class PatientPortalState(ReflexMainState):
     async def confirm_booking(self):
         """Create the appointment from the portal booking form."""
         self.booking_error = ""
-        if not self.booking_exam_type_ref_id:
-            self.booking_error = "Veuillez sélectionner un type d'examen."
-            return
         if not self.booking_doctor_id:
             self.booking_error = "Veuillez sélectionner un médecin."
             return

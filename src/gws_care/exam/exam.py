@@ -4,7 +4,7 @@ from datetime import date
 
 from gws_core import EnumField
 from gws_core.core.model.db_field import JSONField
-from peewee import CharField, DateField, FloatField, ForeignKeyField, TextField  # noqa: F401 (CharField used for exam_type_ref_id)
+from peewee import BooleanField, CharField, DateField, FloatField, ForeignKeyField, TextField  # noqa: F401 (CharField used for exam_type_ref_id)
 
 from gws_care.account.account import Account
 from gws_care.core.care_db_manager import CareDbManager
@@ -47,6 +47,10 @@ class Exam(ModelWithUser):
     requested_param_ids: list = JSONField(null=True)  # list of ExamParameter.id strings — tests requested by doctor
     # ExamTypeRef.id strings prescribed by doctor for follow-up (blood test, X-ray, etc.)
     prescribed_exam_ref_ids: list = JSONField(null=True)
+    # Exam.id strings of the actual follow-up Exam records created from prescribed_exam_ref_ids
+    follow_up_exam_ids: list = JSONField(null=True)
+    # True when this exam was created as a follow-up prescription (simplified lab view)
+    is_follow_up: bool = BooleanField(default=False, null=False)
     interpretation: str = TextField(null=True)
     interpreted_by: User = ForeignKeyField(User, null=True, backref="+")
 
@@ -72,6 +76,8 @@ class Exam(ModelWithUser):
             lab_results=self.lab_results or [],
             requested_param_ids=self.requested_param_ids or [],
             prescribed_exam_ref_ids=self.prescribed_exam_ref_ids or [],
+            follow_up_exam_ids=self.follow_up_exam_ids or [],
+            is_follow_up=bool(self.is_follow_up),
             interpretation=self.interpretation,
             interpreted_by_id=str(self.interpreted_by_id) if self.interpreted_by_id else None,
             consultation_id=self.consultation_id or "",

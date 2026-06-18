@@ -164,6 +164,22 @@ def _appt_row(appt: PortalAppointmentDTO) -> rx.Component:
             )
         ),
         rx.table.cell(_appt_status_badge(appt.status)),
+        rx.table.cell(
+            rx.cond(
+                appt.status == "SCHEDULED",
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("x", size=14),
+                        variant="ghost",
+                        size="1",
+                        color_scheme="red",
+                        on_click=PatientPortalState.cancel_appointment(appt.id),
+                    ),
+                    content="Annuler ce rendez-vous",
+                ),
+                rx.fragment(),
+            ),
+        ),
         _hover={"background": "var(--gray-2)"},
     )
 
@@ -279,15 +295,24 @@ def _booking_dialog() -> rx.Component:
                     ),
                     rx.fragment(),
                 ),
-                # Exam type
+                # Exam type (optional)
                 rx.vstack(
-                    rx.text("Type d'examen *", size="2", weight="medium"),
+                    rx.hstack(
+                        rx.text("Type d'examen", size="2", weight="medium"),
+                        rx.badge("optionnel", color_scheme="gray", variant="soft", size="1"),
+                        spacing="2", align="center",
+                    ),
                     rx.select.root(
-                        rx.select.trigger(placeholder="Sélectionner un type d'examen", width="100%"),
+                        rx.select.trigger(placeholder="Sélectionner un type d'examen (optionnel)", width="100%"),
                         rx.select.content(
+                            rx.select.item("— Consultation générale —", value="__none__"),
                             rx.foreach(PatientPortalState.booking_exam_types, _booking_exam_type_option),
                         ),
-                        value=PatientPortalState.booking_exam_type_ref_id,
+                        value=rx.cond(
+                            PatientPortalState.booking_exam_type_ref_id != "",
+                            PatientPortalState.booking_exam_type_ref_id,
+                            "__none__",
+                        ),
                         on_change=PatientPortalState.set_booking_exam_type,
                         width="100%",
                     ),
@@ -458,6 +483,7 @@ def _appointments_tab() -> rx.Component:
                         rx.table.column_header_cell("Date & heure"),
                         rx.table.column_header_cell("Examen"),
                         rx.table.column_header_cell("Statut"),
+                        rx.table.column_header_cell(""),
                     )
                 ),
                 rx.table.body(rx.foreach(PatientPortalState.appointments, _appt_row)),
@@ -629,7 +655,8 @@ def patient_portal_page() -> rx.Component:
                         rx.tabs.content(_appointments_tab(), value="appointments", padding_top="1rem"),
                         rx.tabs.content(_certificates_tab(), value="certificates", padding_top="1rem"),
                         rx.tabs.content(_messages_tab(), value="messages", padding_top="1rem"),
-                        default_value="exams",
+                        value=PatientPortalState.active_tab,
+                        on_change=PatientPortalState.set_tab,
                         width="100%",
                     ),
                     spacing="4",

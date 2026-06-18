@@ -538,8 +538,18 @@ def _sidebar_content() -> rx.Component:
             rx.separator(width="100%", margin_y="0.25rem"),
 
             # ── 5. Espace patient ─────────────────────────────────────────────
+            rx.cond(
+                NavRoleState.can_see_patient_portal,
+                rx.text("Mon espace", size="1", color="var(--gray-8)", weight="medium",
+                        padding="0.25rem 0.5rem 0"),
+                rx.fragment(),
+            ),
             _cond_nav(NavRoleState.can_see_patient_portal,
-                      "layout-dashboard", "Mon espace", "/patient-portal"),
+                      "flask-conical", "Mes examens", "/my-exams"),
+            _cond_nav(NavRoleState.can_see_patient_portal,
+                      "calendar-plus", "Mes rendez-vous", "/my-appointments"),
+            _cond_nav(NavRoleState.can_see_patient_portal,
+                      "file-check-2", "Mes certificats", "/my-certificates"),
 
             width="100%",
             spacing="1",

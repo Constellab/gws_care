@@ -77,6 +77,8 @@ class ExamDetailDTO(BaseModel):
     requested_param_ids: list[str] = []
     consultation_id: str = ""   # non-empty when exam belongs to a Consultation
     prescribed_exam_ref_ids: list[str] = []  # follow-up exams prescribed by doctor
+    follow_up_exam_ids: list[str] = []        # Exam.id list of actual follow-up records
+    is_follow_up: bool = False                # True when this exam was created as a follow-up prescription
 
 
 class ConsultationContextDTO(BaseModel):
@@ -117,12 +119,32 @@ class AvailableParamOption(BaseModel):
     critical_high: str = ""  # raw float string; empty = no threshold
 
 
+class FollowUpParamOption(BaseModel):
+    """One parameter within an exam type for the prescribe-follow-up dialog."""
+    id: str
+    name: str
+    unit: str = ""
+    ref_range: str = ""
+    is_selected: bool = True  # all selected by default
+
+
 class FollowUpExamOption(BaseModel):
     """One exam type that the doctor can prescribe as a follow-up."""
 
     id: str
     name: str
     category_label: str = ""
+    params: list[FollowUpParamOption] = []   # available parameters for this exam type
+    params_expanded: bool = False            # whether param list is shown in UI
+
+
+class FollowUpExamRowDTO(BaseModel):
+    """A follow-up Exam record created from a doctor's prescription."""
+
+    exam_id: str
+    exam_type_label: str
+    status: str = "draft"
+    link_url: str = ""
 
 
 class LabResultRowDTO(BaseModel):
@@ -204,6 +226,15 @@ class ExamDetailState(RoleState):
     prescribe_selected_ids: list[str] = []  # toggled by doctor
     is_saving_prescription: bool = False
     is_submitting: bool = False  # True while submit_exam is running
+    # Names of prescribed follow-up exams (for display in UI — kept for backward compat)
+    prescribed_exam_names: list[str] = []
+    # Actual follow-up Exam records created for prescribed exams (clickable by lab tech)
+    follow_up_exams: list[FollowUpExamRowDTO] = []
+
+    # Request specific parameters for current exam (doctor selects which tests to run)
+    request_params_form_open: bool = False
+    request_params_selected_ids: list[str] = []
+    is_saving_requested_params: bool = False
 
     @rx.var
     def result_data_items(self) -> list[list[str]]:
@@ -495,25 +526,75 @@ class ExamDetailState(RoleState):
 
     @rx.event
     async def open_prescribe_dialog(self):
-        """Open the dialog for prescribing follow-up exams. Loads available exam types."""
+        """Open the dialog for prescribing follow-up exams. Loads exam types with their parameters."""
         self.prescribe_form_open = True
         self.prescribe_selected_ids = list(self.exam.prescribed_exam_ref_ids) if self.exam else []
         try:
             with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_parameter import ExamParameter
                 from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+
                 refs = list(
                     ExamTypeRef.select()
                     .where(ExamTypeRef.is_active == True)  # noqa: E712
                     .order_by(ExamTypeRef.category, ExamTypeRef.name)
                 )
-                self.prescribe_exam_options = [
-                    FollowUpExamOption(
-                        id=str(r.id),
+                ref_ids = [str(r.id) for r in refs]
+                # Batch-load all parameters for all refs
+                params_by_ref: dict[str, list[FollowUpParamOption]] = {}
+                if ref_ids:
+                    for p in (
+                        ExamParameter.select()
+                        .where(ExamParameter.exam_type_ref.in_(ref_ids))
+                        .order_by(ExamParameter.display_order)
+                    ):
+                        ref_key = str(p.exam_type_ref_id)
+                        ref_range = ""
+                        if p.ref_low is not None and p.ref_high is not None:
+                            ref_range = f"{p.ref_low}–{p.ref_high}"
+                        elif p.ref_low is not None:
+                            ref_range = f">{p.ref_low}"
+                        elif p.ref_high is not None:
+                            ref_range = f"<{p.ref_high}"
+                        params_by_ref.setdefault(ref_key, []).append(
+                            FollowUpParamOption(
+                                id=str(p.id),
+                                name=p.name,
+                                unit=p.unit or "",
+                                ref_range=ref_range,
+                                is_selected=True,
+                            )
+                        )
+
+                # If re-opening for an exam that already has follow-up records,
+                # restore previously selected param IDs per exam type
+                existing_param_ids_by_ref: dict[str, set[str]] = {}
+                if self.exam and self.exam.follow_up_exam_ids:
+                    from gws_care.exam.exam import Exam as ExamModel
+                    for fid in self.exam.follow_up_exam_ids:
+                        fex = ExamModel.get_or_none(ExamModel.id == fid)
+                        if fex and fex.exam_type_ref_id:
+                            existing_param_ids_by_ref[str(fex.exam_type_ref_id)] = set(fex.requested_param_ids or [])
+
+                options = []
+                for r in refs:
+                    rid = str(r.id)
+                    raw_params = params_by_ref.get(rid, [])
+                    prev_selected = existing_param_ids_by_ref.get(rid)
+                    if prev_selected is not None:
+                        # Restore previous selection
+                        raw_params = [
+                            FollowUpParamOption(**{**p.model_dump(), "is_selected": p.id in prev_selected})
+                            for p in raw_params
+                        ]
+                    options.append(FollowUpExamOption(
+                        id=rid,
                         name=r.name,
                         category_label=r.get_category_label(),
-                    )
-                    for r in refs
-                ]
+                        params=raw_params,
+                        params_expanded=rid in self.prescribe_selected_ids,
+                    ))
+                self.prescribe_exam_options = options
         except Exception as exc:
             self.error_message = str(exc)
 
@@ -523,31 +604,174 @@ class ExamDetailState(RoleState):
 
     @rx.event
     def toggle_prescribe_exam(self, ref_id: str):
-        """Toggle an exam type in the prescription selection."""
+        """Toggle an exam type in the prescription selection; expand params on select."""
+        updated = []
+        for o in self.prescribe_exam_options:
+            if o.id == ref_id:
+                new_selected = ref_id not in self.prescribe_selected_ids
+                updated.append(FollowUpExamOption(**{
+                    **o.model_dump(),
+                    "params_expanded": new_selected,
+                }))
+            else:
+                updated.append(o)
+        self.prescribe_exam_options = updated
         if ref_id in self.prescribe_selected_ids:
             self.prescribe_selected_ids = [x for x in self.prescribe_selected_ids if x != ref_id]
         else:
             self.prescribe_selected_ids = self.prescribe_selected_ids + [ref_id]
 
     @rx.event
+    def toggle_prescribe_params_expanded(self, ref_id: str):
+        """Toggle visibility of parameter list for a selected exam type."""
+        self.prescribe_exam_options = [
+            FollowUpExamOption(**{**o.model_dump(), "params_expanded": not o.params_expanded})
+            if o.id == ref_id else o
+            for o in self.prescribe_exam_options
+        ]
+
+    @rx.event
+    def toggle_prescribe_param(self, ref_id: str, param_id: str):
+        """Toggle one parameter within a prescribed exam type."""
+        updated = []
+        for o in self.prescribe_exam_options:
+            if o.id == ref_id:
+                new_params = [
+                    FollowUpParamOption(**{**p.model_dump(), "is_selected": not p.is_selected})
+                    if p.id == param_id else p
+                    for p in o.params
+                ]
+                updated.append(FollowUpExamOption(**{**o.model_dump(), "params": new_params}))
+            else:
+                updated.append(o)
+        self.prescribe_exam_options = updated
+
+    @rx.event
+    def select_all_prescribe_params(self, ref_id: str):
+        """Select all parameters for a prescribed exam type."""
+        self.prescribe_exam_options = [
+            FollowUpExamOption(**{
+                **o.model_dump(),
+                "params": [FollowUpParamOption(**{**p.model_dump(), "is_selected": True}) for p in o.params],
+            }) if o.id == ref_id else o
+            for o in self.prescribe_exam_options
+        ]
+
+    @rx.event
+    def open_request_params_dialog(self):
+        """Open dialog for doctor to select which parameters to request for this exam."""
+        self.request_params_selected_ids = list(self.exam.requested_param_ids) if self.exam else []
+        self.request_params_form_open = True
+
+    @rx.event
+    def close_request_params_dialog(self):
+        self.request_params_form_open = False
+
+    @rx.event
+    def toggle_request_param(self, param_id: str):
+        """Toggle a parameter in the doctor's request selection."""
+        if param_id in self.request_params_selected_ids:
+            self.request_params_selected_ids = [x for x in self.request_params_selected_ids if x != param_id]
+        else:
+            self.request_params_selected_ids = self.request_params_selected_ids + [param_id]
+
+    @rx.event
+    async def save_requested_params(self):
+        """Persist the requested parameter list and reload exam."""
+        self.is_saving_requested_params = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam.exam_service import ExamService
+                ExamService.update_requested_params(
+                    self.exam_id_param,
+                    list(self.request_params_selected_ids),
+                )
+            self.request_params_form_open = False
+            await self._load_exam()
+        except Exception as exc:
+            yield rx.toast.error(str(exc))
+        finally:
+            self.is_saving_requested_params = False
+
+    @rx.event
     async def save_prescribed_exams(self):
-        """Persist the prescribed follow-up exam list to the Exam record."""
+        """Persist prescribed follow-up exams and create actual Exam records for each."""
         self.is_saving_prescription = True
         try:
             with await self.authenticate_user():
+                from datetime import date
+
+                from gws_care.exam.exam import Exam as ExamModel
                 from gws_care.exam.exam_dto import UpdateExamSectionsDTO
                 from gws_care.exam.exam_service import ExamService
-                # Only update prescribed_exam_ref_ids; pass None for other fields to leave them unchanged
+                from gws_care.exam.exam_type import ExamStatus, ExamType
+
+                parent_exam = ExamService.get_exam(self.exam_id_param)
+                patient_id = str(parent_exam.patient_id)
+                new_ref_ids: list[str] = list(self.prescribe_selected_ids)
+
+                # Build a map: ref_id → list of selected param IDs for that exam type
+                selected_params_by_ref: dict[str, list[str]] = {}
+                for opt in self.prescribe_exam_options:
+                    if opt.id in new_ref_ids:
+                        selected_params_by_ref[opt.id] = [p.id for p in opt.params if p.is_selected]
+
+                # Existing follow-up exam records keyed by exam_type_ref_id
+                existing_followup: dict[str, str] = {}  # {exam_type_ref_id: exam_id}
+                for eid in (parent_exam.follow_up_exam_ids or []):
+                    ex = ExamModel.get_or_none(ExamModel.id == eid)
+                    if ex:
+                        existing_followup[str(ex.exam_type_ref_id)] = eid
+
+                # Create or update Exam records for selected ref IDs
+                follow_up_ids: list[str] = []
+                for ref_id in new_ref_ids:
+                    param_ids = selected_params_by_ref.get(ref_id, [])
+                    if ref_id in existing_followup:
+                        # Update param selection on existing follow-up record
+                        existing_id = existing_followup[ref_id]
+                        fex = ExamModel.get_or_none(ExamModel.id == existing_id)
+                        if fex:
+                            fex.requested_param_ids = param_ids or None
+                            fex.save()
+                        follow_up_ids.append(existing_id)
+                    else:
+                        # Create a new DRAFT Exam record marked as follow-up
+                        new_exam = ExamModel()
+                        new_exam.patient_id = patient_id
+                        new_exam.exam_date = date.today()
+                        new_exam.exam_type = ExamType.OTHER
+                        new_exam.exam_type_ref_id = ref_id
+                        new_exam.status = ExamStatus.DRAFT
+                        new_exam.billing_account_id = parent_exam.billing_account_id
+                        new_exam.requested_param_ids = param_ids or None
+                        new_exam.is_follow_up = True
+                        new_exam.save()
+                        follow_up_ids.append(str(new_exam.id))
+
+                # Delete orphaned follow-up exams that were deselected (only DRAFT ones)
+                deselected_ref_ids = set(existing_followup.keys()) - set(new_ref_ids)
+                for ref_id in deselected_ref_ids:
+                    orphan_id = existing_followup[ref_id]
+                    orphan = ExamModel.get_or_none(ExamModel.id == orphan_id)
+                    if orphan and orphan.status == ExamStatus.DRAFT:
+                        orphan.delete_instance()
+
+                # Persist the updated lists on the parent exam
                 dto = UpdateExamSectionsDTO(
-                    prescribed_exam_ref_ids=list(self.prescribe_selected_ids),
+                    prescribed_exam_ref_ids=new_ref_ids,
+                    follow_up_exam_ids=follow_up_ids,
                 )
                 ExamService.update_sections(self.exam_id_param, dto)
+
             if self.exam:
                 self.exam = self.exam.copy(update={
                     "prescribed_exam_ref_ids": list(self.prescribe_selected_ids),
+                    "follow_up_exam_ids": follow_up_ids,
                 })
             self.prescribe_form_open = False
             yield rx.toast.success("Ordonnances d'examens enregistrées.")
+            await self._load_exam()
         except Exception as exc:
             self.error_message = str(exc)
             yield rx.toast.error(f"Erreur : {exc}")
@@ -658,7 +882,40 @@ class ExamDetailState(RoleState):
                     requested_param_ids=exam.requested_param_ids or [],
                     consultation_id=exam.consultation_id or "",
                     prescribed_exam_ref_ids=exam.prescribed_exam_ref_ids or [],
+                    follow_up_exam_ids=exam.follow_up_exam_ids or [],
+                    is_follow_up=bool(exam.is_follow_up),
                 )
+
+                # Load names of prescribed follow-up exams for display
+                pref_ids = exam.prescribed_exam_ref_ids or []
+                if pref_ids:
+                    prefs = list(
+                        ExamTypeRef.select(ExamTypeRef.id, ExamTypeRef.name)
+                        .where(ExamTypeRef.id.in_(pref_ids))
+                    )
+                    ref_name_map = {str(r.id): r.name for r in prefs}
+                    self.prescribed_exam_names = [ref_name_map.get(rid, rid) for rid in pref_ids]
+                else:
+                    self.prescribed_exam_names = []
+
+                # Load follow-up Exam records (created when doctor saved prescriptions)
+                followup_ids = exam.follow_up_exam_ids or []
+                if followup_ids:
+                    from gws_care.exam.exam import Exam as ExamModel
+                    followup_rows = []
+                    for fid in followup_ids:
+                        fex = ExamModel.get_or_none(ExamModel.id == fid)
+                        if fex:
+                            flbl = ref_name_map.get(str(fex.exam_type_ref_id), str(fex.exam_type_ref_id)) if fex.exam_type_ref_id else fex.exam_type.get_label()
+                            followup_rows.append(FollowUpExamRowDTO(
+                                exam_id=str(fex.id),
+                                exam_type_label=flbl,
+                                status=fex.status.value,
+                                link_url=f"/exam/{fex.id}",
+                            ))
+                    self.follow_up_exams = followup_rows
+                else:
+                    self.follow_up_exams = []
 
                 # Load consultation context if this exam belongs to one
                 if exam.consultation_id:

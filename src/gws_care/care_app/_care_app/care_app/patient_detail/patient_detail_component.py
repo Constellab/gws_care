@@ -409,6 +409,81 @@ def _consultations_section() -> rx.Component:
     )
 
 
+def _prescribed_followup_exam_row(exam: ExamRowDTO) -> rx.Component:
+    """Clickable row for a prescribed follow-up exam (lab tech fills results)."""
+    return rx.link(
+        rx.hstack(
+            rx.icon("flask-conical", size=14, color="var(--blue-9)"),
+            rx.text(exam.exam_type_label, size="2", weight="medium", flex="1"),
+            rx.text(exam.exam_date, size="1", color="var(--gray-8)"),
+            rx.badge(
+                rx.match(
+                    exam.status,
+                    ("DRAFT", "En attente"),
+                    ("PENDING", "Résultats en cours"),
+                    ("INTERPRETED", "Complété"),
+                    "—",
+                ),
+                color_scheme=rx.match(
+                    exam.status,
+                    ("DRAFT", "amber"),
+                    ("PENDING", "blue"),
+                    ("INTERPRETED", "green"),
+                    "gray",
+                ),
+                size="1",
+                variant="soft",
+            ),
+            rx.icon("chevron-right", size=12, color="var(--gray-8)"),
+            spacing="2",
+            align="center",
+            width="100%",
+            padding="0.5rem 0.75rem",
+            border_radius="6px",
+            background="var(--blue-2)",
+            _hover={"background": "var(--blue-3)", "cursor": "pointer"},
+        ),
+        href=exam.link_url,
+        text_decoration="none",
+        width="100%",
+    )
+
+
+def _prescribed_followup_section() -> rx.Component:
+    """Section showing prescribed follow-up exams that the lab tech can fill in."""
+    return rx.cond(
+        PatientDetailState.prescribed_followup_exams.length() > 0,
+        rx.vstack(
+            rx.hstack(
+                rx.icon("clipboard-check", size=16, color="var(--blue-9)"),
+                rx.heading("Examens de suivi prescrits", size="4"),
+                rx.badge(
+                    PatientDetailState.prescribed_followup_exams.length().to(str),
+                    color_scheme="blue",
+                    size="1",
+                ),
+                rx.tooltip(
+                    rx.icon("info", size=13, color="var(--gray-7)"),
+                    content="Ces examens ont été prescrits par le médecin lors d'une consultation. Le laborantin peut cliquer sur chaque examen pour renseigner les résultats.",
+                ),
+                width="100%",
+                align="center",
+                spacing="2",
+            ),
+            rx.vstack(
+                rx.foreach(
+                    PatientDetailState.prescribed_followup_exams,
+                    _prescribed_followup_exam_row,
+                ),
+                width="100%",
+                spacing="2",
+            ),
+            width="100%",
+            spacing="3",
+        ),
+    )
+
+
 def _exams_section() -> rx.Component:
     """Examens prescrits directement (hors consultation et hors campagne)."""
     return rx.vstack(
@@ -431,7 +506,7 @@ def _exams_section() -> rx.Component:
             spacing="2",
         ),
         rx.cond(
-            PatientDetailState.exams,
+            PatientDetailState.standalone_exams.length() > 0,
             rx.table.root(
                 rx.table.header(
                     rx.table.row(
@@ -443,7 +518,7 @@ def _exams_section() -> rx.Component:
                     )
                 ),
                 rx.table.body(
-                    rx.foreach(PatientDetailState.exams, _exam_row),
+                    rx.foreach(PatientDetailState.standalone_exams, _exam_row),
                 ),
                 width="100%",
                 variant="surface",
@@ -986,7 +1061,9 @@ def patient_detail_page() -> rx.Component:
                                         sample_collection_panel(),
                                         rx.fragment(),
                                     ),
+                                    _prescribed_followup_section(),
                                     _consultations_section(),
+                                    _exams_section(),
                                     spacing="6",
                                     width="100%",
                                 ),

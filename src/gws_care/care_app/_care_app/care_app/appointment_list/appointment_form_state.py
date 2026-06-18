@@ -1,6 +1,5 @@
 """State for the appointment create / edit form dialog."""
 
-from datetime import datetime, timedelta
 from typing import AsyncGenerator
 
 import reflex as rx
@@ -28,13 +27,18 @@ class AppointmentFormState(FormDialogState, rx.State):
     form_patient_id: str = ""
     form_patient_label: str = ""   # display only (read-only when opened from patient detail)
     form_account_id: str = ""
-    form_scheduled_at: str = ""    # YYYY-MM-DDTHH:MM
-    form_exam_type: str = ""       # ExamTypeRef.id
+    form_scheduled_at: str = ""    # YYYY-MM-DDTHH:MM  (set from slot selection)
+    form_exam_type: str = ""       # ExamTypeRef.id (optional)
     form_notes: str = ""
     form_doctor_id: str = ""       # assigned_doctor_id
     form_duration: str = "20"      # minutes
     form_room: str = ""            # room/cabinet
     form_error: str = ""
+
+    # Slot picker (secretary booking flow)
+    form_booking_date: str = ""          # YYYY-MM-DD selected by secretary
+    form_available_slots: list[str] = [] # "YYYY-MM-DDTHH:MM" available slots
+    form_slots_loading: bool = False
 
     # Exam type options loaded from referential
     exam_type_options: list[ExamTypeOption] = []
@@ -59,7 +63,7 @@ class AppointmentFormState(FormDialogState, rx.State):
 
     @rx.event
     def set_form_exam_type(self, value: str):
-        self.form_exam_type = value
+        self.form_exam_type = "" if value == "_none_" else value
 
     @rx.event
     def set_form_notes(self, value: str):
@@ -72,6 +76,51 @@ class AppointmentFormState(FormDialogState, rx.State):
     @rx.event
     def set_form_doctor_id(self, value: str):
         self.form_doctor_id = "" if value == "_none_" else value
+        # Reset slot selection when doctor changes
+        self.form_scheduled_at = ""
+        self.form_available_slots = []
+
+    @rx.event
+    async def set_form_booking_date(self, value: str):
+        self.form_booking_date = value
+        self.form_scheduled_at = ""
+        await self._load_available_slots()
+
+    @rx.event
+    async def set_form_doctor_and_reload(self, value: str):
+        self.form_doctor_id = "" if value == "_none_" else value
+        self.form_scheduled_at = ""
+        self.form_available_slots = []
+        if self.form_doctor_id and self.form_booking_date:
+            await self._load_available_slots()
+
+    @rx.event
+    def set_form_slot(self, slot: str):
+        """Select a time slot — sets form_scheduled_at."""
+        self.form_scheduled_at = slot
+
+    async def _load_available_slots(self):
+        """Load available slots for current doctor + date."""
+        if not self.form_doctor_id or not self.form_booking_date:
+            self.form_available_slots = []
+            return
+        self.form_slots_loading = True
+        try:
+            _main = await self.get_state(ReflexMainState)
+            with await _main.authenticate_user():
+                from datetime import date
+                from gws_care.scheduling.doctor_schedule import DoctorScheduleService
+                d = date.fromisoformat(self.form_booking_date)
+                slots = DoctorScheduleService.available_slots(self.form_doctor_id, d)
+                self.form_available_slots = [s.strftime("%Y-%m-%dT%H:%M") for s in slots]
+                # auto-select first slot
+                if self.form_available_slots and not self.form_scheduled_at:
+                    self.form_scheduled_at = self.form_available_slots[0]
+        except Exception as exc:
+            print(f"[appointment_form] Failed to load slots: {exc}")
+            self.form_available_slots = []
+        finally:
+            self.form_slots_loading = False
 
     @rx.event
     def set_form_duration(self, value: str):
@@ -136,18 +185,19 @@ class AppointmentFormState(FormDialogState, rx.State):
     @rx.event
     def open_create_dialog(self, patient_id: str, patient_label: str = ""):
         """Open the dialog pre-filled with a patient."""
-        default_dt = (datetime.now() + timedelta(days=1)).replace(
-            second=0, microsecond=0, minute=0
-        )
+        from datetime import date
         self.form_patient_id = patient_id
         self.form_patient_label = patient_label
         self.form_account_id = ""
-        self.form_scheduled_at = default_dt.strftime("%Y-%m-%dT%H:%M")
+        self.form_scheduled_at = ""
         self.form_exam_type = ""
         self.form_notes = ""
         self.form_doctor_id = ""
         self.form_duration = "20"
         self.form_room = ""
+        self.form_booking_date = date.today().strftime("%Y-%m-%d")
+        self.form_available_slots = []
+        self.form_slots_loading = False
         self._editing_appointment_id = ""
         self.is_update_mode = False
         self._load_exam_type_options()
@@ -155,24 +205,37 @@ class AppointmentFormState(FormDialogState, rx.State):
         self.dialog_opened = True
 
     @rx.event
-    def open_create_dialog_standalone(self):
+    async def open_create_dialog_standalone(self):
         """Open the dialog without a pre-selected patient (from appointments page)."""
-        default_dt = (datetime.now() + timedelta(days=1)).replace(
-            second=0, microsecond=0, minute=0
-        )
+        from datetime import date
         self.form_patient_id = ""
         self.form_patient_label = ""
         self.form_account_id = ""
-        self.form_scheduled_at = default_dt.strftime("%Y-%m-%dT%H:%M")
+        self.form_scheduled_at = ""
         self.form_exam_type = ""
         self.form_notes = ""
         self.form_doctor_id = ""
         self.form_duration = "20"
         self.form_room = ""
+        self.form_booking_date = date.today().strftime("%Y-%m-%d")
+        self.form_available_slots = []
+        self.form_slots_loading = False
         self._editing_appointment_id = ""
         self.is_update_mode = False
         self._load_exam_type_options()
         self._load_doctor_options()
+        # If the current user is a doctor, pre-select them
+        try:
+            _main = await self.get_state(ReflexMainState)
+            with await _main.authenticate_user() as auth_user:
+                from gws_care.role.care_role import CareRole
+                from gws_care.role.user_role_service import UserRoleService
+                roles = UserRoleService.get_roles_for_user(str(auth_user.id))
+                _doctor_roles = {CareRole.MEDECIN_PSC, CareRole.MEDECIN_ENTREPRISE}
+                if any(r in _doctor_roles for r in roles):
+                    self.form_doctor_id = str(auth_user.id)
+        except Exception:
+            pass
         # Load patient options for the selector
         try:
             from gws_care.patient.patient_service import PatientService
@@ -206,6 +269,9 @@ class AppointmentFormState(FormDialogState, rx.State):
         self.form_doctor_id = ""
         self.form_duration = "20"
         self.form_room = ""
+        self.form_booking_date = ""
+        self.form_available_slots = []
+        self.form_slots_loading = False
         self.patient_options = []
         self.exam_type_options = []
         self.doctor_options = []
@@ -218,18 +284,17 @@ class AppointmentFormState(FormDialogState, rx.State):
         async with self:
             self.form_error = ""
         scheduled_at = self.form_scheduled_at
-        exam_type = self.form_exam_type
         if not scheduled_at:
             async with self:
-                self.form_error = "Scheduled date/time is required."
-            return
-        if not exam_type:
-            async with self:
-                self.form_error = "Exam type is required."
+                self.form_error = "Veuillez sélectionner un créneau disponible."
             return
         if not self.form_patient_id:
             async with self:
-                self.form_error = "Please select a patient."
+                self.form_error = "Veuillez sélectionner un patient."
+            return
+        if not self.form_doctor_id:
+            async with self:
+                self.form_error = "Veuillez sélectionner un médecin."
             return
 
         async with self:

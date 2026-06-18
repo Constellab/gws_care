@@ -34,6 +34,7 @@ class ExamRowDTO(BaseModel):
     exam_type_label: str
     status: str
     link_url: str = ""   # /exam/{id} for standalone, /campaign-patient/{c}/{p} for campaign
+    is_prescribed_followup: bool = False  # True if this exam was created from a doctor's prescription
 
 
 class AppointmentRowDTO(BaseModel):
@@ -88,6 +89,16 @@ class PatientDetailState(ReflexMainState):
     campaign_enrollments: list[CampaignEnrollmentDTO] = []
     is_loading: bool = False
     error_message: str = ""
+
+    @rx.var
+    def prescribed_followup_exams(self) -> list[ExamRowDTO]:
+        """Return standalone exams that are prescribed follow-ups (for lab section)."""
+        return [e for e in self.exams if e.is_prescribed_followup]
+
+    @rx.var
+    def standalone_exams(self) -> list[ExamRowDTO]:
+        """Return standalone exams that are NOT prescribed follow-ups."""
+        return [e for e in self.exams if not e.is_prescribed_followup]
 
     @rx.event
     async def on_load(self):
@@ -253,6 +264,13 @@ class PatientDetailState(ReflexMainState):
                     for cr in consult_rows
                     for ex_dto in cr.exams
                 }
+
+                # Collect all follow-up exam IDs from all loaded exams (prescribed by doctor)
+                followup_exam_id_set: set[str] = set()
+                for e in exams_loaded:
+                    for fid in (e.follow_up_exam_ids or []):
+                        followup_exam_id_set.add(str(fid))
+
                 existing_camp_sections: set[tuple[str, str]] = set()
                 exam_rows_standalone: list[ExamRowDTO] = []
                 exam_rows_by_campaign: dict[str, list[ExamRowDTO]] = {}
@@ -296,6 +314,7 @@ class PatientDetailState(ReflexMainState):
                             exam_type_label=label,
                             status=e.status.value,
                             link_url=f"/exam/{e.id}",
+                            is_prescribed_followup=str(e.id) in followup_exam_id_set,
                         ))
 
                 # Pre-fetch all CampaignExams (used for pending rows + appointment inference)

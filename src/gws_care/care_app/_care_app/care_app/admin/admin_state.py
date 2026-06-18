@@ -90,15 +90,37 @@ class AdminState(RoleState):
                 care_role = CareRole(role)
                 if UserRoleService.has_role(user_id, care_role):
                     UserRoleService.revoke_role(user_id, care_role)
-                    self.success_message = f"Role '{care_role.get_label()}' revoked."
+                    self.success_message = f"Rôle '{care_role.get_label()}' retiré."
                 else:
-                    # For ACCOUNT_ADMIN / PATIENT, assign without link first;
-                    # user can set the link via the selector that appears.
-                    UserRoleService.assign_role(user_id, care_role)
-                    self.success_message = f"Role '{care_role.get_label()}' assigned."
+                    if care_role == CareRole.PATIENT:
+                        # Auto-create a Patient record from the user's info and link it
+                        from datetime import date
+                        from gws_care.user.user import User
+                        from gws_care.patient.patient_service import PatientService
+                        from gws_care.patient.patient_dto import SavePatientDTO
+                        user_obj = User.get_by_id(user_id)
+                        patient = PatientService.create_patient(SavePatientDTO(
+                            last_name=user_obj.last_name or user_obj.email,
+                            first_name=user_obj.first_name or "",
+                            date_of_birth=date(2000, 1, 1),  # placeholder — edit in patient list
+                            gender="Other",
+                            email=user_obj.email or None,
+                        ))
+                        UserRoleService.assign_role(user_id, care_role)
+                        UserRoleService.assign_role_with_link(
+                            user_id, care_role, linked_patient_id=str(patient.id)
+                        )
+                        self.success_message = (
+                            f"Rôle patient assigné et dossier créé ({patient.patient_number}). "
+                            "Pensez à compléter la date de naissance dans la liste patients."
+                        )
+                    else:
+                        UserRoleService.assign_role(user_id, care_role)
+                        self.success_message = f"Rôle '{care_role.get_label()}' assigné."
             await self._load_users()
+            await self._load_entity_options()
         except Exception as e:
-            self.error_message = f"Error updating role: {e}"
+            self.error_message = f"Erreur : {e}"
 
     @rx.event
     async def set_account_link(self, user_id: str, account_id: str):

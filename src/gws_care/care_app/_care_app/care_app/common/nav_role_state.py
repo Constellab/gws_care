@@ -160,6 +160,7 @@ class NavRoleState(ReflexMainState):
         return (
             self.is_super_admin or self.is_admin_psc
             or self.is_operateur_terrain
+            or self.is_medecin_psc or self.is_medecin_entreprise
             or (self.no_role_assigned and self.is_platform_admin)
         )
 
@@ -485,5 +486,5 @@ class NavRoleState(ReflexMainState):
         if self.is_rh_entreprise:
             return "/hr"
         if self.is_patient_user:
-            return "/patient-portal"
+            return "/my-exams"
         return "/dashboard"

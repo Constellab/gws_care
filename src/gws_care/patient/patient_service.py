@@ -37,11 +37,13 @@ class PatientService:
         account_id: str | None = None,
         dob_from: str | None = None,
         dob_to: str | None = None,
+        doctor_id: str | None = None,
     ) -> int:
         """Return total count matching the given filters (for pagination)."""
         return cls._build_query(
             name=name, patient_number=patient_number, phone=phone,
             account_id=account_id, dob_from=dob_from, dob_to=dob_to,
+            doctor_id=doctor_id,
         ).count()
 
     @classmethod
@@ -57,10 +59,12 @@ class PatientService:
         sort_ascending: bool = True,
         limit: int = 50,
         offset: int = 0,
+        doctor_id: str | None = None,
     ) -> list[Patient]:
         query = cls._build_query(
             name=name, patient_number=patient_number, phone=phone,
             account_id=account_id, dob_from=dob_from, dob_to=dob_to,
+            doctor_id=doctor_id,
         )
         # Sorting
         _sort_map = {
@@ -89,12 +93,21 @@ class PatientService:
         account_id: str | None = None,
         dob_from: str | None = None,
         dob_to: str | None = None,
+        doctor_id: str | None = None,
     ):
         """Shared query builder (no ordering/limit) used by both search and count."""
         query = (
             Patient.select(Patient, Account)
             .join(Account, JOIN.LEFT_OUTER, on=(Patient.billing_account == Account.id))
         )
+        if doctor_id:
+            from gws_care.appointment.appointment import Appointment
+            patient_ids = (
+                Appointment.select(Appointment.patient)
+                .where(Appointment.assigned_doctor_id == doctor_id)
+                .distinct()
+            )
+            query = query.where(Patient.id.in_(patient_ids))
         if patient_number:
             query = query.where(Patient.patient_number == patient_number)
         if phone:

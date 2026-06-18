@@ -6,11 +6,14 @@ from gws_reflex_main import main_component
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .exam_detail_state import (
+    AvailableParamOption,
     ConsultationContextDTO,
     ExamDetailDTO,
     ExamDetailState,
     ExamFileRowDTO,
     FollowUpExamOption,
+    FollowUpExamRowDTO,
+    FollowUpParamOption,
     LabResultRowDTO,
     RequestedParamDTO,
 )
@@ -677,28 +680,67 @@ def _prescribed_param_row(param: RequestedParamDTO) -> rx.Component:
 
 
 def _prescribed_tests_section() -> rx.Component:
-    """Section showing which lab tests were requested by the doctor. Hidden when empty."""
+    """Section showing which lab tests were requested by the doctor.
+
+    Always shown when exam has an exam type ref (so doctor can add/edit).
+    """
     return rx.cond(
-        ExamDetailState.requested_params,
+        ExamDetailState.available_params,
         _section_card(
             "Tests prescrits par le médecin",
             rx.vstack(
                 rx.hstack(
-                    rx.icon("flask-conical", size=14, color="var(--blue-9)"),
-                    rx.text(
-                        "Le médecin a demandé les analyses suivantes. Saisissez les résultats dans la section ci-dessous.",
-                        size="2",
-                        color="var(--gray-11)",
+                    rx.vstack(
+                        rx.text(
+                            "Sélectionnez les analyses spécifiques à effectuer pour cet examen.",
+                            size="2",
+                            color="var(--gray-9)",
+                        ),
+                        rx.cond(
+                            ExamDetailState.requested_params,
+                            rx.hstack(
+                                rx.icon("flask-conical", size=14, color="var(--blue-9)"),
+                                rx.text(
+                                    ExamDetailState.requested_params.length().to(str)
+                                    + " analyse(s) prescrite(s)",
+                                    size="2",
+                                    color="var(--blue-9)",
+                                    weight="medium",
+                                ),
+                                spacing="1",
+                                align="center",
+                            ),
+                            rx.text(
+                                "Aucune analyse prescrite pour l'instant.",
+                                size="2",
+                                color="var(--gray-7)",
+                                font_style="italic",
+                            ),
+                        ),
+                        spacing="1",
+                        flex="1",
                     ),
-                    spacing="2",
-                    align="start",
-                ),
-                rx.box(
-                    rx.foreach(ExamDetailState.requested_params, _prescribed_param_row),
+                    rx.button(
+                        rx.icon("list-checks", size=14),
+                        "Prescrire les analyses",
+                        on_click=ExamDetailState.open_request_params_dialog,
+                        variant="soft",
+                        color_scheme="blue",
+                        size="2",
+                    ),
                     width="100%",
-                    padding="0.5rem",
-                    background="var(--blue-2)",
-                    border_radius="6px",
+                    align="start",
+                    spacing="3",
+                ),
+                rx.cond(
+                    ExamDetailState.requested_params,
+                    rx.box(
+                        rx.foreach(ExamDetailState.requested_params, _prescribed_param_row),
+                        width="100%",
+                        padding="0.5rem",
+                        background="var(--blue-2)",
+                        border_radius="6px",
+                    ),
                 ),
                 width="100%",
                 spacing="3",
@@ -916,33 +958,206 @@ def _documents_section() -> rx.Component:
     )
 
 
-# ── Prescribe follow-up exams ─────────────────────────────────────────────────
+# ── Request parameters dialog (doctor selects tests for current exam) ─────────
 
-def _prescribe_exam_option_row(opt: FollowUpExamOption) -> rx.Component:
-    """One row in the prescribe dialog: checkbox + exam type name."""
-    is_checked = ExamDetailState.prescribe_selected_ids.contains(opt.id)
+def _request_param_option_row(param: AvailableParamOption) -> rx.Component:
+    """One row in the request-parameters dialog: checkbox + parameter name + unit."""
+    is_checked = ExamDetailState.request_params_selected_ids.contains(param.id)
     return rx.hstack(
         rx.checkbox(
             checked=is_checked,
-            on_change=lambda _: ExamDetailState.toggle_prescribe_exam(opt.id),
+            on_change=lambda _: ExamDetailState.toggle_request_param(param.id),
             size="2",
         ),
         rx.vstack(
-            rx.text(opt.name, size="2", weight="medium"),
-            rx.text(opt.category_label, size="1", color="var(--gray-9)"),
+            rx.text(param.name, size="2", weight="medium"),
+            rx.cond(
+                param.unit != "",
+                rx.text(param.unit, size="1", color="var(--gray-9)"),
+            ),
             spacing="0",
+        ),
+        rx.spacer(),
+        rx.cond(
+            param.ref_range != "",
+            rx.text(param.ref_range, size="1", color="var(--gray-8)"),
         ),
         spacing="3",
         align="center",
         width="100%",
         padding_y="0.25rem",
         cursor="pointer",
-        on_click=ExamDetailState.toggle_prescribe_exam(opt.id),
+        on_click=ExamDetailState.toggle_request_param(param.id),
+    )
+
+
+def _request_params_dialog() -> rx.Component:
+    """Modal dialog for doctor to select which parameters to test in this exam."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(
+                rx.hstack(
+                    rx.icon("list-checks", size=18, color="var(--accent-9)"),
+                    rx.text("Analyses à prescrire"),
+                    spacing="2",
+                    align="center",
+                )
+            ),
+            rx.text(
+                "Cochez les analyses spécifiques que le laboratoire doit effectuer pour cet examen.",
+                size="2",
+                color="var(--gray-9)",
+                margin_bottom="0.75rem",
+            ),
+            rx.scroll_area(
+                rx.vstack(
+                    rx.foreach(ExamDetailState.available_params, _request_param_option_row),
+                    spacing="1",
+                    width="100%",
+                ),
+                max_height="360px",
+                width="100%",
+            ),
+            rx.cond(
+                ExamDetailState.request_params_selected_ids.length() > 0,
+                rx.callout(
+                    ExamDetailState.request_params_selected_ids.length().to(str)
+                    + " analyse(s) sélectionnée(s)",
+                    icon="flask-conical",
+                    color_scheme="blue",
+                    size="1",
+                    margin_top="0.75rem",
+                ),
+                rx.fragment(),
+            ),
+            rx.hstack(
+                rx.dialog.close(
+                    rx.button(
+                        "Annuler",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=ExamDetailState.close_request_params_dialog,
+                    ),
+                ),
+                rx.button(
+                    rx.cond(
+                        ExamDetailState.is_saving_requested_params,
+                        rx.spinner(size="2"),
+                        rx.icon("save", size=15),
+                    ),
+                    "Enregistrer",
+                    on_click=ExamDetailState.save_requested_params,
+                    color_scheme="blue",
+                    disabled=ExamDetailState.is_saving_requested_params,
+                ),
+                spacing="2",
+                justify="end",
+                margin_top="1rem",
+                width="100%",
+            ),
+            max_width="520px",
+        ),
+        open=ExamDetailState.request_params_form_open,
+        on_open_change=lambda _: ExamDetailState.close_request_params_dialog(),
+    )
+
+
+# ── Prescribe follow-up exams ─────────────────────────────────────────────────
+
+def _prescribe_param_row(opt_id: str):
+    """Factory — returns a foreach-compatible renderer for one param checkbox row."""
+    def _render(p: FollowUpParamOption) -> rx.Component:
+        return rx.hstack(
+            rx.checkbox(
+                checked=p.is_selected,
+                on_change=lambda _: ExamDetailState.toggle_prescribe_param(opt_id, p.id),
+                size="1",
+            ),
+            rx.text(p.name, size="2", flex="1"),
+            rx.cond(
+                p.unit != "",
+                rx.text(p.unit, size="1", color="var(--gray-8)", min_width="40px"),
+                rx.fragment(),
+            ),
+            rx.cond(
+                p.ref_range != "",
+                rx.text(p.ref_range, size="1", color="var(--gray-8)", min_width="60px"),
+                rx.fragment(),
+            ),
+            spacing="2",
+            align="center",
+            padding_y="0.15rem",
+            padding_left="1rem",
+            cursor="pointer",
+            on_click=ExamDetailState.toggle_prescribe_param(opt_id, p.id),
+            width="100%",
+        )
+    return _render
+
+
+def _prescribe_exam_option_row(opt: FollowUpExamOption) -> rx.Component:
+    """One row in the prescribe dialog: checkbox + exam type name + expandable params."""
+    is_checked = ExamDetailState.prescribe_selected_ids.contains(opt.id)
+    return rx.vstack(
+        rx.hstack(
+            rx.checkbox(
+                checked=is_checked,
+                on_change=lambda _: ExamDetailState.toggle_prescribe_exam(opt.id),
+                size="2",
+            ),
+            rx.vstack(
+                rx.text(opt.name, size="2", weight="medium"),
+                rx.text(
+                    opt.category_label + " · " + opt.params.length().to(str) + " paramètre(s)",
+                    size="1", color="var(--gray-9)",
+                ),
+                spacing="0",
+                flex="1",
+                align_items="start",
+            ),
+            rx.cond(
+                is_checked & opt.params,
+                rx.icon_button(
+                    rx.cond(opt.params_expanded, rx.icon("chevron-up", size=13), rx.icon("chevron-down", size=13)),
+                    variant="ghost",
+                    size="1",
+                    color_scheme="gray",
+                    on_click=ExamDetailState.toggle_prescribe_params_expanded(opt.id),
+                ),
+                rx.fragment(),
+            ),
+            spacing="3",
+            align="center",
+            width="100%",
+            padding_y="0.35rem",
+            cursor="pointer",
+            on_click=ExamDetailState.toggle_prescribe_exam(opt.id),
+        ),
+        rx.cond(
+            is_checked & opt.params_expanded & opt.params,
+            rx.vstack(
+                rx.hstack(
+                    rx.text("Tout sélectionner", size="1", color="var(--accent-9)", cursor="pointer",
+                            on_click=ExamDetailState.select_all_prescribe_params(opt.id)),
+                    width="100%",
+                    padding_left="1rem",
+                ),
+                rx.foreach(opt.params, _prescribe_param_row(opt.id)),
+                spacing="0",
+                width="100%",
+                background="var(--gray-2)",
+                border_radius="6px",
+                padding="0.5rem",
+            ),
+            rx.fragment(),
+        ),
+        spacing="0",
+        width="100%",
     )
 
 
 def _prescribe_dialog() -> rx.Component:
-    """Modal dialog for doctor to prescribe follow-up exams."""
+    """Modal dialog for doctor to prescribe follow-up exams with parameter selection."""
     return rx.dialog.root(
         rx.dialog.content(
             rx.dialog.title(
@@ -954,7 +1169,7 @@ def _prescribe_dialog() -> rx.Component:
                 )
             ),
             rx.text(
-                "Sélectionnez les examens que le patient doit réaliser suite à cette consultation.",
+                "Sélectionnez les examens et les tests spécifiques à prescrire.",
                 size="2",
                 color="var(--gray-9)",
                 margin_bottom="0.75rem",
@@ -965,14 +1180,14 @@ def _prescribe_dialog() -> rx.Component:
                     spacing="1",
                     width="100%",
                 ),
-                max_height="320px",
+                max_height="400px",
                 width="100%",
             ),
             rx.cond(
                 ExamDetailState.prescribe_selected_ids.length() > 0,
                 rx.callout(
                     ExamDetailState.prescribe_selected_ids.length().to(str)
-                    + " examen(s) sélectionné(s)",
+                    + " examen(s) sélectionné(s) — cochez les tests souhaités",
                     icon="check",
                     color_scheme="blue",
                     size="1",
@@ -1005,16 +1220,50 @@ def _prescribe_dialog() -> rx.Component:
                 margin_top="1rem",
                 width="100%",
             ),
-            max_width="520px",
+            max_width="560px",
         ),
         open=ExamDetailState.prescribe_form_open,
         on_open_change=lambda _: ExamDetailState.close_prescribe_dialog(),
     )
 
 
+def _followup_exam_row(row: FollowUpExamRowDTO) -> rx.Component:
+    """One clickable row for a prescribed follow-up exam."""
+    status_color = rx.cond(
+        row.status == "draft",
+        "var(--amber-9)",
+        rx.cond(row.status == "pending", "var(--blue-9)", "var(--green-9)"),
+    )
+    status_label = rx.cond(
+        row.status == "draft",
+        "En attente",
+        rx.cond(row.status == "pending", "Résultats en cours", "Complété"),
+    )
+    return rx.link(
+        rx.hstack(
+            rx.icon("flask-conical", size=14, color="var(--blue-9)"),
+            rx.text(row.exam_type_label, size="2", weight="medium", flex="1"),
+            rx.badge(status_label, color_scheme=rx.cond(
+                row.status == "draft", "amber",
+                rx.cond(row.status == "pending", "blue", "green"),
+            ), size="1"),
+            rx.icon("chevron-right", size=12, color="var(--gray-8)"),
+            spacing="2",
+            align="center",
+            width="100%",
+            padding="0.5rem 0.75rem",
+            border_radius="6px",
+            background="var(--gray-2)",
+            _hover={"background": "var(--blue-2)", "cursor": "pointer"},
+        ),
+        href=row.link_url,
+        text_decoration="none",
+        width="100%",
+    )
+
+
 def _followup_exams_section(exam: ExamDetailDTO) -> rx.Component:
     """Section showing prescribed follow-up exams and the 'Prescrire' button (edit mode)."""
-    # Build a lookup from IDs to show names
     return _section_card(
         "Examens de suivi prescrits",
         rx.vstack(
@@ -1026,24 +1275,52 @@ def _followup_exams_section(exam: ExamDetailDTO) -> rx.Component:
                         color="var(--gray-9)",
                     ),
                     rx.cond(
-                        exam.prescribed_exam_ref_ids.length() > 0,
-                        rx.hstack(
-                            rx.icon("check-check", size=14, color="var(--green-9)"),
-                            rx.text(
-                                exam.prescribed_exam_ref_ids.length().to(str)
-                                + " examen(s) prescrit(s)",
-                                size="2",
-                                color="var(--green-9)",
-                                weight="medium",
+                        ExamDetailState.follow_up_exams.length() > 0,
+                        rx.vstack(
+                            rx.hstack(
+                                rx.icon("check-check", size=14, color="var(--green-9)"),
+                                rx.text(
+                                    ExamDetailState.follow_up_exams.length().to(str)
+                                    + " examen(s) prescrit(s)",
+                                    size="2",
+                                    color="var(--green-9)",
+                                    weight="medium",
+                                ),
+                                spacing="1",
+                                align="center",
                             ),
-                            spacing="1",
-                            align="center",
+                            rx.vstack(
+                                rx.foreach(
+                                    ExamDetailState.follow_up_exams,
+                                    _followup_exam_row,
+                                ),
+                                spacing="2",
+                                width="100%",
+                            ),
+                            spacing="2",
+                            width="100%",
                         ),
-                        rx.text(
-                            "Aucun examen prescrit pour l'instant.",
-                            size="2",
-                            color="var(--gray-7)",
-                            font_style="italic",
+                        rx.cond(
+                            exam.prescribed_exam_ref_ids.length() > 0,
+                            # Prescriptions saved but no follow-up records yet (legacy data)
+                            rx.hstack(
+                                rx.icon("check-check", size=14, color="var(--green-9)"),
+                                rx.text(
+                                    exam.prescribed_exam_ref_ids.length().to(str)
+                                    + " examen(s) prescrit(s)",
+                                    size="2",
+                                    color="var(--green-9)",
+                                    weight="medium",
+                                ),
+                                spacing="1",
+                                align="center",
+                            ),
+                            rx.text(
+                                "Aucun examen prescrit pour l'instant.",
+                                size="2",
+                                color="var(--gray-7)",
+                                font_style="italic",
+                            ),
                         ),
                     ),
                     spacing="2",
@@ -1074,6 +1351,7 @@ def exam_detail_page() -> rx.Component:
     return main_component(
         page_layout(
             _prescribe_dialog(),
+            _request_params_dialog(),
             rx.button(
                 rx.icon("arrow-left", size=16),
                 LanguageState.tr["back_to_patient_btn"],
@@ -1094,36 +1372,70 @@ def exam_detail_page() -> rx.Component:
                 rx.center(rx.spinner(size="3"), padding="3rem"),
                 rx.cond(
                     ExamDetailState.exam,
-                    rx.vstack(
-                        _exam_header(ExamDetailState.exam),
-                        # When exam belongs to a consultation: show shared context banner
-                        # and hide the per-exam medical sections (they live on the consultation)
-                        rx.cond(
-                            ExamDetailState.consultation_context,
-                            _consultation_context_banner(ExamDetailState.consultation_context),
-                            rx.fragment(),
-                        ),
-                        rx.cond(
-                            ~ExamDetailState.exam.consultation_id,
-                            rx.vstack(
-                                _reasons_and_history_section(),
-                                _physical_exam_section(),
-                                width="100%",
-                                spacing="6",
+                    rx.cond(
+                        ExamDetailState.exam.is_follow_up,
+                        # ── Simplified view: follow-up prescribed exam (lab tech fills results) ──
+                        rx.vstack(
+                            _exam_header(ExamDetailState.exam),
+                            _prescribed_tests_section(),
+                            _lab_results_section(),
+                            _documents_section(),
+                            _section_card(
+                                "Interprétation médicale",
+                                rx.vstack(
+                                    rx.text_area(
+                                        placeholder="Interprétation et commentaires du médecin...",
+                                        value=ExamDetailState.form_conclusion,
+                                        on_change=ExamDetailState.set_form_conclusion,
+                                        rows="4",
+                                        width="100%",
+                                    ),
+                                    rx.button(
+                                        rx.icon("save", size=15),
+                                        "Sauvegarder",
+                                        on_click=ExamDetailState.save_sections,
+                                        disabled=ExamDetailState.is_saving_sections,
+                                        size="2",
+                                    ),
+                                    spacing="3",
+                                    width="100%",
+                                ),
                             ),
-                            rx.fragment(),
+                            width="100%",
+                            spacing="6",
                         ),
-                        _prescribed_tests_section(),
-                        _lab_results_section(),
-                        rx.cond(
-                            ~ExamDetailState.exam.consultation_id,
-                            _conclusion_section(),
-                            rx.fragment(),
+                        # ── Full view: standard exam detail page ──
+                        rx.vstack(
+                            _exam_header(ExamDetailState.exam),
+                            # When exam belongs to a consultation: show shared context banner
+                            # and hide the per-exam medical sections (they live on the consultation)
+                            rx.cond(
+                                ExamDetailState.consultation_context,
+                                _consultation_context_banner(ExamDetailState.consultation_context),
+                                rx.fragment(),
+                            ),
+                            rx.cond(
+                                ~ExamDetailState.exam.consultation_id,
+                                rx.vstack(
+                                    _reasons_and_history_section(),
+                                    _physical_exam_section(),
+                                    width="100%",
+                                    spacing="6",
+                                ),
+                                rx.fragment(),
+                            ),
+                            _prescribed_tests_section(),
+                            _lab_results_section(),
+                            rx.cond(
+                                ~ExamDetailState.exam.consultation_id,
+                                _conclusion_section(),
+                                rx.fragment(),
+                            ),
+                            _followup_exams_section(ExamDetailState.exam),
+                            _documents_section(),
+                            width="100%",
+                            spacing="6",
                         ),
-                        _followup_exams_section(ExamDetailState.exam),
-                        _documents_section(),
-                        width="100%",
-                        spacing="6",
                     ),
                     rx.center(
                         rx.text(LanguageState.tr["exam_not_found"], color="var(--gray-9)"), padding="3rem"
