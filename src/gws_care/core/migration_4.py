@@ -17,5 +17,7 @@ class Migration050(BrickMigration):
     def migrate(
         cls, sql_migrator: SqlMigrator, from_version: Version, to_version: Version
     ) -> None:
+        db = sql_migrator.migrator.database
+        db.create_tables([ExamFile], safe=True)
         sql_migrator.add_column_if_not_exists(ExamFile, CharField(null=True), "document_type")
         sql_migrator.migrate()

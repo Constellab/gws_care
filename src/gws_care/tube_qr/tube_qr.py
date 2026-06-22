@@ -60,7 +60,7 @@ class TubeQR(ModelWithUser):
     associated_at: datetime = DateTimeField(null=True)
     collected_at: datetime = DateTimeField(null=True)
     cancelled_reason: str = TextField(null=True)
-    cancelled_by_id: int = CharField(max_length=36, null=True)
+    cancelled_by_id: str | None = CharField(max_length=36, null=True)
 
     class Meta:
         table_name = "gws_care_tube_qr"

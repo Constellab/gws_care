@@ -51,11 +51,22 @@ class CareRole(str, Enum):
     # System
     SYSTEME = "SYSTEME"
 
-    # ── Backward-compatible aliases kept for migration safety ─────────────────
+    # ── Backward-compatible Python aliases (CareRole.ADMIN → SUPER_ADMIN_PSC) ─
     ADMIN = "SUPER_ADMIN_PSC"
     DOCTOR = "MEDECIN_PSC"
     OPERATOR = "OPERATEUR_TERRAIN"
     ACCOUNT_ADMIN = "RH_ENTREPRISE"
+
+    @classmethod
+    def _missing_(cls, value: object):
+        """Map legacy DB strings ('ADMIN', 'DOCTOR', …) to current members."""
+        _legacy = {
+            "ADMIN": cls.SUPER_ADMIN_PSC,
+            "DOCTOR": cls.MEDECIN_PSC,
+            "OPERATOR": cls.OPERATEUR_TERRAIN,
+            "ACCOUNT_ADMIN": cls.RH_ENTREPRISE,
+        }
+        return _legacy.get(value)
 
     def get_label(self) -> str:
         labels = {

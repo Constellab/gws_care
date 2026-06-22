@@ -93,7 +93,7 @@ class DashboardSnapshotService:
 
         total_campaigns = Campaign.select().count()
         active_campaigns = Campaign.select().where(
-            Campaign.status.not_in([CampaignStatus.ARCHIVED.value, CampaignStatus.CANCELLED.value])
+            Campaign.status != CampaignStatus.ARCHIVED.value
         ).count() if hasattr(Campaign, 'status') else 0
 
         total_patients = Patient.select().count()

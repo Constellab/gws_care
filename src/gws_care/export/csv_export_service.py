@@ -51,7 +51,7 @@ def generate_exam_history_csv(patient_id: str) -> bytes:
             account_name,
             exam.interpretation or "",
             result_summary,
-            exam.notes or "",
+            exam.conclusion or "",
         ])
 
     return output.getvalue().encode("utf-8-sig")   # utf-8-sig for Excel compat

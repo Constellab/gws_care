@@ -222,9 +222,10 @@ class PatientInvoiceService:
     def _next_invoice_number(cls, on_date: date) -> str:
         """Generate a sequential invoice number: FACT-YYYY-NNNN."""
         year = on_date.year
+        from peewee import fn
         count = (
             PatientInvoice.select()
-            .where(PatientInvoice.invoice_date.year == year)
+            .where(fn.YEAR(PatientInvoice.invoice_date) == year)
             .count()
         ) + 1
         return f"FACT-{year}-{count:04d}"
