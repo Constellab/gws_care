@@ -3,46 +3,82 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
-from ..appointment_list.appointment_form_component import appointment_form_dialog
-from ..appointment_list.appointment_form_state import AppointmentFormState
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..patient_list.patient_form_component import patient_form_dialog
 from ..patient_list.patient_form_state import PatientFormState
-from ..patient_list.patient_delete_component import patient_delete_dialog
-from ..patient_list.patient_delete_state import PatientDeleteState
+from .certificate_form_component import certificate_form_dialog
 from .exam_form_component import exam_form_dialog
 from .exam_form_state import ExamFormState
-from .consultation_form_component import consultation_form_dialog
-from .consultation_form_state import ConsultationFormState
 from .patient_detail_state import (
-    AppointmentRowDTO,
-    CampaignEnrollmentDTO,
-    ConsultationExamDTO,
-    ConsultationRowDTO,
+    CertificateRowDTO,
     ExamRowDTO,
     PatientDetailDTO,
     PatientDetailState,
+    PatientVisitRowDTO,
+    PrescriptionRowDTO,
 )
-from ..common.nav_role_state import NavRoleState
-from .patient_dossier_state import (
-    PATIENT_DOC_TYPE_OPTIONS,
-    PatientDocRowDTO,
-    PatientDossierState,
-    PatientNoteRowDTO,
-)
-from .patient_qr_state import PatientQrState
-from .sample_collection_component import sample_collection_panel
-from .sample_collection_state import SampleCollectionState
+from .patient_account_tab_state import AccountPickerRowDTO, LinkedAccountRowDTO, PatientAccountTabState
+from .patient_doctor_tab_state import DoctorPickerRowDTO, LinkedDoctorRowDTO, PatientDoctorTabState
+from .prescription_form_component import prescription_form_dialog
 
 
 def _info_row(label: str, value: rx.Var) -> rx.Component:
     return rx.hstack(
-        rx.text(label, size="2", weight="medium", color="var(--gray-9)", min_width="180px"),
-        rx.cond(value, rx.text(value, size="2"), rx.text("—", size="2", color="var(--gray-7)")),
+        rx.text(label, size="2", weight="medium", color="var(--gray-9)", min_width="180px", flex_shrink="0"),
+        rx.cond(
+            value,
+            rx.text(value, size="2", overflow_wrap="break-word", word_break="break-word", min_width="0", flex="1"),
+            rx.text("—", size="2", color="var(--gray-7)"),
+        ),
         spacing="4",
         align="start",
         padding_y="0.4rem",
+        width="100%",
+    )
+
+
+def _exam_sortable_header(label: str, column: str) -> rx.Component:
+    """Column header cell with sort-direction arrow for the exams table."""
+    return rx.table.column_header_cell(
+        rx.hstack(
+            rx.text(label, size="2"),
+            rx.cond(
+                PatientDetailState.exam_sort_column == column,
+                rx.cond(
+                    PatientDetailState.exam_sort_ascending,
+                    rx.icon("chevron-up", size=13, color="var(--accent-9)"),
+                    rx.icon("chevron-down", size=13, color="var(--accent-9)"),
+                ),
+                rx.icon("chevrons-up-down", size=13, color="var(--gray-7)"),
+            ),
+            spacing="1",
+            align="center",
+        ),
+        on_click=lambda: PatientDetailState.set_exam_sort(column),
+        style={"cursor": "pointer"},
+    )
+
+
+def _visit_sortable_header(label: str, column: str) -> rx.Component:
+    """Column header cell with sort-direction arrow for the visits table."""
+    return rx.table.column_header_cell(
+        rx.hstack(
+            rx.text(label, size="2"),
+            rx.cond(
+                PatientDetailState.visit_sort_column == column,
+                rx.cond(
+                    PatientDetailState.visit_sort_ascending,
+                    rx.icon("chevron-up", size=13, color="var(--accent-9)"),
+                    rx.icon("chevron-down", size=13, color="var(--accent-9)"),
+                ),
+                rx.icon("chevrons-up-down", size=13, color="var(--gray-7)"),
+            ),
+            spacing="1",
+            align="center",
+        ),
+        on_click=lambda: PatientDetailState.set_visit_sort(column),
+        style={"cursor": "pointer"},
     )
 
 
@@ -56,96 +92,16 @@ def _section(title: str, *rows: rx.Component) -> rx.Component:
         border="1px solid var(--gray-4)",
         border_radius="8px",
         background="var(--gray-1)",
+        overflow="hidden",
     )
 
 
-def _patient_qr_button(patient: PatientDetailDTO) -> rx.Component:
-    """QR code shown in a dialog opened by a button in the patient card header."""
-    return rx.dialog.root(
-        rx.dialog.trigger(
-            rx.button(
-                rx.icon("qr-code", size=15),
-                "QR Code",
-                variant="outline",
-                size="2",
-            ),
-        ),
-        rx.dialog.content(
-            rx.vstack(
-                rx.dialog.title(
-                    rx.hstack(
-                        rx.icon("qr-code", size=18, color="var(--accent-9)"),
-                        rx.text(f"QR Code — {patient.patient_number}", weight="medium"),
-                        spacing="2",
-                        align="center",
-                    ),
-                ),
-                rx.center(
-                    rx.cond(
-                        PatientQrState.qr_image_data_url != "",
-                        rx.image(
-                            src=PatientQrState.qr_image_data_url,
-                            width="220px",
-                            height="220px",
-                            border_radius="8px",
-                            border="1px solid var(--gray-4)",
-                        ),
-                        rx.box(
-                            rx.vstack(
-                                rx.icon("qr-code", size=48, color="var(--gray-6)"),
-                                rx.text("Génération en cours...", size="2", color="var(--gray-8)"),
-                                align="center",
-                                spacing="2",
-                            ),
-                            width="220px",
-                            height="220px",
-                            display="flex",
-                            align_items="center",
-                            justify_content="center",
-                            border="1px dashed var(--gray-5)",
-                            border_radius="8px",
-                            background="var(--gray-2)",
-                        ),
-                    ),
-                    padding="1rem 0",
-                ),
-                rx.text(
-                    patient.patient_number,
-                    size="2",
-                    color="var(--gray-9)",
-                    font_family="monospace",
-                    text_align="center",
-                    width="100%",
-                ),
-                rx.hstack(
-                    rx.dialog.close(
-                        rx.button("Fermer", variant="ghost", size="2"),
-                    ),
-                    rx.button(
-                        rx.icon("download", size=14),
-                        "Télécharger",
-                        size="2",
-                        on_click=lambda: PatientQrState.download_qr(
-                            patient.id, patient.patient_number
-                        ),
-                    ),
-                    spacing="3",
-                    justify="end",
-                    width="100%",
-                ),
-                spacing="3",
-                width="100%",
-            ),
-            max_width="320px",
-        ),
-    )
 
 
 def _patient_card(patient: PatientDetailDTO) -> rx.Component:
-    """Identity card header for the patient detail page."""
     return rx.vstack(
         # Header
-        rx.hstack(
+        rx.flex(
             rx.vstack(
                 rx.heading(f"{patient.first_name} {patient.last_name}", size="7"),
                 rx.hstack(
@@ -156,19 +112,35 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
                         ("F", rx.badge(LanguageState.tr["gender_female_badge"], color_scheme="pink", variant="soft", size="2")),
                         rx.badge(patient.gender, color_scheme="gray", variant="soft", size="2"),
                     ),
+                    rx.cond(
+                        patient.sex != None,  # noqa: E711
+                        rx.badge(
+                            LanguageState.tr["field_sex_label"] + ": " + patient.sex,
+                            color_scheme="violet", variant="soft", size="2",
+                        ),
+                    ),
                     spacing="2",
+                    align="center",
+                    flex_wrap="wrap",
                 ),
                 spacing="2",
                 align_items="start",
+                flex="1",
+                min_width="0",
             ),
-            rx.spacer(),
             rx.hstack(
-                _patient_qr_button(patient),
+                rx.button(
+                    rx.icon("id-card", size=15),
+                    LanguageState.tr["btn_id_card"],
+                    on_click=PatientDetailState.open_id_card,
+                    variant="outline",
+                    size="2",
+                ),
                 rx.button(
                     rx.icon("download", size=15),
                     LanguageState.tr["export_csv"],
                     on_click=PatientDetailState.download_exam_history,
-                    variant="ghost",
+                    variant="outline",
                     size="2",
                 ),
                 rx.button(
@@ -178,225 +150,566 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
                     variant="outline",
                     size="2",
                 ),
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("trash-2", size=15),
-                        variant="outline",
-                        size="2",
-                        color_scheme="red",
-                        on_click=lambda: PatientDeleteState.open_delete_dialog(
-                            patient.id,
-                            patient.first_name + " " + patient.last_name,
-                            "/",
-                        ),
-                    ),
-                    content=LanguageState.tr["tooltip_delete_patient"],
-                ),
                 spacing="2",
+                flex_shrink="0",
+                flex_wrap="wrap",
             ),
             width="100%",
-            align="center",
+            align="start",
+            gap="3",
+            wrap="wrap",
         ),
         rx.separator(width="100%"),
-        # All identity info in a single vertical list
-        rx.vstack(
-            _info_row(LanguageState.tr["info_dob"], patient.date_of_birth),
-            _info_row(LanguageState.tr["info_birth_name"], patient.birth_name),
-            _info_row(LanguageState.tr["info_gender"], patient.gender),
-            _info_row(LanguageState.tr["info_phone"], patient.phone),
-            _info_row(LanguageState.tr["info_email"], patient.email),
-            _info_row(LanguageState.tr["info_address"], patient.address),
-            _info_row(LanguageState.tr["info_postal_code"], patient.postal_code),
-            _info_row(LanguageState.tr["info_city"], patient.city),
-            _info_row(LanguageState.tr["info_physician_name"], patient.primary_physician_name),
-            _info_row(LanguageState.tr["info_physician_phone"], patient.primary_physician_phone),
-            spacing="0",
+        # Sections
+        rx.grid(
+            _section(
+                LanguageState.tr["section_personal_info"],
+                _info_row(LanguageState.tr["field_ssn"], patient.social_security_number),
+                _info_row(LanguageState.tr["info_dob"], patient.date_of_birth),
+                _info_row(LanguageState.tr["info_birth_name"], patient.birth_name),
+                _info_row(LanguageState.tr["info_gender"], patient.gender),
+                _info_row(LanguageState.tr["field_nationality"], patient.nationality),
+            ),
+            _section(
+                LanguageState.tr["section_contact"],
+                _info_row(LanguageState.tr["info_phone"], patient.phone),
+                _info_row(LanguageState.tr["info_email"], patient.email),
+                _info_row(LanguageState.tr["info_address"], patient.address),
+                _info_row(LanguageState.tr["info_postal_code"], patient.postal_code),
+                _info_row(LanguageState.tr["info_city"], patient.city),
+            ),
+            columns=rx.breakpoints(initial="1", sm="1", md="2"),
+            spacing="4",
             width="100%",
-            align_items="start",
+        ),
+        # Measurements section
+        rx.cond(
+            (patient.weight != None) | (patient.height != None),  # noqa: E711
+            _section(
+                LanguageState.tr["section_measurements"],
+                rx.hstack(
+                    # Weight
+                    rx.cond(
+                        patient.weight,
+                        rx.vstack(
+                            rx.text(LanguageState.tr["field_weight"], size="1", color="var(--gray-9)", weight="medium"),
+                            rx.text(patient.weight.to_string() + " kg", size="3", weight="bold"),
+                            spacing="0", align_items="start",
+                        ),
+                    ),
+                    # Height
+                    rx.cond(
+                        patient.height,
+                        rx.vstack(
+                            rx.text(LanguageState.tr["field_height"], size="1", color="var(--gray-9)", weight="medium"),
+                            rx.text(patient.height.to_string() + " cm", size="3", weight="bold"),
+                            spacing="0", align_items="start",
+                        ),
+                    ),
+                    # BMI badge
+                    rx.cond(
+                        PatientDetailState.patient_bmi,
+                        rx.vstack(
+                            rx.text(LanguageState.tr["bmi_label"], size="1", color="var(--gray-9)", weight="medium"),
+                            rx.match(
+                                PatientDetailState.patient_bmi_category,
+                                ("underweight", rx.badge(
+                                    PatientDetailState.patient_bmi.to_string() + " — " + LanguageState.tr["bmi_underweight"],
+                                    color_scheme="blue", variant="soft", size="2")),
+                                ("normal", rx.badge(
+                                    PatientDetailState.patient_bmi.to_string() + " — " + LanguageState.tr["bmi_normal"],
+                                    color_scheme="green", variant="soft", size="2")),
+                                ("overweight", rx.badge(
+                                    PatientDetailState.patient_bmi.to_string() + " — " + LanguageState.tr["bmi_overweight"],
+                                    color_scheme="orange", variant="soft", size="2")),
+                                ("obese", rx.badge(
+                                    PatientDetailState.patient_bmi.to_string() + " — " + LanguageState.tr["bmi_obese"],
+                                    color_scheme="red", variant="solid", size="2")),
+                                rx.fragment(),
+                            ),
+                            rx.text(LanguageState.tr["bmi_auto"], size="1", color="var(--gray-7)"),
+                            spacing="1", align_items="start",
+                        ),
+                    ),
+                    spacing="6", align="end", flex_wrap="wrap",
+                ),
+                rx.text(LanguageState.tr["bmi_alert_desc"], size="1", color="var(--gray-7)", margin_top="0.5rem"),
+                rx.text(LanguageState.tr["patient_measurements_from_exam"], size="1", color="var(--gray-6)"),
+            ),
         ),
         width="100%",
         spacing="4",
     )
 
 
-def _exam_status_badge(status: str) -> rx.Component:
-    return rx.match(
-        status,
-        ("DRAFT", rx.fragment()),
-        ("PENDING", rx.badge(LanguageState.tr["exam_status_pending"], color_scheme="orange", variant="soft", size="1")),
-        ("INTERPRETED", rx.badge(LanguageState.tr["exam_status_interpreted"], color_scheme="green", variant="soft", size="1")),
-        ("PENDING_ENTRY", rx.badge("À saisir", color_scheme="blue", variant="soft", size="1")),
-        rx.badge(status, color_scheme="gray", variant="soft", size="1"),
+
+def _id_card_visual() -> rx.Component:
+    """The visual patient ID card rendered in the dialog."""
+    sex_label = rx.match(
+        PatientDetailState.patient.sex,
+        ("M", LanguageState.tr["sex_male"]),
+        ("F", LanguageState.tr["sex_female"]),
+        ("Autre", LanguageState.tr["sex_other"]),
+        "—",
     )
-
-
-def _exam_row(exam: ExamRowDTO) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(
-            rx.cond(
-                exam.exam_date != "",
-                rx.text(exam.exam_date, size="2"),
-                rx.text("—", size="2", color="var(--gray-7)"),
-            )
-        ),
-        rx.table.cell(rx.text(exam.exam_type_label, size="2")),
-        rx.table.cell(_exam_status_badge(exam.status)),
-        rx.table.cell(
-            rx.button(
-                rx.icon("pencil", size=14),
-                "Saisir / Voir",
-                variant="ghost",
-                size="1",
-                on_click=rx.redirect(exam.link_url),
-            ),
-        ),
-        rx.table.cell(
-            # Show delete only for standalone exams (real id, not a campaign pending row)
-            rx.cond(
-                (exam.id != "") & (exam.status != "PENDING_ENTRY"),
-                rx.cond(
-                    exam.link_url.contains("/exam/"),
-                    rx.icon_button(
-                        rx.icon("trash-2", size=14),
-                        variant="ghost",
-                        size="1",
-                        color_scheme="red",
-                        on_click=lambda: PatientDetailState.delete_exam(exam.id),
-                    ),
-                    rx.fragment(),
-                ),
-                rx.fragment(),
-            ),
-        ),
-        _hover={"background": "var(--gray-2)"},
-        cursor="pointer",
-    )
-
-
-def _consultation_exam_row(ex: ConsultationExamDTO) -> rx.Component:
-    """One exam row inside a consultation card."""
-    return rx.hstack(
-        rx.icon(
-            rx.match(
-                ex.status,
-                ("DRAFT", "clock"),
-                ("PENDING", "flask-conical"),
-                ("INTERPRETED", "check-circle"),
-                "file",
-            ),
-            size=14,
-            color=rx.match(
-                ex.status,
-                ("DRAFT", "var(--gray-8)"),
-                ("PENDING", "var(--orange-9)"),
-                ("INTERPRETED", "var(--green-9)"),
-                "var(--gray-8)",
-            ),
-        ),
-        rx.text(ex.exam_type_label, size="2", flex="1"),
-        rx.cond(
-            ex.has_lab_results,
-            rx.badge("Résultats saisis", color_scheme="blue", size="1", variant="soft"),
-        ),
-        rx.icon_button(
-            rx.icon("arrow-right", size=13),
-            variant="ghost",
-            size="1",
-            color_scheme="gray",
-            on_click=rx.redirect("/exam/" + ex.exam_id),
-        ),
-        spacing="2",
-        align="center",
-        padding="0.35rem 0.5rem",
-        border_radius="6px",
-        width="100%",
-        _hover={"background": "var(--gray-2)"},
-    )
-
-
-def _consultation_card(consult: ConsultationRowDTO) -> rx.Component:
-    """Card for one consultation visit with its ordered exams."""
-    return rx.card(
-        rx.vstack(
+    return rx.box(
+        # ── Top band ──────────────────────────────────────────────────────────
+        rx.box(
             rx.hstack(
-                rx.vstack(
-                    rx.hstack(
-                        rx.icon("calendar", size=14, color="var(--gray-8)"),
-                        rx.text(consult.consultation_date, size="2", weight="medium"),
-                        spacing="1",
-                        align="center",
+                rx.hstack(
+                    rx.icon("heart-pulse", size=16, color="var(--accent-9)"),
+                    rx.text(
+                        "CONSTELLAB CARE — PS CONSULTING",
+                        size="1",
+                        weight="bold",
+                        color="var(--accent-9)",
                     ),
+                    spacing="2",
+                    align="center",
+                ),
+                rx.spacer(),
+                rx.text(
+                    PatientDetailState.patient.patient_number,
+                    size="1",
+                    color="var(--accent-9)",
+                    weight="medium",
+                ),
+                width="100%",
+                align="center",
+            ),
+            background="var(--accent-2)",
+            padding="0.5rem 1rem",
+            border_radius="8px 8px 0 0",
+        ),
+        # ── Card body ─────────────────────────────────────────────────────────
+        rx.hstack(
+            # Left: patient info
+            rx.vstack(
+                rx.text(
                     rx.cond(
-                        consult.reason_for_visit != "",
+                        PatientDetailState.patient.last_name,
+                        PatientDetailState.patient.last_name,
+                        "",
+                    ),
+                    size="6",
+                    weight="bold",
+                    color="white",
+                    letter_spacing="0.05em",
+                ),
+                rx.text(
+                    rx.cond(
+                        PatientDetailState.patient.first_name,
+                        PatientDetailState.patient.first_name,
+                        "",
+                    ),
+                    size="4",
+                    color="var(--accent-5)",
+                ),
+                rx.separator(width="100%", margin_y="0.4rem", color="var(--accent-5)"),
+                # SSN
+                rx.vstack(
+                    rx.text(LanguageState.tr["field_ssn"], size="1", color="var(--accent-5)", weight="medium"),
+                    rx.cond(
+                        PatientDetailState.patient.social_security_number,
                         rx.text(
-                            consult.reason_for_visit,
-                            size="2",
-                            color="var(--gray-9)",
-                            max_width="400px",
-                            overflow="hidden",
-                            text_overflow="ellipsis",
-                            white_space="nowrap",
+                            PatientDetailState.patient.social_security_number,
+                            size="3",
+                            color="white",
+                            weight="bold",
+                            font_family="monospace",
                         ),
+                        rx.text("—", size="3", color="var(--accent-5)"),
                     ),
                     spacing="0",
                     align_items="start",
                 ),
-                rx.spacer(),
-                rx.badge(
-                    consult.exam_count.to_string() + " examen(s)",
-                    color_scheme="blue",
-                    variant="soft",
-                    size="1",
-                ),
-                align="center",
-                width="100%",
-            ),
-            rx.cond(
-                consult.exams,
+                # DOB
                 rx.vstack(
-                    rx.separator(size="4"),
-                    rx.foreach(consult.exams, _consultation_exam_row),
-                    spacing="1",
-                    width="100%",
+                    rx.text(LanguageState.tr["info_dob"], size="1", color="var(--accent-5)", weight="medium"),
+                    rx.text(PatientDetailState.patient.date_of_birth, size="3", color="white", weight="bold"),
+                    spacing="0",
+                    align_items="start",
                 ),
+                # Sex
+                rx.vstack(
+                    rx.text(LanguageState.tr["field_sex"], size="1", color="var(--accent-5)", weight="medium"),
+                    rx.text(sex_label, size="3", color="white", weight="bold"),
+                    spacing="0",
+                    align_items="start",
+                ),
+                spacing="3",
+                align_items="start",
+                flex="1",
+                padding="1.25rem",
             ),
-            spacing="2",
+            # Right: QR code
+            rx.vstack(
+                rx.cond(
+                    PatientDetailState.patient.qr_code,
+                    rx.box(
+                        rx.image(
+                            src=PatientDetailState.patient.qr_code,
+                            width="120px",
+                            height="120px",
+                        ),
+                        background="white",
+                        padding="6px",
+                        border_radius="6px",
+                    ),
+                    rx.box(
+                        rx.icon("qr-code", size=80, color="var(--accent-6)"),
+                        padding="10px",
+                    ),
+                ),
+                rx.text(LanguageState.tr["qr_code_label"], size="1", color="var(--accent-5)"),
+                align="center",
+                justify="center",
+                padding="1rem",
+            ),
+            spacing="0",
+            align="center",
             width="100%",
         ),
-        width="100%",
-        padding="0.75rem",
+        # ── Footer strip ─────────────────────────────────────────────────────
+        rx.box(
+            rx.text(
+                LanguageState.tr["id_card_footer"],
+                size="1",
+                color="var(--accent-5)",
+                text_align="center",
+            ),
+            background="var(--accent-12)",
+            padding="0.25rem",
+            border_radius="0 0 8px 8px",
+        ),
+        background="linear-gradient(135deg, var(--accent-10) 0%, var(--accent-8) 100%)",
+        border_radius="8px",
+        width="480px",
+        box_shadow="0 8px 32px var(--accent-a8)",
     )
 
 
-def _consultations_section() -> rx.Component:
+def id_card_dialog() -> rx.Component:
+    """Dialog showing the patient ID card with print and download actions."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(LanguageState.tr["id_card_title"]),
+            rx.dialog.description(LanguageState.tr["id_card_desc"]),
+            rx.vstack(
+                rx.cond(
+                    PatientDetailState.patient,
+                    _id_card_visual(),
+                    rx.spinner(size="3"),
+                ),
+                rx.hstack(
+                    rx.button(
+                        rx.icon("printer", size=15),
+                        LanguageState.tr["print_btn"],
+                        on_click=rx.call_script("window.print()"),
+                        variant="outline",
+                        size="2",
+                    ),
+                    rx.button(
+                        rx.icon("file-down", size=15),
+                        LanguageState.tr["download_pdf_btn"],
+                        on_click=PatientDetailState.download_id_card_pdf,
+                        size="2",
+                    ),
+                    rx.button(
+                        LanguageState.tr["close_btn"],
+                        on_click=PatientDetailState.close_id_card,
+                        variant="soft",
+                        color_scheme="gray",
+                        size="2",
+                    ),
+                    spacing="2",
+                    justify="end",
+                    width="100%",
+                    padding_top="0.75rem",
+                ),
+                spacing="4",
+                align="center",
+                margin_top="1rem",
+            ),
+            max_width="560px",
+            on_interact_outside=PatientDetailState.close_id_card,
+            on_escape_key_down=PatientDetailState.close_id_card,
+        ),
+        open=PatientDetailState.show_id_card,
+    )
+
+
+def _visit_status_badge(status: str) -> rx.Component:
+    return rx.match(
+        status,
+        ("pending", rx.badge(LanguageState.tr["status_pending"], color_scheme="gray", variant="soft", size="1")),
+        ("visit_done", rx.badge(LanguageState.tr["status_visit_done"], color_scheme="amber", variant="soft", size="1")),
+        ("lab_done", rx.badge(LanguageState.tr["status_lab_done"], color_scheme="blue", variant="soft", size="1")),
+        ("doctor_clinic_validated", rx.badge(LanguageState.tr["status_doctor_clinic_validated"], color_scheme="purple", variant="soft", size="1")),
+        ("doctor_company_validated", rx.badge(LanguageState.tr["status_doctor_company_validated"], color_scheme="green", variant="soft", size="1")),
+        ("cancelled", rx.badge(LanguageState.tr["status_cancelled"], color_scheme="red", variant="soft", size="1")),
+        rx.badge(status, color_scheme="gray", variant="soft", size="1"),
+    )
+
+
+def _visit_mode_badge(mode: str) -> rx.Component:
+    return rx.match(
+        mode,
+        ("at_work", rx.badge(LanguageState.tr["appt_mode_at_work"], color_scheme="blue", variant="soft", size="1")),
+        ("at_home", rx.badge(LanguageState.tr["appt_mode_at_home"], color_scheme="green", variant="soft", size="1")),
+        ("address", rx.badge(LanguageState.tr["appt_mode_address"], color_scheme="orange", variant="soft", size="1")),
+        ("visio", rx.badge(LanguageState.tr["appt_mode_visio"], color_scheme="purple", variant="soft", size="1")),
+        ("hospital", rx.badge(LanguageState.tr["appt_mode_hospital"], color_scheme="teal", variant="soft", size="1")),
+        rx.fragment(),
+    )
+
+
+def _patient_visit_row(visit: PatientVisitRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(visit.visit_number, size="2")),
+        rx.table.cell(
+            rx.cond(
+                visit.campaign_name,
+                rx.link(
+                    visit.campaign_name,
+                    on_click=lambda: PatientDetailState.go_to_campaign(visit.campaign_id),
+                    cursor="pointer",
+                    size="2",
+                ),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
+        rx.table.cell(
+            rx.cond(
+                visit.scheduled_at,
+                rx.text(visit.scheduled_at[:16].replace("T", " "), size="2"),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
+        rx.table.cell(
+            rx.cond(
+                visit.appointment_mode != "",
+                _visit_mode_badge(visit.appointment_mode),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
+        rx.table.cell(
+            rx.cond(
+                visit.doctor_name != "",
+                rx.text(visit.doctor_name, size="2"),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
+        rx.table.cell(_visit_status_badge(visit.campaign_visit_status)),
+        rx.table.cell(
+            rx.tooltip(
+                rx.icon_button(
+                    rx.icon("external-link", size=14),
+                    variant="ghost",
+                    size="1",
+                    on_click=lambda: PatientDetailState.go_to_visit(visit.id),
+                ),
+                content=LanguageState.tr["tooltip_view_visit"],
+            ),
+        ),
+        _hover={"background": "var(--gray-2)"},
+    )
+
+
+def _create_visit_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(LanguageState.tr["new_visit_form_title"]),
+            rx.dialog.description(LanguageState.tr["new_visit_desc"]),
+            rx.vstack(
+                rx.cond(
+                    PatientDetailState.create_visit_error != "",
+                    rx.callout(
+                        PatientDetailState.create_visit_error,
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
+                    ),
+                ),
+                rx.vstack(
+                    rx.text(LanguageState.tr["field_scheduled_datetime"], size="2", weight="medium"),
+                    rx.input(
+                        type="datetime-local",
+                        value=PatientDetailState.create_visit_scheduled_at,
+                        on_change=PatientDetailState.set_create_visit_scheduled_at,
+                        size="2",
+                        width="100%",
+                    ),
+                    spacing="1",
+                    width="100%",
+                ),
+                rx.vstack(
+                    rx.text(LanguageState.tr["col_account"], size="2", weight="medium"),
+                    rx.cond(
+                        PatientDetailState.patient_accounts.length() > 0,
+                        rx.select.root(
+                            rx.select.trigger(placeholder=LanguageState.tr["select_account_placeholder"]),
+                            rx.select.content(
+                                rx.foreach(
+                                    PatientDetailState.patient_accounts,
+                                    lambda a: rx.select.item(a.name, value=a.id),
+                                ),
+                            ),
+                            value=PatientDetailState.create_visit_account_id,
+                            on_change=PatientDetailState.set_create_visit_account_id,
+                            size="2",
+                            width="100%",
+                        ),
+                        rx.callout(
+                            LanguageState.tr["no_account_alert_desc"],
+                            icon="triangle-alert",
+                            color_scheme="orange",
+                            size="1",
+                        ),
+                    ),
+                    spacing="1",
+                    width="100%",
+                ),
+                rx.hstack(
+                    rx.spacer(),
+                    rx.button(
+                        LanguageState.tr["cancel_btn"],
+                        on_click=PatientDetailState.close_create_visit_dialog,
+                        variant="soft",
+                        color_scheme="gray",
+                        size="2",
+                    ),
+                    rx.button(
+                        LanguageState.tr["create_visit_btn"],
+                        on_click=PatientDetailState.save_create_visit,
+                        size="2",
+                        disabled=PatientDetailState.patient_accounts.length() == 0,
+                    ),
+                    spacing="2",
+                    width="100%",
+                    padding_top="0.75rem",
+                ),
+                spacing="4",
+                width="100%",
+            ),
+            max_width="480px",
+            on_interact_outside=PatientDetailState.close_create_visit_dialog,
+            on_escape_key_down=PatientDetailState.close_create_visit_dialog,
+        ),
+        open=PatientDetailState.show_create_visit_dialog,
+    )
+
+
+def _visits_section() -> rx.Component:
     return rx.vstack(
         rx.hstack(
-            rx.icon("stethoscope", size=16, color="var(--gray-9)"),
-            rx.heading("Consultations", size="4"),
+            rx.heading(LanguageState.tr["visits_section_title"], size="4"),
             rx.spacer(),
             rx.button(
                 rx.icon("plus", size=15),
-                "Nouvelle consultation",
-                on_click=lambda: ConsultationFormState.open_dialog(PatientDetailState.patient.id),
+                LanguageState.tr["new_visit_btn"],
+                on_click=PatientDetailState.open_create_visit_dialog,
                 size="2",
-                color_scheme="blue",
+            ),
+            width="100%",
+            align="center",
+        ),
+        # Filter bar
+        rx.hstack(
+            rx.input(
+                type="date",
+                value=PatientDetailState.visit_filter_from,
+                on_change=PatientDetailState.set_visit_filter_from,
+                size="1",
+                width="130px",
+                placeholder=LanguageState.tr["placeholder_date_from"],
+            ),
+            rx.text("→", size="2", color="var(--gray-8)"),
+            rx.input(
+                type="date",
+                value=PatientDetailState.visit_filter_to,
+                on_change=PatientDetailState.set_visit_filter_to,
+                size="1",
+                width="130px",
+                placeholder=LanguageState.tr["placeholder_date_to"],
+            ),
+            rx.select.root(
+                rx.select.trigger(placeholder=LanguageState.tr["col_mode"], size="1", width="130px"),
+                rx.select.content(
+                    rx.select.item(LanguageState.tr["all_modes_option"], value="ALL"),
+                    rx.select.item(LanguageState.tr["appt_mode_at_work"], value="at_work"),
+                    rx.select.item(LanguageState.tr["appt_mode_at_home"], value="at_home"),
+                    rx.select.item(LanguageState.tr["appt_mode_address"], value="address"),
+                    rx.select.item(LanguageState.tr["appt_mode_visio"], value="visio"),
+                    rx.select.item(LanguageState.tr["appt_mode_hospital"], value="hospital"),
+                ),
+                value=rx.cond(PatientDetailState.visit_filter_mode != "", PatientDetailState.visit_filter_mode, "ALL"),
+                on_change=PatientDetailState.set_visit_filter_mode,
+            ),
+            rx.cond(
+                PatientDetailState.visit_doctor_options.length() > 0,
+                rx.select.root(
+                    rx.select.trigger(placeholder=LanguageState.tr["col_doctor"], size="1", width="160px"),
+                    rx.select.content(
+                        rx.select.item(LanguageState.tr["all_doctors_option"], value="ALL"),
+                        rx.foreach(
+                            PatientDetailState.visit_doctor_options,
+                            lambda d: rx.select.item(d, value=d),
+                        ),
+                    ),
+                    value=rx.cond(PatientDetailState.visit_filter_doctor != "", PatientDetailState.visit_filter_doctor, "ALL"),
+                    on_change=PatientDetailState.set_visit_filter_doctor,
+                ),
+            ),
+            rx.select.root(
+                rx.select.trigger(placeholder=LanguageState.tr["col_status"], size="1", width="160px"),
+                rx.select.content(
+                    rx.select.item(LanguageState.tr["all_statuses_option"], value="ALL"),
+                    rx.select.item(LanguageState.tr["status_pending"], value="pending"),
+                    rx.select.item(LanguageState.tr["status_visit_done"], value="visit_done"),
+                    rx.select.item(LanguageState.tr["status_lab_done"], value="lab_done"),
+                    rx.select.item(LanguageState.tr["status_doctor_clinic_validated"], value="doctor_clinic_validated"),
+                    rx.select.item(LanguageState.tr["status_doctor_company_validated"], value="doctor_company_validated"),
+                    rx.select.item(LanguageState.tr["status_cancelled"], value="cancelled"),
+                ),
+                value=rx.cond(PatientDetailState.visit_filter_status != "", PatientDetailState.visit_filter_status, "ALL"),
+                on_change=PatientDetailState.set_visit_filter_status,
             ),
             width="100%",
             align="center",
             spacing="2",
+            flex_wrap="wrap",
         ),
         rx.cond(
-            PatientDetailState.consultations,
-            rx.vstack(
-                rx.foreach(PatientDetailState.consultations, _consultation_card),
+            PatientDetailState.filtered_sorted_visits,
+            rx.box(
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            _visit_sortable_header(LanguageState.tr["col_visit_number"], "visit_number"),
+                            _visit_sortable_header(LanguageState.tr["nav_campaigns"], "campaign_name"),
+                            _visit_sortable_header(LanguageState.tr["col_scheduled"], "scheduled_at"),
+                            _visit_sortable_header(LanguageState.tr["col_mode"], "appointment_mode"),
+                            _visit_sortable_header(LanguageState.tr["col_doctor"], "doctor_name"),
+                            _visit_sortable_header(LanguageState.tr["col_status"], "campaign_visit_status"),
+                            rx.table.column_header_cell(""),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(PatientDetailState.filtered_sorted_visits, _patient_visit_row),
+                    ),
+                    width="100%",
+                    variant="surface",
+                ),
+                overflow_x="auto",
                 width="100%",
-                spacing="2",
             ),
             rx.center(
-                rx.text(
-                    "Aucune consultation enregistrée — créez la première via le bouton ci-dessus.",
-                    color="var(--gray-8)",
-                    size="2",
+                rx.vstack(
+                    rx.icon("calendar-x", size=40, color="var(--gray-6)"),
+                    rx.text(LanguageState.tr["no_visits_section"], size="2", color="var(--gray-9)"),
+                    align="center",
+                    spacing="2",
                 ),
                 padding="2rem",
                 border="1px dashed var(--gray-5)",
@@ -409,91 +722,40 @@ def _consultations_section() -> rx.Component:
     )
 
 
-def _prescribed_followup_exam_row(exam: ExamRowDTO) -> rx.Component:
-    """Clickable row for a prescribed follow-up exam (lab tech fills results)."""
-    return rx.link(
-        rx.hstack(
-            rx.icon("flask-conical", size=14, color="var(--blue-9)"),
-            rx.text(exam.exam_type_label, size="2", weight="medium", flex="1"),
-            rx.text(exam.exam_date, size="1", color="var(--gray-8)"),
-            rx.badge(
-                rx.match(
-                    exam.status,
-                    ("DRAFT", "En attente"),
-                    ("PENDING", "Résultats en cours"),
-                    ("INTERPRETED", "Complété"),
-                    "—",
-                ),
-                color_scheme=rx.match(
-                    exam.status,
-                    ("DRAFT", "amber"),
-                    ("PENDING", "blue"),
-                    ("INTERPRETED", "green"),
-                    "gray",
-                ),
-                size="1",
-                variant="soft",
-            ),
-            rx.icon("chevron-right", size=12, color="var(--gray-8)"),
-            spacing="2",
-            align="center",
-            width="100%",
-            padding="0.5rem 0.75rem",
-            border_radius="6px",
-            background="var(--blue-2)",
-            _hover={"background": "var(--blue-3)", "cursor": "pointer"},
-        ),
-        href=exam.link_url,
-        text_decoration="none",
-        width="100%",
+def _exam_status_badge(status: str) -> rx.Component:
+    return rx.match(
+        status,
+        ("todo", rx.badge(LanguageState.tr["exam_status_todo"], color_scheme="gray", variant="soft", size="1")),
+        ("in_progress_results", rx.badge(LanguageState.tr["exam_status_in_progress_results"], color_scheme="orange", variant="soft", size="1")),
+        ("in_progress_interpretation", rx.badge(LanguageState.tr["exam_status_in_progress_interpretation"], color_scheme="blue", variant="soft", size="1")),
+        ("done", rx.badge(LanguageState.tr["exam_status_done"], color_scheme="green", variant="soft", size="1")),
+        rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
 
-def _prescribed_followup_section() -> rx.Component:
-    """Section showing prescribed follow-up exams that the lab tech can fill in."""
-    return rx.cond(
-        PatientDetailState.prescribed_followup_exams.length() > 0,
-        rx.vstack(
-            rx.hstack(
-                rx.icon("clipboard-check", size=16, color="var(--blue-9)"),
-                rx.heading("Examens de suivi prescrits", size="4"),
-                rx.badge(
-                    PatientDetailState.prescribed_followup_exams.length().to(str),
-                    color_scheme="blue",
-                    size="1",
-                ),
-                rx.tooltip(
-                    rx.icon("info", size=13, color="var(--gray-7)"),
-                    content="Ces examens ont été prescrits par le médecin lors d'une consultation. Le laborantin peut cliquer sur chaque examen pour renseigner les résultats.",
-                ),
-                width="100%",
-                align="center",
-                spacing="2",
+def _exam_row(exam: ExamRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(exam.exam_date),
+        rx.table.cell(exam.exam_type_label),
+        rx.table.cell(_exam_status_badge(exam.status)),
+        rx.table.cell(
+            rx.button(
+                rx.icon("eye", size=14),
+                LanguageState.tr["view_btn"],
+                variant="ghost",
+                size="1",
+                on_click=lambda: PatientDetailState.go_to_exam(exam.id),
             ),
-            rx.vstack(
-                rx.foreach(
-                    PatientDetailState.prescribed_followup_exams,
-                    _prescribed_followup_exam_row,
-                ),
-                width="100%",
-                spacing="2",
-            ),
-            width="100%",
-            spacing="3",
         ),
+        _hover={"background": "var(--gray-2)"},
+        cursor="pointer",
     )
 
 
 def _exams_section() -> rx.Component:
-    """Examens prescrits directement (hors consultation et hors campagne)."""
     return rx.vstack(
         rx.hstack(
-            rx.icon("flask-conical", size=16, color="var(--gray-9)"),
-            rx.heading("Examens autonomes", size="4"),
-            rx.tooltip(
-                rx.icon("info", size=13, color="var(--gray-7)"),
-                content="Examens prescrits hors consultation médicale. Les examens liés à une consultation apparaissent dans la section Consultations ci-dessus.",
-            ),
+            rx.heading(LanguageState.tr["exams_section_title"], size="4"),
             rx.spacer(),
             rx.button(
                 rx.icon("plus", size=15),
@@ -503,256 +765,90 @@ def _exams_section() -> rx.Component:
             ),
             width="100%",
             align="center",
-            spacing="2",
         ),
-        rx.cond(
-            PatientDetailState.standalone_exams.length() > 0,
-            rx.table.root(
-                rx.table.header(
-                    rx.table.row(
-                        rx.table.column_header_cell(LanguageState.tr["col_date"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_type"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_status"]),
-                        rx.table.column_header_cell(""),
-                        rx.table.column_header_cell(""),
-                    )
-                ),
-                rx.table.body(
-                    rx.foreach(PatientDetailState.standalone_exams, _exam_row),
-                ),
-                width="100%",
-                variant="surface",
+        # Filter bar
+        rx.hstack(
+            rx.input(
+                type="date",
+                value=PatientDetailState.exam_filter_from,
+                on_change=PatientDetailState.set_exam_filter_from,
+                size="1",
+                width="130px",
+                placeholder=LanguageState.tr["placeholder_date_from"],
             ),
-            rx.center(
-                rx.text(LanguageState.tr["no_exams_recorded"], color="var(--gray-8)", size="2"),
-                padding="2rem",
-                border="1px dashed var(--gray-5)",
-                border_radius="8px",
-                width="100%",
+            rx.text("→", size="2", color="var(--gray-8)"),
+            rx.input(
+                type="date",
+                value=PatientDetailState.exam_filter_to,
+                on_change=PatientDetailState.set_exam_filter_to,
+                size="1",
+                width="130px",
+                placeholder=LanguageState.tr["placeholder_date_to"],
             ),
-        ),
-        width="100%",
-        spacing="3",
-    )
-
-
-def _appointment_status_badge(status: str) -> rx.Component:
-    return rx.match(
-        status,
-        ("SCHEDULED", rx.badge(LanguageState.tr["status_scheduled"], color_scheme="blue", variant="soft", size="1")),
-        ("IN_PROGRESS", rx.badge(LanguageState.tr["status_in_progress"], color_scheme="orange", variant="soft", size="1")),
-        ("DONE", rx.badge(LanguageState.tr["status_done"], color_scheme="green", variant="soft", size="1")),
-        ("CANCELLED", rx.badge(LanguageState.tr["status_cancelled"], color_scheme="gray", variant="soft", size="1")),
-        ("campaign", rx.badge("Inscrit", color_scheme="blue", variant="outline", size="1")),
-        rx.badge(status, color_scheme="gray", variant="soft", size="1"),
-    )
-
-
-def _appointment_row(appt: AppointmentRowDTO) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(
-            rx.cond(
-                appt.scheduled_at != "",
-                rx.text(appt.scheduled_at[:10], size="2"),
-                rx.text("—", size="2", color="var(--gray-7)"),
-            )
-        ),
-        rx.table.cell(rx.text(appt.exam_type_label, size="2")),
-        rx.table.cell(
-            rx.cond(
-                appt.campaign_name != "",
-                rx.badge(
-                    rx.icon("users", size=11),
-                    appt.campaign_name,
-                    color_scheme="blue",
-                    variant="soft",
+            rx.select.root(
+                rx.select.trigger(
+                    placeholder=LanguageState.tr["filter_by_type_placeholder"],
                     size="1",
-                    gap="1",
+                    width="180px",
                 ),
-                rx.cond(
-                    appt.account_name,
-                    rx.text(appt.account_name, size="2"),
-                    rx.text("—", size="2", color="var(--gray-7)"),
-                ),
-            )
-        ),
-        rx.table.cell(_appointment_status_badge(appt.status)),
-        _hover={"background": "var(--gray-2)"},
-    )
-
-
-
-def _campaign_exam_item(exam: ExamRowDTO) -> rx.Component:
-    """One exam row inside a campaign enrollment card."""
-    return rx.hstack(
-        rx.icon(
-            rx.match(
-                exam.status,
-                ("PENDING_ENTRY", "clock"),
-                ("DRAFT", "flask-conical"),
-                ("PENDING", "flask-conical"),
-                ("INTERPRETED", "check"),
-                "file",
-            ),
-            size=13,
-            color=rx.match(
-                exam.status,
-                ("PENDING_ENTRY", "var(--gray-5)"),
-                ("DRAFT", "var(--orange-9)"),
-                ("PENDING", "var(--orange-9)"),
-                ("INTERPRETED", "var(--green-9)"),
-                "var(--gray-8)",
-            ),
-        ),
-        rx.text(exam.exam_type_label, size="2", flex="1"),
-        rx.cond(
-            exam.exam_date != "",
-            rx.text(exam.exam_date[:10], size="1", color="var(--gray-8)"),
-            rx.fragment(),
-        ),
-        _exam_status_badge(exam.status),
-        rx.icon_button(
-            rx.icon("arrow-right", size=13),
-            variant="ghost",
-            size="1",
-            color_scheme="gray",
-            on_click=rx.redirect(exam.link_url),
-        ),
-        spacing="2",
-        align="center",
-        padding="0.3rem 0.5rem",
-        border_radius="6px",
-        width="100%",
-        _hover={"background": "var(--gray-3)"},
-    )
-
-
-def _campaign_enrollment_card(e: CampaignEnrollmentDTO) -> rx.Component:
-    """Card showing one campaign enrollment with its exams for this patient."""
-    return rx.card(
-        rx.vstack(
-            rx.hstack(
-                rx.vstack(
-                    rx.text(e.campaign_name, size="2", weight="medium"),
-                    rx.cond(
-                        e.start_date != "",
-                        rx.text(e.start_date, size="1", color="var(--gray-8)"),
-                        rx.fragment(),
+                rx.select.content(
+                    rx.select.item(LanguageState.tr["all_types_option"], value="ALL"),
+                    rx.foreach(
+                        PatientDetailState.exam_type_options,
+                        lambda t: rx.select.item(t, value=t),
                     ),
-                    spacing="0",
-                    align_items="start",
                 ),
-                rx.spacer(),
-                rx.badge(e.status_label, color_scheme="blue", variant="soft", size="1"),
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("external-link", size=13),
-                        variant="ghost",
-                        size="1",
-                        on_click=rx.redirect("/campaign/" + e.campaign_id),
-                    ),
-                    content="Voir la campagne",
+                value=rx.cond(PatientDetailState.exam_filter_type != "", PatientDetailState.exam_filter_type, "ALL"),
+                on_change=PatientDetailState.set_exam_filter_type,
+            ),
+            rx.select.root(
+                rx.select.trigger(
+                    placeholder=LanguageState.tr["filter_by_status_placeholder"],
+                    size="1",
+                    width="160px",
                 ),
-                align="center",
-                width="100%",
-            ),
-            rx.cond(
-                e.exams,
-                rx.vstack(
-                    rx.separator(size="4"),
-                    rx.text("Examens de la campagne", size="1", weight="medium", color="var(--gray-9)"),
-                    rx.foreach(e.exams, _campaign_exam_item),
-                    spacing="1",
-                    width="100%",
+                rx.select.content(
+                    rx.select.item(LanguageState.tr["all_statuses_option"], value="ALL"),
+                    rx.select.item(LanguageState.tr["exam_status_todo"], value="todo"),
+                    rx.select.item(LanguageState.tr["exam_status_in_progress_results"], value="in_progress_results"),
+                    rx.select.item(LanguageState.tr["exam_status_in_progress_interpretation"], value="in_progress_interpretation"),
+                    rx.select.item(LanguageState.tr["exam_status_done"], value="done"),
                 ),
-            ),
-            spacing="2",
-            width="100%",
-        ),
-        width="100%",
-        padding="0.75rem",
-    )
-
-
-def _campaigns_section() -> rx.Component:
-    """Participations du patient aux campagnes de santé, avec examens intégrés."""
-    return rx.vstack(
-        rx.hstack(
-            rx.icon("flag", size=16, color="var(--gray-9)"),
-            rx.heading("Campagnes de santé", size="4"),
-            spacing="2",
-            align="center",
-            width="100%",
-        ),
-        rx.cond(
-            PatientDetailState.campaign_enrollments,
-            rx.vstack(
-                rx.foreach(PatientDetailState.campaign_enrollments, _campaign_enrollment_card),
-                spacing="3",
-                width="100%",
-            ),
-            rx.center(
-                rx.text("Ce patient ne participe à aucune campagne.",
-                        color="var(--gray-8)", size="2"),
-                padding="1.5rem",
-                border="1px dashed var(--gray-5)",
-                border_radius="8px",
-                width="100%",
-            ),
-        ),
-        width="100%",
-        spacing="3",
-    )
-
-
-def _appointments_section() -> rx.Component:
-    return rx.vstack(
-        rx.hstack(
-            rx.heading(LanguageState.tr["appointments_section_title"], size="4"),
-            rx.spacer(),
-            rx.button(
-                rx.icon("plus", size=15),
-                LanguageState.tr["new_appointment_btn"],
-                on_click=lambda: AppointmentFormState.open_create_dialog(
-                    PatientDetailState.patient.id,
-                    PatientDetailState.patient.first_name + " " + PatientDetailState.patient.last_name,
-                ),
-                size="2",
-            ),
-            rx.button(
-                LanguageState.tr["view_all_btn"],
-                on_click=PatientDetailState.go_to_appointments,
-                variant="ghost",
-                size="2",
+                value=rx.cond(PatientDetailState.exam_filter_status != "", PatientDetailState.exam_filter_status, "ALL"),
+                on_change=PatientDetailState.set_exam_filter_status,
             ),
             width="100%",
             align="center",
             spacing="2",
         ),
         rx.cond(
-            PatientDetailState.appointments,
+            PatientDetailState.filtered_sorted_exams,
             rx.box(
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
-                            rx.table.column_header_cell(LanguageState.tr["col_scheduled"]),
-                            rx.table.column_header_cell(LanguageState.tr["col_exam_type"]),
-                            rx.table.column_header_cell("Campagne / Compte"),
-                            rx.table.column_header_cell(LanguageState.tr["col_status"]),
+                            _exam_sortable_header(LanguageState.tr["col_date"], "exam_date"),
+                            _exam_sortable_header(LanguageState.tr["col_type"], "exam_type_label"),
+                            _exam_sortable_header(LanguageState.tr["col_status"], "status"),
+                            rx.table.column_header_cell(""),
                         )
                     ),
                     rx.table.body(
-                        rx.foreach(PatientDetailState.appointments, _appointment_row),
+                        rx.foreach(PatientDetailState.filtered_sorted_exams, _exam_row),
                     ),
                     width="100%",
                     variant="surface",
                 ),
-                max_height="320px",
-                overflow_y="auto",
+                overflow_x="auto",
                 width="100%",
             ),
             rx.center(
-                rx.text(LanguageState.tr["no_appts_section"], color="var(--gray-8)", size="2"),
+                rx.vstack(
+                    rx.icon("flask-conical", size=40, color="var(--gray-6)"),
+                    rx.text(LanguageState.tr["no_exams_recorded"], size="2", color="var(--gray-9)"),
+                    align="center",
+                    spacing="2",
+                ),
                 padding="2rem",
                 border="1px dashed var(--gray-5)",
                 border_radius="8px",
@@ -764,117 +860,139 @@ def _appointments_section() -> rx.Component:
     )
 
 
-# ── Document types dropdown options ──────────────────────────────────────────
-_DOC_TYPE_ITEMS = [rx.select.item(label, value=value) for value, label in PATIENT_DOC_TYPE_OPTIONS]
 
 
-def _doc_row(doc: PatientDocRowDTO) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(
-            rx.hstack(
-                rx.icon("file", size=14, color="var(--gray-8)"),
-                rx.link(
-                    doc.original_name,
-                    href=rx.get_upload_url(doc.stored_filename),
-                    target="_blank",
-                    size="2",
+def _presc_sortable_header(label: str, column: str) -> rx.Component:
+    return rx.table.column_header_cell(
+        rx.hstack(
+            rx.text(label, size="2"),
+            rx.cond(
+                PatientDetailState.presc_sort_column == column,
+                rx.cond(
+                    PatientDetailState.presc_sort_ascending,
+                    rx.icon("chevron-up", size=13, color="var(--accent-9)"),
+                    rx.icon("chevron-down", size=13, color="var(--accent-9)"),
                 ),
-                spacing="2",
-                align="center",
+                rx.icon("chevrons-up-down", size=13, color="var(--gray-7)"),
+            ),
+            spacing="1",
+            align="center",
+        ),
+        on_click=lambda: PatientDetailState.set_presc_sort(column),
+        style={"cursor": "pointer"},
+    )
+
+
+def _prescription_row(presc: PrescriptionRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(presc.prescription_date, size="2")),
+        rx.table.cell(
+            rx.cond(
+                presc.diagnosis != "",
+                rx.text(presc.diagnosis, size="2"),
+                rx.text("—", size="2", color="var(--gray-7)"),
             )
         ),
-        rx.table.cell(rx.badge(doc.type_label, variant="soft", size="1")),
-        rx.table.cell(rx.text(doc.uploaded_by_name, size="2", color="var(--gray-9)")),
-        rx.table.cell(rx.text(doc.created_at, size="2", color="var(--gray-8)")),
-        rx.table.cell(rx.text(doc.file_size_kb, size="2", color="var(--gray-7)")),
+        rx.table.cell(rx.text(presc.drug_count.to_string(), size="2")),
+        rx.table.cell(rx.text(presc.prescribed_by_name, size="2", color="var(--gray-9)")),
         rx.table.cell(
-            rx.icon_button(
-                rx.icon("trash-2", size=13),
-                color_scheme="red",
-                variant="ghost",
-                size="1",
-                on_click=PatientDossierState.delete_patient_doc(doc.id),
+            rx.hstack(
+                rx.cond(
+                    presc.is_archived,
+                    rx.badge("α", color_scheme="gray", variant="soft", size="1"),
+                ),
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("eye", size=14),
+                        variant="ghost",
+                        size="1",
+                        on_click=lambda: PatientDetailState.go_to_prescription(presc.id),
+                    ),
+                    content=LanguageState.tr["view_btn"],
+                ),
+                spacing="1",
             )
         ),
         _hover={"background": "var(--gray-2)"},
+        style={"opacity": rx.cond(presc.is_archived, "0.6", "1")},
     )
 
 
-def _documents_section() -> rx.Component:
-    """Document upload and list section for the patient dossier."""
+def _prescriptions_tab() -> rx.Component:
     return rx.vstack(
+        # Filter bar
         rx.hstack(
-            rx.icon("folder-open", size=18, color="var(--blue-9)"),
-            rx.heading("Documents du dossier", size="4"),
-            rx.spacer(),
-            width="100%",
-            align="center",
-        ),
-        # Upload bar
-        rx.hstack(
-            rx.select.root(
-                rx.select.trigger(size="2", width="200px"),
-                rx.select.content(
-                    *_DOC_TYPE_ITEMS,
+            rx.input(
+                type="date",
+                value=PatientDetailState.presc_filter_from,
+                on_change=PatientDetailState.set_presc_filter_from,
+                size="1",
+                width="130px",
+                placeholder=LanguageState.tr["placeholder_date_from"],
+            ),
+            rx.text("→", size="2", color="var(--gray-8)"),
+            rx.input(
+                type="date",
+                value=PatientDetailState.presc_filter_to,
+                on_change=PatientDetailState.set_presc_filter_to,
+                size="1",
+                width="130px",
+                placeholder=LanguageState.tr["placeholder_date_to"],
+            ),
+            rx.tooltip(
+                rx.icon_button(
+                    rx.icon(
+                        rx.cond(PatientDetailState.presc_show_archived, "archive", "archive-x"),
+                        size=14,
+                    ),
+                    on_click=PatientDetailState.toggle_presc_show_archived,
+                    variant=rx.cond(PatientDetailState.presc_show_archived, "soft", "ghost"),
+                    color_scheme=rx.cond(PatientDetailState.presc_show_archived, "accent", "gray"),
+                    size="1",
                 ),
-                value=PatientDossierState.selected_doc_type,
-                on_change=PatientDossierState.set_selected_doc_type,
+                content=LanguageState.tr["show_archived_tooltip"],
+            ),
+            rx.spacer(),
+            rx.button(
+                rx.icon("plus", size=15),
+                LanguageState.tr["new_prescription_btn"],
+                on_click=PatientDetailState.open_prescription_dialog,
                 size="2",
             ),
-            rx.upload(
-                rx.button(
-                    rx.cond(
-                        PatientDossierState.is_uploading_doc,
-                        rx.spinner(size="2"),
-                        rx.icon("upload", size=15),
-                    ),
-                    "Ajouter un document",
-                    size="2",
-                    variant="outline",
-                    disabled=PatientDossierState.is_uploading_doc,
-                ),
-                id="patient_doc_upload",
-                accept={
-                    "application/pdf": [".pdf"],
-                    "image/jpeg": [".jpg", ".jpeg"],
-                    "image/png": [".png"],
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
-                },
-                multiple=True,
-                on_drop=PatientDossierState.handle_doc_upload(
-                    rx.upload_files(upload_id="patient_doc_upload")
-                ),
-            ),
-            spacing="3",
-            align="center",
             width="100%",
+            align="center",
+            spacing="2",
         ),
-        # Document list
         rx.cond(
-            PatientDossierState.patient_docs,
-            rx.table.root(
-                rx.table.header(
-                    rx.table.row(
-                        rx.table.column_header_cell("Fichier"),
-                        rx.table.column_header_cell("Type"),
-                        rx.table.column_header_cell("Ajouté par"),
-                        rx.table.column_header_cell("Date"),
-                        rx.table.column_header_cell("Taille"),
-                        rx.table.column_header_cell(""),
-                    )
+            PatientDetailState.filtered_sorted_prescriptions,
+            rx.box(
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            _presc_sortable_header(LanguageState.tr["prescription_date_label"], "prescription_date"),
+                            _presc_sortable_header(LanguageState.tr["prescription_diagnosis_label"], "diagnosis"),
+                            _presc_sortable_header(LanguageState.tr["prescription_drugs_count"], "drug_count"),
+                            _presc_sortable_header(LanguageState.tr["col_prescribed_by"], "prescribed_by_name"),
+                            rx.table.column_header_cell(""),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(PatientDetailState.filtered_sorted_prescriptions, _prescription_row),
+                    ),
+                    width="100%",
+                    variant="surface",
                 ),
-                rx.table.body(
-                    rx.foreach(PatientDossierState.patient_docs, _doc_row),
-                ),
+                overflow_x="auto",
                 width="100%",
-                variant="surface",
             ),
             rx.center(
-                rx.text(
-                    "Aucun document dans le dossier.",
-                    size="2", color="var(--gray-7)",
+                rx.vstack(
+                    rx.icon("file-text", size=40, color="var(--gray-6)"),
+                    rx.text(LanguageState.tr["no_prescriptions"], size="2", color="var(--gray-9)"),
+                    align="center",
+                    spacing="2",
                 ),
-                padding="2rem",
+                padding="2.5rem",
                 border="1px dashed var(--gray-5)",
                 border_radius="8px",
                 width="100%",
@@ -885,120 +1003,546 @@ def _documents_section() -> rx.Component:
     )
 
 
-def _note_card(note: PatientNoteRowDTO) -> rx.Component:
-    return rx.box(
+def _cert_sortable_header(label: str, column: str) -> rx.Component:
+    return rx.table.column_header_cell(
         rx.hstack(
-            rx.hstack(
-                rx.icon("user-round", size=14, color="var(--blue-9)"),
-                rx.text(note.author_name, size="2", weight="medium"),
-                spacing="1",
-                align="center",
+            rx.text(label, size="2"),
+            rx.cond(
+                PatientDetailState.cert_sort_column == column,
+                rx.cond(
+                    PatientDetailState.cert_sort_ascending,
+                    rx.icon("chevron-up", size=13, color="var(--accent-9)"),
+                    rx.icon("chevron-down", size=13, color="var(--accent-9)"),
+                ),
+                rx.icon("chevrons-up-down", size=13, color="var(--gray-7)"),
             ),
-            rx.spacer(),
-            rx.text(note.created_at, size="1", color="var(--gray-7)"),
-            rx.icon_button(
-                rx.icon("trash-2", size=12),
-                color_scheme="red",
-                variant="ghost",
-                size="1",
-                on_click=PatientDossierState.delete_patient_note(note.id),
-            ),
-            width="100%",
+            spacing="1",
             align="center",
         ),
-        rx.separator(width="100%", my="2"),
-        rx.text(note.content, size="2", color="var(--gray-12)", white_space="pre-wrap"),
-        padding="0.75rem 1rem",
-        border="1px solid var(--gray-4)",
-        border_radius="8px",
-        background="var(--gray-1)",
-        width="100%",
+        on_click=lambda: PatientDetailState.set_cert_sort(column),
+        style={"cursor": "pointer"},
     )
 
 
-def _notes_section() -> rx.Component:
-    """Doctor notes section for the patient dossier."""
+def _certificate_row(cert: CertificateRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(cert.issue_date, size="2")),
+        rx.table.cell(rx.badge(cert.certificate_type_label, variant="soft", color_scheme="teal", size="1")),
+        rx.table.cell(
+            rx.cond(
+                cert.conclusion != "",
+                rx.text(cert.conclusion, size="2"),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
+        rx.table.cell(
+            rx.cond(
+                cert.is_fit_for_work,
+                rx.badge(LanguageState.tr["fit_for_work"], color_scheme="green", variant="soft", size="1"),
+                rx.badge(LanguageState.tr["not_fit_for_work"], color_scheme="red", variant="soft", size="1"),
+            )
+        ),
+        rx.table.cell(rx.text(cert.issued_by_name, size="2", color="var(--gray-9)")),
+        rx.table.cell(
+            rx.hstack(
+                rx.cond(
+                    cert.is_archived,
+                    rx.badge("α", color_scheme="gray", variant="soft", size="1"),
+                ),
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("eye", size=14),
+                        variant="ghost",
+                        size="1",
+                        on_click=lambda: PatientDetailState.go_to_certificate(cert.id),
+                    ),
+                    content=LanguageState.tr["view_btn"],
+                ),
+                spacing="1",
+            )
+        ),
+        _hover={"background": "var(--gray-2)"},
+        style={"opacity": rx.cond(cert.is_archived, "0.6", "1")},
+    )
+
+
+def _certificates_tab() -> rx.Component:
     return rx.vstack(
+        # Filter bar
         rx.hstack(
-            rx.icon("notebook-pen", size=18, color="var(--green-9)"),
-            rx.heading("Notes médicales", size="4"),
+            rx.input(
+                type="date",
+                value=PatientDetailState.cert_filter_from,
+                on_change=PatientDetailState.set_cert_filter_from,
+                size="1",
+                width="130px",
+                placeholder=LanguageState.tr["placeholder_date_from"],
+            ),
+            rx.text("→", size="2", color="var(--gray-8)"),
+            rx.input(
+                type="date",
+                value=PatientDetailState.cert_filter_to,
+                on_change=PatientDetailState.set_cert_filter_to,
+                size="1",
+                width="130px",
+                placeholder=LanguageState.tr["placeholder_date_to"],
+            ),
+            rx.tooltip(
+                rx.icon_button(
+                    rx.icon(
+                        rx.cond(PatientDetailState.cert_show_archived, "archive", "archive-x"),
+                        size=14,
+                    ),
+                    on_click=PatientDetailState.toggle_cert_show_archived,
+                    variant=rx.cond(PatientDetailState.cert_show_archived, "soft", "ghost"),
+                    color_scheme=rx.cond(PatientDetailState.cert_show_archived, "accent", "gray"),
+                    size="1",
+                ),
+                content=LanguageState.tr["show_archived_tooltip"],
+            ),
             rx.spacer(),
             rx.button(
                 rx.icon("plus", size=15),
-                "Ajouter une note",
-                on_click=PatientDossierState.toggle_note_input,
+                LanguageState.tr["new_certificate_btn"],
+                on_click=PatientDetailState.open_certificate_dialog,
                 size="2",
-                variant="outline",
-                color_scheme="green",
             ),
             width="100%",
             align="center",
+            spacing="2",
         ),
-        # Inline note input (toggled)
         rx.cond(
-            PatientDossierState.show_note_input,
-            rx.vstack(
-                rx.text_area(
-                    value=PatientDossierState.new_note_text,
-                    on_change=PatientDossierState.set_new_note_text,
-                    placeholder="Rédigez votre note médicale ici…",
-                    rows="5",
+            PatientDetailState.filtered_sorted_certificates,
+            rx.box(
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            _cert_sortable_header(LanguageState.tr["cert_form_date_label"], "issue_date"),
+                            _cert_sortable_header(LanguageState.tr["col_cert_type"], "certificate_type_label"),
+                            _cert_sortable_header(LanguageState.tr["cert_form_conclusion_label"], "conclusion"),
+                            rx.table.column_header_cell(
+                                rx.text(LanguageState.tr["cert_fit_for_work"], size="2")
+                            ),
+                            _cert_sortable_header(LanguageState.tr["col_issued_by"], "issued_by_name"),
+                            rx.table.column_header_cell(""),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(PatientDetailState.filtered_sorted_certificates, _certificate_row),
+                    ),
                     width="100%",
-                    resize="vertical",
+                    variant="surface",
                 ),
-                rx.hstack(
-                    rx.button(
-                        rx.cond(
-                            PatientDossierState.is_saving_note,
-                            rx.spinner(size="2"),
-                            rx.icon("save", size=14),
-                        ),
-                        "Enregistrer la note",
-                        on_click=PatientDossierState.add_patient_note,
-                        disabled=PatientDossierState.is_saving_note,
-                        size="2",
-                        color_scheme="green",
-                    ),
-                    rx.button(
-                        "Annuler",
-                        on_click=PatientDossierState.toggle_note_input,
-                        variant="ghost",
-                        size="2",
-                    ),
+                overflow_x="auto",
+                width="100%",
+            ),
+            rx.center(
+                rx.vstack(
+                    rx.icon("award", size=40, color="var(--gray-6)"),
+                    rx.text(LanguageState.tr["no_certificates"], size="2", color="var(--gray-9)"),
+                    align="center",
                     spacing="2",
                 ),
-                width="100%",
-                spacing="2",
-                padding="1rem",
-                border="1px solid var(--green-6)",
+                padding="2.5rem",
+                border="1px dashed var(--gray-5)",
                 border_radius="8px",
-                background="var(--green-1)",
+                width="100%",
             ),
         ),
-        # Notes list
-        rx.cond(
-            PatientDossierState.patient_notes,
+        width="100%",
+        spacing="3",
+    )
+
+
+# ── Doctors tab ───────────────────────────────────────────────────────────────
+
+def _doctor_picker_row(doctor: DoctorPickerRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(doctor.full_name, size="2", weight="medium")),
+        rx.table.cell(
+            rx.cond(doctor.specialization != "",
+                    rx.text(doctor.specialization, size="2"),
+                    rx.text("—", size="2", color="var(--gray-8)"))
+        ),
+        _hover={"background_color": "var(--accent-2)", "cursor": "pointer"},
+        on_click=lambda: PatientDoctorTabState.link_doctor(doctor.id),
+    )
+
+
+def _doctor_picker_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(LanguageState.tr["tab_doctors"]),
             rx.vstack(
-                rx.foreach(PatientDossierState.patient_notes, _note_card),
-                width="100%",
-                spacing="2",
-            ),
-            rx.cond(
-                ~PatientDossierState.show_note_input,
-                rx.center(
-                    rx.text(
-                        "Aucune note médicale pour ce patient.",
-                        size="2", color="var(--gray-7)",
+                rx.input(
+                    rx.input.slot(rx.icon("search", size=14)),
+                    placeholder=LanguageState.tr["select_doctor_placeholder"],
+                    value=PatientDoctorTabState.picker_filter,
+                    on_change=PatientDoctorTabState.set_picker_filter,
+                    size="2", width="100%",
+                ),
+                rx.cond(
+                    PatientDoctorTabState.picker_is_loading,
+                    rx.center(rx.spinner(size="2"), padding="1.5rem"),
+                    rx.cond(
+                        PatientDoctorTabState.picker_rows.length() > 0,
+                        rx.box(
+                            rx.table.root(
+                                rx.table.header(rx.table.row(
+                                    rx.table.column_header_cell(LanguageState.tr["col_name"]),
+                                    rx.table.column_header_cell(LanguageState.tr["col_specialization"]),
+                                )),
+                                rx.table.body(rx.foreach(PatientDoctorTabState.picker_rows, _doctor_picker_row)),
+                                width="100%", variant="surface",
+                            ),
+                            max_height="320px", overflow_y="auto", width="100%",
+                        ),
+                        rx.center(rx.text(LanguageState.tr["no_doctors_found"], size="2", color="var(--gray-9)"), padding="1.5rem"),
                     ),
-                    padding="2rem",
+                ),
+                rx.hstack(
+                    rx.button(LanguageState.tr["cancel_btn"], variant="soft", color_scheme="gray",
+                              on_click=PatientDoctorTabState.close_picker),
+                    justify="end", width="100%",
+                ),
+                spacing="3", width="100%",
+            ),
+            on_interact_outside=PatientDoctorTabState.close_picker,
+            on_escape_key_down=PatientDoctorTabState.close_picker,
+            max_width="500px",
+        ),
+        open=PatientDoctorTabState.picker_open,
+    )
+
+
+def _linked_doctor_row(doc: LinkedDoctorRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(
+            rx.hstack(
+                rx.cond(
+                    doc.is_referent,
+                    rx.tooltip(
+                        rx.icon("star", size=14, color="var(--amber-9)"),
+                        content=LanguageState.tr["doctor_referent_label"],
+                    ),
+                    rx.fragment(),
+                ),
+                rx.text(doc.full_name, size="2", weight="medium"),
+                spacing="2", align="center",
+            )
+        ),
+        rx.table.cell(rx.cond(doc.specialization != "", rx.text(doc.specialization, size="2"), rx.text("—", size="2", color="var(--gray-8)"))),
+        rx.table.cell(rx.cond(doc.phone != "", rx.text(doc.phone, size="2"), rx.text("—", size="2", color="var(--gray-8)"))),
+        rx.table.cell(
+            rx.hstack(
+                rx.cond(
+                    doc.is_referent,
+                    rx.tooltip(
+                        rx.icon_button(rx.icon("star-off", size=13), variant="ghost", color_scheme="amber", size="1",
+                                       on_click=lambda: PatientDoctorTabState.open_confirm_clear_referent(doc.doctor_id, doc.full_name)),
+                        content=LanguageState.tr["doctor_remove_referent_tooltip"],
+                    ),
+                    rx.tooltip(
+                        rx.icon_button(rx.icon("star", size=13), variant="ghost", color_scheme="gray", size="1",
+                                       on_click=lambda: PatientDoctorTabState.set_referent(doc.doctor_id)),
+                        content=LanguageState.tr["doctor_set_referent_tooltip"],
+                    ),
+                ),
+                rx.tooltip(
+                    rx.icon_button(rx.icon("unlink", size=13), variant="ghost", color_scheme="red", size="1",
+                                   on_click=lambda: PatientDoctorTabState.open_confirm_unlink(doc.doctor_id, doc.full_name)),
+                    content=LanguageState.tr["doctor_unlink_tooltip"],
+                ),
+                spacing="1",
+            )
+        ),
+    )
+
+
+def _doctor_confirm_unlink_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title(LanguageState.tr["doctor_unlink_tooltip"]),
+            rx.alert_dialog.description(
+                rx.text(
+                    LanguageState.tr["confirm_unlink_doctor_msg"],
+                    " ",
+                    rx.text.strong(PatientDoctorTabState.confirm_unlink_doctor_name),
+                    " ?",
+                    size="2",
+                ),
+            ),
+            rx.hstack(
+                rx.alert_dialog.cancel(
+                    rx.button(
+                        LanguageState.tr["cancel_btn"],
+                        variant="outline", color_scheme="gray", size="2",
+                        on_click=PatientDoctorTabState.close_confirm_unlink,
+                    ),
+                ),
+                rx.alert_dialog.action(
+                    rx.button(
+                        LanguageState.tr["confirm_btn"],
+                        color_scheme="red", size="2",
+                        on_click=lambda: PatientDoctorTabState.unlink_doctor(PatientDoctorTabState.confirm_unlink_doctor_id),
+                    ),
+                ),
+                spacing="3", justify="end", margin_top="1rem",
+            ),
+        ),
+        open=PatientDoctorTabState.confirm_unlink_open,
+    )
+
+
+def _doctor_confirm_clear_referent_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title(LanguageState.tr["doctor_remove_referent_tooltip"]),
+            rx.alert_dialog.description(
+                rx.text(
+                    LanguageState.tr["confirm_clear_referent_msg"],
+                    " ",
+                    rx.text.strong(PatientDoctorTabState.confirm_clear_referent_doctor_name),
+                    " ?",
+                    size="2",
+                ),
+            ),
+            rx.hstack(
+                rx.alert_dialog.cancel(
+                    rx.button(
+                        LanguageState.tr["cancel_btn"],
+                        variant="outline", color_scheme="gray", size="2",
+                        on_click=PatientDoctorTabState.close_confirm_clear_referent,
+                    ),
+                ),
+                rx.alert_dialog.action(
+                    rx.button(
+                        LanguageState.tr["confirm_btn"],
+                        color_scheme="amber", size="2",
+                        on_click=lambda: PatientDoctorTabState.clear_referent(PatientDoctorTabState.confirm_clear_referent_doctor_id),
+                    ),
+                ),
+                spacing="3", justify="end", margin_top="1rem",
+            ),
+        ),
+        open=PatientDoctorTabState.confirm_clear_referent_open,
+    )
+
+
+def _doctors_tab() -> rx.Component:
+    return rx.vstack(
+        _doctor_picker_dialog(),
+        _doctor_confirm_unlink_dialog(),
+        _doctor_confirm_clear_referent_dialog(),
+        rx.hstack(
+            rx.spacer(),
+            rx.button(
+                rx.icon("plus", size=14),
+                LanguageState.tr["doctor_link_btn"],
+                on_click=PatientDoctorTabState.open_picker,
+                variant="outline", size="2",
+            ),
+            width="100%",
+        ),
+        rx.cond(
+            PatientDoctorTabState.error_message != "",
+            rx.callout(PatientDoctorTabState.error_message, icon="alert-circle", color_scheme="red", size="1"),
+        ),
+        rx.cond(
+            PatientDoctorTabState.is_loading,
+            rx.center(rx.spinner(size="2"), padding="2rem"),
+            rx.cond(
+                PatientDoctorTabState.linked_doctors.length() > 0,
+                rx.table.root(
+                    rx.table.header(rx.table.row(
+                        rx.table.column_header_cell(LanguageState.tr["col_name"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_specialization"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_phone"]),
+                        rx.table.column_header_cell(""),
+                    )),
+                    rx.table.body(rx.foreach(PatientDoctorTabState.linked_doctors, _linked_doctor_row)),
+                    width="100%", variant="surface",
+                ),
+                rx.center(
+                    rx.vstack(
+                        rx.icon("user-round-x", size=40, color="var(--gray-6)"),
+                        rx.text(LanguageState.tr["no_doctors_linked"], size="2", color="var(--gray-9)"),
+                        spacing="2", align="center",
+                    ),
+                    padding="4rem",
                     border="1px dashed var(--gray-5)",
                     border_radius="8px",
                     width="100%",
                 ),
             ),
         ),
-        width="100%",
-        spacing="3",
+        width="100%", spacing="3",
+    )
+
+
+# ── Accounts tab ──────────────────────────────────────────────────────────────
+
+def _account_picker_row_tab(account: AccountPickerRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(account.name, size="2", weight="medium")),
+        rx.table.cell(rx.cond(account.city != "", rx.text(account.city, size="2"), rx.text("—", size="2", color="var(--gray-8)"))),
+        _hover={"background_color": "var(--accent-2)", "cursor": "pointer"},
+        on_click=lambda: PatientAccountTabState.link_account(account.id),
+    )
+
+
+def _account_picker_dialog_tab() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(LanguageState.tr["acct_picker_title"]),
+            rx.vstack(
+                rx.input(
+                    rx.input.slot(rx.icon("search", size=14)),
+                    placeholder=LanguageState.tr["acct_picker_filter_placeholder"],
+                    value=PatientAccountTabState.picker_filter,
+                    on_change=PatientAccountTabState.set_picker_filter,
+                    size="2", width="100%",
+                ),
+                rx.cond(
+                    PatientAccountTabState.picker_is_loading,
+                    rx.center(rx.spinner(size="2"), padding="1.5rem"),
+                    rx.cond(
+                        PatientAccountTabState.picker_rows.length() > 0,
+                        rx.box(
+                            rx.table.root(
+                                rx.table.header(rx.table.row(
+                                    rx.table.column_header_cell(LanguageState.tr["col_account_name"]),
+                                    rx.table.column_header_cell(LanguageState.tr["field_city"]),
+                                )),
+                                rx.table.body(rx.foreach(PatientAccountTabState.picker_rows, _account_picker_row_tab)),
+                                width="100%", variant="surface",
+                            ),
+                            max_height="320px", overflow_y="auto", width="100%",
+                        ),
+                        rx.center(rx.text(LanguageState.tr["no_accounts_found"], size="2", color="var(--gray-9)"), padding="1.5rem"),
+                    ),
+                ),
+                rx.hstack(
+                    rx.button(LanguageState.tr["cancel_btn"], variant="soft", color_scheme="gray",
+                              on_click=PatientAccountTabState.close_picker),
+                    justify="end", width="100%",
+                ),
+                spacing="3", width="100%",
+            ),
+            on_interact_outside=PatientAccountTabState.close_picker,
+            on_escape_key_down=PatientAccountTabState.close_picker,
+            max_width="500px",
+        ),
+        open=PatientAccountTabState.picker_open,
+    )
+
+
+def _linked_account_row(acct: LinkedAccountRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(acct.name, size="2", weight="medium")),
+        rx.table.cell(
+            rx.match(
+                acct.account_type,
+                ("COMPANY", rx.badge(LanguageState.tr["account_company_badge"], color_scheme="blue", variant="soft", size="1")),
+                ("INDIVIDUAL", rx.badge(LanguageState.tr["account_individual_badge"], color_scheme="purple", variant="soft", size="1")),
+                rx.badge(acct.account_type, color_scheme="gray", variant="soft", size="1"),
+            )
+        ),
+        rx.table.cell(rx.cond(acct.city != "", rx.text(acct.city, size="2"), rx.text("—", size="2", color="var(--gray-8)"))),
+        rx.table.cell(rx.cond(acct.phone != "", rx.text(acct.phone, size="2"), rx.text("—", size="2", color="var(--gray-8)"))),
+        rx.table.cell(
+            rx.tooltip(
+                rx.icon_button(rx.icon("unlink", size=13), variant="ghost", color_scheme="red", size="1",
+                               on_click=lambda: PatientAccountTabState.open_confirm_unlink(acct.account_id, acct.name)),
+                content=LanguageState.tr["account_unlink_tooltip"],
+            )
+        ),
+    )
+
+
+def _account_confirm_unlink_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title(LanguageState.tr["account_unlink_tooltip"]),
+            rx.alert_dialog.description(
+                rx.text(
+                    LanguageState.tr["confirm_unlink_account_msg"],
+                    " ",
+                    rx.text.strong(PatientAccountTabState.confirm_unlink_account_name),
+                    " ?",
+                    size="2",
+                ),
+            ),
+            rx.hstack(
+                rx.alert_dialog.cancel(
+                    rx.button(
+                        LanguageState.tr["cancel_btn"],
+                        variant="outline", color_scheme="gray", size="2",
+                        on_click=PatientAccountTabState.close_confirm_unlink,
+                    ),
+                ),
+                rx.alert_dialog.action(
+                    rx.button(
+                        LanguageState.tr["confirm_btn"],
+                        color_scheme="red", size="2",
+                        on_click=lambda: PatientAccountTabState.unlink_account(PatientAccountTabState.confirm_unlink_account_id),
+                    ),
+                ),
+                spacing="3", justify="end", margin_top="1rem",
+            ),
+        ),
+        open=PatientAccountTabState.confirm_unlink_open,
+    )
+
+
+def _accounts_tab() -> rx.Component:
+    return rx.vstack(
+        _account_picker_dialog_tab(),
+        _account_confirm_unlink_dialog(),
+        rx.hstack(
+            rx.spacer(),
+            rx.button(
+                rx.icon("plus", size=14),
+                LanguageState.tr["account_link_btn"],
+                on_click=PatientAccountTabState.open_picker,
+                variant="outline", size="2",
+            ),
+            width="100%",
+        ),
+        rx.cond(
+            PatientAccountTabState.error_message != "",
+            rx.callout(PatientAccountTabState.error_message, icon="alert-circle", color_scheme="red", size="1"),
+        ),
+        rx.cond(
+            PatientAccountTabState.is_loading,
+            rx.center(rx.spinner(size="2"), padding="2rem"),
+            rx.cond(
+                PatientAccountTabState.linked_accounts.length() > 0,
+                rx.table.root(
+                    rx.table.header(rx.table.row(
+                        rx.table.column_header_cell(LanguageState.tr["col_account_name"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_type"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_city"]),
+                        rx.table.column_header_cell(LanguageState.tr["col_phone"]),
+                        rx.table.column_header_cell(""),
+                    )),
+                    rx.table.body(rx.foreach(PatientAccountTabState.linked_accounts, _linked_account_row)),
+                    width="100%", variant="surface",
+                ),
+                rx.center(
+                    rx.vstack(
+                        rx.icon("building-x", size=40, color="var(--gray-6)"),
+                        rx.text(LanguageState.tr["no_accounts_linked"], size="2", color="var(--gray-9)"),
+                        spacing="2", align="center",
+                    ),
+                    padding="4rem",
+                    border="1px dashed var(--gray-5)",
+                    border_radius="8px",
+                    width="100%",
+                ),
+            ),
+        ),
+        width="100%", spacing="3",
     )
 
 
@@ -1008,12 +1552,13 @@ def patient_detail_page() -> rx.Component:
         page_layout(
             patient_form_dialog(),
             exam_form_dialog(),
-            consultation_form_dialog(),
-            appointment_form_dialog(),
-            patient_delete_dialog(),
+            prescription_form_dialog(),
+            certificate_form_dialog(),
+            id_card_dialog(),
+            _create_visit_dialog(),
             rx.button(
                 rx.icon("arrow-left", size=16),
-                LanguageState.tr["back_to_patients"],
+                LanguageState.tr["btn_back"],
                 on_click=PatientDetailState.go_back,
                 variant="ghost",
                 size="2",
@@ -1033,64 +1578,70 @@ def patient_detail_page() -> rx.Component:
                     PatientDetailState.patient,
                     rx.vstack(
                         _patient_card(PatientDetailState.patient),
-                        # ── Tabbed sections (logically grouped) ──────────────
                         rx.tabs.root(
                             rx.tabs.list(
                                 rx.tabs.trigger(
-                                    rx.hstack(rx.icon("stethoscope", size=14), rx.text("Clinique"), spacing="1", align="center"),
-                                    value="clinique",
-                                ),
-                                rx.tabs.trigger(
-                                    rx.hstack(rx.icon("flag", size=14), rx.text("Campagnes"), spacing="1", align="center"),
-                                    value="campagnes",
-                                ),
-                                rx.tabs.trigger(
-                                    rx.hstack(rx.icon("calendar", size=14), rx.text("Rendez-vous"), spacing="1", align="center"),
-                                    value="agenda",
-                                ),
-                                rx.tabs.trigger(
-                                    rx.hstack(rx.icon("folder-open", size=14), rx.text("Dossier"), spacing="1", align="center"),
-                                    value="dossier",
-                                ),
-                                size="2",
-                            ),
-                            rx.tabs.content(
-                                rx.vstack(
-                                    rx.cond(
-                                        NavRoleState.can_see_samples,
-                                        sample_collection_panel(),
-                                        rx.fragment(),
+                                    rx.hstack(
+                                        rx.icon("calendar-clock", size=15),
+                                        rx.text(LanguageState.tr["appointments_section_title"]),
+                                        spacing="1",
+                                        align="center",
                                     ),
-                                    _prescribed_followup_section(),
-                                    _consultations_section(),
-                                    _exams_section(),
-                                    spacing="6",
-                                    width="100%",
+                                    value="visits",
                                 ),
-                                value="clinique",
-                                padding_top="1rem",
-                            ),
-                            rx.tabs.content(
-                                _campaigns_section(),
-                                value="campagnes",
-                                padding_top="1rem",
-                            ),
-                            rx.tabs.content(
-                                _appointments_section(),
-                                value="agenda",
-                                padding_top="1rem",
-                            ),
-                            rx.tabs.content(
-                                rx.vstack(
-                                    _documents_section(),
-                                    _notes_section(),
-                                    spacing="6",
-                                    width="100%",
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("flask-conical", size=15),
+                                        rx.text(LanguageState.tr["tab_exams"]),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="exams",
                                 ),
-                                value="dossier",
-                                padding_top="1rem",
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("file-text", size=15),
+                                        rx.text(LanguageState.tr["tab_prescriptions"]),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="prescriptions",
+                                ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("award", size=15),
+                                        rx.text(LanguageState.tr["tab_certificates"]),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="certificates",
+                                ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("user-round-check", size=15),
+                                        rx.text(LanguageState.tr["tab_doctors"]),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="doctors",
+                                ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("building-2", size=15),
+                                        rx.text(LanguageState.tr["tab_accounts"]),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="accounts",
+                                ),
                             ),
-                            default_value="clinique",
+                            rx.tabs.content(_visits_section(), value="visits", padding_top="1rem"),
+                            rx.tabs.content(_exams_section(), value="exams", padding_top="1rem"),
+                            rx.tabs.content(_prescriptions_tab(), value="prescriptions", padding_top="1rem"),
+                            rx.tabs.content(_certificates_tab(), value="certificates", padding_top="1rem"),
+                            rx.tabs.content(_doctors_tab(), value="doctors", padding_top="1rem"),
+                            rx.tabs.content(_accounts_tab(), value="accounts", padding_top="1rem"),
+                            default_value="visits",
                             width="100%",
                         ),
                         width="100%",

@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.empty_state_component import empty_state
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .account_form_component import account_form_dialog
@@ -66,39 +67,42 @@ def _account_row(account: AccountRowDTO) -> rx.Component:
             )
         ),
         rx.table.cell(
-            rx.hstack(
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("chevron-right", size=14),
-                        variant="ghost",
-                        size="1",
-                        on_click=lambda: AccountListState.go_to_account(account.id),
-                    ),
-                    content=LanguageState.tr["tooltip_view_account"],
-                ),
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("pencil", size=14),
-                        variant="ghost",
-                        size="1",
-                        on_click=lambda: AccountFormState.open_edit_dialog(account.id),
-                    ),
-                    content=LanguageState.tr["tooltip_edit_account"],
-                ),
-                rx.cond(
-                    account.is_active,
+            rx.box(
+                rx.hstack(
                     rx.tooltip(
                         rx.icon_button(
-                            rx.icon("ban", size=14),
+                            rx.icon("chevron-right", size=14),
                             variant="ghost",
                             size="1",
-                            color_scheme="red",
-                            on_click=AccountListState.open_confirm_deactivate(account.id, account.name),
+                            on_click=lambda: AccountListState.go_to_account(account.id),
                         ),
-                        content=LanguageState.tr["tooltip_deactivate_account"],
+                        content=LanguageState.tr["tooltip_view_account"],
                     ),
+                    rx.tooltip(
+                        rx.icon_button(
+                            rx.icon("pencil", size=14),
+                            variant="ghost",
+                            size="1",
+                            on_click=lambda: AccountFormState.open_edit_dialog(account.id),
+                        ),
+                        content=LanguageState.tr["tooltip_edit_account"],
+                    ),
+                    rx.cond(
+                        account.is_active,
+                        rx.tooltip(
+                            rx.icon_button(
+                                rx.icon("ban", size=14),
+                                variant="ghost",
+                                size="1",
+                                color_scheme="red",
+                                on_click=lambda: AccountListState.deactivate_account(account.id),
+                            ),
+                            content=LanguageState.tr["tooltip_deactivate_account"],
+                        ),
+                    ),
+                    spacing="1",
                 ),
-                spacing="1",
+                on_click=rx.stop_propagation,
             )
         ),
         style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
@@ -123,46 +127,26 @@ def account_list_page() -> rx.Component:
                 align="center",
             ),
             account_form_dialog(),
-            # ── Confirm désactivation compte ──────────────────────────────────
-            rx.dialog.root(
-                rx.dialog.content(
-                    rx.dialog.title(
-                        rx.hstack(rx.icon("ban", size=18, color="var(--red-9)"),
-                                  rx.text("Désactiver ce compte ?"), spacing="2"),
-                    ),
-                    rx.dialog.description(
-                        rx.vstack(
-                            rx.text(
-                                "Le compte « ",
-                                rx.text.strong(AccountListState.confirm_deactivate_name),
-                                " » sera marqué comme inactif.",
-                                size="2",
-                            ),
-                            rx.text("Les campagnes et patients associés restent accessibles.",
-                                    size="2", color="var(--gray-9)"),
-                            spacing="2",
-                        ),
-                    ),
-                    rx.hstack(
-                        rx.dialog.close(
-                            rx.button("Annuler", variant="soft", color_scheme="gray",
-                                      on_click=AccountListState.dismiss_confirm_deactivate),
-                        ),
-                        rx.button("Désactiver", color_scheme="red",
-                                  on_click=AccountListState.confirmed_deactivate),
-                        justify="end", spacing="2", margin_top="1rem", width="100%",
-                    ),
-                    max_width="440px",
-                ),
-                open=AccountListState.confirm_deactivate_open,
-                on_open_change=lambda _: AccountListState.dismiss_confirm_deactivate(),
-            ),
             rx.hstack(
                 rx.input(
                     placeholder=LanguageState.tr["search_by_name"],
                     value=AccountListState.search_name,
                     on_change=AccountListState.handle_name_change,
                     min_width="260px",
+                    size="2",
+                ),
+                rx.select.root(
+                    rx.select.trigger(
+                        placeholder=LanguageState.tr["all_account_types"],
+                        width="180px",
+                    ),
+                    rx.select.content(
+                        rx.select.item(LanguageState.tr["all_account_types"], value="ALL"),
+                        rx.select.item(LanguageState.tr["account_company_badge"], value="COMPANY"),
+                        rx.select.item(LanguageState.tr["account_individual_badge"], value="INDIVIDUAL"),
+                    ),
+                    value=AccountListState.filter_account_type,
+                    on_change=AccountListState.set_filter_account_type,
                     size="2",
                 ),
                 rx.button(
@@ -188,33 +172,47 @@ def account_list_page() -> rx.Component:
                 rx.center(rx.spinner(size="3"), padding="3rem"),
                 rx.cond(
                     AccountListState.accounts.length() > 0,
-                    rx.table.root(
-                        rx.table.header(
-                            rx.table.row(
-                                _sortable_header(LanguageState.tr["col_account_name"], "name"),
-                                _sortable_header(LanguageState.tr["col_city"], "city"),
-                                _sortable_header(LanguageState.tr["col_contact"], "contact_name"),
-                                _sortable_header(LanguageState.tr["col_phone"], "phone"),
-                                _sortable_header(LanguageState.tr["col_email"], "email"),
-                                _sortable_header(LanguageState.tr["col_status"], "is_active"),
-                                rx.table.column_header_cell(""),
-                            )
+                    rx.vstack(
+                        rx.table.root(
+                            rx.table.header(
+                                rx.table.row(
+                                    _sortable_header(LanguageState.tr["col_account_name"], "name"),
+                                    _sortable_header(LanguageState.tr["col_city"], "city"),
+                                    _sortable_header(LanguageState.tr["col_contact"], "contact_name"),
+                                    _sortable_header(LanguageState.tr["col_phone"], "phone"),
+                                    _sortable_header(LanguageState.tr["col_email"], "email"),
+                                    _sortable_header(LanguageState.tr["col_status"], "is_active"),
+                                    rx.table.column_header_cell(""),
+                                )
+                            ),
+                            rx.table.body(
+                                rx.foreach(AccountListState.accounts, _account_row)
+                            ),
+                            width="100%",
+                            variant="surface",
                         ),
-                        rx.table.body(
-                            rx.foreach(AccountListState.accounts, _account_row)
+                        rx.cond(
+                            AccountListState.has_more,
+                            rx.center(
+                                rx.button(
+                                    rx.cond(
+                                        AccountListState.is_loading_more,
+                                        rx.hstack(rx.spinner(size="2"), rx.text("Loading..."), spacing="2"),
+                                        rx.hstack(rx.icon("chevron-down", size=16), rx.text("Load more"), spacing="2"),
+                                    ),
+                                    variant="soft",
+                                    size="2",
+                                    on_click=AccountListState.load_more_accounts,
+                                    disabled=AccountListState.is_loading_more,
+                                ),
+                                width="100%",
+                                padding="1rem",
+                            ),
                         ),
                         width="100%",
-                        variant="surface",
+                        spacing="0",
                     ),
-                    rx.center(
-                        rx.vstack(
-                            rx.icon("building-2", size=40, color="var(--gray-7)"),
-                            rx.text(LanguageState.tr["no_accounts_found"], color="var(--gray-9)"),
-                            align="center",
-                            spacing="2",
-                        ),
-                        padding="3rem",
-                    ),
+                    empty_state("building-2", LanguageState.tr["no_accounts_found"]),
                 ),
             ),
         )

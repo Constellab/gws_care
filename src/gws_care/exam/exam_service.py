@@ -1,5 +1,7 @@
 """CRUD + domain service for Exam sessions."""
 
+from datetime import datetime
+
 from gws_core import BadRequestException, NotFoundException
 
 from gws_care.exam.exam import Exam
@@ -7,6 +9,8 @@ from gws_care.exam.exam_dto import ExamRowDTO, InterpretExamDTO, SaveExamDTO, Up
 from gws_care.exam.exam_type import ExamStatus
 from gws_care.patient.patient import Patient
 from gws_care.user.user import User
+from gws_care.workflow.exam_validation_step import ExamValidationStep
+from gws_care.workflow.exam_validation_workflow import ExamValidationWorkflow
 
 
 class ExamService:
@@ -40,18 +44,33 @@ class ExamService:
 
     @classmethod
     def create_exam(cls, dto: SaveExamDTO) -> Exam:
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+        from gws_care.visit.visit_type import VisitType
+
         patient = Patient.get_or_none(Patient.id == dto.patient_id)
         if patient is None:
             raise BadRequestException(f"Patient '{dto.patient_id}' not found")
 
+        if dto.visit_id:
+            visit = Visit.get_or_none(Visit.id == dto.visit_id)
+            if visit is None:
+                raise BadRequestException(f"Visit '{dto.visit_id}' not found")
+        else:
+            visit = Visit()
+            visit.visit_type = VisitType.CONSULTATION
+            visit.patient = patient
+            visit.billing_account_id = dto.account_id
+            visit.campaign_visit_status = CampaignVisitStatus.PENDING
+            visit.save()
+
         exam = Exam()
         exam.patient = patient
+        exam.visit = visit
         exam.billing_account_id = dto.account_id
         exam.exam_date = dto.exam_date
         exam.exam_type = dto.exam_type
-        exam.exam_type_ref_id = dto.exam_type_ref_id
-        exam.requested_param_ids = dto.requested_param_ids if dto.requested_param_ids else None
-        exam.status = ExamStatus.DRAFT
+        exam.status = ExamStatus.TODO
         exam.reason_for_visit = dto.reason_for_visit
         exam.medical_history = dto.medical_history
         exam.weight = dto.weight
@@ -60,7 +79,6 @@ class ExamService:
         exam.blood_pressure = dto.blood_pressure
         exam.heart_rate = dto.heart_rate
         exam.temperature = dto.temperature
-        exam.conclusion = dto.conclusion
         exam.save()
         return exam
 
@@ -76,12 +94,7 @@ class ExamService:
         exam.blood_pressure = dto.blood_pressure
         exam.heart_rate = dto.heart_rate
         exam.temperature = dto.temperature
-        exam.conclusion = dto.conclusion
         exam.lab_results = dto.lab_results
-        if dto.prescribed_exam_ref_ids is not None:
-            exam.prescribed_exam_ref_ids = dto.prescribed_exam_ref_ids or None
-        if dto.follow_up_exam_ids is not None:
-            exam.follow_up_exam_ids = dto.follow_up_exam_ids or None
         exam.save()
         return exam
 
@@ -90,8 +103,6 @@ class ExamService:
         exam = cls.get_exam(exam_id)
         exam.exam_date = dto.exam_date
         exam.exam_type = dto.exam_type
-        exam.exam_type_ref_id = dto.exam_type_ref_id
-        exam.requested_param_ids = dto.requested_param_ids or None
         exam.billing_account_id = dto.account_id
         exam.reason_for_visit = dto.reason_for_visit
         exam.medical_history = dto.medical_history
@@ -101,39 +112,160 @@ class ExamService:
         exam.blood_pressure = dto.blood_pressure
         exam.heart_rate = dto.heart_rate
         exam.temperature = dto.temperature
-        exam.conclusion = dto.conclusion
         exam.save()
         return exam
 
     @classmethod
-    def set_pending(cls, exam_id: str) -> Exam:
-        """Mark exam as PENDING (results entered, awaiting interpretation)."""
+    def update_reason_and_history(cls, exam_id: str, reason: str | None, history: str | None) -> Exam:
         exam = cls.get_exam(exam_id)
-        exam.status = ExamStatus.PENDING
+        exam.reason_for_visit = reason
+        exam.medical_history = history
         exam.save()
+        return exam
+
+    @classmethod
+    def update_physical(
+        cls,
+        exam_id: str,
+        weight: float | None,
+        height: float | None,
+        bmi: float | None,
+        blood_pressure: str | None,
+        heart_rate: float | None,
+        temperature: float | None,
+    ) -> Exam:
+        exam = cls.get_exam(exam_id)
+        exam.weight = weight
+        exam.height = height
+        exam.bmi = bmi
+        exam.blood_pressure = blood_pressure
+        exam.heart_rate = heart_rate
+        exam.temperature = temperature
+        exam.save()
+        return exam
+
+    @classmethod
+    def update_lab_results(cls, exam_id: str, lab_results: list[dict]) -> Exam:
+        exam = cls.get_exam(exam_id)
+        exam.lab_results = lab_results
+        exam.save()
+        return exam
+
+    @classmethod
+    def set_in_progress_results(cls, exam_id: str, user: User | None = None) -> Exam:
+        """Advance exam from TODO → IN_PROGRESS_RESULTS (informations saved)."""
+        exam = cls.get_exam(exam_id)
+        exam.status = ExamStatus.IN_PROGRESS_RESULTS
+        exam.save()
+        record = ExamValidationWorkflow()
+        record.exam = exam
+        record.step = ExamValidationStep.IN_PROGRESS_RESULTS
+        record.reached_by = user
+        record.reached_at = datetime.utcnow()
+        record.save()
+        return exam
+
+    @classmethod
+    def set_in_progress_interpretation(cls, exam_id: str, user: User | None = None) -> Exam:
+        """Advance exam to IN_PROGRESS_INTERPRETATION (results submitted for review)."""
+        exam = cls.get_exam(exam_id)
+        exam.status = ExamStatus.IN_PROGRESS_INTERPRETATION
+        exam.save()
+        record = ExamValidationWorkflow()
+        record.exam = exam
+        record.step = ExamValidationStep.IN_PROGRESS_INTERPRETATION
+        record.reached_by = user
+        record.reached_at = datetime.utcnow()
+        record.save()
         return exam
 
     @classmethod
     def interpret_exam(cls, exam_id: str, dto: InterpretExamDTO, doctor: User) -> Exam:
-        """Save doctor's interpretation and mark exam as INTERPRETED."""
+        """Save doctor's interpretation and mark exam as DONE."""
         if not dto.interpretation or not dto.interpretation.strip():
             raise BadRequestException("Interpretation text is required")
         exam = cls.get_exam(exam_id)
         exam.interpretation = dto.interpretation.strip()
         exam.interpreted_by = doctor
-        exam.status = ExamStatus.INTERPRETED
+        exam.status = ExamStatus.DONE
         exam.save()
-        return exam
-
-    @classmethod
-    def update_requested_params(cls, exam_id: str, param_ids: list[str]) -> Exam:
-        """Update which specific parameters the doctor wants tested for this exam."""
-        exam = cls.get_exam(exam_id)
-        exam.requested_param_ids = param_ids if param_ids else None
-        exam.save()
+        record = ExamValidationWorkflow()
+        record.exam = exam
+        record.step = ExamValidationStep.DONE
+        record.reached_by = doctor
+        record.reached_at = datetime.utcnow()
+        record.save()
         return exam
 
     @classmethod
     def delete_exam(cls, exam_id: str) -> None:
         exam = cls.get_exam(exam_id)
         exam.delete_instance()
+
+    # ── Phase 4 — Terrain / QR code methods ──────────────────────────────────
+
+    @classmethod
+    def assign_tube_qr(cls, exam_id: str, tube_qr_code: str) -> Exam:
+        """Assign a tube QR code to an exam."""
+        exam = cls.get_exam(exam_id)
+        exam.tube_qr_code = tube_qr_code
+        exam.save()
+        return exam
+
+    @classmethod
+    def mark_terrain_done(cls, exam_id: str) -> Exam:
+        """Mark an exam as done on-site (OT checks off the exam)."""
+        exam = cls.get_exam(exam_id)
+        exam.is_done_on_site = True
+        exam.save()
+        return exam
+
+    @classmethod
+    def find_by_tube_qr(cls, qr_code: str) -> dict | None:
+        """Lookup an exam by its tube QR code.
+
+        The tube QR code format is TUBE-<patient_number>-<exam_type_code>.
+        Returns a dict with keys: patient, visit, exams_to_do (list of Exam).
+        Returns None if not found.
+        """
+        from gws_care.patient.patient import Patient as PatientModel
+        from gws_care.visit.visit import Visit
+
+        exam = Exam.get_or_none(Exam.tube_qr_code == qr_code)
+        if exam is None:
+            return None
+
+        patient = PatientModel.get_or_none(PatientModel.id == exam.patient_id)
+        if patient is None:
+            return None
+
+        # All exams for the same patient (regardless of visit — standalone or visit-linked)
+        all_exams_for_patient = list(
+            Exam.select()
+            .where(Exam.patient == exam.patient_id)
+            .order_by(Exam.exam_date.desc())
+        )
+
+        return {
+            "patient": patient,
+            "visit": Visit.get_or_none(Visit.id == exam.visit_id) if exam.visit_id else None,
+            "exams_to_do": [e for e in all_exams_for_patient if not e.is_done_on_site],
+        }
+
+    @classmethod
+    def list_exams_for_campaign_terrain(cls, program_id: str) -> list[Exam]:
+        """Return all exams (via CampaignVisit) for a program for on-site view.
+
+        Falls back to patient-level exams if no visit FK is present.
+        """
+        from gws_care.campaign.campaign_service import CampaignService
+        from gws_care.visit.visit import Visit
+        patients = CampaignService.get_patients(program_id)
+        if not patients:
+            return []
+        patient_ids = [str(p.id) for p in patients]
+        return list(
+            Exam.select()
+            .where(Exam.patient << patient_ids)
+            .order_by(Exam.patient_id, Exam.exam_date)
+        )

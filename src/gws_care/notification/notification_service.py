@@ -1,11 +1,10 @@
-"""Notification service: send emails, SMS, WhatsApp via Brevo or SMTP, store logs."""
+"""Notification service: send emails via SMTP, store logs."""
 
 from __future__ import annotations
 
 from gws_core import BadRequestException
 
 from gws_care.notification.notification_dto import (
-    BrevoConfigDTO,
     NotificationPreferenceDTO,
     SendCustomMessageDTO,
     SendManualNotificationDTO,
@@ -35,6 +34,9 @@ class NotificationService:
         Reads SmtpConfig from the database. Returns True on success, False on failure.
         If no SMTP host is configured, logs a warning and returns False.
         """
+        # SMTP disabled — remove this line once credentials are configured
+        return False
+
         import smtplib
         from email.mime.text import MIMEText
 
@@ -60,9 +62,7 @@ class NotificationService:
             else:
                 server = smtplib.SMTP(config.host, port, timeout=15)
 
-            # Resolve credentials from Constellab Credentials store
-            smtp_username = config.username
-            smtp_password = None
+            # Resolve username + password from Constellab BASIC Credentials
             if config.credentials_name:
                 try:
                     from gws_core.credentials.credentials import Credentials
@@ -71,13 +71,9 @@ class NotificationService:
                         config.credentials_name, CredentialsType.BASIC
                     )
                     basic = creds.get_data_object()
-                    smtp_username = basic.username or smtp_username
-                    smtp_password = basic.password
+                    server.login(basic.username, basic.password)
                 except Exception as cred_exc:
                     print(f"[NotificationService] Could not load credentials '{config.credentials_name}': {cred_exc}")
-
-            if smtp_username and smtp_password:
-                server.login(smtp_username, smtp_password)
 
             server.sendmail(from_addr, [to_email], msg.as_string())
             server.quit()
@@ -86,123 +82,72 @@ class NotificationService:
             print(f"[NotificationService] Email send failed to {to_email}: {exc}")
             return False
 
-    # ── Brevo helpers ─────────────────────────────────────────────────────────
-
     @classmethod
-    def _get_brevo_api_key(cls) -> str | None:
-        """Resolve the Brevo API key from Constellab Credentials. Returns None if not configured."""
-        from gws_care.notification.notification_models import BrevoConfig
-        config = BrevoConfig.get_or_none()
-        if config is None or not config.credentials_name:
-            return None
-        try:
-            from gws_core.credentials.credentials import Credentials
-            from gws_core.credentials.credentials_type import CredentialsType
-            creds = Credentials.find_by_name_and_check(config.credentials_name, CredentialsType.BASIC)
-            basic = creds.get_data_object()
-            return basic.password
-        except Exception as exc:
-            print(f"[NotificationService] Could not load Brevo credentials: {exc}")
-            return None
+    def _send_email_with_attachment(
+        cls,
+        to_email: str,
+        subject: str,
+        body: str,
+        pdf_bytes: bytes,
+        filename: str,
+    ) -> bool:
+        """Send an email with a PDF attachment via the configured SMTP server."""
+        # SMTP disabled — remove this line once credentials are configured
+        return False
 
-    @classmethod
-    def _send_brevo_email(cls, to_email: str, to_name: str | None, subject: str, body: str) -> bool:
-        """Send a transactional email via the Brevo API."""
-        import json
-        import urllib.request
-
-        api_key = cls._get_brevo_api_key()
-        if not api_key:
-            print("[NotificationService] Brevo API key not configured — email not sent.")
-            return False
-
-        from gws_care.notification.notification_models import BrevoConfig
-        config = BrevoConfig.get_or_none()
-        from_email = (config.from_email if config else None) or "noreply@constellab.care"
-        from_name = (config.from_name if config else None) or "Constellab Care"
-
-        payload = json.dumps({
-            "sender": {"name": from_name, "email": from_email},
-            "to": [{"email": to_email, "name": to_name or ""}],
-            "subject": subject,
-            "textContent": body,
-        }).encode("utf-8")
+        import smtplib
+        from email import encoders
+        from email.mime.base import MIMEBase
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
 
         try:
-            req = urllib.request.Request(
-                "https://api.brevo.com/v3/smtp/email",
-                data=payload,
-                headers={"api-key": api_key, "content-type": "application/json", "accept": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return resp.status < 300
+            from gws_care.notification.notification_models import SmtpConfig
+            config = SmtpConfig.get_or_none()
+            if config is None or not config.host:
+                print("[NotificationService] No SMTP host configured — email not sent.")
+                return False
+
+            from_addr = config.from_email or config.username or "noreply@constellab.care"
+            from_name = config.from_name or "Constellab Care"
+
+            msg = MIMEMultipart()
+            msg["Subject"] = subject
+            msg["From"] = f"{from_name} <{from_addr}>"
+            msg["To"] = to_email
+            msg.attach(MIMEText(body, "plain", "utf-8"))
+
+            part = MIMEBase("application", "pdf")
+            part.set_payload(pdf_bytes)
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", "attachment", filename=filename)
+            msg.attach(part)
+
+            port = config.port if config.port else 587
+            if config.use_tls:
+                server = smtplib.SMTP(config.host, port, timeout=15)
+                server.starttls()
+            else:
+                server = smtplib.SMTP(config.host, port, timeout=15)
+
+            # Resolve username + password from Constellab BASIC Credentials
+            if config.credentials_name:
+                try:
+                    from gws_core.credentials.credentials import Credentials
+                    from gws_core.credentials.credentials_type import CredentialsType
+                    creds = Credentials.find_by_name_and_check(
+                        config.credentials_name, CredentialsType.BASIC
+                    )
+                    basic = creds.get_data_object()
+                    server.login(basic.username, basic.password)
+                except Exception as cred_exc:
+                    print(f"[NotificationService] Could not load credentials '{config.credentials_name}': {cred_exc}")
+
+            server.sendmail(from_addr, [to_email], msg.as_string())
+            server.quit()
+            return True
         except Exception as exc:
-            print(f"[NotificationService] Brevo email failed to {to_email}: {exc}")
-            return False
-
-    @classmethod
-    def _send_brevo_sms(cls, to_phone: str, body: str) -> bool:
-        """Send a transactional SMS via the Brevo API. to_phone must be E.164 (e.g. +33612345678)."""
-        import json
-        import urllib.request
-
-        api_key = cls._get_brevo_api_key()
-        if not api_key:
-            print("[NotificationService] Brevo API key not configured — SMS not sent.")
-            return False
-
-        from gws_care.notification.notification_models import BrevoConfig
-        config = BrevoConfig.get_or_none()
-        sender = (config.sms_sender if config else None) or "ConstellCare"
-
-        payload = json.dumps({
-            "sender": sender,
-            "recipient": to_phone,
-            "content": body,
-            "type": "transactional",
-        }).encode("utf-8")
-
-        try:
-            req = urllib.request.Request(
-                "https://api.brevo.com/v3/transactionalSMS/sms",
-                data=payload,
-                headers={"api-key": api_key, "content-type": "application/json", "accept": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return resp.status < 300
-        except Exception as exc:
-            print(f"[NotificationService] Brevo SMS failed to {to_phone}: {exc}")
-            return False
-
-    @classmethod
-    def _send_brevo_whatsapp(cls, to_phone: str, body: str) -> bool:
-        """Send a transactional WhatsApp message via the Brevo API. to_phone must be E.164."""
-        import json
-        import urllib.request
-
-        api_key = cls._get_brevo_api_key()
-        if not api_key:
-            print("[NotificationService] Brevo API key not configured — WhatsApp not sent.")
-            return False
-
-        payload = json.dumps({
-            "recipientPhoneNumber": to_phone,
-            "text": body,
-        }).encode("utf-8")
-
-        try:
-            req = urllib.request.Request(
-                "https://api.brevo.com/v3/whatsapp/sendMessage",
-                data=payload,
-                headers={"api-key": api_key, "content-type": "application/json", "accept": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return resp.status < 300
-        except Exception as exc:
-            print(f"[NotificationService] Brevo WhatsApp failed to {to_phone}: {exc}")
+            print(f"[NotificationService] Email (with attachment) send failed to {to_email}: {exc}")
             return False
 
     @classmethod
@@ -215,27 +160,26 @@ class NotificationService:
         subject: str,
         body: str,
     ) -> bool:
-        """Route a message to the appropriate transport based on channel."""
-        if channel == NotificationChannel.SMS.value:
-            if not to_phone:
-                print("[NotificationService] SMS requested but no phone number available.")
-                return False
-            return cls._send_brevo_sms(to_phone, body)
-        elif channel == NotificationChannel.WHATSAPP.value:
-            if not to_phone:
-                print("[NotificationService] WhatsApp requested but no phone number available.")
-                return False
-            return cls._send_brevo_whatsapp(to_phone, body)
+        """Route an email message via SMTP."""
+        # Only EMAIL channel is supported
+        if to_email:
+            return cls._send_email(to_email, subject, body)
         else:
-            # Default: email — try Brevo first, fall back to SMTP
-            brevo_key = cls._get_brevo_api_key()
-            if brevo_key and to_email:
-                return cls._send_brevo_email(to_email, to_name, subject, body)
-            elif to_email:
-                return cls._send_email(to_email, subject, body)
-            else:
-                print("[NotificationService] Email requested but no email address available.")
-                return False
+            print("[NotificationService] Email requested but no email address available.")
+            return False
+
+    @classmethod
+    def _dispatch_with_pdf(
+        cls,
+        to_email: str,
+        to_name: str | None,
+        subject: str,
+        body: str,
+        pdf_bytes: bytes,
+        filename: str,
+    ) -> bool:
+        """Send email with PDF attachment via SMTP."""
+        return cls._send_email_with_attachment(to_email, subject, body, pdf_bytes, filename)
 
     # ── Logging helpers ───────────────────────────────────────────────────────
 
@@ -252,8 +196,10 @@ class NotificationService:
         sent_by: User | None,
         patient=None,
         account=None,
-        appointment=None,
+        visit=None,
         extra_data: dict | None = None,
+        recipient_user: User | None = None,
+        parent_log: NotificationLog | None = None,
     ) -> NotificationLog:
         log = NotificationLog()
         log.notification_type = notification_type
@@ -265,9 +211,11 @@ class NotificationService:
         log.recipient_phone = recipient_phone
         log.recipient_name = recipient_name
         log.sent_by = sent_by
+        log.recipient_user = recipient_user
+        log.parent_log = parent_log
         log.patient = patient
         log.account = account
-        log.related_appointment = appointment
+        log.related_visit = visit
         log.extra_data = extra_data
         log.save()
         return log
@@ -281,30 +229,40 @@ class NotificationService:
     # ── Manual sending ────────────────────────────────────────────────────────
 
     @classmethod
-    def send_to_patient(cls, dto: SendCustomMessageDTO, sent_by: User) -> NotificationLog:
-        """Send a message to a single patient via the requested channel."""
+    def send_to_patient(
+        cls,
+        dto: SendCustomMessageDTO,
+        sent_by: User,
+        parent_log: NotificationLog | None = None,
+    ) -> NotificationLog:
+        """Send an in-app + optional email message to a single patient."""
         from gws_care.patient.patient_service import PatientService
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
 
         if not dto.subject.strip():
             raise BadRequestException("Subject is required")
         if not dto.body.strip():
             raise BadRequestException("Message body is required")
 
-        channel = dto.channel or NotificationChannel.EMAIL.value
         patient = PatientService.get_patient(dto.patient_id)
 
-        if channel == NotificationChannel.EMAIL.value and not patient.email:
-            raise BadRequestException(
-                f"Patient {patient.get_full_name()} has no email address configured."
+        # Resolve recipient_user: the User row linked to this patient via PATIENT role
+        recipient_user: User | None = None
+        patient_role = (
+            UserCareRole.select()
+            .where(
+                UserCareRole.role == CareRole.PATIENT,
+                UserCareRole.linked_patient_id == str(patient.id),
             )
-        if channel in (NotificationChannel.SMS.value, NotificationChannel.WHATSAPP.value) and not patient.phone:
-            raise BadRequestException(
-                f"Patient {patient.get_full_name()} has no phone number configured."
-            )
+            .first()
+        )
+        if patient_role:
+            recipient_user = User.get_or_none(User.id == patient_role.user_id)
 
         log = cls._create_log(
             notification_type=NotificationType.MANUAL_PATIENT,
-            channel=NotificationChannel(channel),
+            channel=NotificationChannel.IN_APP,
             subject=dto.subject,
             body=dto.body,
             recipient_email=patient.email,
@@ -312,14 +270,65 @@ class NotificationService:
             recipient_name=patient.get_full_name(),
             sent_by=sent_by,
             patient=patient,
+            recipient_user=recipient_user,
+            parent_log=parent_log,
         )
-        success = cls._dispatch(channel, patient.email, patient.phone, patient.get_full_name(), dto.subject, dto.body)
+        cls._finalise_log(log, True)
+
+        # Also dispatch bell notification to recipient user if known
+        if recipient_user:
+            cls.create_bell(str(recipient_user.id), f"Message de {sent_by.get_full_name()}: {dto.subject}", log=log)
+
+        # Also send email if patient has one
+        if patient.email:
+            cls._send_email(patient.email, dto.subject, dto.body)
+
+        return log
+
+    @classmethod
+    def send_pdf_to_patient(
+        cls,
+        patient_id: str,
+        subject: str,
+        body: str,
+        pdf_bytes: bytes,
+        filename: str,
+        sent_by: User | None = None,
+    ) -> NotificationLog:
+        """Send an email with a PDF attachment to a patient."""
+        from gws_care.patient.patient_service import PatientService
+
+        patient = PatientService.get_patient(patient_id)
+        if not patient.email:
+            raise BadRequestException(
+                f"Patient {patient.get_full_name()} has no email address configured."
+            )
+
+        log = cls._create_log(
+            notification_type=NotificationType.MANUAL_PATIENT,
+            channel=NotificationChannel.EMAIL,
+            subject=subject,
+            body=body,
+            recipient_email=patient.email,
+            recipient_phone=patient.phone,
+            recipient_name=patient.get_full_name(),
+            sent_by=sent_by,
+            patient=patient,
+        )
+        success = cls._dispatch_with_pdf(
+            patient.email,
+            patient.get_full_name(),
+            subject,
+            body,
+            pdf_bytes,
+            filename,
+        )
         cls._finalise_log(log, success)
         return log
 
     @classmethod
     def send_to_account(cls, dto: SendManualNotificationDTO, sent_by: User) -> list[NotificationLog]:
-        """Send a message to all patients linked to an account via the requested channel."""
+        """Send an email message to all patients linked to an account."""
         from gws_care.account.account_service import AccountService
         from gws_care.patient.patient_service import PatientService
 
@@ -330,21 +339,30 @@ class NotificationService:
         if not dto.account_id:
             raise BadRequestException("Account is required")
 
-        channel = dto.channel or NotificationChannel.EMAIL.value
         account = AccountService.get_account(dto.account_id)
         patients = PatientService.list_patients_for_account(dto.account_id)
         logs = []
 
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
+
         for patient in patients:
-            use_phone = channel in (NotificationChannel.SMS.value, NotificationChannel.WHATSAPP.value)
-            if use_phone and not patient.phone:
-                continue
-            if not use_phone and not patient.email:
-                continue
+            # Resolve recipient_user for this patient
+            recipient_user: User | None = None
+            patient_role = (
+                UserCareRole.select()
+                .where(
+                    UserCareRole.role == CareRole.PATIENT,
+                    UserCareRole.linked_patient_id == str(patient.id),
+                )
+                .first()
+            )
+            if patient_role:
+                recipient_user = User.get_or_none(User.id == patient_role.user_id)
 
             log = cls._create_log(
                 notification_type=NotificationType.MANUAL_ACCOUNT,
-                channel=NotificationChannel(channel),
+                channel=NotificationChannel.IN_APP,
                 subject=dto.subject,
                 body=dto.body,
                 recipient_email=patient.email,
@@ -353,9 +371,16 @@ class NotificationService:
                 sent_by=sent_by,
                 patient=patient,
                 account=account,
+                recipient_user=recipient_user,
             )
-            success = cls._dispatch(channel, patient.email, patient.phone, patient.get_full_name(), dto.subject, dto.body)
-            cls._finalise_log(log, success)
+            cls._finalise_log(log, True)
+
+            if recipient_user:
+                cls.create_bell(str(recipient_user.id), f"Message de {sent_by.get_full_name()}: {dto.subject}", log=log)
+
+            if patient.email:
+                cls._send_email(patient.email, dto.subject, dto.body)
+
             logs.append(log)
 
         return logs
@@ -364,13 +389,13 @@ class NotificationService:
 
     @classmethod
     def send_appointment_reminder(
-        cls, appointment, days_before: int, sent_by: User | None = None
+        cls, visit, days_before: int, sent_by: User | None = None
     ) -> NotificationLog | None:
-        """Send a reminder email for a single appointment.
+        """Send a reminder email for a scheduled consultation visit.
 
         Returns None if the patient has no email.
         """
-        patient = appointment.patient
+        patient = visit.patient
         if not patient.email:
             return None
 
@@ -378,8 +403,7 @@ class NotificationService:
         body = (
             f"Dear {patient.get_full_name()},\n\n"
             f"This is a reminder that you have an appointment scheduled on "
-            f"{appointment.scheduled_at.strftime('%A %d %B %Y at %H:%M')}.\n\n"
-            f"Exam type: {appointment.exam_type.get_label()}\n\n"
+            f"{visit.scheduled_at.strftime('%A %d %B %Y at %H:%M')}.\n\n"
             f"Please contact us if you need to reschedule.\n\nBest regards,\nConstellab Care"
         )
 
@@ -393,7 +417,7 @@ class NotificationService:
             recipient_name=patient.get_full_name(),
             sent_by=sent_by,
             patient=patient,
-            appointment=appointment,
+            visit=visit,
             extra_data={"days_before": days_before},
         )
         success = cls._dispatch(NotificationChannel.EMAIL.value, patient.email, patient.phone, patient.get_full_name(), subject, body)
@@ -402,10 +426,11 @@ class NotificationService:
 
     @classmethod
     def process_appointment_reminders(cls, user: User) -> int:
-        """Send reminders for all upcoming appointments matching user preferences.
+        """Send reminders for all upcoming consultation visits matching user preferences.
 
-        Skips appointments that already have a reminder logged for the same
-        (appointment_id, days_before) combination today.
+        Queries CONSULTATION-type Visits with a scheduled_at on the target date.
+        Skips visits that already have a reminder logged for the same
+        (visit_id, days_before) combination today.
 
         Returns the number of reminders dispatched.
         """
@@ -415,8 +440,9 @@ class NotificationService:
         if not pref.email_reminders_enabled or not pref.reminder_days:
             return 0
 
-        from gws_care.appointment.appointment import Appointment
-        from gws_care.appointment.appointment_status import AppointmentStatus
+        from gws_care.visit.consultation_visit_status import ConsultationVisitStatus
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.visit_type import VisitType
 
         count = 0
         today = date.today()
@@ -427,20 +453,20 @@ class NotificationService:
             target_dt_end = f"{target_date.isoformat()}T23:59:59"
 
             upcoming = list(
-                Appointment.select()
+                Visit.select()
                 .where(
-                    Appointment.scheduled_at >= target_dt_start,
-                    Appointment.scheduled_at <= target_dt_end,
-                    Appointment.status == AppointmentStatus.SCHEDULED,
+                    Visit.visit_type == VisitType.CONSULTATION,
+                    Visit.scheduled_at >= target_dt_start,
+                    Visit.scheduled_at <= target_dt_end,
+                    Visit.consultation_visit_status == ConsultationVisitStatus.SCHEDULED,
                 )
             )
 
-            for appt in upcoming:
-                # Skip if already sent a reminder for this appt + days combo today
+            for visit in upcoming:
                 already_sent = (
                     NotificationLog.select()
                     .where(
-                        NotificationLog.related_appointment == appt.id,
+                        NotificationLog.related_visit == visit.id,
                         NotificationLog.notification_type == NotificationType.APPOINTMENT_REMINDER,
                         NotificationLog.status == NotificationStatus.SENT,
                     )
@@ -452,10 +478,192 @@ class NotificationService:
                 if already_sent:
                     continue
 
-                cls.send_appointment_reminder(appt, days_before=days, sent_by=user)
+                cls.send_appointment_reminder(visit, days_before=days, sent_by=user)
                 count += 1
 
         return count
+
+    # ── Phase 5 — Typed appointment reminders (J-15, J-3, J-1) ──────────────
+
+    # Map: days_before → NotificationType (for idempotency)
+    _REMINDER_TYPE_MAP = {
+        15: NotificationType.APPOINTMENT_REMINDER_15D,
+        3: NotificationType.APPOINTMENT_REMINDER_3D,
+        1: NotificationType.APPOINTMENT_REMINDER_1D,
+    }
+
+    @classmethod
+    def send_daily_appointment_reminders(cls) -> int:
+        """
+        Daily scheduler method: send appointment reminders at J-15, J-3, and J-1.
+
+        Queries CONSULTATION-type Visits with a scheduled_at on the target date.
+        Each reminder is idempotent — a second call on the same day for the same
+        (visit_id, NotificationType) pair will be skipped.
+
+        Returns the number of reminders dispatched.
+        """
+        from datetime import date, timedelta
+
+        from gws_care.visit.consultation_visit_status import ConsultationVisitStatus
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.visit_type import VisitType
+
+        count = 0
+        today = date.today()
+
+        for days_before, notif_type in cls._REMINDER_TYPE_MAP.items():
+            target_date = today + timedelta(days=days_before)
+            target_dt_start = f"{target_date.isoformat()}T00:00:00"
+            target_dt_end = f"{target_date.isoformat()}T23:59:59"
+
+            upcoming = list(
+                Visit.select()
+                .where(
+                    Visit.visit_type == VisitType.CONSULTATION,
+                    Visit.scheduled_at >= target_dt_start,
+                    Visit.scheduled_at <= target_dt_end,
+                    Visit.consultation_visit_status == ConsultationVisitStatus.SCHEDULED,
+                )
+            )
+
+            for visit in upcoming:
+                already_sent = (
+                    NotificationLog.select()
+                    .where(
+                        NotificationLog.related_visit == visit.id,
+                        NotificationLog.notification_type == notif_type,
+                    )
+                    .exists()
+                )
+                if already_sent:
+                    continue
+
+                patient = visit.patient
+                if not patient.email:
+                    continue
+
+                subject = f"[Constellab Care] Rappel de rendez-vous — J-{days_before}"
+                body = (
+                    f"Cher(e) {patient.get_full_name()},\n\n"
+                    f"Nous vous rappelons que vous avez un rendez-vous prévu dans {days_before} jour(s), "
+                    f"le {visit.scheduled_at.strftime('%A %d %B %Y à %H:%M')}.\n\n"
+                    f"Contactez-nous si vous devez modifier ce rendez-vous.\n\nCordialement,\nConstellab Care"
+                )
+
+                log = cls._create_log(
+                    notification_type=notif_type,
+                    channel=NotificationChannel.EMAIL,
+                    subject=subject,
+                    body=body,
+                    recipient_email=patient.email,
+                    recipient_phone=patient.phone,
+                    recipient_name=patient.get_full_name(),
+                    sent_by=None,
+                    patient=patient,
+                    visit=visit,
+                    extra_data={"days_before": days_before},
+                )
+                success = cls._dispatch(
+                    NotificationChannel.EMAIL.value,
+                    patient.email,
+                    patient.phone,
+                    patient.get_full_name(),
+                    subject,
+                    body,
+                )
+                cls._finalise_log(log, success)
+                count += 1
+
+        return count
+
+    # ── Phase 5 — Terrain thank-you ───────────────────────────────────────────
+
+    @classmethod
+    def send_terrain_thank_you(cls, patient, visit, sent_by: User | None = None) -> None:
+        """Email + in-app bell to a patient after their on-site visit is completed."""
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
+
+        patient_name = patient.get_full_name()
+        subject = "[Constellab Care] Merci pour votre visite on-site"
+        body = (
+            f"Cher(e) {patient_name},\n\n"
+            f"Merci d'avoir participé à la visite on-site #{visit.visit_number}.\n"
+            f"Vos prélèvements ont bien été enregistrés. "
+            f"Vous serez informé(e) dès que vos résultats seront disponibles.\n\n"
+            f"Cordialement,\nConstellab Care"
+        )
+        message = f"Merci pour votre participation à la visite on-site #{visit.visit_number}."
+
+        log = None
+        if patient.email:
+            log = cls._create_log(
+                notification_type=NotificationType.TERRAIN_THANK_YOU,
+                channel=NotificationChannel.EMAIL,
+                subject=subject,
+                body=body,
+                recipient_email=patient.email,
+                recipient_phone=patient.phone,
+                recipient_name=patient_name,
+                sent_by=sent_by,
+                patient=patient,
+                extra_data={"visit_id": str(visit.id)},
+            )
+            success = cls._dispatch(NotificationChannel.EMAIL.value, patient.email, patient.phone, patient_name, subject, body)
+            cls._finalise_log(log, success)
+
+        # Bell to PATIENT role user linked to this patient
+        patient_roles = list(UserCareRole.select().where(
+            UserCareRole.role == CareRole.PATIENT,
+            UserCareRole.linked_patient_id == str(patient.id),
+        ))
+        for role_entry in patient_roles:
+            cls.create_bell(str(role_entry.user_id), message, log=log)
+
+    # ── Phase 5 — Certificate available ──────────────────────────────────────
+
+    @classmethod
+    def notify_certificate_available(cls, certificate, patient, sent_by: User | None = None) -> None:
+        """Email + in-app bell to a patient when a medical certificate is issued."""
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
+
+        patient_name = patient.get_full_name()
+        subject = "[Constellab Care] Votre certificat médical est disponible"
+        body = (
+            f"Cher(e) {patient_name},\n\n"
+            f"Votre certificat médical daté du {certificate.issue_date.strftime('%d/%m/%Y')} "
+            f"est maintenant disponible.\n"
+            f"Vous pouvez le consulter et le télécharger depuis votre espace Constellab Care.\n\n"
+            f"Cordialement,\nConstellab Care"
+        )
+        message = f"Votre certificat médical du {certificate.issue_date.strftime('%d/%m/%Y')} est disponible."
+
+        log = None
+        if patient.email:
+            log = cls._create_log(
+                notification_type=NotificationType.CERTIFICATE_AVAILABLE,
+                channel=NotificationChannel.EMAIL,
+                subject=subject,
+                body=body,
+                recipient_email=patient.email,
+                recipient_phone=patient.phone,
+                recipient_name=patient_name,
+                sent_by=sent_by,
+                patient=patient,
+                extra_data={"certificate_id": str(certificate.id)},
+            )
+            success = cls._dispatch(NotificationChannel.EMAIL.value, patient.email, patient.phone, patient_name, subject, body)
+            cls._finalise_log(log, success)
+
+        # Bell to PATIENT role user linked to this patient
+        patient_roles = list(UserCareRole.select().where(
+            UserCareRole.role == CareRole.PATIENT,
+            UserCareRole.linked_patient_id == str(patient.id),
+        ))
+        for role_entry in patient_roles:
+            cls.create_bell(str(role_entry.user_id), message, log=log)
 
     # ── Preferences ───────────────────────────────────────────────────────────
 
@@ -491,6 +699,40 @@ class NotificationService:
             query = query.where(NotificationLog.patient == patient_id)
         if account_id:
             query = query.where(NotificationLog.account == account_id)
+        if notification_type and notification_type != "ALL":
+            query = query.where(NotificationLog.notification_type == notification_type)
+        return list(query.limit(limit))
+
+    @classmethod
+    def list_sent_logs(
+        cls,
+        user_id: str,
+        notification_type: str | None = None,
+        limit: int = 200,
+    ) -> list[NotificationLog]:
+        """Messages sent by the given user."""
+        query = (
+            NotificationLog.select()
+            .where(NotificationLog.sent_by == user_id)
+            .order_by(NotificationLog.created_at.desc())
+        )
+        if notification_type and notification_type != "ALL":
+            query = query.where(NotificationLog.notification_type == notification_type)
+        return list(query.limit(limit))
+
+    @classmethod
+    def list_inbox_logs(
+        cls,
+        user_id: str,
+        notification_type: str | None = None,
+        limit: int = 200,
+    ) -> list[NotificationLog]:
+        """Messages received by the given user (recipient_user_id = user_id)."""
+        query = (
+            NotificationLog.select()
+            .where(NotificationLog.recipient_user == user_id)
+            .order_by(NotificationLog.created_at.desc())
+        )
         if notification_type and notification_type != "ALL":
             query = query.where(NotificationLog.notification_type == notification_type)
         return list(query.limit(limit))
@@ -538,6 +780,134 @@ class NotificationService:
             .count()
         )
 
+    # ── Phase 2 — Validation workflow notifications ───────────────────────────
+
+    @classmethod
+    def notify_lab_done_to_doctors(cls, program, sent_by: User | None = None) -> None:
+        """Bell notification to every DOCTOR user when a program moves to LAB_DONE.
+
+        Also attempts to send an email to each doctor user if an email address is set.
+        """
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
+
+        campaign_name = program.name
+        message = f"La campagne « {campaign_name} » est prête pour validation Clinic Doctor."
+        subject = f"[Constellab Care] Program pending validation — {campaign_name}"
+        body = (
+            f"Bonjour,\n\n"
+            f"La campagne « {campaign_name} » a été validée par le laboratoire.\n"
+            f"Tous les résultats sont disponibles et attendent votre validation Clinic Doctor.\n\n"
+            f"Veuillez vous connecter à Constellab Care pour procéder.\n\n"
+            f"Cordialement,\nConstellab Care"
+        )
+
+        log = cls._create_log(
+            notification_type=NotificationType.LAB_DONE,
+            channel=NotificationChannel.IN_APP,
+            subject=subject,
+            body=message,
+            recipient_email=None,
+            recipient_phone=None,
+            recipient_name=None,
+            sent_by=sent_by,
+            extra_data={"program_id": str(program.id)},
+        )
+
+        doctor_roles = list(UserCareRole.select(UserCareRole, UserCareRole.user).join(UserCareRole.user.rel_model).where(
+            UserCareRole.role == CareRole.DOCTOR
+        ))
+
+        for role_entry in doctor_roles:
+            cls.create_bell(str(role_entry.user_id), message, log=log)
+            user = role_entry.user
+            if hasattr(user, "email") and user.email:
+                cls._dispatch(NotificationChannel.EMAIL.value, user.email, None, None, subject, body)
+
+    @classmethod
+    def notify_clinic_validated_to_account_admins(cls, program, sent_by: User | None = None) -> None:
+        """Bell notification to ACCOUNT_ADMIN users of the program's account when clinic validates."""
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
+
+        campaign_name = program.name
+        account_id = str(program.account_id)
+        message = f"La campagne « {campaign_name} » est validée par le Clinic Doctor — vos résultats sont disponibles."
+        subject = f"[Constellab Care] Résultats disponibles — {campaign_name}"
+        body = (
+            f"Bonjour,\n\n"
+            f"La campagne « {campaign_name} » a été validée par le Clinic Doctor.\n"
+            f"Les résultats sont maintenant disponibles pour validation Company Doctor.\n\n"
+            f"Veuillez vous connecter à Constellab Care pour procéder.\n\n"
+            f"Cordialement,\nConstellab Care"
+        )
+
+        log = cls._create_log(
+            notification_type=NotificationType.CAMPAIGN_CLINIC_VALIDATED,
+            channel=NotificationChannel.IN_APP,
+            subject=subject,
+            body=message,
+            recipient_email=None,
+            recipient_phone=None,
+            recipient_name=None,
+            sent_by=sent_by,
+            extra_data={"program_id": str(program.id)},
+        )
+
+        admin_roles = list(UserCareRole.select(UserCareRole, UserCareRole.user).join(UserCareRole.user.rel_model).where(
+            UserCareRole.role == CareRole.ACCOUNT_ADMIN,
+            UserCareRole.linked_account_id == account_id,
+        ))
+
+        for role_entry in admin_roles:
+            cls.create_bell(str(role_entry.user_id), message, log=log)
+            user = role_entry.user
+            if hasattr(user, "email") and user.email:
+                cls._dispatch(NotificationChannel.EMAIL.value, user.email, None, None, subject, body)
+
+    @classmethod
+    def notify_results_available_to_patient(cls, visit, patient, sent_by: User | None = None) -> None:
+        """Email + bell notification to the Patient user when doctor company validates their visit."""
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_care_role import UserCareRole
+
+        patient_name = patient.get_full_name()
+        message = f"Vos résultats médicaux sont disponibles — visite #{visit.visit_number}."
+        subject = "[Constellab Care] Vos résultats médicaux sont disponibles"
+        body = (
+            f"Cher(e) {patient_name},\n\n"
+            f"Vos résultats médicaux pour la visite #{visit.visit_number} ont été validés "
+            f"par le Company Doctor.\n"
+            f"Vous pouvez les consulter en vous connectant à votre espace Constellab Care.\n\n"
+            f"Cordialement,\nConstellab Care"
+        )
+
+        # Email directly to patient
+        log = None
+        if patient.email:
+            log = cls._create_log(
+                notification_type=NotificationType.RESULTS_AVAILABLE,
+                channel=NotificationChannel.EMAIL,
+                subject=subject,
+                body=body,
+                recipient_email=patient.email,
+                recipient_phone=patient.phone,
+                recipient_name=patient_name,
+                sent_by=sent_by,
+                patient=patient,
+                extra_data={"visit_id": str(visit.id)},
+            )
+            success = cls._dispatch(NotificationChannel.EMAIL.value, patient.email, patient.phone, patient_name, subject, body)
+            cls._finalise_log(log, success)
+
+        # Bell to the PATIENT role user linked to this patient
+        patient_role_entries = list(UserCareRole.select().where(
+            UserCareRole.role == CareRole.PATIENT,
+            UserCareRole.linked_patient_id == str(patient.id),
+        ))
+        for role_entry in patient_role_entries:
+            cls.create_bell(str(role_entry.user_id), message, log=log)
+
     # ── SMTP Configuration ────────────────────────────────────────────────────
 
     @classmethod
@@ -546,13 +916,12 @@ class NotificationService:
         from gws_care.notification.notification_dto import SmtpConfigDTO
         from gws_care.notification.notification_models import SmtpConfig
 
-        record = SmtpConfig.get_or_none()
+        record = SmtpConfig.select().first()
         if record is None:
             return SmtpConfigDTO()
         return SmtpConfigDTO(
             host=record.host or "",
             port=record.port if record.port is not None else 587,
-            username=record.username or "",
             credentials_name=record.credentials_name or "",
             use_tls=record.use_tls,
             from_email=record.from_email or "",
@@ -564,47 +933,16 @@ class NotificationService:
         """Persist the SMTP configuration (creates or updates the singleton record)."""
         from gws_care.notification.notification_models import SmtpConfig
 
-        record = SmtpConfig.get_or_none()
+        record = SmtpConfig.select().first()
         if record is None:
             record = SmtpConfig()
         record.host = dto.host
         record.port = dto.port
-        record.username = dto.username
         record.credentials_name = dto.credentials_name
         record.use_tls = dto.use_tls
         record.from_email = dto.from_email
         record.from_name = dto.from_name
         record.save()
 
-    # ── Brevo Configuration ───────────────────────────────────────────────────
-
-    @classmethod
-    def get_brevo_config(cls) -> BrevoConfigDTO:
-        """Return the current Brevo configuration as a BrevoConfigDTO."""
-        from gws_care.notification.notification_models import BrevoConfig
-
-        record = BrevoConfig.get_or_none()
-        if record is None:
-            return BrevoConfigDTO()
-        return BrevoConfigDTO(
-            credentials_name=record.credentials_name or "",
-            from_email=record.from_email or "",
-            from_name=record.from_name or "",
-            sms_sender=record.sms_sender or "",
-        )
-
-    @classmethod
-    def save_brevo_config(cls, dto: BrevoConfigDTO) -> None:
-        """Persist the Brevo configuration (creates or updates the singleton record)."""
-        from gws_care.notification.notification_models import BrevoConfig
-
-        record = BrevoConfig.get_or_none()
-        if record is None:
-            record = BrevoConfig()
-        record.credentials_name = dto.credentials_name
-        record.from_email = dto.from_email
-        record.from_name = dto.from_name
-        record.sms_sender = dto.sms_sender
-        record.save()
 
 

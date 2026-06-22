@@ -1,72 +1,130 @@
-"""Prescription — a medical prescription issued during a consultation.
-
-Covers both drug prescriptions and exam/investigation orders.
-"""
+"""Prescription model, DTOs and service."""
 
 from __future__ import annotations
 
+import json
 from datetime import date
-from enum import Enum
+from typing import Any
 
-from peewee import BooleanField, CharField, DateField, ForeignKeyField, IntegerField, TextField
+from gws_core import BaseModelDTO, ModelDTO
+from peewee import BooleanField, DateField, ForeignKeyField, TextField
 
-from gws_care.consultation.consultation import Consultation
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
 from gws_care.patient.patient import Patient
 from gws_care.user.user import User
+from gws_care.visit.visit import Visit
+
+# ── DTOs ──────────────────────────────────────────────────────────────────────
+
+class DrugLineDTO(BaseModelDTO):
+    """One drug line in a prescription."""
+
+    name: str = ""
+    dosage: str = ""
+    frequency: str = ""
+    duration: str = ""
 
 
-class PrescriptionType(str, Enum):
-    DRUG = "DRUG"                   # Médicament
-    LAB_ORDER = "LAB_ORDER"         # Bilan biologique
-    IMAGING = "IMAGING"             # Imagerie
-    SPECIALIST = "SPECIALIST"       # Consultation spécialisée
-    PHYSIOTHERAPY = "PHYSIOTHERAPY" # Kinésithérapie
-    OTHER = "OTHER"
+class SavePrescriptionDTO(BaseModelDTO):
+    patient_id: str
+    prescription_date: str  # ISO date string "YYYY-MM-DD"
+    drugs: list[DrugLineDTO] = []
+    instructions: str = ""
+    diagnosis: str = ""
 
-    def get_label(self) -> str:
-        return {
-            "DRUG": "Médicament",
-            "LAB_ORDER": "Bilan biologique",
-            "IMAGING": "Imagerie",
-            "SPECIALIST": "Spécialiste",
-            "PHYSIOTHERAPY": "Kinésithérapie",
-            "OTHER": "Autre",
-        }[self.value]
 
+class PrescriptionRowDTO(BaseModelDTO):
+    """Lightweight DTO for the prescriptions list in the patient detail page."""
+
+    id: str
+    prescription_date: str
+    drug_count: int
+    diagnosis: str
+    prescribed_by_name: str
+
+
+class PrescriptionDetailDTO(BaseModelDTO):
+    """Full DTO used when generating the PDF."""
+
+    id: str
+    prescription_date: str
+    drugs: list[DrugLineDTO]
+    instructions: str
+    diagnosis: str
+    prescribed_by_name: str
+    patient_name: str
+    patient_number: str
+    patient_date_of_birth: str
+
+
+# ── Model ──────────────────────────────────────────────────────────────────────
 
 class Prescription(ModelWithUser):
-    """A prescription document issued by a doctor during a consultation.
-
-    Contains one or more PrescriptionLine items.
-    """
+    """Medical prescription issued for a patient."""
 
     patient: Patient = ForeignKeyField(
-        Patient, null=False, backref="prescriptions", on_delete="CASCADE", index=True
+        Patient, null=False, backref="prescriptions", on_delete="CASCADE"
     )
-    consultation: Consultation = ForeignKeyField(
-        Consultation, null=True, backref="prescriptions", on_delete="SET NULL"
+    prescribed_by: User = ForeignKeyField(
+        User, null=True, backref="+", on_delete="SET NULL"
     )
-    prescribing_doctor: User = ForeignKeyField(
-        User, null=False, backref="prescriptions", on_delete="RESTRICT"
-    )
-    prescription_type: str = CharField(
-        max_length=20, null=False, default=PrescriptionType.DRUG.value
-    )
-    issued_at: date = DateField(null=False)
-    valid_until: date = DateField(null=True)
-    is_renewable: bool = BooleanField(default=False, null=False)
-    # Number of times already renewed
-    renewal_count: int = IntegerField(default=0, null=False)
-    # Free-text instructions printed at the bottom of the prescription
-    general_instructions: str | None = TextField(null=True)
+    prescription_date: date = DateField(null=False)
+    # drugs stored as JSON text: list of {name, dosage, frequency, duration}
+    drugs_json: str = TextField(null=False, default="[]")
+    instructions: str = TextField(null=True)
+    diagnosis: str = TextField(null=True)
+    is_archived: bool = BooleanField(default=False, null=False)
+    # Optional link to a classical visit (null for standalone prescriptions)
+    visit: Visit = ForeignKeyField(Visit, null=True, backref="prescriptions", on_delete="SET NULL")
 
-    def get_type_label(self) -> str:
+    @property
+    def drugs(self) -> list[dict[str, Any]]:
         try:
-            return PrescriptionType(self.prescription_type).get_label()
-        except ValueError:
-            return self.prescription_type
+            return json.loads(self.drugs_json) if self.drugs_json else []
+        except Exception:
+            return []
+
+    @drugs.setter
+    def drugs(self, value: list[dict[str, Any]]) -> None:
+        self.drugs_json = json.dumps(value)
+
+    def to_row_dto(self) -> PrescriptionRowDTO:
+        prescribed_by_name = "—"
+        if self.prescribed_by_id:
+            try:
+                u: User = User.get_by_id(str(self.prescribed_by_id))
+                prescribed_by_name = f"{u.first_name} {u.last_name}".strip() or "—"
+            except Exception:
+                pass
+        return PrescriptionRowDTO(
+            id=str(self.id),
+            prescription_date=self.prescription_date.isoformat(),
+            drug_count=len(self.drugs),
+            diagnosis=self.diagnosis or "",
+            prescribed_by_name=prescribed_by_name,
+        )
+
+    def to_detail_dto(self) -> PrescriptionDetailDTO:
+        prescribed_by_name = "—"
+        if self.prescribed_by_id:
+            try:
+                u: User = User.get_by_id(str(self.prescribed_by_id))
+                prescribed_by_name = f"Dr. {u.first_name} {u.last_name}".strip()
+            except Exception:
+                pass
+        p: Patient = Patient.get_by_id(str(self.patient_id))
+        return PrescriptionDetailDTO(
+            id=str(self.id),
+            prescription_date=self.prescription_date.isoformat(),
+            drugs=[DrugLineDTO(**d) for d in self.drugs],
+            instructions=self.instructions or "",
+            diagnosis=self.diagnosis or "",
+            prescribed_by_name=prescribed_by_name,
+            patient_name=f"{p.first_name} {p.last_name}".strip(),
+            patient_number=p.patient_number,
+            patient_date_of_birth=p.date_of_birth.isoformat() if p.date_of_birth else "",
+        )
 
     class Meta:
         table_name = "gws_care_prescription"
@@ -75,86 +133,56 @@ class Prescription(ModelWithUser):
         db_manager = CareDbManager.get_instance()
 
 
-class PrescriptionLine(ModelWithUser):
-    """One item on a prescription (one drug, one imaging order, etc.)."""
-
-    prescription: Prescription = ForeignKeyField(
-        Prescription, null=False, backref="lines", on_delete="CASCADE", index=True
-    )
-    # For drugs: the drug name / INN
-    item_name: str = CharField(max_length=300, null=False)
-    # Dosage: "1 comprimé matin et soir"
-    dosage: str = CharField(max_length=300, null=True)
-    # Duration: "pendant 7 jours"
-    duration: str = CharField(max_length=200, null=True)
-    # Quantity: "1 boîte", "2 ampoules"
-    quantity: str = CharField(max_length=100, null=True)
-    # Specific instructions: "à prendre pendant les repas"
-    instructions: str = TextField(null=True)
-    display_order: int = IntegerField(default=0, null=False)
-
-    class Meta:
-        table_name = "gws_care_prescription_line"
-        database = CareDbManager.get_instance().db
-        is_table = True
-        db_manager = CareDbManager.get_instance()
-
+# ── Service ───────────────────────────────────────────────────────────────────
 
 class PrescriptionService:
-    """Create and manage prescriptions."""
+    """CRUD service for Prescription."""
 
     @classmethod
-    def create(
-        cls,
-        patient_id: str,
-        prescribing_doctor_id: str,
-        prescription_type: PrescriptionType,
-        issued_at: date,
-        consultation_id: str | None = None,
-        valid_until: date | None = None,
-        is_renewable: bool = False,
-        general_instructions: str | None = None,
-        lines: list[dict] | None = None,
-    ) -> Prescription:
-        """Create a prescription with its lines in a single call.
-
-        Each line dict: {item_name, dosage?, duration?, quantity?, instructions?}
-        """
-        prescription = Prescription.create(
-            patient_id=patient_id,
-            consultation_id=consultation_id,
-            prescribing_doctor_id=prescribing_doctor_id,
-            prescription_type=prescription_type.value,
-            issued_at=issued_at,
-            valid_until=valid_until,
-            is_renewable=is_renewable,
-            general_instructions=general_instructions,
-        )
-        for i, line in enumerate(lines or []):
-            PrescriptionLine.create(
-                prescription=prescription,
-                item_name=line["item_name"],
-                dosage=line.get("dosage"),
-                duration=line.get("duration"),
-                quantity=line.get("quantity"),
-                instructions=line.get("instructions"),
-                display_order=i,
-            )
-        return prescription
+    def list_for_patient(cls, patient_id: str, include_archived: bool = False) -> list[Prescription]:
+        q = Prescription.select().where(Prescription.patient == patient_id)
+        if not include_archived:
+            q = q.where((Prescription.is_archived == False) | (Prescription.is_archived.is_null(True)))
+        return list(q.order_by(Prescription.prescription_date.desc()))
 
     @classmethod
-    def list_for_patient(cls, patient_id: str, limit: int = 50) -> list[Prescription]:
-        return list(
-            Prescription.select()
-            .where(Prescription.patient == patient_id)
-            .order_by(Prescription.issued_at.desc())
-            .limit(limit)
-        )
+    def get(cls, prescription_id: str) -> Prescription:
+        from gws_core import NotFoundException
+        p = Prescription.get_or_none(Prescription.id == prescription_id)
+        if p is None:
+            raise NotFoundException(f"Prescription '{prescription_id}' not found")
+        return p
 
     @classmethod
-    def list_for_consultation(cls, consultation_id: str) -> list[Prescription]:
-        return list(
-            Prescription.select()
-            .where(Prescription.consultation == consultation_id)
-            .order_by(Prescription.issued_at.desc())
-        )
+    def create(cls, dto: SavePrescriptionDTO, prescribed_by: User) -> Prescription:
+        from gws_core import BadRequestException
+        patient = Patient.get_or_none(Patient.id == dto.patient_id)
+        if patient is None:
+            raise BadRequestException(f"Patient '{dto.patient_id}' not found")
+
+        p = Prescription()
+        p.patient = patient
+        p.prescribed_by = prescribed_by
+        p.prescription_date = date.fromisoformat(dto.prescription_date)
+        p.drugs = [d.dict() for d in dto.drugs]
+        p.instructions = dto.instructions or None
+        p.diagnosis = dto.diagnosis or None
+        p.save()
+        return p
+
+    @classmethod
+    def archive(cls, prescription_id: str) -> None:
+        p = cls.get(prescription_id)
+        p.is_archived = True
+        p.save()
+
+    @classmethod
+    def unarchive(cls, prescription_id: str) -> None:
+        p = cls.get(prescription_id)
+        p.is_archived = False
+        p.save()
+
+    @classmethod
+    def delete(cls, prescription_id: str) -> None:
+        p = cls.get(prescription_id)
+        p.delete_instance()

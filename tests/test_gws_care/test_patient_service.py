@@ -250,48 +250,74 @@ class TestPatientService(BaseTestCase):
         self.assertEqual(results[0].last_name, "ALBERT")
         self.assertEqual(results[1].last_name, "ZIDANE")
 
-    # ── assign_account ────────────────────────────────────────────────────────
+    # ── add_account / remove_account ──────────────────────────────────────────
 
-    def test_assign_account(self):
-        """assign_account links a patient to an account."""
+    def test_add_account(self):
+        """add_account links a patient to an account."""
+        from gws_care.patient.patient_account import PatientAccount
         patient = PatientService.create_patient(_make_patient_dto(first_name="ToLink"))
         account = _make_account("LinkAcct")
 
-        updated = PatientService.assign_account(str(patient.id), str(account.id))
-        self.assertEqual(str(updated.billing_account_id), str(account.id))
+        PatientService.add_account(str(patient.id), str(account.id))
+        link = PatientAccount.get_or_none(
+            (PatientAccount.patient_id == patient.id)
+            & (PatientAccount.account_id == account.id)
+        )
+        self.assertIsNotNone(link)
 
-    def test_assign_account_unlink(self):
-        """Passing None for account_id unlinks the patient."""
+    def test_remove_account(self):
+        """remove_account unlinks a patient from an account."""
+        from gws_care.patient.patient_account import PatientAccount
         account = _make_account("UnlinkAcct")
         dto = _make_patient_dto(first_name="ToUnlink", account_id=str(account.id))
         patient = PatientService.create_patient(dto)
-        self.assertIsNotNone(patient.billing_account_id)
-
-        updated = PatientService.assign_account(str(patient.id), None)
-        self.assertIsNone(updated.billing_account_id)
-
-    def test_assign_account_reassign(self):
-        """Patient can be reassigned from one account to another."""
-        acc1 = _make_account("Acc1Reassign")
-        acc2 = _make_account("Acc2Reassign")
-        patient = PatientService.create_patient(
-            _make_patient_dto(first_name="Reassign", account_id=str(acc1.id))
+        # Verify link exists
+        link = PatientAccount.get_or_none(
+            (PatientAccount.patient_id == patient.id)
+            & (PatientAccount.account_id == account.id)
         )
-        updated = PatientService.assign_account(str(patient.id), str(acc2.id))
-        self.assertEqual(str(updated.billing_account_id), str(acc2.id))
+        self.assertIsNotNone(link)
 
-    def test_assign_account_unknown_account_raises(self):
-        """assign_account raises NotFoundException for unknown account_id."""
+        PatientService.remove_account(str(patient.id), str(account.id))
+        link_after = PatientAccount.get_or_none(
+            (PatientAccount.patient_id == patient.id)
+            & (PatientAccount.account_id == account.id)
+        )
+        self.assertIsNone(link_after)
+
+    def test_add_account_multiple(self):
+        """A patient can be linked to multiple accounts."""
+        from gws_care.patient.patient_account import PatientAccount
+        patient = PatientService.create_patient(_make_patient_dto(first_name="MultiAcct"))
+        acc1 = _make_account("Acc1Multi")
+        acc2 = _make_account("Acc2Multi")
+
+        PatientService.add_account(str(patient.id), str(acc1.id))
+        PatientService.add_account(str(patient.id), str(acc2.id))
+
+        links = list(PatientAccount.select().where(PatientAccount.patient_id == patient.id))
+        self.assertEqual(len(links), 2)
+
+    def test_add_account_idempotent(self):
+        """add_account called twice for the same pair does not raise."""
+        account = _make_account("IdempAcct")
+        patient = PatientService.create_patient(_make_patient_dto(first_name="Idemp"))
+        PatientService.add_account(str(patient.id), str(account.id))
+        # Should not raise
+        PatientService.add_account(str(patient.id), str(account.id))
+
+    def test_add_account_unknown_account_raises(self):
+        """add_account raises NotFoundException for unknown account_id."""
         patient = PatientService.create_patient(_make_patient_dto(first_name="NoAcctAssign"))
         with self.assertRaises(NotFoundException):
-            PatientService.assign_account(
+            PatientService.add_account(
                 str(patient.id), "00000000-0000-0000-0000-000000000000"
             )
 
-    def test_assign_account_unknown_patient_raises(self):
-        """assign_account raises NotFoundException for unknown patient_id."""
+    def test_add_account_unknown_patient_raises(self):
+        """add_account raises NotFoundException for unknown patient_id."""
         account = _make_account("AssignUnknownPat")
         with self.assertRaises(NotFoundException):
-            PatientService.assign_account(
+            PatientService.add_account(
                 "00000000-0000-0000-0000-000000000000", str(account.id)
             )

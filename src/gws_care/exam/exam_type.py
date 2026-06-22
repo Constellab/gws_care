@@ -23,7 +23,6 @@ class ExamType(Enum):
     OTHER = "other"
 
     def get_label(self) -> str:
-        """Return a human-readable label for the exam type."""
         labels = {
             ExamType.BIOLOGY: "Biology",
             ExamType.RADIOLOGY: "Radiology",
@@ -44,7 +43,6 @@ class ExamType(Enum):
         return labels.get(self, self.value)
 
     def has_image_attachments(self) -> bool:
-        """Return True if this exam type supports image/trace attachments."""
         return self in {
             ExamType.RADIOLOGY,
             ExamType.OPHTHALMOLOGY,
@@ -55,12 +53,20 @@ class ExamType(Enum):
 
 
 class ExamStatus(Enum):
-    """Interpretation status of an exam."""
+    """Workflow status of an exam."""
 
-    DRAFT = "draft"                # Exam session created, results not yet entered
-    COLLECTED = "collected"        # Sample collected by terrain operator
-    LAB_RECEIVED = "lab_received"  # Sample received by the lab
-    LAB_VALIDATED = "lab_validated"  # Lab has validated the results — awaiting doctor
-    PENDING = "pending"            # Results entered, awaiting doctor interpretation
-    INTERPRETED = "interpreted"    # Doctor has written interpretation
-    CANCELLED = "cancelled"        # Exam cancelled / voided
+    TODO = "todo"
+    IN_PROGRESS_RESULTS = "in_progress_results"
+    IN_PROGRESS_INTERPRETATION = "in_progress_interpretation"
+    DONE = "done"
+    CANCELLED = "cancelled"
+
+    def get_label(self) -> str:
+        labels = {
+            ExamStatus.TODO: "À faire",
+            ExamStatus.IN_PROGRESS_RESULTS: "En cours — Résultats",
+            ExamStatus.IN_PROGRESS_INTERPRETATION: "En cours — Interprétation",
+            ExamStatus.DONE: "Terminé",
+            ExamStatus.CANCELLED: "Annulé",
+        }
+        return labels.get(self, self.value)

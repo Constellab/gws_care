@@ -20,26 +20,12 @@ class StagedFile(BaseModel):
     document_type: str = ""  # DocumentType enum value, empty means unset
 
 
-class ExamTypeOption(BaseModel):
-    id: str   # ExamTypeRef.id (used as exam_type value)
-    name: str
-    category_label: str
-
-
-class ExamParamOption(BaseModel):
-    """An ExamParameter available for selection when creating an exam."""
-
-    id: str
-    name: str
-    unit: str = ""
-
-
 class ExamFormState(FormDialogState, rx.State):
     """Manages the create exam dialog on the patient detail page."""
 
     # Form fields
     form_exam_date: str = ""
-    form_exam_type: str = ""    # ExamTypeRef.id
+    form_exam_type: str = "biology"
     form_account_id: str = ""
     form_reason_for_visit: str = ""
     form_medical_history: str = ""
@@ -50,18 +36,6 @@ class ExamFormState(FormDialogState, rx.State):
     form_heart_rate: str = ""
     form_temperature: str = ""
     form_conclusion: str = ""
-
-    # Exam type options loaded from referential
-    exam_type_options: list[ExamTypeOption] = []
-
-    # Parameters available for the selected exam type
-    available_exam_params: list[ExamParamOption] = []
-    # IDs of params the doctor has checked
-    selected_param_ids: list[str] = []
-    # Error message from loading exam parameters
-    load_error: str = ""
-    # Error message for form validation
-    form_error: str = ""
 
     # Staged file attachments (selected but exam not yet created)
     staged_files: list[StagedFile] = []
@@ -79,40 +53,6 @@ class ExamFormState(FormDialogState, rx.State):
     @rx.event
     def set_form_exam_type(self, value: str):
         self.form_exam_type = value
-        self._load_params_for_type(value)
-
-    def _load_params_for_type(self, exam_type_ref_id: str):
-        """Load ExamParameter records for the selected exam type from the referential."""
-        self.load_error = ""
-        if not exam_type_ref_id:
-            self.available_exam_params = []
-            self.selected_param_ids = []
-            return
-        try:
-            from gws_care.exam_type_ref.exam_parameter import ExamParameter
-            params = (
-                ExamParameter.select()
-                .where(ExamParameter.exam_type_ref == exam_type_ref_id)
-                .order_by(ExamParameter.display_order)
-            )
-            self.available_exam_params = [
-                ExamParamOption(id=str(p.id), name=p.name, unit=p.unit or "")
-                for p in params
-            ]
-            # Pre-select all parameters by default
-            self.selected_param_ids = [str(p.id) for p in params]
-        except Exception as exc:
-            self.available_exam_params = []
-            self.selected_param_ids = []
-            self.load_error = str(exc)
-
-    @rx.event
-    def toggle_param_selection(self, param_id: str):
-        """Toggle a parameter in/out of the selected list."""
-        if param_id in self.selected_param_ids:
-            self.selected_param_ids = [p for p in self.selected_param_ids if p != param_id]
-        else:
-            self.selected_param_ids = self.selected_param_ids + [param_id]
 
     @rx.event
     def set_form_account_id(self, value: str):
@@ -220,7 +160,7 @@ class ExamFormState(FormDialogState, rx.State):
 
         self._patient_id = patient_id
         self.form_exam_date = date.today().isoformat()
-        self.form_exam_type = ""
+        self.form_exam_type = "biology"
         self.form_account_id = ""
         self.form_reason_for_visit = ""
         self.form_medical_history = ""
@@ -234,27 +174,6 @@ class ExamFormState(FormDialogState, rx.State):
         self.staged_files = []
         self.is_uploading = False
         self.is_update_mode = False
-        # Load exam type options from referential (exclude CLINICAL — physical exams go to appointments)
-        try:
-            from gws_care.exam_type_ref.exam_type_ref import ExamCategory, ExamTypeRef
-            refs = (
-                ExamTypeRef.select()
-                .where(
-                    ExamTypeRef.is_active == True,
-                    ExamTypeRef.category != ExamCategory.CLINICAL.value,
-                )
-                .order_by(ExamTypeRef.category, ExamTypeRef.name)
-            )
-            self.exam_type_options = [
-                ExamTypeOption(id=str(r.id), name=r.name, category_label=r.get_category_label())
-                for r in refs
-            ]
-            if self.exam_type_options:
-                self.form_exam_type = self.exam_type_options[0].id
-                self._load_params_for_type(self.exam_type_options[0].id)
-        except Exception as exc:
-            self.exam_type_options = []
-            print(f"[exam_form] exam_type_options load error: {exc}")
         self.dialog_opened = True
 
     # ── FormDialogState implementation ───────────────────────────────────────
@@ -262,7 +181,7 @@ class ExamFormState(FormDialogState, rx.State):
     async def _clear_form_state(self) -> None:
         from datetime import date
         self.form_exam_date = date.today().isoformat()
-        self.form_exam_type = ""
+        self.form_exam_type = "biology"
         self.form_account_id = ""
         self.form_reason_for_visit = ""
         self.form_medical_history = ""
@@ -277,18 +196,11 @@ class ExamFormState(FormDialogState, rx.State):
         self.is_uploading = False
         self._patient_id = ""
         self.is_update_mode = False
-        self.available_exam_params = []
-        self.selected_param_ids = []
-        self.load_error = ""
-        self.form_error = ""
 
     async def _create(self, form_data: dict) -> AsyncGenerator:
         """Create a new exam and attach any staged files."""
-        async with self:
-            self.form_error = ""
         if not self.form_exam_date or not self.form_exam_type:
-            async with self:
-                self.form_error = "Exam date and type are required."
+            yield rx.toast.error("Exam date and type are required.")
             return
 
         async with self:
@@ -310,7 +222,7 @@ class ExamFormState(FormDialogState, rx.State):
             dto = SaveExamDTO(
                 patient_id=self._patient_id,
                 exam_date=self.form_exam_date,
-                exam_type_ref_id=self.form_exam_type,
+                exam_type=self.form_exam_type,
                 account_id=self.form_account_id or None,
                 reason_for_visit=self.form_reason_for_visit or None,
                 medical_history=self.form_medical_history or None,
@@ -320,41 +232,9 @@ class ExamFormState(FormDialogState, rx.State):
                 blood_pressure=self.form_blood_pressure or None,
                 heart_rate=_to_float(self.form_heart_rate),
                 temperature=_to_float(self.form_temperature),
-                conclusion=self.form_conclusion or None,
-                requested_param_ids=list(self.selected_param_ids) if self.selected_param_ids else [],
             )
             exam = ExamService.create_exam(dto)
             exam_id = str(exam.id)
-
-            # Notify all OPERATEUR_LABO users if lab tests were requested
-            if self.selected_param_ids:
-                from gws_care.notification.notification_service import NotificationService
-                from gws_care.role.care_role import CareRole
-                from gws_care.role.user_care_role import UserCareRole
-                from gws_care.patient.patient import Patient as PatientModel
-                try:
-                    patient_obj = PatientModel.get_or_none(PatientModel.id == self._patient_id)
-                    patient_name = (
-                        f"{patient_obj.first_name} {patient_obj.last_name}"
-                        if patient_obj else "patient"
-                    )
-                    exam_type_label = (
-                        self.exam_type_options[
-                            next((i for i, o in enumerate(self.exam_type_options) if o.id == self.form_exam_type), 0)
-                        ].name
-                        if self.exam_type_options else self.form_exam_type
-                    )
-                    labo_roles = (
-                        UserCareRole.select()
-                        .where(UserCareRole.role == CareRole.OPERATEUR_LABO.value)
-                    )
-                    for ur in labo_roles:
-                        NotificationService.create_bell(
-                            user_id=str(ur.user_id),
-                            message=f"Nouvelle analyse à traiter — {patient_name} ({exam_type_label})",
-                        )
-                except Exception as notify_exc:
-                    print(f"[ExamFormState] Lab notification failed: {notify_exc}")
 
             # Persist staged files as ExamFile records, registering each as a gws_core Resource
             for sf in self.staged_files:
@@ -373,7 +253,4 @@ class ExamFormState(FormDialogState, rx.State):
 
     async def _update(self, form_data: dict) -> AsyncGenerator:
         """Exams cannot be edited through this dialog."""
-        async with self:
-            self.form_error = "Exams cannot be edited."
-        return
-        yield  # make it a generator
+        yield rx.toast.error("Exams cannot be edited.")

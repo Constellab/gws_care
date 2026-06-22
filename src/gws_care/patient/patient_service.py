@@ -1,11 +1,12 @@
+import json
 import uuid
 from datetime import date
 
-from peewee import JOIN
 from gws_core import BadRequestException, NotFoundException
 
 from gws_care.account.account import Account
 from gws_care.patient.patient import Patient
+from gws_care.patient.patient_account import PatientAccount
 from gws_care.patient.patient_dto import SavePatientDTO
 
 
@@ -29,161 +30,113 @@ class PatientService:
         return patient
 
     @classmethod
-    def count_patients(
-        cls,
-        name: str | None = None,
-        patient_number: str | None = None,
-        phone: str | None = None,
-        account_id: str | None = None,
-        dob_from: str | None = None,
-        dob_to: str | None = None,
-        doctor_id: str | None = None,
-    ) -> int:
-        """Return total count matching the given filters (for pagination)."""
-        return cls._build_query(
-            name=name, patient_number=patient_number, phone=phone,
-            account_id=account_id, dob_from=dob_from, dob_to=dob_to,
-            doctor_id=doctor_id,
-        ).count()
-
-    @classmethod
     def search_patients(
         cls,
         name: str | None = None,
+        search: str | None = None,
         patient_number: str | None = None,
+        patient_number_prefix: str | None = None,
         phone: str | None = None,
         account_id: str | None = None,
         dob_from: str | None = None,
         dob_to: str | None = None,
-        sort_column: str = "last_name",
-        sort_ascending: bool = True,
-        limit: int = 50,
+        limit: int | None = None,
         offset: int = 0,
-        doctor_id: str | None = None,
     ) -> list[Patient]:
-        query = cls._build_query(
-            name=name, patient_number=patient_number, phone=phone,
-            account_id=account_id, dob_from=dob_from, dob_to=dob_to,
-            doctor_id=doctor_id,
-        )
-        # Sorting
-        _sort_map = {
-            "last_name": Patient.last_name,
-            "first_name": Patient.first_name,
-            "patient_number": Patient.patient_number,
-            "date_of_birth": Patient.date_of_birth,
-            "gender": Patient.gender,
-            "city": Patient.city,
-            "phone": Patient.phone,
-            "account_name": Account.name,
-        }
-        sort_field = _sort_map.get(sort_column, Patient.last_name)
-        query = query.order_by(
-            sort_field.asc() if sort_ascending else sort_field.desc(),
-            Patient.first_name,
-        )
-        return list(query.limit(limit).offset(offset))
-
-    @classmethod
-    def _build_query(
-        cls,
-        name: str | None = None,
-        patient_number: str | None = None,
-        phone: str | None = None,
-        account_id: str | None = None,
-        dob_from: str | None = None,
-        dob_to: str | None = None,
-        doctor_id: str | None = None,
-    ):
-        """Shared query builder (no ordering/limit) used by both search and count."""
-        query = (
-            Patient.select(Patient, Account)
-            .join(Account, JOIN.LEFT_OUTER, on=(Patient.billing_account == Account.id))
-        )
-        if doctor_id:
-            from gws_care.appointment.appointment import Appointment
-            patient_ids = (
-                Appointment.select(Appointment.patient)
-                .where(Appointment.assigned_doctor_id == doctor_id)
-                .distinct()
-            )
-            query = query.where(Patient.id.in_(patient_ids))
+        query = Patient.select()
         if patient_number:
             query = query.where(Patient.patient_number == patient_number)
+        if patient_number_prefix:
+            query = query.where(Patient.patient_number.startswith(patient_number_prefix))
         if phone:
-            query = query.where(Patient.phone.contains(phone))
-        if name:
+            query = query.where(Patient.phone == phone)
+        term = search or name
+        if term:
             query = query.where(
-                Patient.last_name.contains(name)
-                | Patient.first_name.contains(name)
+                Patient.last_name.contains(term)
+                | Patient.first_name.contains(term)
             )
         if account_id:
-            from gws_care.company.company_service import CompanyService
-            company_id = CompanyService.get_company_id_for_account(account_id)
-            if company_id:
-                query = query.where(
-                    (Patient.billing_account == account_id)
-                    | (Patient.company_id == company_id)
-                )
-            else:
-                query = query.where(Patient.billing_account == account_id)
+            from peewee import JOIN
+            query = (
+                query
+                .join(PatientAccount, JOIN.INNER, on=(PatientAccount.patient_id == Patient.id))
+                .where(PatientAccount.account_id == account_id)
+            )
         if dob_from:
             from datetime import date as date_type
             query = query.where(Patient.date_of_birth >= date_type.fromisoformat(dob_from))
         if dob_to:
             from datetime import date as date_type
             query = query.where(Patient.date_of_birth <= date_type.fromisoformat(dob_to))
-        return query
+        query = query.order_by(Patient.last_name, Patient.first_name)
+        if offset:
+            query = query.offset(offset)
+        if limit:
+            query = query.limit(limit)
+        return list(query)
 
     @classmethod
     def list_patients_for_account(cls, account_id: str) -> list[Patient]:
-        """Return all patients belonging to the given account."""
+        """Return all patients linked to the given account."""
+        from peewee import JOIN
         return list(
             Patient.select()
-            .where(Patient.billing_account == account_id)
+            .join(PatientAccount, JOIN.INNER, on=(PatientAccount.patient_id == Patient.id))
+            .where(PatientAccount.account_id == account_id)
             .order_by(Patient.last_name, Patient.first_name)
         )
 
     @classmethod
-    def list_patients_for_company(cls, company_id: str) -> list[Patient]:
-        """Return all patients linked to the given company."""
-        return list(
-            Patient.select()
-            .where(Patient.company_id == company_id)
-            .order_by(Patient.last_name, Patient.first_name)
-        )
+    def add_account(cls, patient_id: str, account_id: str) -> None:
+        """Link a patient to a billing account (many-to-many)."""
+        patient = cls.get_patient(patient_id)
+        account = Account.get_or_none(Account.id == account_id)
+        if account is None:
+            raise NotFoundException(f"Account '{account_id}' not found")
+        # get_or_create avoids duplicate-key error if already linked
+        PatientAccount.get_or_create(patient=patient, account=account)
 
     @classmethod
-    def assign_account(cls, patient_id: str, account_id: str | None) -> Patient:
-        """Assign (or remove) an account from a patient."""
-        patient = cls.get_patient(patient_id)
-        if account_id:
-            account = Account.get_or_none(Account.id == account_id)
-            if account is None:
-                raise NotFoundException(f"Account '{account_id}' not found")
-            patient.billing_account = account
-        else:
-            patient.billing_account = None
-        patient.save()
-        return patient
-
-    @classmethod
-    def assign_company(cls, patient_id: str, company_id: str | None) -> Patient:
-        """Assign (or remove) a company from a patient."""
-        patient = cls.get_patient(patient_id)
-        patient.company_id = company_id
-        patient.save()
-        return patient
+    def remove_account(cls, patient_id: str, account_id: str) -> None:
+        """Remove the link between a patient and a billing account."""
+        PatientAccount.delete().where(
+            (PatientAccount.patient_id == patient_id)
+            & (PatientAccount.account_id == account_id)
+        ).execute()
 
     @classmethod
     def create_patient(cls, dto: SavePatientDTO) -> Patient:
         cls._validate(dto)
         patient = Patient()
         patient.patient_number = cls._generate_patient_number()
-        patient.qr_token = cls._generate_qr_token()
         cls._apply_dto(patient, dto)
+        # Generate QR code on creation (encode patient_number)
+        try:
+            from gws_care.qr_code import generate_patient_qr_data_uri
+            patient.qr_code = generate_patient_qr_data_uri(patient.patient_number)
+        except Exception:
+            patient.qr_code = None  # non-fatal
         patient.save()
         return patient
+
+    @classmethod
+    def get_qr_code(cls, patient_id: str) -> str | None:
+        """Return the patient's QR code data URI, generating it if absent.
+
+        Returns None if the patient doesn't exist.
+        """
+        patient = Patient.get_or_none(Patient.id == patient_id)
+        if patient is None:
+            return None
+        if not patient.qr_code:
+            try:
+                from gws_care.qr_code import generate_patient_qr_data_uri
+                patient.qr_code = generate_patient_qr_data_uri(patient.patient_number)
+                patient.save()
+            except Exception:
+                return None
+        return patient.qr_code
 
     @classmethod
     def update_patient(cls, patient_id: str, dto: SavePatientDTO) -> Patient:
@@ -217,13 +170,15 @@ class PatientService:
         patient.city = dto.city
         patient.phone = dto.phone
         patient.email = dto.email
-        patient.primary_physician_name = dto.primary_physician_name
-        patient.primary_physician_phone = dto.primary_physician_phone
-        if dto.account_id:
-            account = Account.get_or_none(Account.id == dto.account_id)
-            patient.billing_account = account
-        else:
-            patient.billing_account = None
+        patient.social_security_number = dto.social_security_number
+        patient.weight = dto.weight
+        patient.height = dto.height
+        patient.sex = dto.sex if dto.sex in ("M", "F", "Autre") else None
+        patient.nationality = getattr(dto, "nationality", None)
+        patient.phone_country = getattr(dto, "phone_country", None)
+        patient.notification_preferences = (
+            json.dumps(dto.notification_preferences) if dto.notification_preferences else None
+        )
 
     @classmethod
     def _generate_patient_number(cls) -> str:
@@ -232,41 +187,3 @@ class PatientService:
             number = f"PAT-{uuid.uuid4().hex[:8].upper()}"
             if not Patient.get_or_none(Patient.patient_number == number):
                 return number
-
-    @classmethod
-    def _generate_qr_token(cls) -> str:
-        """Generate a unique 12-character QR token (uppercase hex)."""
-        while True:
-            token = uuid.uuid4().hex[:12].upper()
-            if not Patient.get_or_none(Patient.qr_token == token):
-                return token
-
-    @classmethod
-    def delete_patient(cls, patient_id: str, reason: str, deleted_by: str | None = None) -> None:
-        """Permanently delete a patient record and write an audit log entry.
-
-        Args:
-            patient_id: UUID of the patient to delete.
-            reason: Mandatory reason for the deletion (stored in the audit log).
-            deleted_by: Display name of the operator performing the deletion.
-
-        Raises:
-            BadRequestException: If *reason* is empty.
-            NotFoundException: If the patient does not exist.
-        """
-        if not reason or not reason.strip():
-            raise BadRequestException("A deletion reason is required.")
-        patient = Patient.get_or_none(Patient.id == patient_id)
-        if patient is None:
-            raise NotFoundException(f"Patient '{patient_id}' not found")
-        # Write audit log before deleting so the record is preserved.
-        from gws_care.patient.patient_deletion_log import PatientDeletionLog
-        log = PatientDeletionLog()
-        log.patient_db_id = str(patient.id)
-        log.patient_number = patient.patient_number
-        log.patient_name = patient.get_full_name()
-        log.reason = reason.strip()
-        log.deleted_by = deleted_by or ""
-        log.save()
-        # CampaignPatient rows are CASCADE-deleted by the DB FK constraint.
-        patient.delete_instance()

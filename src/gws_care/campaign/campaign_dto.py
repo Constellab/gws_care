@@ -1,38 +1,46 @@
-"""Campaign DTO — lightweight Pydantic models for Reflex state serialization."""
+"""DTOs for Campaign."""
 
 from datetime import date
 
-from pydantic import BaseModel
+from gws_core import BaseModelDTO, ModelDTO
+
+from gws_care.campaign.campaign_status import CampaignStatus
 
 
-class CampaignDTO(BaseModel):
-    id: str
+class CampaignDTO(ModelDTO):
+    """Full campaign record returned to callers."""
+
+    campaign_number: str
     name: str
-    account_id: str
-    account_name: str
-    company_id: str = ""
-    company_name: str = ""
+    account_id: str | None = None
+    account_name: str | None = None
+    start_date: date
+    end_date: date
+    status: CampaignStatus
+    notes: str | None = None
+    is_individual: bool = False
+
+
+class CampaignRowDTO(BaseModelDTO):
+    """Lightweight row for list views."""
+
+    id: str
+    campaign_number: str
+    name: str
+    account_name: str | None = None
+    start_date: str   # ISO string
+    end_date: str     # ISO string
     status: str
     status_label: str
-    status_color: str
-    start_date: date | None
-    end_date: date | None
-    location: str | None
-    psc_doctor_name: str | None
-    enterprise_doctor_name: str | None
-    requires_medical_review: bool
     patient_count: int = 0
-    notes: str | None
+    exam_type_count: int = 0
 
 
-class SaveCampaignDTO(BaseModel):
+class SaveCampaignDTO(BaseModelDTO):
+    """DTO for creating or updating a campaign."""
+
     name: str
-    account_id: str = ""
-    company_id: str = ""
-    start_date: date | None = None
-    end_date: date | None = None
-    location: str | None = None
-    psc_doctor_id: str | None = None
-    enterprise_doctor_id: str | None = None
-    requires_medical_review: bool = False
+    account_id: str
+    start_date: str   # ISO date string YYYY-MM-DD
+    end_date: str     # ISO date string YYYY-MM-DD
     notes: str | None = None

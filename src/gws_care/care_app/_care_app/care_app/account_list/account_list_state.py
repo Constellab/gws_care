@@ -4,6 +4,8 @@ import reflex as rx
 from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
 
+from ..common.role_state import RoleState
+
 
 class AccountRowDTO(BaseModel):
     """Lightweight DTO for displaying an account in the list."""
@@ -18,36 +20,48 @@ class AccountRowDTO(BaseModel):
     is_active: bool = True
 
 
-class AccountListState(ReflexMainState):
+class AccountListState(RoleState):
     """State for the account list page."""
 
     accounts: list[AccountRowDTO] = []
     is_loading: bool = False
+    is_loading_more: bool = False
+    has_more: bool = False
     error_message: str = ""
     search_name: str = ""
+    filter_account_type: str = "ALL"
     sort_column: str = "name"
     sort_ascending: bool = True
 
-    # Confirm désactivation
-    confirm_deactivate_open: bool = False
-    confirm_deactivate_id: str = ""
-    confirm_deactivate_name: str = ""
+    _page_offset: int = 0
+    _current_page_size: int = 50
 
     @rx.event
     async def on_load(self):
         """Load accounts when the page is mounted."""
+        await self._load_roles()
+        redirect = await self._require_any_of(self.is_operator, self.is_doctor, self.is_account_admin)
+        if redirect:
+            return redirect
         await self._load_accounts()
 
     @rx.event
     async def handle_name_change(self, value: str):
-        """Filter accounts by name — debounce handled in component."""
+        """Filter accounts by name."""
         self.search_name = value
+        await self._load_accounts()
+
+    @rx.event
+    async def set_filter_account_type(self, value: str):
+        """Filter accounts by type (ALL, COMPANY, INDIVIDUAL)."""
+        self.filter_account_type = value
         await self._load_accounts()
 
     @rx.event
     async def clear_filters(self):
         """Reset filters."""
         self.search_name = ""
+        self.filter_account_type = "ALL"
         await self._load_accounts()
 
     @rx.event
@@ -66,8 +80,18 @@ class AccountListState(ReflexMainState):
         return rx.redirect(f"/account/{account_id}")
 
     @rx.event
+    async def load_more_accounts(self):
+        """Append the next page of accounts to the current list."""
+        self.is_loading_more = True
+        await self._load_accounts(reset=False)
+
+    @rx.event
     async def deactivate_account(self, account_id: str):
-        """Mark an account as inactive."""
+        """Mark an account as inactive.
+
+        :param account_id: DB id of the account to deactivate
+        :type account_id: str
+        """
         try:
             with await self.authenticate_user():
                 from gws_care.account.account_service import AccountService
@@ -76,43 +100,32 @@ class AccountListState(ReflexMainState):
         except Exception as e:
             self.error_message = f"Error deactivating account: {e}"
 
-    @rx.event
-    def open_confirm_deactivate(self, account_id: str, account_name: str):
-        self.confirm_deactivate_id = account_id
-        self.confirm_deactivate_name = account_name
-        self.confirm_deactivate_open = True
-
-    @rx.event
-    def dismiss_confirm_deactivate(self):
-        self.confirm_deactivate_open = False
-        self.confirm_deactivate_id = ""
-        self.confirm_deactivate_name = ""
-
-    @rx.event
-    async def confirmed_deactivate(self):
-        account_id = self.confirm_deactivate_id
-        self.confirm_deactivate_open = False
-        self.confirm_deactivate_id = ""
-        self.confirm_deactivate_name = ""
-        await self.deactivate_account(account_id)
-
-    async def _load_accounts(self):
+    async def _load_accounts(self, reset: bool = True):
         """Internal: fetch accounts from DB."""
         if not await self.check_authentication():
             self.error_message = "Authentication required"
             return
 
-        self.is_loading = True
+        if reset:
+            self._page_offset = 0
+            self.is_loading = True
+            from gws_care.core.care_app_config_service import CareAppConfigService
+            self._current_page_size = CareAppConfigService.get_page_size()
         self.error_message = ""
 
         try:
             with await self.authenticate_user():
                 from gws_care.account.account_service import AccountService
-                accounts = AccountService.list_accounts(active_only=False)
-                if self.search_name.strip():
-                    s = self.search_name.strip().lower()
-                    accounts = [a for a in accounts if s in a.name.lower() or (a.city and s in a.city.lower()) or (a.contact_name and s in a.contact_name.lower())]
-                account_rows = [
+                accounts = AccountService.list_accounts(
+                    active_only=False,
+                    name=self.search_name or None,
+                    account_type=self.filter_account_type if self.filter_account_type != "ALL" else None,
+                    limit=self._current_page_size + 1,
+                    offset=self._page_offset,
+                )
+                has_more = len(accounts) > self._current_page_size
+                accounts = accounts[:self._current_page_size]
+                new_rows = [
                     AccountRowDTO(
                         id=str(a.id),
                         account_type=a.account_type or "COMPANY",
@@ -126,12 +139,16 @@ class AccountListState(ReflexMainState):
                     for a in accounts
                 ]
                 sort_col = self.sort_column
+                all_rows = new_rows if reset else self.accounts + new_rows
                 self.accounts = sorted(
-                    account_rows,
+                    all_rows,
                     key=lambda row: "" if getattr(row, sort_col) is None else str(getattr(row, sort_col)).lower(),
                     reverse=not self.sort_ascending,
                 )
+                self.has_more = has_more
+                self._page_offset += self._current_page_size
         except Exception as e:
             self.error_message = f"Error loading accounts: {e}"
         finally:
             self.is_loading = False
+            self.is_loading_more = False

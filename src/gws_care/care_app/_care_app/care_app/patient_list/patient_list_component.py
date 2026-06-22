@@ -3,13 +3,15 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.account_picker_component import account_picker_button, account_picker_dialog
+from ..common.empty_state_component import empty_state
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .patient_delete_component import patient_delete_dialog
 from .patient_delete_state import PatientDeleteState
 from .patient_form_component import patient_form_dialog
 from .patient_form_state import PatientFormState
-from .patient_list_state import AccountOptionDTO, PatientListState, PatientRowDTO
+from .patient_list_state import PatientListState, PatientRowDTO
 
 
 def _gender_badge(gender: str) -> rx.Component:
@@ -71,10 +73,6 @@ def _patient_row(patient: PatientRowDTO) -> rx.Component:
     )
 
 
-def _account_filter_option(account: AccountOptionDTO) -> rx.Component:
-    return rx.select.item(account.name, value=account.id)
-
-
 def _sortable_header(label: str, column: str) -> rx.Component:
     """Column header cell with a sort-direction arrow."""
     return rx.table.column_header_cell(
@@ -130,16 +128,7 @@ def _filter_bar() -> rx.Component:
                 ),
                 debounce_timeout=300,
             ),
-            rx.select.root(
-                rx.select.trigger(placeholder=LanguageState.tr["all_accounts"]),
-                rx.select.content(
-                    rx.select.item(LanguageState.tr["all_accounts"], value="ALL"),
-                    rx.foreach(PatientListState.companies, _account_filter_option),
-                ),
-                value=PatientListState.filter_account_id,
-                on_change=PatientListState.set_filter_account,
-                size="2",
-            ),
+            account_picker_button(PatientListState),
             spacing="3",
             wrap="wrap",
             width="100%",
@@ -181,6 +170,7 @@ def patient_list_page() -> rx.Component:
     """Patient list page."""
     return main_component(
         page_layout(
+            account_picker_dialog(PatientListState),
             rx.hstack(
                 rx.heading(LanguageState.tr["patients_page_title"], size="6"),
                 rx.spacer(),
@@ -224,34 +214,48 @@ def patient_list_page() -> rx.Component:
                 rx.center(rx.spinner(size="3"), padding="3rem"),
                 rx.cond(
                     PatientListState.patients.length() > 0,
-                    rx.table.root(
-                        rx.table.header(
-                            rx.table.row(
-                                _sortable_header(LanguageState.tr["col_patient_number"], "patient_number"),
-                                _sortable_header(LanguageState.tr["col_name"], "last_name"),
-                                _sortable_header(LanguageState.tr["col_dob"], "date_of_birth"),
-                                _sortable_header(LanguageState.tr["col_gender"], "gender"),
-                                _sortable_header(LanguageState.tr["col_account"], "account_name"),
-                                _sortable_header(LanguageState.tr["col_city"], "city"),
-                                _sortable_header(LanguageState.tr["col_phone"], "phone"),
-                                rx.table.column_header_cell(""),
-                            )
+                    rx.vstack(
+                        rx.table.root(
+                            rx.table.header(
+                                rx.table.row(
+                                    _sortable_header(LanguageState.tr["col_patient_number"], "patient_number"),
+                                    _sortable_header(LanguageState.tr["col_name"], "last_name"),
+                                    _sortable_header(LanguageState.tr["col_dob"], "date_of_birth"),
+                                    _sortable_header(LanguageState.tr["col_gender"], "gender"),
+                                    _sortable_header(LanguageState.tr["col_account"], "account_name"),
+                                    _sortable_header(LanguageState.tr["col_city"], "city"),
+                                    _sortable_header(LanguageState.tr["col_phone"], "phone"),
+                                    rx.table.column_header_cell(""),
+                                )
+                            ),
+                            rx.table.body(
+                                rx.foreach(PatientListState.patients, _patient_row)
+                            ),
+                            width="100%",
+                            variant="surface",
                         ),
-                        rx.table.body(
-                            rx.foreach(PatientListState.patients, _patient_row)
+                        rx.cond(
+                            PatientListState.has_more,
+                            rx.center(
+                                rx.button(
+                                    rx.cond(
+                                        PatientListState.is_loading_more,
+                                        rx.hstack(rx.spinner(size="2"), rx.text("Loading..."), spacing="2"),
+                                        rx.hstack(rx.icon("chevron-down", size=16), rx.text("Load more"), spacing="2"),
+                                    ),
+                                    variant="soft",
+                                    size="2",
+                                    on_click=PatientListState.load_more_patients,
+                                    disabled=PatientListState.is_loading_more,
+                                ),
+                                width="100%",
+                                padding="1rem",
+                            ),
                         ),
                         width="100%",
-                        variant="surface",
+                        spacing="0",
                     ),
-                    rx.center(
-                        rx.vstack(
-                            rx.icon("user-x", size=40, color="var(--gray-7)"),
-                            rx.text(LanguageState.tr["no_patients_found"], color="var(--gray-9)"),
-                            align="center",
-                            spacing="2",
-                        ),
-                        padding="3rem",
-                    ),
+                    empty_state("user-x", LanguageState.tr["no_patients_found"]),
                 ),
             ),
             # ── Pagination controls ───────────────────────────────────────────

@@ -1,8 +1,9 @@
 """State management for the patient list page."""
 
 import reflex as rx
-from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
+
+from ..common.account_picker_state import AccountPickerRowDTO, AccountPickerState
 
 
 class PatientRowDTO(BaseModel):
@@ -19,20 +20,26 @@ class PatientRowDTO(BaseModel):
     account_name: str | None = None
 
 
-class AccountOptionDTO(BaseModel):
-    """Lightweight account option for filter dropdown."""
-
-    id: str
-    name: str
-
-
-class PatientListState(ReflexMainState):
+class PatientListState(AccountPickerState):
     """State for the patient list page."""
 
+    # ── Account picker vars (declared here for independent state storage) ─────
+    acct_picker_is_open: bool = False
+    acct_picker_filter: str = ""
+    acct_picker_accounts: list[AccountPickerRowDTO] = []
+    acct_picker_is_loading: bool = False
+    acct_picker_error: str = ""
+    acct_picker_selected_id: str = ""
+    acct_picker_selected_name: str = ""
+
     patients: list[PatientRowDTO] = []
-    companies: list[AccountOptionDTO] = []
     is_loading: bool = False
+    is_loading_more: bool = False
+    has_more: bool = False
     error_message: str = ""
+
+    _page_offset: int = 0
+    _current_page_size: int = 50
 
     search_name: str = ""
     search_patient_number: str = ""
@@ -43,178 +50,161 @@ class PatientListState(ReflexMainState):
     sort_column: str = "last_name"
     sort_ascending: bool = True
 
-    # Pagination
-    page: int = 1
-    page_size: int = 50
-    total_count: int = 0
+    # ── Account picker events ─────────────────────────────────────────────────────
 
-    # Doctor view: when logged in as a doctor, only their own patients are shown
-    is_doctor_view: bool = False
-    doctor_context_id: str = ""
+    @rx.event
+    async def open_account_picker(self):
+        await self._open_account_picker()
 
-    @rx.var
-    def total_pages(self) -> int:
-        if self.total_count == 0:
-            return 1
-        return max(1, (self.total_count + self.page_size - 1) // self.page_size)
+    @rx.event
+    def close_account_picker(self):
+        self.acct_picker_is_open = False
 
-    @rx.var
-    def has_prev_page(self) -> bool:
-        return self.page > 1
+    @rx.event
+    async def acct_picker_set_filter(self, value: str):
+        await self._acct_picker_set_filter(value)
 
-    @rx.var
-    def has_next_page(self) -> bool:
-        return self.page < self.total_pages
+    @rx.event
+    async def acct_picker_confirm(self, account_id: str, name: str):
+        await self._acct_picker_confirm(account_id, name)
+
+    @rx.event
+    async def acct_picker_clear(self):
+        await self._acct_picker_clear()
 
     @rx.event
     async def on_load(self):
         """Load patients when the page is mounted."""
-        # Detect if the authenticated user is a doctor role (not an admin)
-        if not await self.check_authentication():
-            return
-        try:
-            with await self.authenticate_user() as auth_user:
-                from gws_care.user.user_role_service import UserRoleService
-                from gws_care.user.care_role import CareRole
-                roles = UserRoleService.get_roles_for_user(str(auth_user.id))
-                _doctor_roles = {CareRole.MEDECIN_PSC, CareRole.MEDECIN_ENTREPRISE}
-                _admin_roles = {CareRole.SUPER_ADMIN_PSC, CareRole.ADMIN_PSC}
-                is_doctor = any(r in _doctor_roles for r in roles)
-                is_admin = any(r in _admin_roles for r in roles)
-                if is_doctor and not is_admin:
-                    self.is_doctor_view = True
-                    self.doctor_context_id = str(auth_user.id)
-                else:
-                    self.is_doctor_view = False
-                    self.doctor_context_id = ""
-        except Exception:
-            self.is_doctor_view = False
-            self.doctor_context_id = ""
-        await self._load_companies()
+        await self._load_roles()
+        redirect = await self._require_any_of(
+            self.is_operator, self.is_doctor, self.is_admin, self.is_account_admin,
+            redirect_to="/patient-dashboard",
+        )
+        if redirect:
+            return redirect
         await self._load_patients()
 
-    @rx.event
-    async def go_to_page(self, page: int):
-        self.page = max(1, min(page, self.total_pages))
+    async def _on_account_picked(self, account_id: str) -> None:
+        self.filter_account_id = account_id
         await self._load_patients()
-
-    @rx.event
-    async def prev_page(self):
-        if self.has_prev_page:
-            self.page -= 1
-            await self._load_patients()
-
-    @rx.event
-    async def next_page(self):
-        if self.has_next_page:
-            self.page += 1
-            await self._load_patients()
 
     @rx.event
     async def set_filter_account(self, value: str):
-        """Filter by account — reset to page 1."""
+        """Filter by account."""
         self.filter_account_id = value if value != "ALL" else ""
-        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def set_filter_dob_from(self, value: str):
+        """Filter patients born on or after this date."""
         self.filter_dob_from = value
-        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def set_filter_dob_to(self, value: str):
+        """Filter patients born on or before this date."""
         self.filter_dob_to = value
-        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def handle_name_change(self, value: str):
-        """Debounce: state stores value immediately; _load_patients is called.
-        The actual debounce is handled in the component via rx.debounce_input."""
+        """Filter by name."""
         self.search_name = value
-        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def handle_patient_number_change(self, value: str):
+        """Filter by patient number."""
         self.search_patient_number = value
-        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def handle_phone_change(self, value: str):
+        """Filter by phone."""
         self.search_phone = value
-        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def clear_filters(self):
+        """Reset all filters and reload."""
         self.search_name = ""
         self.search_patient_number = ""
         self.search_phone = ""
         self.filter_account_id = ""
         self.filter_dob_from = ""
         self.filter_dob_to = ""
-        self.page = 1
         await self._load_patients()
 
     @rx.event
     async def set_sort(self, column: str):
+        """Sort by column; toggle direction if already sorted by the same column."""
         if self.sort_column == column:
             self.sort_ascending = not self.sort_ascending
         else:
             self.sort_column = column
             self.sort_ascending = True
-        self.page = 1
         await self._load_patients()
 
     @rx.event
     def go_to_patient(self, patient_id: str):
+        """Navigate to the patient detail page."""
         return rx.redirect(f"/patient/{patient_id}")
 
-    async def _load_companies(self):
-        try:
-            with await self.authenticate_user():
-                from gws_care.account.account_service import AccountService
-                comps = AccountService.list_accounts()
-                self.companies = [
-                    AccountOptionDTO(id=str(c.id), name=c.name) for c in comps
-                ]
-        except Exception as exc:
-            self.companies = []
+    @rx.event
+    async def load_more_patients(self):
+        """Append the next page of patients to the current list."""
+        self.is_loading_more = True
+        await self._load_patients(reset=False)
 
-    async def _load_patients(self):
-        """Load one page of patients from DB — sort and filter are handled at SQL level."""
+    async def _load_patients(self, reset: bool = True):
+        """Internal: load patients from DB with current filters."""
         if not await self.check_authentication():
             self.error_message = "Authentication required"
             return
-        self.is_loading = True
+
+        if reset:
+            self._page_offset = 0
+            self.is_loading = True
+            from gws_care.core.care_app_config_service import CareAppConfigService
+            self._current_page_size = CareAppConfigService.get_page_size()
         self.error_message = ""
+
         try:
             with await self.authenticate_user():
                 from gws_care.patient.patient_service import PatientService
-                filters = dict(
+                # Normalize patient number input: strip "PAT-" prefix so that
+                # typing "PAT-01" or "01" both match PAT-01XXXX. An input of
+                # just "PAT-" strips to empty and shows all patients.
+                raw_pn = self.search_patient_number.strip()
+                if raw_pn.upper().startswith("PAT-"):
+                    raw_pn = raw_pn[4:]
+                patients = PatientService.search_patients(
                     name=self.search_name or None,
-                    patient_number=self.search_patient_number or None,
+                    patient_number_prefix=f"PAT-{raw_pn}" if raw_pn else None,
                     phone=self.search_phone or None,
                     account_id=self.filter_account_id or None,
                     dob_from=self.filter_dob_from or None,
                     dob_to=self.filter_dob_to or None,
-                    doctor_id=self.doctor_context_id or None,
+                    limit=self._current_page_size + 1,
+                    offset=self._page_offset,
                 )
-                self.total_count = PatientService.count_patients(**filters)
-                # Clamp page to valid range after count update
-                self.page = max(1, min(self.page, self.total_pages))
-                patients = PatientService.search_patients(
-                    **filters,
-                    sort_column=self.sort_column,
-                    sort_ascending=self.sort_ascending,
-                    limit=self.page_size,
-                    offset=(self.page - 1) * self.page_size,
-                )
-                self.patients = [
+                has_more = len(patients) > self._current_page_size
+                patients = patients[:self._current_page_size]
+                # Batch-fetch account names via join table
+                patient_ids = [p.id for p in patients]
+                account_names_by_patient: dict[str, list[str]] = {}
+                if patient_ids:
+                    from gws_care.account.account import Account
+                    from gws_care.patient.patient_account import PatientAccount
+                    links = (
+                        PatientAccount.select(PatientAccount, Account)
+                        .join(Account)
+                        .where(PatientAccount.patient_id.in_(patient_ids))
+                    )
+                    for link in links:
+                        pid = str(link.patient_id)
+                        account_names_by_patient.setdefault(pid, []).append(link.account.name)
+                new_rows = [
                     PatientRowDTO(
                         id=str(p.id),
                         patient_number=p.patient_number,
@@ -224,11 +214,21 @@ class PatientListState(ReflexMainState):
                         gender=p.gender,
                         city=p.city,
                         phone=p.phone,
-                        account_name=p.billing_account.name if p.billing_account_id else None,
+                        account_name=", ".join(account_names_by_patient.get(str(p.id), [])) or None,
                     )
                     for p in patients
                 ]
+                sort_col = self.sort_column
+                all_rows = new_rows if reset else self.patients + new_rows
+                self.patients = sorted(
+                    all_rows,
+                    key=lambda row: (getattr(row, sort_col) or "").lower(),
+                    reverse=not self.sort_ascending,
+                )
+                self.has_more = has_more
+                self._page_offset += self._current_page_size
         except Exception as e:
-            self.error_message = f"Erreur lors du chargement des patients : {e}"
+            self.error_message = f"Error loading patients: {e}"
         finally:
             self.is_loading = False
+            self.is_loading_more = False

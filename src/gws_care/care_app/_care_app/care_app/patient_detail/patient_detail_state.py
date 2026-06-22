@@ -21,9 +21,22 @@ class PatientDetailDTO(BaseModel):
     city: str | None = None
     phone: str | None = None
     email: str | None = None
-    primary_physician_name: str | None = None
-    primary_physician_phone: str | None = None
-    qr_token: str | None = None
+    # Medical / identity fields
+    social_security_number: str | None = None
+    sex: str | None = None
+    nationality: str | None = None
+    phone_country: str | None = None
+    weight: float | None = None
+    height: float | None = None
+    qr_code: str | None = None
+    account_id: str = ""
+    account_name: str = ""
+    # Referent doctor (médecin traitant) — from PatientDoctor where is_referent=True
+    primary_physician_id: str = ""
+    primary_physician_full_name: str = ""
+    primary_physician_specialization: str = ""
+    primary_physician_phone: str = ""
+    primary_physician_email: str = ""
 
 
 class ExamRowDTO(BaseModel):
@@ -33,50 +46,60 @@ class ExamRowDTO(BaseModel):
     exam_date: str
     exam_type_label: str
     status: str
-    link_url: str = ""   # /exam/{id} for standalone, /campaign-patient/{c}/{p} for campaign
-    is_prescribed_followup: bool = False  # True if this exam was created from a doctor's prescription
 
 
-class AppointmentRowDTO(BaseModel):
-    """Lightweight appointment row for the patient detail appointments list."""
+class PatientVisitRowDTO(BaseModel):
+    """Lightweight visit row for the patient detail visits list."""
 
     id: str
-    scheduled_at: str
-    exam_type_label: str
-    status: str
-    account_name: str | None = None
-    campaign_name: str = ""  # non-empty when this row comes from a campaign enrollment
+    visit_number: str
+    campaign_name: str = ""
+    campaign_id: str = ""
+    scheduled_at: str = ""
+    campaign_visit_status: str = ""
+    status_label: str = ""
+    appointment_mode: str = ""
+    doctor_name: str = ""
 
 
-class ConsultationExamDTO(BaseModel):
-    """Lightweight exam row inside a consultation card."""
-
-    exam_id: str
-    exam_type_label: str
-    status: str
-    has_lab_results: bool = False
-
-
-class ConsultationRowDTO(BaseModel):
-    """One consultation visit shown on the patient detail page."""
+class AccountForVisitDTO(BaseModel):
+    """Account option for the create-visit form select."""
 
     id: str
-    consultation_date: str
-    reason_for_visit: str = ""
-    exam_count: int = 0
-    exams: list[ConsultationExamDTO] = []
+    name: str
 
 
-class CampaignEnrollmentDTO(BaseModel):
-    """Lightweight campaign participation row for the patient detail page."""
+class PrescriptionRowDTO(BaseModel):
+    """Lightweight prescription row for the patient detail prescriptions tab."""
 
-    campaign_id: str
-    campaign_name: str
-    status: str
-    status_label: str
-    start_date: str
-    account_name: str
-    exams: list[ExamRowDTO] = []
+    id: str
+    prescription_date: str
+    drug_count: int = 0
+    diagnosis: str = ""
+    prescribed_by_name: str = ""
+    is_archived: bool = False
+
+
+class DrugLineDTO(BaseModel):
+    """One drug line in the prescription form."""
+
+    name: str = ""
+    dosage: str = ""
+    frequency: str = ""
+    duration: str = ""
+
+
+class CertificateRowDTO(BaseModel):
+    """Lightweight certificate row for the patient detail certificates tab."""
+
+    id: str
+    issue_date: str
+    certificate_type: str = "APTITUDE"
+    certificate_type_label: str = ""
+    conclusion: str = ""
+    is_fit_for_work: bool = True
+    issued_by_name: str = ""
+    is_archived: bool = False
 
 
 class PatientDetailState(ReflexMainState):
@@ -84,31 +107,464 @@ class PatientDetailState(ReflexMainState):
 
     patient: PatientDetailDTO | None = None
     exams: list[ExamRowDTO] = []
-    consultations: list[ConsultationRowDTO] = []
-    appointments: list[AppointmentRowDTO] = []
-    campaign_enrollments: list[CampaignEnrollmentDTO] = []
+    exam_type_options: list[str] = []
+    patient_visits: list[PatientVisitRowDTO] = []
     is_loading: bool = False
     error_message: str = ""
+    show_id_card: bool = False
+
+    # Create standalone visit dialog
+    show_create_visit_dialog: bool = False
+    create_visit_scheduled_at: str = ""
+    create_visit_account_id: str = ""
+    create_visit_error: str = ""
+    patient_accounts: list[AccountForVisitDTO] = []
+
+    # ── Prescriptions ─────────────────────────────────────────────────────────
+    prescriptions: list[PrescriptionRowDTO] = []
+    show_prescription_dialog: bool = False
+    prescription_form_date: str = ""
+    prescription_form_diagnosis: str = ""
+    prescription_form_instructions: str = ""
+    prescription_form_drugs: list[DrugLineDTO] = []
+    prescription_form_error: str = ""
+    is_saving_prescription: bool = False
+    # Prescription sort / filter
+    presc_sort_column: str = "prescription_date"
+    presc_sort_ascending: bool = False
+    presc_filter_from: str = ""
+    presc_filter_to: str = ""
+    presc_show_archived: bool = False
+
+    # ── Certificates ──────────────────────────────────────────────────────────
+    certificates: list[CertificateRowDTO] = []
+    show_certificate_dialog: bool = False
+    cert_form_type: str = "APTITUDE"
+    cert_form_date: str = ""
+    cert_form_conclusion: str = ""
+    cert_form_is_fit_for_work: bool = True
+    cert_form_restrictions: str = ""
+    # Work stoppage
+    cert_form_start_date: str = ""
+    cert_form_end_date: str = ""
+    cert_form_return_date: str = ""
+    # Pre-employment / periodic sub-type
+    cert_form_visit_subtype: str = ""
+    # Work accident
+    cert_form_accident_date: str = ""
+    cert_form_body_part: str = ""
+    # SIR
+    cert_form_exposure_type: str = ""
+    # Vaccination
+    cert_form_vaccine_name: str = ""
+    cert_form_vaccine_lot: str = ""
+    cert_form_next_booster: str = ""
+    cert_form_error: str = ""
+    is_saving_certificate: bool = False
+    # Certificate sort / filter
+    cert_sort_column: str = "issue_date"
+    cert_sort_ascending: bool = False
+    cert_filter_from: str = ""
+    cert_filter_to: str = ""
+    cert_show_archived: bool = False
+
+    # ── Visit sort / filter state ──────────────────────────────
+    visit_sort_column: str = "scheduled_at"
+    visit_sort_ascending: bool = False
+    visit_filter_from: str = ""
+    visit_filter_to: str = ""
+    visit_filter_mode: str = ""
+    visit_filter_doctor: str = ""
+    visit_filter_status: str = ""
+    visit_doctor_options: list[str] = []
+
+    @rx.event
+    async def set_visit_sort(self, column: str):
+        if self.visit_sort_column == column:
+            self.visit_sort_ascending = not self.visit_sort_ascending
+        else:
+            self.visit_sort_column = column
+            self.visit_sort_ascending = True
+
+    @rx.event
+    def set_visit_filter_from(self, value: str):
+        self.visit_filter_from = value
+
+    @rx.event
+    def set_visit_filter_to(self, value: str):
+        self.visit_filter_to = value
+
+    @rx.event
+    def set_visit_filter_mode(self, value: str):
+        self.visit_filter_mode = "" if value == "ALL" else value
+
+    @rx.event
+    def set_visit_filter_doctor(self, value: str):
+        self.visit_filter_doctor = "" if value == "ALL" else value
+
+    @rx.event
+    def set_visit_filter_status(self, value: str):
+        self.visit_filter_status = "" if value == "ALL" else value
 
     @rx.var
-    def prescribed_followup_exams(self) -> list[ExamRowDTO]:
-        """Return standalone exams that are prescribed follow-ups (for lab section)."""
-        return [e for e in self.exams if e.is_prescribed_followup]
+    def sorted_visits(self) -> list[PatientVisitRowDTO]:
+        col = self.visit_sort_column
+        return sorted(
+            self.patient_visits,
+            key=lambda v: (getattr(v, col) or "").lower(),
+            reverse=not self.visit_sort_ascending,
+        )
 
     @rx.var
-    def standalone_exams(self) -> list[ExamRowDTO]:
-        """Return standalone exams that are NOT prescribed follow-ups."""
-        return [e for e in self.exams if not e.is_prescribed_followup]
+    def filtered_sorted_visits(self) -> list[PatientVisitRowDTO]:
+        rows = self.patient_visits
+        if self.visit_filter_from:
+            rows = [v for v in rows if v.scheduled_at >= self.visit_filter_from]
+        if self.visit_filter_to:
+            rows = [v for v in rows if v.scheduled_at <= self.visit_filter_to]
+        if self.visit_filter_mode:
+            rows = [v for v in rows if v.appointment_mode == self.visit_filter_mode]
+        if self.visit_filter_doctor:
+            rows = [v for v in rows if v.doctor_name == self.visit_filter_doctor]
+        if self.visit_filter_status:
+            rows = [v for v in rows if v.campaign_visit_status == self.visit_filter_status]
+        col = self.visit_sort_column
+        return sorted(
+            rows,
+            key=lambda v: (getattr(v, col) or "").lower(),
+            reverse=not self.visit_sort_ascending,
+        )
+
+    exam_sort_column: str = "exam_date"
+    exam_sort_ascending: bool = False
+    exam_filter_from: str = ""
+    exam_filter_to: str = ""
+    exam_filter_type: str = ""
+    exam_filter_status: str = ""
+
+    @rx.event
+    async def set_exam_sort(self, column: str):
+        if self.exam_sort_column == column:
+            self.exam_sort_ascending = not self.exam_sort_ascending
+        else:
+            self.exam_sort_column = column
+            self.exam_sort_ascending = True
+
+    @rx.event
+    def set_exam_filter_from(self, value: str):
+        self.exam_filter_from = value
+
+    @rx.event
+    def set_exam_filter_to(self, value: str):
+        self.exam_filter_to = value
+
+    @rx.event
+    def set_exam_filter_type(self, value: str):
+        self.exam_filter_type = "" if value == "ALL" else value
+
+    @rx.event
+    def set_exam_filter_status(self, value: str):
+        self.exam_filter_status = "" if value == "ALL" else value
+
+    @rx.var
+    def patient_bmi(self) -> float | None:
+        """Auto-calculate patient BMI from stored weight and height."""
+        if self.patient is None:
+            return None
+        try:
+            w = self.patient.weight
+            h = self.patient.height
+            if w and h:
+                h_m = float(h) / 100.0
+                return round(float(w) / (h_m * h_m), 1)
+        except Exception:
+            pass
+        return None
+
+    @rx.var
+    def patient_bmi_category(self) -> str:
+        bmi = self.patient_bmi
+        if bmi is None:
+            return ""
+        if bmi < 18.5:
+            return "underweight"
+        if bmi < 25.0:
+            return "normal"
+        if bmi < 30.0:
+            return "overweight"
+        return "obese"
+
+    @rx.var
+    def filtered_sorted_exams(self) -> list[ExamRowDTO]:
+        rows = self.exams
+        if self.exam_filter_from:
+            rows = [e for e in rows if e.exam_date >= self.exam_filter_from]
+        if self.exam_filter_to:
+            rows = [e for e in rows if e.exam_date <= self.exam_filter_to]
+        if self.exam_filter_type:
+            rows = [e for e in rows if e.exam_type_label == self.exam_filter_type]
+        if self.exam_filter_status:
+            rows = [e for e in rows if e.status == self.exam_filter_status]
+        col = self.exam_sort_column
+        return sorted(
+            rows,
+            key=lambda e: (getattr(e, col) or "").lower(),
+            reverse=not self.exam_sort_ascending,
+        )
+
+    @rx.var
+    def sorted_exams(self) -> list[ExamRowDTO]:
+        col = self.exam_sort_column
+        return sorted(
+            self.exams,
+            key=lambda e: (getattr(e, col) or "").lower(),
+            reverse=not self.exam_sort_ascending,
+        )
+
+    @rx.event
+    def set_presc_sort(self, column: str):
+        if self.presc_sort_column == column:
+            self.presc_sort_ascending = not self.presc_sort_ascending
+        else:
+            self.presc_sort_column = column
+            self.presc_sort_ascending = True
+
+    @rx.event
+    def set_presc_filter_from(self, value: str):
+        self.presc_filter_from = value
+
+    @rx.event
+    def set_presc_filter_to(self, value: str):
+        self.presc_filter_to = value
+
+    @rx.event
+    def toggle_presc_show_archived(self):
+        self.presc_show_archived = not self.presc_show_archived
+
+    @rx.var
+    def filtered_sorted_prescriptions(self) -> list[PrescriptionRowDTO]:
+        rows = self.prescriptions
+        if not self.presc_show_archived:
+            rows = [r for r in rows if not r.is_archived]
+        if self.presc_filter_from:
+            rows = [r for r in rows if r.prescription_date >= self.presc_filter_from]
+        if self.presc_filter_to:
+            rows = [r for r in rows if r.prescription_date <= self.presc_filter_to]
+        col = self.presc_sort_column
+        return sorted(
+            rows,
+            key=lambda r: str(getattr(r, col) or "").lower(),
+            reverse=not self.presc_sort_ascending,
+        )
+
+    @rx.event
+    def set_cert_sort(self, column: str):
+        if self.cert_sort_column == column:
+            self.cert_sort_ascending = not self.cert_sort_ascending
+        else:
+            self.cert_sort_column = column
+            self.cert_sort_ascending = True
+
+    @rx.event
+    def set_cert_filter_from(self, value: str):
+        self.cert_filter_from = value
+
+    @rx.event
+    def set_cert_filter_to(self, value: str):
+        self.cert_filter_to = value
+
+    @rx.event
+    def toggle_cert_show_archived(self):
+        self.cert_show_archived = not self.cert_show_archived
+
+    @rx.var
+    def filtered_sorted_certificates(self) -> list[CertificateRowDTO]:
+        rows = self.certificates
+        if not self.cert_show_archived:
+            rows = [r for r in rows if not r.is_archived]
+        if self.cert_filter_from:
+            rows = [r for r in rows if r.issue_date >= self.cert_filter_from]
+        if self.cert_filter_to:
+            rows = [r for r in rows if r.issue_date <= self.cert_filter_to]
+        col = self.cert_sort_column
+        return sorted(
+            rows,
+            key=lambda r: str(getattr(r, col) or "").lower(),
+            reverse=not self.cert_sort_ascending,
+        )
+
 
     @rx.event
     async def on_load(self):
-        """Load patient data and exam list when the page is mounted."""
+        """Load patient data, exam list and tab states when the page is mounted."""
         await self._load_patient()
+        patient_id = self.patient_id_param
+        if patient_id:
+            from .patient_doctor_tab_state import PatientDoctorTabState
+            from .patient_account_tab_state import PatientAccountTabState
+            yield PatientDoctorTabState.load(patient_id)
+            yield PatientAccountTabState.load(patient_id)
 
     @rx.event
     def go_back(self):
-        """Navigate back to the patient list."""
-        return rx.redirect("/")
+        return rx.call_script("window.history.back()")
+
+    @rx.event
+    def open_id_card(self):
+        """Open the patient ID card dialog."""
+        self.show_id_card = True
+
+    @rx.event
+    def close_id_card(self):
+        """Close the patient ID card dialog."""
+        self.show_id_card = False
+
+    # ── Prescription events ───────────────────────────────────────────────────
+
+    @rx.event
+    def open_prescription_dialog(self):
+        from datetime import date
+        self.prescription_form_date = date.today().isoformat()
+        self.prescription_form_diagnosis = ""
+        self.prescription_form_instructions = ""
+        self.prescription_form_drugs = [DrugLineDTO()]
+        self.prescription_form_error = ""
+        self.show_prescription_dialog = True
+
+    @rx.event
+    def close_prescription_dialog(self):
+        self.show_prescription_dialog = False
+
+    @rx.event
+    def set_prescription_form_date(self, value: str):
+        self.prescription_form_date = value
+
+    @rx.event
+    def set_prescription_form_diagnosis(self, value: str):
+        self.prescription_form_diagnosis = value
+
+    @rx.event
+    def set_prescription_form_instructions(self, value: str):
+        self.prescription_form_instructions = value
+
+    @rx.event
+    def prescription_add_drug(self):
+        self.prescription_form_drugs = self.prescription_form_drugs + [DrugLineDTO()]
+
+    @rx.event
+    def prescription_remove_drug(self, index: int):
+        drugs = list(self.prescription_form_drugs)
+        if len(drugs) > 1:
+            drugs.pop(index)
+        self.prescription_form_drugs = drugs
+
+    @rx.event
+    def prescription_set_drug_name(self, index: int, value: str):
+        drugs = [DrugLineDTO(**d.dict()) for d in self.prescription_form_drugs]
+        if 0 <= index < len(drugs):
+            drugs[index].name = value
+        self.prescription_form_drugs = drugs
+
+    @rx.event
+    def prescription_set_drug_dosage(self, index: int, value: str):
+        drugs = [DrugLineDTO(**d.dict()) for d in self.prescription_form_drugs]
+        if 0 <= index < len(drugs):
+            drugs[index].dosage = value
+        self.prescription_form_drugs = drugs
+
+    @rx.event
+    def prescription_set_drug_frequency(self, index: int, value: str):
+        drugs = [DrugLineDTO(**d.dict()) for d in self.prescription_form_drugs]
+        if 0 <= index < len(drugs):
+            drugs[index].frequency = value
+        self.prescription_form_drugs = drugs
+
+    @rx.event
+    def prescription_set_drug_duration(self, index: int, value: str):
+        drugs = [DrugLineDTO(**d.dict()) for d in self.prescription_form_drugs]
+        if 0 <= index < len(drugs):
+            drugs[index].duration = value
+        self.prescription_form_drugs = drugs
+
+    @rx.event
+    async def save_prescription(self):
+        if not self.patient:
+            return
+        if not self.prescription_form_date:
+            self.prescription_form_error = "La date est obligatoire."
+            return
+        self.prescription_form_error = ""
+        self.is_saving_prescription = True
+        try:
+            with await self.authenticate_user() as auth_user:
+                from gws_care.prescription.prescription import (
+                    DrugLineDTO as ServiceDrugLineDTO,
+                )
+                from gws_care.prescription.prescription import (
+                    PrescriptionService,
+                    SavePrescriptionDTO,
+                )
+                from gws_care.user.user import User
+                doctor = User.get_by_id(str(auth_user.id))
+                dto = SavePrescriptionDTO(
+                    patient_id=self.patient.id,
+                    prescription_date=self.prescription_form_date,
+                    drugs=[
+                        ServiceDrugLineDTO(
+                            name=d.name,
+                            dosage=d.dosage,
+                            frequency=d.frequency,
+                            duration=d.duration,
+                        )
+                        for d in self.prescription_form_drugs
+                        if d.name.strip()
+                    ],
+                    instructions=self.prescription_form_instructions,
+                    diagnosis=self.prescription_form_diagnosis,
+                )
+                PrescriptionService.create(dto, doctor)
+            self.show_prescription_dialog = False
+            await self._load_prescriptions()
+        except Exception as e:
+            self.prescription_form_error = str(e)
+        finally:
+            self.is_saving_prescription = False
+
+    @rx.event
+    async def download_prescription_pdf(self, prescription_id: str):
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.pdf import generate_prescription_pdf
+                pdf_bytes = generate_prescription_pdf(prescription_id)
+            return rx.download(data=pdf_bytes, filename=f"ordonnance_{prescription_id[:8]}.pdf")
+        except Exception as e:
+            self.error_message = f"Erreur génération PDF : {e}"
+
+    @rx.event
+    async def delete_prescription(self, prescription_id: str):
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.prescription.prescription import PrescriptionService
+                PrescriptionService.delete(prescription_id)
+            await self._load_prescriptions()
+        except Exception as e:
+            self.error_message = str(e)
+
+    @rx.event
+    async def download_id_card_pdf(self):
+        """Generate and download the patient ID card as a PDF."""
+        if not self.patient:
+            return
+        try:
+            with await self.authenticate_user():
+                from gws_care.pdf import generate_patient_id_card_pdf
+                pdf_bytes = generate_patient_id_card_pdf(self.patient.id)
+            filename = f"carte_patient_{self.patient.patient_number}.pdf"
+            return rx.download(data=pdf_bytes, filename=filename)
+        except Exception as e:
+            self.error_message = f"PDF generation error: {e}"
 
     @rx.event
     def go_to_exam(self, exam_id: str):
@@ -116,28 +572,81 @@ class PatientDetailState(ReflexMainState):
         return rx.redirect(f"/exam/{exam_id}")
 
     @rx.event
-    async def go_to_appointments(self):
-        """Navigate to the appointments page, pre-filtered for this patient."""
-        from ..appointment_list.appointment_list_state import AppointmentListState
-        patient_name = (
-            f"{self.patient.first_name} {self.patient.last_name}"
-            if self.patient else ""
-        )
-        yield AppointmentListState.set_patient_context(self.patient_id_param, patient_name)
-        yield rx.redirect("/appointments")
+    def go_to_prescription(self, prescription_id: str):
+        """Navigate to the prescription detail page."""
+        return rx.redirect(f"/prescription/{prescription_id}")
 
     @rx.event
-    async def delete_exam(self, exam_id: str):
-        """Delete a standalone exam and reload the patient."""
-        if not exam_id:
+    def go_to_certificate(self, certificate_id: str):
+        """Navigate to the certificate detail page."""
+        return rx.redirect(f"/certificate/{certificate_id}")
+
+    @rx.event
+    def go_to_visit(self, visit_id: str):
+        """Navigate to the visit detail page."""
+        return rx.redirect(f"/visit/{visit_id}")
+
+    @rx.event
+    def go_to_campaign(self, campaign_id: str):
+        """Navigate to the campaign detail page."""
+        return rx.redirect(f"/campaign/{campaign_id}")
+
+    @rx.event
+    def go_to_visits(self):
+        """Navigate to the visits page."""
+        return rx.redirect("/visits")
+
+    # ── Standalone visit creation ─────────────────────────────────────────────
+
+    @rx.event
+    def open_create_visit_dialog(self):
+        self.show_create_visit_dialog = True
+        self.create_visit_scheduled_at = ""
+        self.create_visit_error = ""
+        # Auto-select when the patient has exactly one linked account
+        if len(self.patient_accounts) == 1:
+            self.create_visit_account_id = self.patient_accounts[0].id
+        else:
+            self.create_visit_account_id = ""
+
+    @rx.event
+    def close_create_visit_dialog(self):
+        self.show_create_visit_dialog = False
+
+    @rx.event
+    def set_create_visit_scheduled_at(self, value: str):
+        self.create_visit_scheduled_at = value
+
+    @rx.event
+    def set_create_visit_account_id(self, value: str):
+        self.create_visit_account_id = "" if value == "none" else value
+
+    @rx.event
+    async def save_create_visit(self):
+        if not self.patient:
             return
+        if not self.create_visit_scheduled_at:
+            self.create_visit_error = "Veuillez sélectionner une date et une heure."
+            return
+        self.create_visit_error = ""
         try:
             with await self.authenticate_user():
-                from gws_care.exam.exam_service import ExamService
-                ExamService.delete_exam(exam_id)
-            yield PatientDetailState.on_load()
-        except Exception as exc:
-            yield rx.toast.error(f"Erreur lors de la suppression : {exc}")
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.visit_dto import SaveStandaloneVisitDTO
+                dto = SaveStandaloneVisitDTO(
+                    patient_id=self.patient.id,
+                    billing_account_id=self.create_visit_account_id or None,
+                    scheduled_at=self.create_visit_scheduled_at,
+                )
+                _visit, program = CampaignVisitService.create_visit_with_default_campaign(
+                    patient_id=dto.patient_id,
+                    scheduled_at_str=dto.scheduled_at,
+                    billing_account_id=dto.billing_account_id,
+                )
+            self.show_create_visit_dialog = False
+            return rx.redirect(f"/campaign/{program.id}")
+        except Exception as e:
+            self.create_visit_error = str(e)
 
     @rx.event
     async def download_exam_history(self):
@@ -170,18 +679,28 @@ class PatientDetailState(ReflexMainState):
 
         try:
             with await self.authenticate_user():
-                from gws_care.appointment.appointment_service import AppointmentService
                 from gws_care.exam.exam_service import ExamService
-                from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
                 from gws_care.patient.patient_service import PatientService
-
-                # Build a label lookup dict for all active ExamTypeRef entries
-                ref_labels: dict[str, str] = {
-                    str(r.id): r.name
-                    for r in ExamTypeRef.select(ExamTypeRef.id, ExamTypeRef.name)
-                }
-
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
                 p = PatientService.get_patient(patient_id)
+                # Resolve referent doctor from PatientDoctor table
+                physician_id = ""
+                physician_full_name = ""
+                physician_specialization = ""
+                physician_phone = ""
+                physician_email = ""
+                try:
+                    from gws_care.patient.patient_doctor_service import PatientDoctorService
+                    referent = PatientDoctorService.get_referent(patient_id)
+                    if referent:
+                        physician_id = str(referent.id)
+                        physician_full_name = referent.get_full_name()
+                        physician_specialization = referent.specialization or ""
+                        physician_phone = referent.phone or ""
+                        physician_email = referent.email or ""
+                except Exception:
+                    pass
+
                 self.patient = PatientDetailDTO(
                     id=str(p.id),
                     patient_number=p.patient_number,
@@ -196,219 +715,338 @@ class PatientDetailState(ReflexMainState):
                     city=p.city,
                     phone=p.phone,
                     email=p.email,
-                    primary_physician_name=p.primary_physician_name,
-                    primary_physician_phone=p.primary_physician_phone,
-                    qr_token=p.qr_token,
+                    social_security_number=p.social_security_number,
+                    sex=p.sex,
+                    nationality=p.nationality,
+                    phone_country=p.phone_country,
+                    weight=float(p.weight) if p.weight is not None else None,
+                    height=float(p.height) if p.height is not None else None,
+                    qr_code=p.qr_code,
+                    primary_physician_id=physician_id,
+                    primary_physician_full_name=physician_full_name,
+                    primary_physician_specialization=physician_specialization,
+                    primary_physician_phone=physician_phone,
+                    primary_physician_email=physician_email,
                 )
-
-                # ── Load campaign memberships — enrollments built after exam processing ──
-                from peewee import JOIN
-                from gws_care.campaign.campaign import Campaign
-                from gws_care.campaign.campaign_patient import CampaignPatient, MedicalRecordStatus
-                from gws_care.account.account import Account
-                cp_rows = list(
-                    CampaignPatient.select(CampaignPatient, Campaign, Account)
-                    .join(Campaign)
-                    .join(Account, JOIN.LEFT_OUTER, on=(Campaign.account == Account.id))
-                    .switch(CampaignPatient)
-                    .where(CampaignPatient.patient == patient_id)
-                    .order_by(Campaign.start_date.desc())
-                )
-
-                # ── Consultations (visits with grouped exams) ─────────────────────────
-                from gws_care.consultation.consultation_service import ConsultationService
-                from gws_care.exam.exam import Exam as ExamModel
-                consult_rows: list[ConsultationRowDTO] = []
-                try:
-                    consults = list(ConsultationService.list_for_patient(patient_id))
-                    # Pre-fetch all exams for all consultations in one query (avoids N+1)
-                    consult_ids = [str(c.id) for c in consults]
-                    exams_by_consult: dict[str, list] = {}
-                    if consult_ids:
-                        for ex in (
-                            ExamModel.select()
-                            .where(ExamModel.consultation_id.in_(consult_ids))
-                            .order_by(ExamModel.exam_date.asc())
-                        ):
-                            exams_by_consult.setdefault(str(ex.consultation_id), []).append(ex)
-                    for consult in consults:
-                        linked_exams = exams_by_consult.get(str(consult.id), [])
-                        exam_dtos = []
-                        for ex in linked_exams:
-                            lbl = (
-                                ref_labels.get(str(ex.exam_type_ref_id), ex.exam_type.get_label())
-                                if ex.exam_type_ref_id
-                                else ex.exam_type.get_label()
-                            )
-                            exam_dtos.append(ConsultationExamDTO(
-                                exam_id=str(ex.id),
-                                exam_type_label=lbl,
-                                status=ex.status.value,
-                                has_lab_results=bool(ex.lab_results),
-                            ))
-                        consult_rows.append(ConsultationRowDTO(
-                            id=str(consult.id),
-                            consultation_date=consult.consultation_date.isoformat(),
-                            reason_for_visit=consult.reason_for_visit or "",
-                            exam_count=len(exam_dtos),
-                            exams=exam_dtos,
-                        ))
-                except Exception as exc:
-                    self.error_message = f"Erreur lors du chargement des consultations : {exc}"
-                self.consultations = consult_rows
-
-                # ── Exams: separate into campaign groups and standalone ─────────────────
-                exams_loaded = ExamService.list_exams_for_patient(patient_id)
-                consultation_exam_ids: set[str] = {
-                    ex_dto.exam_id
-                    for cr in consult_rows
-                    for ex_dto in cr.exams
-                }
-
-                # Collect all follow-up exam IDs from all loaded exams (prescribed by doctor)
-                followup_exam_id_set: set[str] = set()
-                for e in exams_loaded:
-                    for fid in (e.follow_up_exam_ids or []):
-                        followup_exam_id_set.add(str(fid))
-
-                existing_camp_sections: set[tuple[str, str]] = set()
-                exam_rows_standalone: list[ExamRowDTO] = []
-                exam_rows_by_campaign: dict[str, list[ExamRowDTO]] = {}
-
-                for e in exams_loaded:
-                    if str(e.id) in consultation_exam_ids:
-                        continue
-                    rv = e.reason_for_visit or ""
-                    if rv.startswith("CAMP:"):
-                        try:
-                            parts = rv.split("|")
-                            c_id = parts[0][5:]
-                            s_id = parts[1][4:]
-                            existing_camp_sections.add((c_id, s_id))
-                            label = ref_labels.get(s_id, e.exam_type.get_label())
-                            exam_rows_by_campaign.setdefault(c_id, []).append(ExamRowDTO(
-                                id=str(e.id),
-                                exam_date=e.exam_date.isoformat(),
-                                exam_type_label=label,
-                                status=e.status.value,
-                                link_url=f"/campaign-patient/{c_id}/{patient_id}",
-                            ))
-                        except Exception as exc:
-                            exam_rows_standalone.append(ExamRowDTO(
-                                id=str(e.id),
-                                exam_date=e.exam_date.isoformat() if e.exam_date else "",
-                                exam_type_label=e.exam_type.get_label(),
-                                status=e.status.value,
-                                link_url=f"/exam/{e.id}",
-                            ))
-                            print(f"[patient_detail] Fallback exam row: {exc}")
-                    else:
-                        label = (
-                            ref_labels.get(str(e.exam_type_ref_id), e.exam_type.get_label())
-                            if e.exam_type_ref_id
-                            else e.exam_type.get_label()
-                        )
-                        exam_rows_standalone.append(ExamRowDTO(
-                            id=str(e.id),
-                            exam_date=e.exam_date.isoformat(),
-                            exam_type_label=label,
-                            status=e.status.value,
-                            link_url=f"/exam/{e.id}",
-                            is_prescribed_followup=str(e.id) in followup_exam_id_set,
-                        ))
-
-                # Pre-fetch all CampaignExams (used for pending rows + appointment inference)
-                from gws_care.campaign.campaign_exam import CampaignExam
-                all_patient_campaign_ids = list({str(cp.campaign_id) for cp in cp_rows})
-                camp_exams_by_c: dict[str, list] = {}
-                if all_patient_campaign_ids:
-                    for ce in (
-                        CampaignExam.select(CampaignExam, ExamTypeRef)
-                        .join(ExamTypeRef)
-                        .where(CampaignExam.campaign.in_(all_patient_campaign_ids))
-                    ):
-                        camp_exams_by_c.setdefault(str(ce.campaign_id), []).append(ce)
-
-                # Pending rows for campaign exam types not yet entered
-                for cp in cp_rows:
-                    c_id = str(cp.campaign_id)
-                    for ce in camp_exams_by_c.get(c_id, []):
-                        s_id = str(ce.exam_type_ref_id)
-                        if (c_id, s_id) not in existing_camp_sections:
-                            exam_rows_by_campaign.setdefault(c_id, []).append(ExamRowDTO(
-                                id="",
-                                exam_date="",
-                                exam_type_label=ce.exam_type_ref.name,
-                                status="PENDING_ENTRY",
-                                link_url=f"/campaign-patient/{c_id}/{patient_id}",
-                            ))
-                            existing_camp_sections.add((c_id, s_id))
-
-                self.exams = exam_rows_standalone
-
-                # ── Campaign enrollments (built after exam processing to include exams) ──
-                campaign_enrollments = []
-                for cp in cp_rows:
-                    try:
-                        ms = MedicalRecordStatus(cp.medical_status)
-                        ms_label = ms.get_label()
-                    except ValueError:
-                        ms_label = cp.medical_status
-                    try:
-                        acct_name = cp.campaign.account.name if cp.campaign.account_id else ""
-                    except Exception:
-                        acct_name = ""
-                    c_id = str(cp.campaign_id)
-                    campaign_enrollments.append(CampaignEnrollmentDTO(
-                        campaign_id=c_id,
-                        campaign_name=cp.campaign.name,
-                        status=cp.medical_status,
-                        status_label=ms_label,
-                        start_date=cp.campaign.start_date.isoformat() if cp.campaign.start_date else "",
-                        account_name=acct_name,
-                        exams=exam_rows_by_campaign.get(c_id, []),
-                    ))
-                self.campaign_enrollments = campaign_enrollments
-
-                # ── Appointments (real + inferred from campaigns) ─────────────────────
-                appointments = AppointmentService.list_for_patient(patient_id)
-                # Batch-load billing account names (avoids N+1)
-                appt_acct_ids = {str(a.billing_account_id) for a in appointments if a.billing_account_id}
-                appt_acct_names: dict[str, str] = {}
-                if appt_acct_ids:
-                    from gws_care.account.account import Account as _Account
-                    for ac in _Account.select(_Account.id, _Account.name).where(_Account.id.in_(appt_acct_ids)):
-                        appt_acct_names[str(ac.id)] = ac.name
-                appt_rows: list[AppointmentRowDTO] = [
-                    AppointmentRowDTO(
-                        id=str(a.id),
-                        scheduled_at=a.scheduled_at.isoformat(),
-                        exam_type_label=(
-                            ref_labels.get(str(a.exam_type_ref_id), a.exam_type.get_label())
-                            if a.exam_type_ref_id
-                            else a.exam_type.get_label()
-                        ),
-                        status=a.status.value,
-                        account_name=appt_acct_names.get(str(a.billing_account_id)) if a.billing_account_id else None,
+                exams = ExamService.list_exams_for_patient(patient_id)
+                self.exams = [
+                    ExamRowDTO(
+                        id=str(e.id),
+                        exam_date=e.exam_date.isoformat(),
+                        exam_type_label=e.exam_type.get_label(),
+                        status=e.status.value,
                     )
-                    for a in appointments
+                    for e in exams
                 ]
-                for cp in cp_rows:
-                    c_id = str(cp.campaign_id)
-                    campaign_obj = cp.campaign
-                    campaign_start = (
-                        campaign_obj.start_date.isoformat() if campaign_obj.start_date else ""
+                # Build exam type filter options from exams present for this patient
+                seen: set[str] = set()
+                options: list[str] = []
+                for e in exams:
+                    lbl = e.exam_type.get_label()
+                    if lbl not in seen:
+                        seen.add(lbl)
+                        options.append(lbl)
+                self.exam_type_options = sorted(options)
+                visits = CampaignVisitService.list_for_patient(patient_id)
+                self.patient_visits = [
+                    PatientVisitRowDTO(
+                        id=str(v.id),
+                        visit_number=v.visit_number,
+                        campaign_name=v.campaign.name if v.campaign_id else "",
+                        campaign_id=str(v.campaign_id) if v.campaign_id else "",
+                        scheduled_at=v.scheduled_at.isoformat() if v.scheduled_at else "",
+                        campaign_visit_status=v.campaign_visit_status.value,
+                        status_label=v.campaign_visit_status.get_label(),
+                        appointment_mode=v.appointment_mode.value if v.appointment_mode else "",
+                        doctor_name=v.doctor.get_full_name() if v.doctor_id else "",
                     )
-                    for ce in camp_exams_by_c.get(c_id, []):
-                        appt_rows.append(AppointmentRowDTO(
-                            id="",
-                            scheduled_at=campaign_start + "T00:00:00" if campaign_start else "",
-                            exam_type_label=ce.exam_type_ref.name,
-                            status="campaign",
-                            campaign_name=campaign_obj.name,
-                        ))
-                self.appointments = appt_rows
+                    for v in visits
+                ]
+                seen_doctors: set[str] = set()
+                doctor_options: list[str] = []
+                for v in visits:
+                    name = v.doctor.get_full_name() if v.doctor_id else ""
+                    if name and name not in seen_doctors:
+                        seen_doctors.add(name)
+                        doctor_options.append(name)
+                self.visit_doctor_options = sorted(doctor_options)
+                from gws_care.patient.patient_account import PatientAccount
+                links = list(PatientAccount.select().where(PatientAccount.patient == patient_id))
+                self.patient_accounts = [
+                    AccountForVisitDTO(id=str(link.account_id), name=link.account.name)
+                    for link in links
+                ]
+                if links:
+                    self.patient.account_name = links[0].account.name
+                    self.patient.account_id = str(links[0].account_id)
+                else:
+                    self.patient.account_name = ""
+                    self.patient.account_id = ""
+            await self._load_prescriptions()
+            await self._load_certificates()
         except Exception as e:
             self.error_message = f"Error loading patient: {e}"
         finally:
             self.is_loading = False
+
+    async def _load_prescriptions(self):
+        """Load the prescriptions list for the current patient."""
+        patient_id = self.patient_id_param
+        if not patient_id:
+            return
+        try:
+            with await self.authenticate_user():
+                from gws_care.prescription.prescription import PrescriptionService
+                rows = PrescriptionService.list_for_patient(patient_id, include_archived=True)
+                self.prescriptions = [
+                    PrescriptionRowDTO(
+                        id=str(r.id),
+                        prescription_date=r.prescription_date.isoformat(),
+                        drug_count=len(r.drugs),
+                        diagnosis=r.diagnosis or "",
+                        prescribed_by_name=r.to_row_dto().prescribed_by_name,
+                        is_archived=bool(r.is_archived),
+                    )
+                    for r in rows
+                ]
+        except Exception as e:
+            self.error_message = f"Error loading prescriptions: {e}"
+
+    async def _reload_visits(self):
+        """Reload only the visits list for the current patient."""
+        patient_id = self.patient_id_param
+        if not patient_id:
+            return
+        try:
+            with await self.authenticate_user():
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                visits = CampaignVisitService.list_for_patient(patient_id)
+                self.patient_visits = [
+                    PatientVisitRowDTO(
+                        id=str(v.id),
+                        visit_number=v.visit_number,
+                        campaign_name=v.campaign.name if v.campaign_id else "",
+                        campaign_id=str(v.campaign_id) if v.campaign_id else "",
+                        scheduled_at=v.scheduled_at.isoformat() if v.scheduled_at else "",
+                        campaign_visit_status=v.campaign_visit_status.value,
+                        status_label=v.campaign_visit_status.get_label(),
+                        appointment_mode=v.appointment_mode.value if v.appointment_mode else "",
+                        doctor_name=v.doctor.get_full_name() if v.doctor_id else "",
+                    )
+                    for v in visits
+                ]
+                seen_doctors: set[str] = set()
+                doctor_options: list[str] = []
+                for v in visits:
+                    name = v.doctor.get_full_name() if v.doctor_id else ""
+                    if name and name not in seen_doctors:
+                        seen_doctors.add(name)
+                        doctor_options.append(name)
+                self.visit_doctor_options = sorted(doctor_options)
+        except Exception:
+            pass
+
+    # ── Certificate event handlers ────────────────────────────────────────────
+
+    @rx.event
+    def open_certificate_dialog(self):
+        """Open the new certificate dialog with a fresh form."""
+        self.cert_form_type = "APTITUDE"
+        self.cert_form_date = ""
+        self.cert_form_conclusion = ""
+        self.cert_form_is_fit_for_work = True
+        self.cert_form_restrictions = ""
+        self.cert_form_start_date = ""
+        self.cert_form_end_date = ""
+        self.cert_form_return_date = ""
+        self.cert_form_visit_subtype = ""
+        self.cert_form_accident_date = ""
+        self.cert_form_body_part = ""
+        self.cert_form_exposure_type = ""
+        self.cert_form_vaccine_name = ""
+        self.cert_form_vaccine_lot = ""
+        self.cert_form_next_booster = ""
+        self.cert_form_error = ""
+        self.is_saving_certificate = False
+        self.show_certificate_dialog = True
+
+    @rx.event
+    def close_certificate_dialog(self):
+        self.show_certificate_dialog = False
+
+    @rx.event
+    def set_cert_form_type(self, value: str):
+        self.cert_form_type = value
+
+    @rx.event
+    def set_cert_form_date(self, value: str):
+        self.cert_form_date = value
+
+    @rx.event
+    def set_cert_form_conclusion(self, value: str):
+        self.cert_form_conclusion = value
+
+    @rx.event
+    def set_cert_form_is_fit_for_work(self, value: bool):
+        self.cert_form_is_fit_for_work = value
+
+    @rx.event
+    def set_cert_form_restrictions(self, value: str):
+        self.cert_form_restrictions = value
+
+    @rx.event
+    def set_cert_form_start_date(self, value: str):
+        self.cert_form_start_date = value
+
+    @rx.event
+    def set_cert_form_end_date(self, value: str):
+        self.cert_form_end_date = value
+
+    @rx.event
+    def set_cert_form_return_date(self, value: str):
+        self.cert_form_return_date = value
+
+    @rx.event
+    def set_cert_form_visit_subtype(self, value: str):
+        self.cert_form_visit_subtype = value
+
+    @rx.event
+    def set_cert_form_accident_date(self, value: str):
+        self.cert_form_accident_date = value
+
+    @rx.event
+    def set_cert_form_body_part(self, value: str):
+        self.cert_form_body_part = value
+
+    @rx.event
+    def set_cert_form_exposure_type(self, value: str):
+        self.cert_form_exposure_type = value
+
+    @rx.event
+    def set_cert_form_vaccine_name(self, value: str):
+        self.cert_form_vaccine_name = value
+
+    @rx.event
+    def set_cert_form_vaccine_lot(self, value: str):
+        self.cert_form_vaccine_lot = value
+
+    @rx.event
+    def set_cert_form_next_booster(self, value: str):
+        self.cert_form_next_booster = value
+
+    @rx.event
+    async def save_certificate(self):
+        """Validate and persist a new medical certificate."""
+        if not self.cert_form_date:
+            self.cert_form_error = "La date d'émission est requise."
+            return
+        if not self.cert_form_conclusion.strip():
+            self.cert_form_error = "La conclusion médicale est requise."
+            return
+        self.cert_form_error = ""
+        self.is_saving_certificate = True
+        try:
+            with await self.authenticate_user() as user:
+                from datetime import date
+
+                from gws_care.certificate.medical_certificate import (
+                    MedicalCertificateService,
+                    SaveMedicalCertificateDTO,
+                )
+                dto = SaveMedicalCertificateDTO(
+                    patient_id=self.patient_id_param,
+                    issue_date=date.fromisoformat(self.cert_form_date),
+                    conclusion=self.cert_form_conclusion.strip(),
+                    is_fit_for_work=self.cert_form_is_fit_for_work,
+                    restrictions=self.cert_form_restrictions.strip() or None,
+                    certificate_type=self.cert_form_type,
+                    start_date=self.cert_form_start_date or None,
+                    end_date=self.cert_form_end_date or None,
+                    return_date=self.cert_form_return_date or None,
+                    visit_subtype=self.cert_form_visit_subtype.strip() or None,
+                    accident_date=self.cert_form_accident_date or None,
+                    body_part=self.cert_form_body_part.strip() or None,
+                    exposure_type=self.cert_form_exposure_type.strip() or None,
+                    vaccine_name=self.cert_form_vaccine_name.strip() or None,
+                    vaccine_lot=self.cert_form_vaccine_lot.strip() or None,
+                    next_booster=self.cert_form_next_booster or None,
+                )
+                MedicalCertificateService.create_certificate(dto, issued_by=user)
+            self.show_certificate_dialog = False
+            await self._load_certificates()
+        except Exception as e:
+            self.cert_form_error = f"Erreur : {e}"
+        finally:
+            self.is_saving_certificate = False
+
+    @rx.event
+    async def download_certificate_pdf(self, certificate_id: str):
+        """Generate and stream the certificate PDF to the browser."""
+        try:
+            with await self.authenticate_user():
+                from gws_care.pdf import generate_certificate_pdf
+                pdf_bytes = generate_certificate_pdf(certificate_id)
+            import base64
+            b64 = base64.b64encode(pdf_bytes).decode()
+            yield rx.call_script(
+                f"const a=document.createElement('a');a.href='data:application/pdf;base64,{b64}';"
+                f"a.download='certificat_{certificate_id[:8]}.pdf';a.click();"
+            )
+        except Exception as e:
+            self.error_message = f"PDF error: {e}"
+
+    @rx.event
+    async def delete_certificate(self, certificate_id: str):
+        """Delete a medical certificate."""
+        try:
+            with await self.authenticate_user():
+                from gws_care.certificate.medical_certificate import MedicalCertificateService
+                MedicalCertificateService.delete(certificate_id)
+            await self._load_certificates()
+        except Exception as e:
+            self.error_message = f"Delete error: {e}"
+
+    async def _load_certificates(self):
+        """Load the certificates list for the current patient."""
+        patient_id = self.patient_id_param
+        if not patient_id:
+            return
+        try:
+            with await self.authenticate_user():
+                from gws_care.certificate.medical_certificate import (
+                    CERTIFICATE_TYPES,
+                    MedicalCertificateService,
+                )
+                rows = MedicalCertificateService.list_for_patient(patient_id, include_archived=True)
+                issued_by_cache: dict = {}
+
+                def _get_issued_by(cert) -> str:
+                    if not cert.issued_by_id:
+                        return ""
+                    uid = str(cert.issued_by_id)
+                    if uid not in issued_by_cache:
+                        try:
+                            from gws_care.user.user import User
+                            u = User.get_by_id(uid)
+                            issued_by_cache[uid] = f"Dr. {u.first_name} {u.last_name}"
+                        except Exception:
+                            issued_by_cache[uid] = ""
+                    return issued_by_cache[uid]
+
+                self.certificates = [
+                    CertificateRowDTO(
+                        id=str(c.id),
+                        issue_date=c.issue_date.isoformat() if c.issue_date else "",
+                        certificate_type=c.certificate_type or "APTITUDE",
+                        certificate_type_label=CERTIFICATE_TYPES.get(
+                            c.certificate_type or "APTITUDE", c.certificate_type or ""
+                        ),
+                        conclusion=c.conclusion or "",
+                        is_fit_for_work=c.is_fit_for_work,
+                        issued_by_name=_get_issued_by(c),
+                        is_archived=bool(c.is_archived),
+                    )
+                    for c in rows
+                ]
+        except Exception as e:
+            self.error_message = f"Error loading certificates: {e}"

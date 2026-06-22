@@ -234,7 +234,8 @@ class TestBulkImportService(BaseTestCase):
         self.assertEqual(created.date_of_birth, date(1990, 6, 1))
         self.assertEqual(created.gender, "M")
         self.assertEqual(created.city, "Paris")
-        self.assertIsNone(created.billing_account_id)
+        from gws_care.patient.patient_account import PatientAccount
+        self.assertEqual(PatientAccount.select().where(PatientAccount.patient == created.id).count(), 0)
 
     def test_import_patient_row_links_account_by_name(self):
         """When account_name matches an existing account, the patient is linked."""
@@ -262,7 +263,12 @@ class TestBulkImportService(BaseTestCase):
 
         created = Patient.get_or_none(Patient.last_name == "LINKED")
         self.assertIsNotNone(created)
-        self.assertEqual(str(created.billing_account_id), str(account.id))
+        from gws_care.patient.patient_account import PatientAccount
+        link = PatientAccount.get_or_none(
+            (PatientAccount.patient == created.id)
+            & (PatientAccount.account == account.id)
+        )
+        self.assertIsNotNone(link)
 
     def test_import_patient_row_unknown_account_name_is_ignored(self):
         """An account_name that doesn't match any record → patient created without account."""
@@ -281,7 +287,8 @@ class TestBulkImportService(BaseTestCase):
 
         created = Patient.get_or_none(Patient.last_name == "NOACCOUNT")
         self.assertIsNotNone(created)
-        self.assertIsNone(created.billing_account_id)
+        from gws_care.patient.patient_account import PatientAccount
+        self.assertEqual(PatientAccount.select().where(PatientAccount.patient == created.id).count(), 0)
 
     def test_import_patient_row_service_validates_data(self):
         """Passing an invalid gender through import_patient_row raises an exception."""
@@ -587,8 +594,8 @@ class TestBulkImportService(BaseTestCase):
 
     # ── Duplicate accounts ────────────────────────────────────────────────────
 
-    def test_import_two_accounts_same_name_creates_two_records(self):
-        """The service does not deduplicate; two rows produce two DB records."""
+    def test_import_two_accounts_same_name_skips_duplicate(self):
+        """Importing the same account name twice creates only one DB record."""
         row = {
             "name": "Duplicate Corp", "registration_number": "", "address": "",
             "postal_code": "", "city": "", "phone": "", "email": "", "contact_name": "",
@@ -597,7 +604,7 @@ class TestBulkImportService(BaseTestCase):
         BulkImportService.import_account_row(row)
 
         count = Account.select().where(Account.name == "Duplicate Corp").count()
-        self.assertEqual(count, 2)
+        self.assertEqual(count, 1)
 
     # ── End-to-end: accounts then patients ────────────────────────────────────
 
@@ -622,7 +629,12 @@ class TestBulkImportService(BaseTestCase):
         account = Account.get_or_none(Account.name == "E2E Company")
         self.assertIsNotNone(patient)
         self.assertIsNotNone(account)
-        self.assertEqual(str(patient.billing_account_id), str(account.id))
+        from gws_care.patient.patient_account import PatientAccount
+        link = PatientAccount.get_or_none(
+            (PatientAccount.patient == patient.id)
+            & (PatientAccount.account == account.id)
+        )
+        self.assertIsNotNone(link)
 
     # ── row_data immutability ─────────────────────────────────────────────────
 

@@ -1,362 +1,340 @@
-"""Campaigns list page — all campaigns with search/filter."""
+"""State for the campaign list page."""
 
 import reflex as rx
-from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
 
+from ..common.account_picker_state import AccountPickerRowDTO, AccountPickerState
 
-class CampaignListRowDTO(BaseModel):
+
+class CampaignRowStateDTO(BaseModel):
+    """Campaign row for list display."""
+
     id: str
+    campaign_number: str
     name: str
-    company_name: str
-    status: str
-    status_label: str
-    status_color: str
+    account_name: str = ""
+    account_id: str = ""
     start_date: str
     end_date: str
-    location: str
-    patient_count: int
-    psc_doctor_name: str
+    status: str
+    status_label: str
+    patient_count: int = 0
+    exam_type_count: int = 0
 
 
-class CompanyOption(BaseModel):
-    id: str
-    name: str
+class CampaignFormPickerState(AccountPickerState):
+    """Sibling account picker for the create-program form.
+
+    Fully self-contained: stores the confirmed form account in its own vars.
+    ProgramListState.save_program reads them via get_state(ProgramFormPickerState).
+    """
+
+    # ── Account picker vars (declared here for independent state storage) ─────
+    acct_picker_is_open: bool = False
+    acct_picker_filter: str = ""
+    acct_picker_accounts: list[AccountPickerRowDTO] = []
+    acct_picker_is_loading: bool = False
+    acct_picker_error: str = ""
+    acct_picker_selected_id: str = ""
+    acct_picker_selected_name: str = ""
+
+    # Form account result — written by _on_account_picked on self
+    form_account_id: str = ""
+    form_account_name: str = ""
+
+    async def _on_account_picked(self, account_id: str) -> None:
+        """Store confirmed selection in own vars — no cross-sibling write needed."""
+        self.form_account_id = account_id
+        self.form_account_name = self.acct_picker_selected_name
+
+    # ── Account picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_account_picker(self):
+        await self._open_account_picker()
+
+    @rx.event
+    def close_account_picker(self):
+        self.acct_picker_is_open = False
+
+    @rx.event
+    async def acct_picker_set_filter(self, value: str):
+        await self._acct_picker_set_filter(value)
+
+    @rx.event
+    async def acct_picker_confirm(self, account_id: str, name: str):
+        await self._acct_picker_confirm(account_id, name)
+
+    @rx.event
+    async def acct_picker_clear(self):
+        await self._acct_picker_clear()
+
+    @rx.event
+    def clear_form_account(self):
+        self.form_account_id = ""
+        self.form_account_name = ""
+        self.acct_picker_selected_id = ""
+        self.acct_picker_selected_name = ""
+
+    @rx.event
+    def reset_form_picker(self):
+        self.form_account_id = ""
+        self.form_account_name = ""
+        self.acct_picker_selected_id = ""
+        self.acct_picker_selected_name = ""
+        self.acct_picker_filter = ""
+        self.acct_picker_accounts = []
+        self.acct_picker_is_open = False
+
+    @rx.event
+    async def load_accounts(self):
+        """Load the account list into the inline picker without opening a dialog."""
+        self.acct_picker_filter = ""
+        self.acct_picker_error = ""
+        await self._run_acct_picker_search()
 
 
-class ExamTypeOption(BaseModel):
-    id: str
-    name: str
-    category_label: str
+class CampaignListState(AccountPickerState):
+    """State for the /programs page."""
 
+    # ── Account picker vars (declared here for independent state storage) ─────
+    acct_picker_is_open: bool = False
+    acct_picker_filter: str = ""
+    acct_picker_accounts: list[AccountPickerRowDTO] = []
+    acct_picker_is_loading: bool = False
+    acct_picker_error: str = ""
+    acct_picker_selected_id: str = ""
+    acct_picker_selected_name: str = ""
 
-class CampaignListState(ReflexMainState):
-    campaigns: list[CampaignListRowDTO] = []
+    programs: list[CampaignRowStateDTO] = []
     is_loading: bool = False
-    error: str = ""
-    search: str = ""
+    is_loading_more: bool = False
+    has_more: bool = False
+    error_message: str = ""
+
+    _page_offset: int = 0
+    _current_page_size: int = 50
+
+    # Filters
+    filter_account_id: str = ""
     filter_status: str = "ALL"
-    company_options: list[CompanyOption] = []
+    search_name: str = ""
 
-    # ── Pagination ───────────────────────────────────────────────────────
-    page: int = 1
-    page_size: int = 50
-    total_count: int = 0
+    # Sorting
+    sort_column: str = "start_date"
+    sort_ascending: bool = False
 
-    @rx.var
-    def total_pages(self) -> int:
-        return max(1, (self.total_count + self.page_size - 1) // self.page_size)
+    # Create dialog
+    create_dialog_open: bool = False
+    form_name: str = ""
+    form_start_date: str = ""
+    form_end_date: str = ""
+    form_notes: str = ""
+    is_saving: bool = False
+    form_error: str = ""
 
-    @rx.var
-    def has_prev_page(self) -> bool:
-        return self.page > 1
+    # ── Account picker events ─────────────────────────────────────────────────────
 
-    @rx.var
-    def has_next_page(self) -> bool:
-        return self.page < self.total_pages
+    @rx.event
+    async def open_account_picker(self):
+        await self._open_account_picker()
 
-    # ── Confirm archivage campagne ───────────────────────────────────────
-    confirm_archive_open: bool = False
-    confirm_archive_id: str = ""
-    confirm_archive_name: str = ""
+    @rx.event
+    def close_account_picker(self):
+        self.acct_picker_is_open = False
 
-    # ── Nouvelle campagne dialog ──────────────────────────────────────────
-    show_create_dialog: bool = False
-    create_name: str = ""
-    create_company_id: str = ""
-    create_start_date: str = ""
-    create_end_date: str = ""
-    create_location: str = ""
-    create_notes: str = ""
-    create_error: str = ""
-    is_creating: bool = False
-    exam_type_options: list[ExamTypeOption] = []
-    create_selected_exams: list[ExamTypeOption] = []
-    create_add_exam_select: str = ""  # valeur du dropdown, remise à vide après chaque ajout
+    @rx.event
+    async def acct_picker_set_filter(self, value: str):
+        await self._acct_picker_set_filter(value)
+
+    @rx.event
+    async def acct_picker_confirm(self, account_id: str, name: str):
+        await self._acct_picker_confirm(account_id, name)
+
+    @rx.event
+    async def acct_picker_clear(self):
+        await self._acct_picker_clear()
 
     @rx.event
     async def on_load(self):
-        await self._load()
+        await self._load_roles()
+        redirect = await self._require_any_of(self.is_operator, self.is_doctor, self.is_admin)
+        if redirect:
+            return redirect
+        await self._load_programs()
+
+    async def _on_account_picked(self, account_id: str) -> None:
+        self.filter_account_id = account_id
+        await self._load_programs()
 
     @rx.event
-    async def set_search(self, v: str):
-        self.search = v
-        self.page = 1
-        await self._load()
+    async def set_filter_account(self, value: str):
+        self.filter_account_id = value if value != "ALL" else ""
+        await self._load_programs()
 
     @rx.event
-    async def set_filter_status(self, v: str):
-        self.filter_status = v
-        self.page = 1
-        await self._load()
+    async def set_filter_status(self, value: str):
+        self.filter_status = value
+        await self._load_programs()
 
     @rx.event
-    async def prev_page(self):
-        if self.has_prev_page:
-            self.page -= 1
-            await self._load()
+    async def set_search_name(self, value: str):
+        self.search_name = value
+        await self._load_programs()
 
     @rx.event
-    async def next_page(self):
-        if self.has_next_page:
-            self.page += 1
-            await self._load()
+    async def set_sort(self, column: str):
+        """Sort by column; toggle direction if already sorted by the same column."""
+        if self.sort_column == column:
+            self.sort_ascending = not self.sort_ascending
+        else:
+            self.sort_column = column
+            self.sort_ascending = True
+        await self._load_programs()
 
     @rx.event
     def go_to_campaign(self, campaign_id: str):
         return rx.redirect(f"/campaign/{campaign_id}")
 
-    # ── Dialog open / close ───────────────────────────────────────────────
     @rx.event
-    async def go_to_create(self):
-        self.create_name = ""
-        self.create_company_id = ""
-        self.create_start_date = ""
-        self.create_end_date = ""
-        self.create_location = ""
-        self.create_notes = ""
-        self.create_error = ""
-        self.create_selected_exams = []
-        self.create_add_exam_select = ""
-        self.show_create_dialog = True
-        # Charger le référentiel d'examens actifs + entreprises
+    async def archive_campaign(self, campaign_id: str):
         try:
             with await self.authenticate_user():
-                from gws_care.company.company import Company
-                from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
-                refs = (
-                    ExamTypeRef.select()
-                    .where(ExamTypeRef.is_active == True)
-                    .order_by(ExamTypeRef.category, ExamTypeRef.name)
-                )
-                self.exam_type_options = [
-                    ExamTypeOption(
-                        id=str(r.id),
-                        name=r.name,
-                        category_label=r.get_category_label(),
-                    )
-                    for r in refs
-                ]
-                companies = Company.select().where(Company.is_active == True).order_by(Company.name)
-                self.company_options = [
-                    CompanyOption(id=str(c.id), name=c.name) for c in companies
-                ]
-        except Exception as exc:
-            self.exam_type_options = []
-            self.company_options = []
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.archive_campaign(campaign_id)
+            await self._load_programs()
+        except Exception as e:
+            self.error_message = str(e)
+
+    @rx.event
+    async def load_more_programs(self):
+        """Append the next page of programs to the current list."""
+        self.is_loading_more = True
+        await self._load_programs(reset=False)
+
+    # ── Create dialog ─────────────────────────────────────────────────────────
+
+    @rx.event
+    def open_create_dialog(self):
+        self.create_dialog_open = True
+        self.form_name = ""
+        self.form_start_date = ""
+        self.form_end_date = ""
+        self.form_notes = ""
+        self.form_error = ""
+        yield CampaignFormPickerState.reset_form_picker
+        yield CampaignFormPickerState.load_accounts
 
     @rx.event
     def close_create_dialog(self):
-        self.show_create_dialog = False
-        self.create_error = ""
+        self.create_dialog_open = False
+        self.form_error = ""
 
     @rx.event
-    def add_exam_to_campaign(self, exam_id: str):
-        """Ajoute un type d'examen depuis la liste déroulante (ignore les doublons)."""
-        self.create_add_exam_select = ""  # remet le dropdown sur le placeholder
-        if not exam_id:
-            return
-        if any(e.id == exam_id for e in self.create_selected_exams):
-            return
-        opt = next((o for o in self.exam_type_options if o.id == exam_id), None)
-        if opt:
-            self.create_selected_exams = self.create_selected_exams + [opt]
+    def set_form_name(self, value: str):
+        self.form_name = value
 
     @rx.event
-    def remove_exam_from_campaign(self, exam_id: str):
-        """Retire un type d'examen de la sélection."""
-        self.create_selected_exams = [
-            e for e in self.create_selected_exams if e.id != exam_id
-        ]
+    def set_form_start_date(self, value: str):
+        self.form_start_date = value
 
     @rx.event
-    def set_create_name(self, v: str): self.create_name = v
-    @rx.event
-    def set_create_company_id(self, v: str): self.create_company_id = v
-    @rx.event
-    def set_create_start_date(self, v: str): self.create_start_date = v
-    @rx.event
-    def set_create_end_date(self, v: str): self.create_end_date = v
-    @rx.event
-    def set_create_location(self, v: str): self.create_location = v
-    @rx.event
-    def set_create_notes(self, v: str): self.create_notes = v
+    def set_form_end_date(self, value: str):
+        self.form_end_date = value
 
     @rx.event
-    async def submit_create(self):
-        self.create_error = ""
-        if not self.create_name.strip():
-            self.create_error = "Le nom est obligatoire."
+    def set_form_notes(self, value: str):
+        self.form_notes = value
+
+    @rx.event
+    async def save_program(self):
+        form_picker = await self.get_state(CampaignFormPickerState)
+        form_account_id = form_picker.form_account_id
+        if not self.form_name.strip() or not form_account_id or not self.form_start_date or not self.form_end_date:
+            self.form_error = "Veuillez remplir tous les champs obligatoires."
             return
-        if not self.create_company_id:
-            self.create_error = "L'entreprise est obligatoire."
-            return
-        self.is_creating = True
+        self.is_saving = True
+        self.form_error = ""
         try:
             with await self.authenticate_user():
-                from datetime import date as date_type
+                from gws_care.campaign.campaign_dto import SaveCampaignDTO
                 from gws_care.campaign.campaign_service import CampaignService
-
-                def _parse_date(s: str) -> date_type | None:
-                    try:
-                        return date_type.fromisoformat(s) if s else None
-                    except ValueError:
-                        return None
-
-                campaign = CampaignService.create_campaign(
-                    name=self.create_name.strip(),
-                    company_id=self.create_company_id,
-                    start_date=_parse_date(self.create_start_date),
-                    end_date=_parse_date(self.create_end_date),
-                    location=self.create_location.strip() or None,
-                    notes=self.create_notes.strip() or None,
+                dto = SaveCampaignDTO(
+                    name=self.form_name.strip(),
+                    account_id=form_account_id,
+                    start_date=self.form_start_date,
+                    end_date=self.form_end_date,
+                    notes=self.form_notes or None,
                 )
-                # Lier les types d'examens sélectionnés depuis le référentiel
-                if self.create_selected_exams:
-                    from gws_care.campaign.campaign_exam import CampaignExam
-                    from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
-                    for exam in self.create_selected_exams:
-                        try:
-                            exam_ref = ExamTypeRef.get_by_id_and_check(exam.id)
-                            ce = CampaignExam()
-                            ce.campaign = campaign
-                            ce.exam_type_ref = exam_ref
-                            ce.save()
-                        except Exception as exc:
-                            pass
-                self.show_create_dialog = False
-                return rx.redirect(f"/campaign/{campaign.id}")
+                program = CampaignService.create_campaign(dto)
+            self.create_dialog_open = False
+            await self._load_programs()
+            return rx.redirect(f"/campaign/{program.id}")
         except Exception as e:
-            self.create_error = str(e)
+            self.form_error = str(e)
         finally:
-            self.is_creating = False
+            self.is_saving = False
 
-    # ── Confirm archivage ────────────────────────────────────────────────
-    @rx.event
-    def open_confirm_archive(self, campaign_id: str, campaign_name: str):
-        self.confirm_archive_id = campaign_id
-        self.confirm_archive_name = campaign_name
-        self.confirm_archive_open = True
+    # ── Internal loaders ──────────────────────────────────────────────────────
 
-    @rx.event
-    def dismiss_confirm_archive(self):
-        self.confirm_archive_open = False
-        self.confirm_archive_id = ""
-        self.confirm_archive_name = ""
-
-    @rx.event
-    async def confirmed_archive(self):
-        campaign_id = self.confirm_archive_id
-        self.confirm_archive_open = False
-        self.confirm_archive_id = ""
-        self.confirm_archive_name = ""
-        try:
-            with await self.authenticate_user():
-                from gws_care.campaign.campaign_service import CampaignService
-                CampaignService.archive(campaign_id)
-            await self._load()
-        except Exception as e:
-            self.error = str(e)
-
-    async def _load(self):
+    async def _load_programs(self, reset: bool = True):
         if not await self.check_authentication():
             return
-        self.is_loading = True
+        if reset:
+            self._page_offset = 0
+            self.is_loading = True
+            from gws_care.core.care_app_config_service import CareAppConfigService
+            self._current_page_size = CareAppConfigService.get_page_size()
+        self.error_message = ""
         try:
             with await self.authenticate_user():
-                from peewee import fn
-                from gws_care.campaign.campaign_patient import CampaignPatient
                 from gws_care.campaign.campaign_service import CampaignService
                 from gws_care.campaign.campaign_status import CampaignStatus
 
-                status_val = self.filter_status if self.filter_status not in ("", "ALL") else None
-
-                # Count total (for pagination)
-                self.total_count = CampaignService.count_all_campaigns(
-                    status=status_val,
-                    search=self.search.strip(),
-                )
-                # Clamp page to valid range
-                self.page = max(1, min(self.page, self.total_pages))
-
-                campaigns = CampaignService.list_all_campaigns(
-                    status=status_val,
-                    search=self.search.strip(),
-                    limit=self.page_size,
-                    offset=(self.page - 1) * self.page_size,
-                )
-
-                # Pre-aggregate patient counts in one GROUP BY (avoids N+1)
-                camp_ids = [str(c.id) for c in campaigns]
-                patient_counts: dict[str, int] = {}
-                if camp_ids:
-                    for row in (
-                        CampaignPatient.select(
-                            CampaignPatient.campaign,
-                            fn.COUNT(CampaignPatient.id).alias("cnt"),
-                        )
-                        .where(CampaignPatient.campaign.in_(camp_ids))
-                        .group_by(CampaignPatient.campaign)
-                        .namedtuples()
-                    ):
-                        patient_counts[str(row.campaign)] = row.cnt
-
-                # Pre-load psc_doctor / company / account names (avoids N+1 in loop)
-                from gws_care.user.user import User as UserModel
-                from gws_care.company.company import Company
-                from gws_care.account.account import Account
-
-                psc_ids = [c.psc_doctor_id for c in campaigns if c.psc_doctor_id]
-                psc_names: dict[str, str] = {}
-                if psc_ids:
-                    for u in UserModel.select(UserModel.id, UserModel.first_name, UserModel.last_name).where(UserModel.id.in_(psc_ids)):
-                        psc_names[str(u.id)] = f"{u.first_name} {u.last_name}".strip()
-
-                company_ids = [c.company_id for c in campaigns if c.company_id]
-                company_label: dict[str, str] = {}
-                if company_ids:
-                    for co in Company.select(Company.id, Company.name).where(Company.id.in_(company_ids)):
-                        company_label[str(co.id)] = co.name
-
-                account_ids = [c.account_id for c in campaigns if c.account_id and not c.company_id]
-                account_label: dict[str, str] = {}
-                if account_ids:
-                    for ac in Account.select(Account.id, Account.name).where(Account.id.in_(account_ids)):
-                        account_label[str(ac.id)] = ac.name
-
-                rows = []
-                for c in campaigns:
+                status_filter = None
+                if self.filter_status != "ALL":
                     try:
-                        status_e = CampaignStatus(c.status)
+                        status_filter = CampaignStatus(self.filter_status)
                     except ValueError:
-                        status_e = CampaignStatus.DRAFT
-                    psc_name = psc_names.get(str(c.psc_doctor_id), "") if c.psc_doctor_id else ""
-                    company_name = (
-                        company_label.get(str(c.company_id), "")
-                        if c.company_id
-                        else account_label.get(str(c.account_id), "")
-                    )
-                    rows.append(CampaignListRowDTO(
+                        pass
+
+                programs = CampaignService.list_campaigns(
+                    account_id=self.filter_account_id or None,
+                    status=status_filter,
+                    search=self.search_name,
+                    limit=self._current_page_size + 1,
+                    offset=self._page_offset,
+                )
+                has_more = len(programs) > self._current_page_size
+                programs = programs[:self._current_page_size]
+                new_rows = [
+                    CampaignRowStateDTO(
                         id=str(c.id),
+                        campaign_number=c.campaign_number,
                         name=c.name,
-                        company_name=company_name,
-                        status=c.status,
-                        status_label=status_e.get_label(),
-                        status_color=status_e.get_color(),
-                        start_date=c.start_date.isoformat() if c.start_date else "",
-                        end_date=c.end_date.isoformat() if c.end_date else "",
-                        location=c.location or "",
-                        patient_count=patient_counts.get(str(c.id), 0),
-                        psc_doctor_name=psc_name,
-                    ))
-                self.campaigns = rows
-                # load company options (for create dialog if already open)
-                from gws_care.company.company import Company
-                companies = Company.select().where(Company.is_active == True).order_by(Company.name)
-                self.company_options = [
-                    CompanyOption(id=str(co.id), name=co.name) for co in companies
+                        account_name=c.account.name if c.account_id else "",
+                        account_id=str(c.account_id) if c.account_id else "",
+                        start_date=str(c.start_date),
+                        end_date=str(c.end_date),
+                        status=c.status.value,
+                        status_label=c.status.get_label(),
+                        patient_count=CampaignService.to_row_dto(c).patient_count,
+                        exam_type_count=CampaignService.to_row_dto(c).exam_type_count,
+                    )
+                    for c in programs
                 ]
+                sort_col = self.sort_column
+                all_rows = new_rows if reset else self.programs + new_rows
+                self.programs = sorted(
+                    all_rows,
+                    key=lambda row: (getattr(row, sort_col) or "").lower(),
+                    reverse=not self.sort_ascending,
+                )
+                self.has_more = has_more
+                self._page_offset += self._current_page_size
         except Exception as e:
-            self.error = str(e)
+            self.error_message = str(e)
         finally:
             self.is_loading = False
+            self.is_loading_more = False
+

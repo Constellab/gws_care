@@ -34,15 +34,9 @@ class ExamDTO(ModelDTO):
     blood_pressure: str | None = None
     heart_rate: float | None = None
     temperature: float | None = None
-    conclusion: str | None = None
-    lab_results: list[dict] = []
-    requested_param_ids: list[str] = []
-    prescribed_exam_ref_ids: list[str] = []  # follow-up exams prescribed by doctor
-    follow_up_exam_ids: list[str] = []         # Exam.id list of actual follow-up Exam records created
-    is_follow_up: bool = False                 # True when exam was created as a follow-up prescription
     interpretation: str | None = None
+    lab_results: list[dict] = []
     interpreted_by_id: str | None = None
-    consultation_id: str = ""   # non-empty when this exam belongs to a Consultation
 
 
 class ExamRowDTO(BaseModelDTO):
@@ -59,11 +53,10 @@ class SaveExamDTO(BaseModelDTO):
     """DTO for creating / updating an exam session."""
 
     patient_id: str
+    visit_id: str | None = None
     account_id: str | None = None
     exam_date: date
-    exam_type: ExamType = ExamType.OTHER   # kept for backward-compat; use exam_type_ref_id for new records
-    exam_type_ref_id: str | None = None    # ExamTypeRef.id — set by forms using the referential
-    requested_param_ids: list[str] = []    # ExamParameter.id list — tests requested by doctor
+    exam_type: ExamType
     reason_for_visit: str | None = None
     medical_history: str | None = None
     weight: float | None = None
@@ -72,7 +65,6 @@ class SaveExamDTO(BaseModelDTO):
     blood_pressure: str | None = None
     heart_rate: float | None = None
     temperature: float | None = None
-    conclusion: str | None = None
 
 
 class UpdateExamSectionsDTO(BaseModelDTO):
@@ -86,10 +78,7 @@ class UpdateExamSectionsDTO(BaseModelDTO):
     blood_pressure: str | None = None
     heart_rate: float | None = None
     temperature: float | None = None
-    conclusion: str | None = None
     lab_results: list[dict] | None = None
-    prescribed_exam_ref_ids: list[str] | None = None  # follow-up exams prescribed by doctor
-    follow_up_exam_ids: list[str] | None = None         # Exam.id list of actual follow-up records
 
 
 class InterpretExamDTO(BaseModelDTO):

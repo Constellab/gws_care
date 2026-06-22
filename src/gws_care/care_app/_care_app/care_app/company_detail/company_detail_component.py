@@ -1,23 +1,15 @@
-"""Company detail page — shows company info, its campaigns, billing accounts and its patients."""
+"""Company detail page — shows company info and its patients."""
 
 import reflex as rx
 from gws_reflex_main import main_component
 
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
-from ..company_list.company_form_component import company_form_dialog
-from ..company_list.company_form_state import CompanyFormState
 from ..patient_list.patient_form_component import patient_form_dialog
 from ..patient_list.patient_form_state import PatientFormState
-from ..patient_list.patient_delete_component import patient_delete_dialog
-from ..patient_list.patient_delete_state import PatientDeleteState
-from ..account_list.account_form_component import account_form_dialog
-from ..account_list.account_form_state import AccountFormState
 from .company_detail_state import (
-    CompanyAccountRowDTO,
     CompanyDetailDTO,
     CompanyDetailState,
-    CompanyCampaignRowDTO,
     CompanyPatientRowDTO,
 )
 
@@ -27,11 +19,12 @@ def _info_item(label: str, value: rx.Var) -> rx.Component:
         rx.text(label, size="1", color="var(--gray-9)", weight="medium"),
         rx.cond(
             value != "",
-            rx.text(value, size="2"),
+            rx.text(value, size="2", overflow_wrap="break-word", word_break="break-word"),
             rx.text("—", size="2", color="var(--gray-7)"),
         ),
         spacing="0",
         align_items="start",
+        min_width="0",
     )
 
 
@@ -46,17 +39,8 @@ def _company_info_card(company: CompanyDetailDTO) -> rx.Component:
                     rx.badge(LanguageState.tr["active_badge"], color_scheme="green", variant="soft", size="1"),
                     rx.badge(LanguageState.tr["inactive_badge"], color_scheme="gray", variant="soft", size="1"),
                 ),
-                rx.spacer(),
-                rx.button(
-                    rx.icon("pencil", size=14),
-                    LanguageState.tr["edit_btn"],
-                    variant="outline",
-                    size="2",
-                    on_click=CompanyFormState.open_edit_dialog(company.id),
-                ),
                 spacing="2",
                 align="center",
-                width="100%",
             ),
             rx.separator(width="100%"),
             rx.grid(
@@ -115,24 +99,10 @@ def _patient_row(p: CompanyPatientRowDTO) -> rx.Component:
                         rx.icon("unlink", size=14),
                         variant="ghost",
                         size="1",
-                        color_scheme="orange",
+                        color_scheme="red",
                         on_click=lambda: CompanyDetailState.remove_patient(p.id),
                     ),
-                    content=LanguageState.tr["tooltip_remove_from_company"],
-                ),
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("trash-2", size=14),
-                        variant="ghost",
-                        size="1",
-                        color_scheme="red",
-                        on_click=lambda: PatientDeleteState.open_delete_dialog(
-                            p.id,
-                            p.first_name + " " + p.last_name,
-                            "/company/" + CompanyDetailState.company.id,
-                        ),
-                    ),
-                    content=LanguageState.tr["tooltip_delete_patient"],
+                    content=LanguageState.tr["tooltip_remove_from_account"],
                 ),
                 spacing="1",
             )
@@ -148,7 +118,7 @@ def _assign_patient_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title(LanguageState.tr["assign_patient_dialog_title"]),
             rx.dialog.description(
-                LanguageState.tr["assign_company_patient_dialog_desc"],
+                LanguageState.tr["assign_patient_dialog_desc"],
                 size="2",
                 margin_bottom="1rem",
             ),
@@ -179,7 +149,7 @@ def _assign_patient_dialog() -> rx.Component:
                             rx.cond(
                                 CompanyDetailState.is_assigning,
                                 rx.spinner(size="2"),
-                                rx.text(LanguageState.tr["assign_btn"]),
+                                LanguageState.tr["assign_btn"],
                             ),
                             on_click=CompanyDetailState.confirm_assign,
                             disabled=(CompanyDetailState.assign_patient_id == "")
@@ -194,7 +164,7 @@ def _assign_patient_dialog() -> rx.Component:
                 ),
                 rx.vstack(
                     rx.text(
-                        LanguageState.tr["all_patients_assigned_company"],
+                        LanguageState.tr["all_patients_assigned"],
                         size="2",
                         color="var(--gray-9)",
                     ),
@@ -214,59 +184,6 @@ def _assign_patient_dialog() -> rx.Component:
             max_width="480px",
         ),
         open=CompanyDetailState.assign_dialog_open,
-    )
-
-
-def _campaign_row(c: CompanyCampaignRowDTO) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(
-            rx.link(c.name, href=rx.cond(c.id != "", "/campaign/" + c.id, "#"),
-                    size="2", weight="medium")
-        ),
-        rx.table.cell(
-            rx.badge(c.status_label, color_scheme=c.status_color, size="1", variant="soft")
-        ),
-        rx.table.cell(rx.text(c.patient_count.to_string() + " patients", size="2")),
-        rx.table.cell(rx.text(c.start_date, size="2")),
-        rx.table.cell(rx.text(c.end_date, size="2")),
-        style={":hover": {"background_color": "var(--gray-2)"}},
-    )
-
-
-def _campaigns_section() -> rx.Component:
-    return rx.vstack(
-        rx.hstack(
-            rx.heading("Campagnes", size="4"),
-            rx.spacer(),
-            rx.tooltip(
-                rx.icon("info", size=14, color="var(--gray-8)"),
-                content="Les campagnes de médecine du travail associées à cette entreprise. La facturation est gérée depuis le Compte de facturation lié.",
-            ),
-            width="100%", align="center",
-        ),
-        rx.separator(width="100%"),
-        rx.cond(
-            CompanyDetailState.campaigns.length() > 0,
-            rx.table.root(
-                rx.table.header(
-                    rx.table.row(
-                        rx.table.column_header_cell("Nom"),
-                        rx.table.column_header_cell("Statut"),
-                        rx.table.column_header_cell("Participants"),
-                        rx.table.column_header_cell("Début"),
-                        rx.table.column_header_cell("Fin"),
-                    )
-                ),
-                rx.table.body(rx.foreach(CompanyDetailState.campaigns, _campaign_row)),
-                width="100%", variant="surface", size="1",
-            ),
-            rx.callout(
-                "Aucune campagne pour cette entreprise. Créez une campagne depuis un Compte de facturation en lui associant cette entreprise.",
-                icon="info", color_scheme="blue", size="1",
-            ),
-        ),
-        width="100%",
-        spacing="3",
     )
 
 
@@ -297,130 +214,33 @@ def _patients_section() -> rx.Component:
         rx.separator(width="100%"),
         rx.cond(
             CompanyDetailState.patients.length() > 0,
-            rx.table.root(
-                rx.table.header(
-                    rx.table.row(
-                        rx.table.column_header_cell("N°"),
-                        rx.table.column_header_cell(LanguageState.tr["col_patient"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_gender"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_dob"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_city"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_phone"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_actions"]),
-                    )
+            rx.box(
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            rx.table.column_header_cell(LanguageState.tr["col_number"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_patient"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_gender"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_dob"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_city"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_phone"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_actions"]),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(CompanyDetailState.patients, _patient_row)
+                    ),
+                    width="100%",
+                    variant="surface",
                 ),
-                rx.table.body(
-                    rx.foreach(CompanyDetailState.patients, _patient_row)
-                ),
+                overflow_x="auto",
                 width="100%",
-                variant="surface",
             ),
             rx.center(
                 rx.text(
-                    LanguageState.tr["no_patients_in_company"],
+                    LanguageState.tr["no_patients_assigned"],
                     size="2",
                     color="var(--gray-9)",
-                ),
-                padding="2rem",
-            ),
-        ),
-        width="100%",
-        spacing="3",
-    )
-
-
-def _account_row(a: CompanyAccountRowDTO) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(rx.text(a.name, size="2", weight="medium")),
-        rx.table.cell(rx.text(a.registration_number, size="2", color="var(--gray-9)")),
-        rx.table.cell(rx.text(a.email, size="2", color="var(--gray-9)")),
-        rx.table.cell(
-            rx.cond(
-                a.is_active,
-                rx.badge("Actif", color_scheme="green", size="1", variant="soft"),
-                rx.badge("Inactif", color_scheme="gray", size="1", variant="soft"),
-            )
-        ),
-        rx.table.cell(
-            rx.tooltip(
-                rx.icon_button(
-                    rx.icon("arrow-right", size=14),
-                    variant="ghost", size="1", color_scheme="blue",
-                    on_click=lambda: CompanyDetailState.go_to_account(a.id),
-                ),
-                content="Voir le compte de facturation",
-            )
-        ),
-        style={":hover": {"background_color": "var(--gray-2)"}},
-    )
-
-
-def _billing_accounts_section() -> rx.Component:
-    """Section showing billing accounts linked to this company."""
-    return rx.vstack(
-        rx.hstack(
-            rx.icon("credit-card", size=16, color="var(--accent-9)"),
-            rx.heading("Comptes de facturation", size="4"),
-            rx.badge(
-                CompanyDetailState.billing_accounts.length().to_string(),
-                color_scheme="blue", variant="soft", size="1",
-            ),
-            rx.spacer(),
-            rx.tooltip(
-                rx.button(
-                    rx.icon("plus", size=14),
-                    "Créer un compte",
-                    size="2",
-                    on_click=CompanyDetailState.open_create_billing_account,
-                ),
-                content="Créer un compte de facturation lié \u00e0 cette entreprise",
-            ),
-            width="100%",
-            align="center",
-            spacing="2",
-        ),
-        rx.callout(
-            rx.hstack(
-                rx.icon("info", size=13),
-                rx.text(
-                    "Chaîne de facturation : Entreprise → Compte de facturation → Préfacturation → Facture. "
-                    "Un compte peut être lié à des campagnes et des préfacturations.",
-                    size="1",
-                ),
-                spacing="2",
-                align="center",
-            ),
-            color_scheme="blue",
-            size="1",
-            width="100%",
-        ),
-        rx.separator(width="100%"),
-        rx.cond(
-            CompanyDetailState.billing_accounts.length() > 0,
-            rx.table.root(
-                rx.table.header(
-                    rx.table.row(
-                        rx.table.column_header_cell("Nom du compte"),
-                        rx.table.column_header_cell("N° SIRET / Immatriculation"),
-                        rx.table.column_header_cell("Email de contact"),
-                        rx.table.column_header_cell("Statut"),
-                        rx.table.column_header_cell(""),
-                    )
-                ),
-                rx.table.body(
-                    rx.foreach(CompanyDetailState.billing_accounts, _account_row),
-                ),
-                width="100%",
-                variant="surface",
-            ),
-            rx.center(
-                rx.vstack(
-                    rx.icon("credit-card", size=28, color="var(--gray-5)"),
-                    rx.text(
-                        "Aucun compte de facturation. Cliquez sur \u00ab\u00a0Créer un compte\u00a0\u00bb pour en créer un.",
-                        size="2", color="var(--gray-8)", text_align="center",
-                    ),
-                    spacing="2", align="center",
                 ),
                 padding="2rem",
             ),
@@ -436,7 +256,7 @@ def company_detail_page() -> rx.Component:
         page_layout(
             rx.button(
                 rx.icon("arrow-left", size=16),
-                LanguageState.tr["back_to_companies"],
+                LanguageState.tr["btn_back"],
                 on_click=CompanyDetailState.go_back,
                 variant="ghost",
                 size="2",
@@ -456,8 +276,6 @@ def company_detail_page() -> rx.Component:
                     CompanyDetailState.company,
                     rx.vstack(
                         _company_info_card(CompanyDetailState.company),
-                        _billing_accounts_section(),
-                        _campaigns_section(),
                         _patients_section(),
                         width="100%",
                         spacing="5",
@@ -470,8 +288,5 @@ def company_detail_page() -> rx.Component:
             ),
             _assign_patient_dialog(),
             patient_form_dialog(),
-            patient_delete_dialog(),
-            company_form_dialog(),
-            account_form_dialog(),
         )
     )

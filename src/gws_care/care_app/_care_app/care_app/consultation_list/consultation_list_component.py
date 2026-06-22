@@ -1,244 +1,269 @@
-"""UI component for the consultations list page — Patient | Entreprise tabs."""
+"""Consultation list page component (/consultations)."""
 
 import reflex as rx
+from gws_reflex_main import main_component
 
+from ..common.empty_state_component import empty_state
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
-from .consultation_list_state import ConsultationListRowDTO, ConsultationListState
+from ..common.patient_picker_component import patient_picker_widget
+from .consultation_list_state import (
+    AccountOptionDTO,
+    ConsultationListState,
+    ConsultationRowDTO,
+    PatientAccountOption,
+)
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _status_chip(row: ConsultationListRowDTO) -> rx.Component:
-    return rx.cond(
-        row.has_conclusion,
-        rx.badge("Conclu", color_scheme="green", variant="soft", size="1"),
-        rx.badge("En cours", color_scheme="orange", variant="soft", size="1"),
-    )
-
-
-def _type_badge(row: ConsultationListRowDTO) -> rx.Component:
+def _status_badge(status: str) -> rx.Component:
     return rx.match(
-        row.consultation_type,
-        ("enterprise", rx.badge("Entreprise", color_scheme="blue", variant="soft", size="1")),
-        ("patient", rx.badge("Patient", color_scheme="violet", variant="soft", size="1")),
-        rx.badge(row.consultation_type, color_scheme="gray", variant="soft", size="1"),
+        status,
+        ("pending", rx.badge("En attente", color_scheme="gray", variant="soft", size="1")),
+        ("cancelled", rx.badge("Annulée", color_scheme="red", variant="soft", size="1")),
+        ("visit_done", rx.badge("Clôturée", color_scheme="green", variant="soft", size="1")),
+        rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
 
-# ── Table row ─────────────────────────────────────────────────────────────────
-
-def _consultation_row(row: ConsultationListRowDTO) -> rx.Component:
+def _consultation_row(row: ConsultationRowDTO) -> rx.Component:
     return rx.table.row(
         rx.table.cell(
-            rx.vstack(
-                rx.link(
-                    row.patient_name,
-                    href=f"/patient/{row.patient_id}",
-                    size="2",
-                    color="var(--accent-9)",
-                ),
-                rx.text(row.patient_number, size="1", color="var(--gray-9)"),
-                spacing="0",
+            rx.cond(
+                row.visit_number,
+                rx.text(row.visit_number, size="2", weight="medium"),
+                rx.text("—", size="2", color="var(--gray-7)"),
             )
         ),
-        rx.table.cell(rx.text(row.consultation_date, size="2")),
+        rx.table.cell(
+            rx.link(
+                row.patient_name,
+                on_click=lambda: ConsultationListState.go_to_patient(row.patient_id),
+                cursor="pointer",
+                size="2",
+            )
+        ),
         rx.table.cell(
             rx.cond(
-                row.reason_for_visit != "",
-                rx.text(
-                    row.reason_for_visit,
-                    size="2",
-                    max_width="240px",
-                    overflow="hidden",
-                    text_overflow="ellipsis",
-                    white_space="nowrap",
-                ),
+                row.account_name,
+                rx.text(row.account_name, size="2"),
                 rx.text("—", size="2", color="var(--gray-7)"),
             )
         ),
         rx.table.cell(
             rx.cond(
-                row.billing_account_name != "",
-                rx.text(row.billing_account_name, size="2"),
+                row.scheduled_at,
+                rx.text(row.scheduled_at[:10], size="2"),
                 rx.text("—", size="2", color="var(--gray-7)"),
             )
         ),
+        rx.table.cell(_status_badge(row.status)),
         rx.table.cell(
-            rx.badge(
-                row.exam_count.to_string(),
-                " examen(s)",
-                color_scheme="blue",
-                variant="soft",
-                size="1",
+            rx.cond(
+                row.exam_count > 0,
+                rx.badge(row.exam_count, color_scheme="blue", variant="soft", size="1"),
+                rx.text("—", size="2", color="var(--gray-7)"),
             )
         ),
-        rx.table.cell(_status_chip(row)),
-        rx.table.cell(
-            rx.icon_button(
-                rx.icon("arrow-right", size=14),
-                variant="ghost",
-                size="1",
-                color_scheme="gray",
-                on_click=rx.redirect(f"/patient/{row.patient_id}"),
-            )
-        ),
-        _hover={"background": "var(--gray-2)"},
+        style={":hover": {"background_color": "var(--gray-2)", "cursor": "pointer"}},
+        on_click=lambda: ConsultationListState.go_to_consultation(row.id),
     )
 
 
-# ── Table ─────────────────────────────────────────────────────────────────────
+def _account_option(account: AccountOptionDTO) -> rx.Component:
+    return rx.select.item(account.name, value=account.id)
+
+
+def _patient_account_option(option: PatientAccountOption) -> rx.Component:
+    return rx.select.item(option.name, value=option.id)
+
+
+def _new_consultation_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Nouvelle consultation"),
+            rx.vstack(
+                rx.vstack(
+                    rx.text("Patient *", size="2", weight="medium"),
+                    patient_picker_widget(ConsultationListState),
+                    spacing="1",
+                    width="100%",
+                ),
+                rx.vstack(
+                    rx.text("Date prévue", size="2", weight="medium"),
+                    rx.input(
+                        type="date",
+                        value=ConsultationListState.new_scheduled_at,
+                        on_change=ConsultationListState.set_new_scheduled_at,
+                        size="2",
+                        width="100%",
+                    ),
+                    spacing="1",
+                    width="100%",
+                ),
+                rx.cond(
+                    ConsultationListState.new_patient_accounts.length() > 0,
+                    rx.vstack(
+                        rx.text("Compte de facturation", size="2", weight="medium"),
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Sélectionner un compte"),
+                            rx.select.content(
+                                rx.foreach(
+                                    ConsultationListState.new_patient_accounts,
+                                    _patient_account_option,
+                                )
+                            ),
+                            value=ConsultationListState.new_account_id,
+                            on_change=ConsultationListState.set_new_account_id,
+                            size="2",
+                            width="100%",
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                ),
+                rx.cond(
+                    ConsultationListState.new_error != "",
+                    rx.callout.root(
+                        rx.callout.icon(rx.icon("circle-alert", size=16)),
+                        rx.callout.text(ConsultationListState.new_error),
+                        color_scheme="red",
+                        size="1",
+                    ),
+                ),
+                rx.hstack(
+                    rx.dialog.close(
+                        rx.button("Annuler", variant="soft", color_scheme="gray", size="2"),
+                    ),
+                    rx.button(
+                        "Créer",
+                        on_click=ConsultationListState.save_new_consultation,
+                        loading=ConsultationListState.new_is_saving,
+                        size="2",
+                    ),
+                    spacing="2",
+                    justify="end",
+                    width="100%",
+                ),
+                spacing="4",
+                width="100%",
+            ),
+            max_width="480px",
+            on_interact_outside=ConsultationListState.close_new_dialog,
+            on_escape_key_down=ConsultationListState.close_new_dialog,
+        ),
+        open=ConsultationListState.show_new_dialog,
+    )
+
+
+def _filters_bar() -> rx.Component:
+    return rx.hstack(
+        rx.input(
+            placeholder="Rechercher un patient…",
+            value=ConsultationListState.search,
+            on_change=ConsultationListState.set_search,
+            size="2",
+            width="220px",
+        ),
+        rx.select.root(
+            rx.select.trigger(placeholder="Statut"),
+            rx.select.content(
+                rx.select.item("Tous les statuts", value="ALL"),
+                rx.select.item("En attente", value="pending"),
+                rx.select.item("Clôturée", value="visit_done"),
+                rx.select.item("Annulée", value="cancelled"),
+            ),
+            value=ConsultationListState.filter_status,
+            on_change=ConsultationListState.set_filter_status,
+            size="2",
+        ),
+        rx.input(
+            type="date",
+            value=ConsultationListState.filter_date_from,
+            on_change=ConsultationListState.set_filter_date_from,
+            size="2",
+        ),
+        rx.input(
+            type="date",
+            value=ConsultationListState.filter_date_to,
+            on_change=ConsultationListState.set_filter_date_to,
+            size="2",
+        ),
+        rx.button(
+            rx.icon("x", size=14),
+            "Réinitialiser",
+            variant="ghost",
+            color_scheme="gray",
+            size="2",
+            on_click=ConsultationListState.clear_filters,
+        ),
+        spacing="2",
+        wrap="wrap",
+        align="center",
+        width="100%",
+    )
+
 
 def _consultations_table() -> rx.Component:
     return rx.cond(
-        ConsultationListState.filtered_rows.length() > 0,
-        rx.table.root(
-            rx.table.header(
-                rx.table.row(
-                    rx.table.column_header_cell("Patient"),
-                    rx.table.column_header_cell("Date"),
-                    rx.table.column_header_cell("Motif"),
-                    rx.table.column_header_cell("Compte / Entreprise"),
-                    rx.table.column_header_cell("Examens"),
-                    rx.table.column_header_cell("Statut"),
-                    rx.table.column_header_cell(""),
-                )
+        ConsultationListState.is_loading,
+        rx.center(rx.spinner(size="3"), padding_y="4em"),
+        rx.cond(
+            ConsultationListState.error_message != "",
+            rx.callout.root(
+                rx.callout.icon(rx.icon("circle-alert", size=16)),
+                rx.callout.text(ConsultationListState.error_message),
+                color_scheme="red",
             ),
-            rx.table.body(
-                rx.foreach(ConsultationListState.filtered_rows, _consultation_row)
-            ),
-            width="100%",
-            variant="surface",
-            size="2",
-        ),
-        rx.center(
-            rx.vstack(
-                rx.icon("stethoscope", size=40, color="var(--gray-7)"),
-                rx.text("Aucune consultation trouvée", size="3", color="var(--gray-9)"),
-                rx.text(
-                    "Les consultations créées depuis les dossiers patients apparaîtront ici.",
-                    size="2",
-                    color="var(--gray-7)",
-                    text_align="center",
+            rx.cond(
+                ConsultationListState.consultations.length() == 0,
+                empty_state("stethoscope", "Aucune consultation trouvée."),
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            rx.table.column_header_cell(rx.text("N° Visite", size="2")),
+                            rx.table.column_header_cell(rx.text("Patient", size="2")),
+                            rx.table.column_header_cell(rx.text("Compte", size="2")),
+                            rx.table.column_header_cell(rx.text("Date prévue", size="2")),
+                            rx.table.column_header_cell(rx.text("Statut", size="2")),
+                            rx.table.column_header_cell(rx.text("Examens", size="2")),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(
+                            ConsultationListState.consultations,
+                            _consultation_row,
+                        )
+                    ),
+                    width="100%",
+                    variant="surface",
                 ),
-                align="center",
-                spacing="2",
             ),
-            padding="4rem",
         ),
     )
 
-
-# ── Tab button ────────────────────────────────────────────────────────────────
-
-def _tab_btn(label: str, icon_tag: str, tab_id: str) -> rx.Component:
-    is_active = ConsultationListState.active_tab == tab_id
-    return rx.button(
-        rx.icon(icon_tag, size=14),
-        label,
-        variant=rx.cond(is_active, "solid", "ghost"),
-        color_scheme=rx.cond(is_active, "blue", "gray"),
-        size="2",
-        on_click=ConsultationListState.set_tab(tab_id),
-    )
-
-
-# ── Page ─────────────────────────────────────────────────────────────────────
 
 def consultation_list_page() -> rx.Component:
-    return page_layout(
-        # Header
-        rx.hstack(
+    return main_component(
+        page_layout(
             rx.vstack(
-                rx.heading("Consultations", size="5"),
-                rx.text(
-                    "Consultations privées — examens hors campagne de masse",
-                    size="2",
-                    color="var(--gray-9)",
-                ),
-                spacing="1",
-            ),
-            rx.spacer(),
-            width="100%",
-            align="center",
-        ),
-        # Tabs + search bar
-        rx.hstack(
-            _tab_btn("Tous", "layout-list", "tous"),
-            _tab_btn("Patient", "user", "patient"),
-            _tab_btn("Entreprise", "building-2", "enterprise"),
-            rx.spacer(),
-            rx.debounce_input(
-                rx.input(
-                    placeholder="Rechercher patient, motif…",
-                    value=ConsultationListState.search_query,
-                    on_change=ConsultationListState.set_search,
-                    width="280px",
-                    size="2",
-                ),
-                debounce_timeout=350,
-            ),
-            rx.text(
-                ConsultationListState.total_count.to(str),
-                " résultat(s)",
-                size="2",
-                color="var(--gray-9)",
-            ),
-            width="100%",
-            align="center",
-            flex_wrap="wrap",
-            spacing="2",
-        ),
-        rx.separator(width="100%"),
-        # Content
-        rx.cond(
-            ConsultationListState.is_loading,
-            rx.center(rx.spinner(size="3"), padding="3rem"),
-            rx.vstack(
-                rx.cond(
-                    ConsultationListState.error_message != "",
-                    rx.callout(
-                        ConsultationListState.error_message,
-                        icon="triangle-alert",
-                        color_scheme="red",
-                        variant="soft",
-                        width="100%",
+                rx.hstack(
+                    rx.heading("Consultations", size="6"),
+                    rx.spacer(),
+                    rx.button(
+                        rx.icon("plus", size=16),
+                        "Nouvelle consultation",
+                        on_click=ConsultationListState.open_new_dialog,
+                        size="2",
                     ),
-                    rx.fragment(),
+                    width="100%",
+                    align="center",
                 ),
+                _filters_bar(),
                 _consultations_table(),
-                # Pagination
-                rx.cond(
-                    ConsultationListState.total_pages > 1,
-                    rx.hstack(
-                        rx.text(
-                            ConsultationListState.total_count.to(str),
-                            " consultation(s) — page ",
-                            ConsultationListState.page.to(str),
-                            " / ",
-                            ConsultationListState.total_pages.to(str),
-                            size="2",
-                            color="var(--gray-9)",
-                        ),
-                        rx.spacer(),
-                        rx.button(
-                            rx.icon("chevron-left", size=14),
-                            on_click=ConsultationListState.prev_page,
-                            variant="soft", size="2",
-                            disabled=~ConsultationListState.has_prev_page,
-                        ),
-                        rx.button(
-                            rx.icon("chevron-right", size=14),
-                            on_click=ConsultationListState.next_page,
-                            variant="soft", size="2",
-                            disabled=~ConsultationListState.has_next_page,
-                        ),
-                        width="100%",
-                        align="center",
-                        padding_top="0.5rem",
-                    ),
-                ),
+                _new_consultation_dialog(),
+                spacing="4",
                 width="100%",
-                spacing="3",
-            ),
-        ),
+                padding="1.5em",
+            )
+        )
     )

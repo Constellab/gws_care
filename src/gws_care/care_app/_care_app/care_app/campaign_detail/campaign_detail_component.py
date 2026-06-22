@@ -1,684 +1,804 @@
-"""Campaign detail page — full workflow UI.
-
-Dialogs have been extracted to campaign_detail_dialogs_component.py to keep
-this file focused on layout, info card, workflow bar, patient and exam tables.
-"""
+"""Campaign detail page component."""
 
 import reflex as rx
 from gws_reflex_main import main_component
 
-from ..common.nav_role_state import NavRoleState
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
+from ..common.patient_picker_component import patient_picker_widget
 from .campaign_detail_state import (
     CampaignDetailState,
-    CampaignExamTypeDTO,
-    CampaignPatientRowDTO,
     ExamTypeOptionDTO,
-    PatientSearchOptionDTO,
+    ExamTypeRowDTO,
+    PatientRowDTO,
+    VisitRowDTO,
 )
-from .campaign_detail_dialogs_component import campaign_detail_dialogs
-
-# ── Helper components ──────────────────────────────────────────────────────
-
-def _status_badge(label: str, color: str) -> rx.Component:
-    return rx.badge(label, color_scheme=color, variant="soft", size="2")
 
 
-def _info_item(label: str, value: rx.Var) -> rx.Component:
+def _exam_type_option_item(opt: ExamTypeOptionDTO) -> rx.Component:
+    return rx.select.item(opt.label, value=opt.id)
+
+
+# ── Workflow lifeline ─────────────────────────────────────────────────────────
+
+def _prog_lifeline_step(step_idx: int, value: str, label: str, color: str) -> rx.Component:
+    """Single step node for the program workflow lifeline."""
+    idx_var = CampaignDetailState.program_status_index
     return rx.vstack(
-        rx.text(label, size="1", color="var(--gray-9)", weight="medium"),
         rx.cond(
-            value != "",
-            rx.text(value, size="2"),
-            rx.text("—", size="2", color="var(--gray-7)"),
-        ),
-        spacing="0",
-        align_items="start",
-    )
-
-
-def _presence_selector(p: CampaignPatientRowDTO) -> rx.Component:
-    return rx.select.root(
-        rx.select.trigger(size="1"),
-        rx.select.content(
-            rx.select.item("En attente", value="PENDING"),
-            rx.select.item("Présent", value="PRESENT"),
-            rx.select.item("Absent", value="ABSENT"),
-        ),
-        value=p.presence_status,
-        on_change=lambda v: CampaignDetailState.set_presence(p.patient_id, v),
-        size="1",
-    )
-
-
-def _presence_badge(p: CampaignPatientRowDTO) -> rx.Component:
-    return rx.badge(p.presence_label, color_scheme=p.presence_color, size="1", variant="soft")
-
-
-def _medical_badge(p: CampaignPatientRowDTO) -> rx.Component:
-    return rx.badge(p.medical_status_label, color_scheme=p.medical_status_color, size="1", variant="soft")
-
-
-# ── Campaign info card ─────────────────────────────────────────────────────
-
-def _campaign_info_card() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            rx.hstack(
-                rx.icon("flag", size=20, color="var(--accent-9)"),
-                rx.heading(CampaignDetailState.campaign.name, size="5"),
-                rx.spacer(),
-                _status_badge(
-                    CampaignDetailState.campaign.status_label,
-                    CampaignDetailState.campaign.status_color,
-                ),
-                rx.tooltip(
-                    rx.icon_button(rx.icon("pen-line", size=14), variant="ghost", size="1",
-                                   on_click=CampaignDetailState.open_edit_dialog),
-                    content="Modifier la campagne",
-                ),
-                spacing="2",
-                align="center",
-                width="100%",
+            idx_var > step_idx,
+            rx.box(
+                rx.icon("check", size=14, color="white"),
+                width="28px", height="28px", border_radius="50%",
+                background=f"var(--{color}-9)",
+                display="flex", align_items="center", justify_content="center",
             ),
-            rx.text(CampaignDetailState.campaign.company_name, size="2", color="var(--gray-9)"),
-            rx.separator(width="100%"),
-            rx.grid(
-                _info_item("Début", CampaignDetailState.campaign.start_date),
-                _info_item("Fin", CampaignDetailState.campaign.end_date),
-                _info_item("Lieu", CampaignDetailState.campaign.location),
-                _info_item("Médecin PSC", CampaignDetailState.campaign.psc_doctor_name),
-                _info_item("Médecin entreprise", CampaignDetailState.campaign.enterprise_doctor_name),
-                _info_item("Notes", CampaignDetailState.campaign.notes),
-                columns="3",
-                spacing="4",
-                width="100%",
-            ),
-            rx.hstack(
-                rx.vstack(
-                    rx.text(CampaignDetailState.campaign.patient_count, size="5", weight="bold", color="var(--accent-9)"),
-                    rx.text("patients inscrits", size="1", color="var(--gray-9)"),
-                    align_items="center",
-                ),
-                rx.vstack(
-                    rx.text(CampaignDetailState.campaign.present_count, size="5", weight="bold", color="var(--green-9)"),
-                    rx.text("présents", size="1", color="var(--gray-9)"),
-                    align_items="center",
-                ),
-                rx.vstack(
-                    rx.text(CampaignDetailState.campaign.absent_count, size="5", weight="bold", color="var(--red-9)"),
-                    rx.text("absents", size="1", color="var(--gray-9)"),
-                    align_items="center",
-                ),
-                spacing="6",
-                justify="center",
-                padding_top="0.5rem",
-            ),
-            spacing="3",
-            width="100%",
-        ),
-        width="100%",
-    )
-
-
-# ── Workflow action bar ────────────────────────────────────────────────────
-
-def _workflow_bar() -> rx.Component:
-    status = CampaignDetailState.campaign.status
-    loading = CampaignDetailState.is_loading
-    return rx.card(
-        rx.vstack(
-            rx.text("Actions disponibles", size="2", weight="medium", color="var(--gray-9)"),
-            rx.hstack(
-                rx.cond(
-                    status == "DRAFT",
-                    rx.button("Soumettre", on_click=CampaignDetailState.submit_campaign,
-                              color_scheme="blue", size="2", loading=loading),
-                ),
-                rx.cond(
-                    status == "AWAITING_OP_VALIDATION",
-                    rx.button("Valider opérationnellement", on_click=CampaignDetailState.validate_ops,
-                              color_scheme="cyan", size="2", loading=loading),
-                ),
-                rx.cond(
-                    status == "AWAITING_MEDICAL_VALIDATION",
-                    rx.hstack(
-                        rx.button("Valider médicalement", on_click=CampaignDetailState.validate_medical,
-                                  color_scheme="purple", size="2", loading=loading),
-                        rx.button("Refuser", on_click=CampaignDetailState.open_refuse_dialog,
-                                  color_scheme="red", variant="soft", size="2", disabled=loading),
-                        spacing="2",
-                    ),
-                ),
-                rx.cond(
-                    (status == "OPERATIONALLY_VALIDATED") | (status == "MEDICALLY_VALIDATED"),
-                    rx.button("Prête pour convocations", on_click=CampaignDetailState.ready_for_convocations,
-                              color_scheme="indigo", size="2", loading=loading),
-                ),
-                rx.cond(
-                    status == "READY_FOR_CONVOCATION",
-                    rx.button("Envoyer convocations", on_click=CampaignDetailState.send_convocations,
-                              color_scheme="sky", size="2", loading=loading),
-                ),
-                rx.cond(
-                    status == "CONVOCATIONS_SENT",
-                    rx.button("Démarrer terrain", on_click=CampaignDetailState.start_terrain,
-                              color_scheme="orange", size="2", loading=loading),
-                ),
-                rx.cond(
-                    status == "TERRAIN_EN_COURS",
-                    rx.button("Clôturer terrain", on_click=CampaignDetailState.close_terrain,
-                              color_scheme="amber", size="2", loading=loading),
-                ),
-                rx.cond(
-                    status == "TERRAIN_CLOTURE",
-                    rx.button("Démarrer labo", on_click=CampaignDetailState.start_lab,
-                              color_scheme="yellow", size="2", loading=loading),
-                ),
-                rx.cond(
-                    status == "LABO_EN_COURS",
-                    rx.button("Valider labo campagne", on_click=CampaignDetailState.validate_lab_campaign,
-                              color_scheme="lime", size="2", loading=loading),
-                ),
-                rx.cond(
-                    status == "LABO_VALIDE",
-                    rx.button("Valider PSC campagne", on_click=CampaignDetailState.validate_psc_campaign,
-                              color_scheme="teal", size="2", loading=loading),
-                ),
-                rx.cond(
-                    status == "VALIDE_MEDECIN_PSC",
-                    rx.button("Publier médecin entreprise", on_click=CampaignDetailState.publish_campaign,
-                              color_scheme="cyan", size="2", loading=loading),
-                ),
-                rx.cond(
-                    status == "PUBLIE_MEDECIN_ENTREPRISE",
-                    rx.button("Publier aux patients", on_click=CampaignDetailState.publish_to_patients,
-                              color_scheme="green", size="2", loading=loading),
-                ),
-                rx.cond(
-                    status == "PUBLIE_PATIENT",
-                    rx.button("Archiver", on_click=CampaignDetailState.archive_campaign,
-                              color_scheme="gray", variant="soft", size="2", loading=loading),
-                ),
-                spacing="2",
-                flex_wrap="wrap",
-            ),
-            spacing="2",
-        ),
-        width="100%",
-        background="var(--gray-1)",
-    )
-
-
-# ── Patients tab ───────────────────────────────────────────────────────────
-
-def _patient_row(p: CampaignPatientRowDTO) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(rx.text(p.patient_number, size="2", weight="medium")),
-        rx.table.cell(
-            rx.link(
-                f"{p.last_name} {p.first_name}",
-                href="/patient/" + p.patient_id,
-                style={"font_weight": "500", "color": "var(--accent-9)",
-                       "_hover": {"text_decoration": "underline"}},
-                size="2",
-            )
-        ),
-        rx.table.cell(rx.cond(p.phone != "", rx.text(p.phone, size="2"), rx.text("—", size="2", color="var(--gray-7)"))),
-        rx.table.cell(_presence_selector(p)),
-        rx.table.cell(_medical_badge(p)),
-        rx.table.cell(
-            rx.hstack(
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("clipboard-list", size=14),
-                        variant="solid",
-                        size="1",
-                        color_scheme="indigo",
-                        on_click=rx.redirect(
-                            "/campaign-patient/"
-                            + CampaignDetailState.campaign.id
-                            + "/"
-                            + p.patient_id
-                        ),
-                        disabled=CampaignDetailState.is_loading,
-                    ),
-                    content="Saisir les résultats d'examens",
-                ),
-                rx.cond(
-                    NavRoleState.is_operateur_labo | NavRoleState.is_upper_admin | NavRoleState.no_role_assigned,
-                    rx.tooltip(
-                        rx.icon_button(
-                            rx.icon("check", size=14),
-                            variant="ghost", size="1", color_scheme="lime",
-                            on_click=lambda: CampaignDetailState.validate_lab_patient(p.patient_id),
-                            disabled=CampaignDetailState.is_loading,
-                        ),
-                        content="Valider résultats labo",
-                    ),
-                    rx.fragment(),
-                ),
-                rx.cond(
-                    NavRoleState.is_medecin_psc | NavRoleState.is_upper_admin | NavRoleState.no_role_assigned,
-                    rx.tooltip(
-                        rx.icon_button(
-                            rx.icon("shield", size=14),
-                            variant="ghost", size="1", color_scheme="blue",
-                            on_click=lambda: CampaignDetailState.open_psc_dialog(
-                                p.patient_id, f"{p.last_name} {p.first_name}", p.psc_notes
-                            ),
-                            disabled=CampaignDetailState.is_loading,
-                        ),
-                        content="Interprétation PSC",
-                    ),
-                    rx.fragment(),
-                ),
-                rx.cond(
-                    NavRoleState.is_medecin_entreprise | NavRoleState.is_upper_admin | NavRoleState.no_role_assigned,
-                    rx.hstack(
-                        rx.tooltip(
-                            rx.icon_button(
-                                rx.icon("building-2", size=14),
-                                variant="ghost", size="1", color_scheme="violet",
-                                on_click=lambda: CampaignDetailState.open_enterprise_dialog(
-                                    p.patient_id, f"{p.last_name} {p.first_name}",
-                                    p.enterprise_notes, p.patient_message
-                                ),
-                                disabled=CampaignDetailState.is_loading,
-                            ),
-                            content="Interprétation entreprise",
-                        ),
-                        rx.tooltip(
-                            rx.icon_button(
-                                rx.icon("send", size=14),
-                                variant="ghost", size="1", color_scheme="green",
-                                on_click=lambda: CampaignDetailState.publish_patient_results(p.patient_id),
-                                disabled=CampaignDetailState.is_loading,
-                            ),
-                            content="Publier au patient",
-                        ),
-                        spacing="1",
-                    ),
-                    rx.fragment(),
-                ),
-                rx.cond(
-                    NavRoleState.is_upper_admin | NavRoleState.no_role_assigned,
-                    rx.tooltip(
-                        rx.icon_button(
-                            rx.icon("trash-2", size=14),
-                            variant="ghost", size="1", color_scheme="red",
-                            on_click=lambda: CampaignDetailState.open_confirm_remove_patient(
-                                p.patient_id, f"{p.last_name} {p.first_name}"
-                            ),
-                            disabled=CampaignDetailState.is_loading,
-                        ),
-                        content="Retirer de la campagne",
-                    ),
-                    rx.fragment(),
-                ),
-                spacing="1",
-            )
-        ),
-        style={":hover": {"background_color": "var(--gray-2)"}},
-    )
-
-
-def _patients_section() -> rx.Component:
-    # Progress bar: ratio of patients with exam done (not PENDING)
-    total = CampaignDetailState.patients.length()
-    done_count = CampaignDetailState.campaign.present_count
-    return rx.vstack(
-        rx.hstack(
-            rx.heading("Patients inscrits", size="4"),
-            rx.spacer(),
             rx.cond(
-                CampaignDetailState.patients.length() > 0,
-                rx.button(
-                    rx.icon("download", size=14), "Exporter CSV",
-                    variant="soft", size="2", color_scheme="gray",
-                    on_click=CampaignDetailState.export_patients_csv,
-                ),
-                rx.fragment(),
-            ),
-            rx.button(
-                rx.icon("user-plus", size=14), "Ajouter un patient",
-                variant="soft", size="2",
-                on_click=CampaignDetailState.open_add_patient_dialog,
-            ),
-            width="100%", align="center", spacing="2",
-        ),
-        # Participation progress bar
-        rx.cond(
-            CampaignDetailState.campaign != None,
-            rx.vstack(
-                rx.hstack(
-                    rx.text(
-                        "Présents : ",
-                        rx.text.strong(CampaignDetailState.campaign.present_count),
-                        " / ",
-                        CampaignDetailState.campaign.patient_count,
-                        size="2",
-                    ),
-                    rx.spacer(),
-                    rx.cond(
-                        CampaignDetailState.campaign.patient_count > 0,
-                        rx.text(
-                            (CampaignDetailState.campaign.present_count * 100 // CampaignDetailState.campaign.patient_count).to(str) + " %",
-                            size="2",
-                            weight="bold",
-                            color="var(--teal-9)",
-                        ),
-                        rx.fragment(),
-                    ),
-                    width="100%",
+                idx_var == step_idx,
+                rx.box(
+                    rx.box(width="10px", height="10px", border_radius="50%",
+                           background=f"var(--{color}-9)"),
+                    width="28px", height="28px", border_radius="50%",
+                    border=f"2px solid var(--{color}-9)",
+                    background=f"var(--{color}-3)",
+                    display="flex", align_items="center", justify_content="center",
                 ),
                 rx.box(
-                    rx.box(
-                        height="8px",
-                        border_radius="4px",
-                        background="var(--teal-9)",
-                        width=rx.cond(
-                            CampaignDetailState.campaign.patient_count > 0,
-                            (CampaignDetailState.campaign.present_count * 100 // CampaignDetailState.campaign.patient_count).to(str) + "%",
-                            "0%",
-                        ),
-                        transition="width 0.4s ease",
-                    ),
-                    height="8px",
-                    background="var(--teal-3)",
-                    border_radius="4px",
-                    width="100%",
-                    overflow="hidden",
+                    width="28px", height="28px", border_radius="50%",
+                    border="2px solid var(--gray-5)", background="var(--gray-2)",
                 ),
-                spacing="1",
-                width="100%",
-            ),
-            rx.fragment(),
-        ),
-        rx.cond(
-            CampaignDetailState.patients.length() > 0,
-            rx.table.root(
-                rx.table.header(
-                    rx.table.row(
-                        rx.table.column_header_cell("N° dossier"),
-                        rx.table.column_header_cell("Nom / Prénom"),
-                        rx.table.column_header_cell("Téléphone"),
-                        rx.table.column_header_cell("Présence"),
-                        rx.table.column_header_cell("Statut médical"),
-                        rx.table.column_header_cell("Actions"),
-                    )
-                ),
-                rx.table.body(rx.foreach(CampaignDetailState.patients, _patient_row)),
-                width="100%",
-                variant="surface",
-            ),
-            rx.center(
-                rx.text("Aucun patient inscrit.", size="2", color="var(--gray-9)"),
-                padding="2rem",
             ),
         ),
-        # ── Patients pagination ──────────────────────────────────────────
-        rx.cond(
-            CampaignDetailState.patients_total_count > CampaignDetailState.patients_page_size,
-            rx.hstack(
-                rx.text(
-                    CampaignDetailState.patients_total_count.to(str)
-                    + " patient(s) — page ",
-                    CampaignDetailState.patients_page.to(str),
-                    " / ",
-                    CampaignDetailState.patients_total_pages.to(str),
-                    size="2",
-                    color="var(--gray-9)",
-                ),
-                rx.spacer(),
-                rx.button(
-                    rx.icon("chevron-left", size=14),
-                    on_click=CampaignDetailState.patients_prev_page,
-                    variant="soft",
-                    size="2",
-                    disabled=~CampaignDetailState.patients_has_prev,
-                ),
-                rx.button(
-                    rx.icon("chevron-right", size=14),
-                    on_click=CampaignDetailState.patients_next_page,
-                    variant="soft",
-                    size="2",
-                    disabled=~CampaignDetailState.patients_has_next,
-                ),
-                width="100%",
-                align="center",
+        rx.text(
+            label, size="1",
+            color=rx.cond(
+                idx_var > step_idx, f"var(--{color}-9)",
+                rx.cond(idx_var == step_idx, f"var(--{color}-11)", "var(--gray-8)"),
             ),
+            weight=rx.cond(idx_var == step_idx, "bold", "regular"),
+            text_align="center", max_width="70px",
         ),
-        spacing="3",
-        width="100%",
+        align="center", spacing="1", flex_shrink="0",
     )
 
 
-# ── Exam types tab ─────────────────────────────────────────────────────────
+def _workflow_lifeline_program() -> rx.Component:
+    steps = [
+        (0, "draft",           "Brouillon",  "gray"),
+        (1, "validated",       "Validée",    "blue"),
+        (2, "terrain_exam",    "Terrain",    "amber"),
+        (3, "sample_analysis", "Analyse",    "orange"),
+        (4, "closed",          "Clôturée",   "green"),
+        (5, "archived",        "Archivée",   "gray"),
+    ]
+    nodes = []
+    for i, (idx, value, label, color) in enumerate(steps):
+        nodes.append(_prog_lifeline_step(idx, value, label, color))
+        if i < len(steps) - 1:
+            nodes.append(
+                rx.box(flex="1", height="2px", background="var(--gray-4)",
+                       align_self="flex-start", margin_top="13px", min_width="6px")
+            )
+    return rx.card(
+        rx.hstack(*nodes, align="start", width="100%", spacing="0"),
+        width="100%", padding="0.75rem 1rem",
+    )
 
-def _exam_type_row(ce: CampaignExamTypeDTO) -> rx.Component:
+
+# ── Workflow buttons ──────────────────────────────────────────────────────────
+
+def _workflow_buttons() -> rx.Component:
+    return rx.hstack(
+        rx.cond(
+            (CampaignDetailState.program.status == "draft")
+            & (CampaignDetailState.is_doctor | CampaignDetailState.is_admin),
+            rx.button(
+                rx.icon("circle_check", size=16),
+                LanguageState.tr["btn_validate_program"],
+                on_click=CampaignDetailState.validate_program,
+                color_scheme="blue", size="2",
+                disabled=~CampaignDetailState.can_validate_program,
+            ),
+        ),
+        rx.cond(
+            (CampaignDetailState.program.status == "validated")
+            & (CampaignDetailState.is_operator | CampaignDetailState.is_admin),
+            rx.button(
+                rx.icon("play", size=16),
+                LanguageState.tr["btn_start_campaign"],
+                on_click=CampaignDetailState.start_campaign,
+                color_scheme="amber", size="2",
+            ),
+        ),
+        # Terrain phase — terrain view shortcut only ("Terminer le terrain" is in the terrain page)
+        rx.cond(
+            (CampaignDetailState.program.status == "terrain_exam")
+            & (CampaignDetailState.is_operator | CampaignDetailState.is_admin),
+            rx.link(
+                rx.button(
+                    rx.icon("map-pin", size=16), "Terrain",
+                    variant="soft", color_scheme="amber", size="2",
+                ),
+                href="/on-site/" + CampaignDetailState.program.id,
+            ),
+        ),
+        rx.cond(
+            (CampaignDetailState.program.status != "closed")
+            & (CampaignDetailState.program.status != "archived")
+            & (CampaignDetailState.is_account_admin | CampaignDetailState.is_admin)
+            & CampaignDetailState.all_visits_company_validated,
+            rx.button(
+                rx.icon("archive", size=16),
+                LanguageState.tr["btn_close_campaign"],
+                on_click=CampaignDetailState.close_campaign,
+                color_scheme="green", size="2",
+            ),
+        ),
+        rx.cond(
+            (CampaignDetailState.program.status == "closed")
+            & (CampaignDetailState.is_account_admin | CampaignDetailState.is_admin),
+            rx.button(
+                rx.icon("archive", size=16),
+                LanguageState.tr["btn_archive_campaign"],
+                on_click=CampaignDetailState.archive_campaign,
+                color_scheme="gray", size="2",
+            ),
+        ),
+        rx.cond(
+            CampaignDetailState.is_operator | CampaignDetailState.is_admin,
+            rx.button(
+                rx.icon("qr-code", size=16), "PDF QR Codes",
+                on_click=CampaignDetailState.download_tube_qr_pdf,
+                variant="soft", size="2",
+                loading=CampaignDetailState.is_downloading_pdf,
+            ),
+        ),
+        rx.button(
+            rx.icon("file-bar-chart", size=16), "Rapport PDF",
+            on_click=CampaignDetailState.download_campaign_report_pdf,
+            variant="soft", color_scheme="gray", size="2",
+            loading=CampaignDetailState.is_downloading_pdf,
+        ),
+        spacing="2",
+        flex_wrap="wrap",
+    )
+
+
+# ── Sort helper ───────────────────────────────────────────────────────────────
+
+def _sort_icon(col: str, sort_col_var, sort_dir_var) -> rx.Component:
+    return rx.cond(
+        sort_col_var == col,
+        rx.cond(
+            sort_dir_var == "asc",
+            rx.icon("chevron-up", size=12),
+            rx.icon("chevron-down", size=12),
+        ),
+        rx.icon("chevrons-up-down", size=12, color="var(--gray-7)"),
+    )
+
+
+# ── Tab 1 — Patients ──────────────────────────────────────────────────────────
+
+def _patient_row(patient: PatientRowDTO) -> rx.Component:
     return rx.table.row(
-        rx.table.cell(rx.text(ce.exam_type_name, size="2", weight="medium")),
-        rx.table.cell(rx.badge(ce.category_label, color_scheme="blue", size="1", variant="soft")),
+        rx.table.cell(rx.text(patient.full_name, size="2", weight="medium")),
+        rx.table.cell(rx.text(patient.patient_number, size="2", color="var(--gray-9)")),
         rx.table.cell(
             rx.cond(
-                NavRoleState.is_upper_admin | NavRoleState.no_role_assigned,
-                rx.icon_button(
-                    rx.icon("trash-2", size=14),
-                    variant="ghost", size="1", color_scheme="red",
-                    on_click=lambda: CampaignDetailState.open_confirm_remove_exam_type(ce.id, ce.exam_type_name),
+                CampaignDetailState.program.is_individual
+                | (CampaignDetailState.program.status == "draft")
+                | (CampaignDetailState.program.status == "validated"),
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("x", size=14), variant="ghost", size="1",
+                        color_scheme="red",
+                        on_click=lambda: CampaignDetailState.remove_patient(patient.id),
+                    ),
+                    content=LanguageState.tr["tooltip_remove_patient"],
                 ),
-                rx.fragment(),
             )
         ),
     )
 
 
-def _exam_types_section() -> rx.Component:
+def _tab_patients() -> rx.Component:
     return rx.vstack(
+        # Toolbar
         rx.hstack(
-            rx.heading("Types d'examens configurés", size="4"),
-            rx.spacer(),
-            rx.button(
-                rx.icon("plus", size=14), "Ajouter un examen",
-                variant="soft", size="2",
-                on_click=CampaignDetailState.open_add_exam_type_dialog,
+            rx.input(
+                rx.input.slot(rx.icon("search", size=13)),
+                placeholder=LanguageState.tr["filter_patient_name_placeholder"],
+                value=CampaignDetailState.patient_filter_name,
+                on_change=CampaignDetailState.set_patient_filter_name,
+                size="2", flex="1",
             ),
-            width="100%", align="center",
+            rx.input(
+                rx.input.slot(rx.icon("hash", size=13)),
+                placeholder=LanguageState.tr["filter_patient_number_placeholder"],
+                value=CampaignDetailState.patient_filter_number,
+                on_change=CampaignDetailState.set_patient_filter_number,
+                size="2", width="160px",
+            ),
+            rx.cond(
+                ~CampaignDetailState.program.is_individual
+                & (CampaignDetailState.is_operator | CampaignDetailState.is_admin)
+                & (
+                    (CampaignDetailState.program.status == "draft")
+                    | (CampaignDetailState.program.status == "validated")
+                ),
+                rx.button(
+                    rx.icon("user-plus", size=14),
+                    LanguageState.tr["add_patient_btn"],
+                    variant="soft", size="2",
+                    on_click=CampaignDetailState.open_add_patient_dialog,
+                ),
+            ),
+            spacing="3", align="center", width="100%", flex_wrap="wrap",
         ),
         rx.cond(
-            CampaignDetailState.exam_types.length() > 0,
+            CampaignDetailState.filtered_patients.length() == 0,
+            rx.center(
+                rx.text(LanguageState.tr["no_patients_in_campaign"], size="2",
+                        color="var(--gray-9)"),
+                padding="2rem", border="1px dashed var(--gray-5)",
+                border_radius="8px", width="100%",
+            ),
             rx.table.root(
                 rx.table.header(
                     rx.table.row(
-                        rx.table.column_header_cell("Nom"),
-                        rx.table.column_header_cell("Catégorie"),
+                        rx.table.column_header_cell(
+                            rx.hstack(
+                                rx.text(LanguageState.tr["col_name"], size="2"),
+                                _sort_icon("full_name", CampaignDetailState.patient_sort_col,
+                                           CampaignDetailState.patient_sort_dir),
+                                spacing="1", align="center",
+                            ),
+                            on_click=lambda: CampaignDetailState.sort_patients("full_name"),
+                            cursor="pointer",
+                        ),
+                        rx.table.column_header_cell(
+                            rx.hstack(
+                                rx.text(LanguageState.tr["col_patient_number"], size="2"),
+                                _sort_icon("patient_number", CampaignDetailState.patient_sort_col,
+                                           CampaignDetailState.patient_sort_dir),
+                                spacing="1", align="center",
+                            ),
+                            on_click=lambda: CampaignDetailState.sort_patients("patient_number"),
+                            cursor="pointer",
+                        ),
                         rx.table.column_header_cell(""),
                     )
                 ),
-                rx.table.body(rx.foreach(CampaignDetailState.exam_types, _exam_type_row)),
-                width="100%",
-                variant="surface",
-            ),
-            rx.center(
-                rx.text("Aucun type d'examen configuré.", size="2", color="var(--gray-9)"),
-                padding="2rem",
+                rx.table.body(
+                    rx.foreach(CampaignDetailState.filtered_patients, _patient_row)
+                ),
+                width="100%", variant="surface",
             ),
         ),
-        spacing="3",
-        width="100%",
+        width="100%", spacing="3",
     )
 
 
+# ── Tab 2 — Exam Types ────────────────────────────────────────────────────────
 
-# ── Dialogs — defined in campaign_detail_dialogs_component.py ─────────────
+def _exam_type_row(et: ExamTypeRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.text(et.name, size="2", weight="medium")),
+        rx.table.cell(rx.text(et.code, size="2", color="var(--gray-9)")),
+        rx.table.cell(rx.text(et.category, size="2", color="var(--gray-8)")),
+        rx.table.cell(
+            rx.cond(
+                (CampaignDetailState.program.status == "draft")
+                | (CampaignDetailState.program.status == "validated"),
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("x", size=14), variant="ghost", size="1",
+                        color_scheme="red",
+                        on_click=lambda: CampaignDetailState.remove_exam_type(et.id),
+                    ),
+                    content=LanguageState.tr["tooltip_remove_exam_type"],
+                ),
+            )
+        ),
+    )
 
 
-# ── Main page ──────────────────────────────────────────────────────────────
+def _tab_exam_types() -> rx.Component:
+    return rx.vstack(
+        rx.hstack(
+            rx.cond(
+                (CampaignDetailState.is_operator | CampaignDetailState.is_admin)
+                & (
+                    (CampaignDetailState.program.status == "draft")
+                    | (CampaignDetailState.program.status == "validated")
+                ),
+                rx.button(
+                    rx.icon("plus", size=14),
+                    LanguageState.tr["add_exam_type_btn"],
+                    variant="soft", size="2",
+                    on_click=CampaignDetailState.open_add_exam_type_dialog,
+                ),
+            ),
+            justify="end", width="100%",
+        ),
+        rx.cond(
+            CampaignDetailState.filtered_exam_types.length() == 0,
+            rx.center(
+                rx.text(LanguageState.tr["no_exam_types_in_campaign"], size="2",
+                        color="var(--gray-9)"),
+                padding="2rem", border="1px dashed var(--gray-5)",
+                border_radius="8px", width="100%",
+            ),
+            rx.table.root(
+                rx.table.header(
+                    rx.table.row(
+                        rx.table.column_header_cell(
+                            rx.hstack(
+                                rx.text(LanguageState.tr["col_name"], size="2"),
+                                _sort_icon("name", CampaignDetailState.exam_sort_col,
+                                           CampaignDetailState.exam_sort_dir),
+                                spacing="1", align="center",
+                            ),
+                            on_click=lambda: CampaignDetailState.sort_exam_types("name"),
+                            cursor="pointer",
+                        ),
+                        rx.table.column_header_cell(
+                            rx.hstack(
+                                rx.text(LanguageState.tr["col_code"], size="2"),
+                                _sort_icon("code", CampaignDetailState.exam_sort_col,
+                                           CampaignDetailState.exam_sort_dir),
+                                spacing="1", align="center",
+                            ),
+                            on_click=lambda: CampaignDetailState.sort_exam_types("code"),
+                            cursor="pointer",
+                        ),
+                        rx.table.column_header_cell(
+                            rx.hstack(
+                                rx.text(LanguageState.tr["col_type"], size="2"),
+                                _sort_icon("category", CampaignDetailState.exam_sort_col,
+                                           CampaignDetailState.exam_sort_dir),
+                                spacing="1", align="center",
+                            ),
+                            on_click=lambda: CampaignDetailState.sort_exam_types("category"),
+                            cursor="pointer",
+                        ),
+                        rx.table.column_header_cell(""),
+                    )
+                ),
+                rx.table.body(
+                    rx.foreach(CampaignDetailState.filtered_exam_types, _exam_type_row)
+                ),
+                width="100%", variant="surface",
+            ),
+        ),
+        width="100%", spacing="3",
+    )
+
+
+# ── Tab 3 — Visits ────────────────────────────────────────────────────────────
+
+def _visit_status_badge(v: VisitRowDTO) -> rx.Component:
+    return rx.match(
+        v.campaign_visit_status,
+        ("pending", rx.badge(v.status_label, color_scheme="gray", variant="soft", size="1")),
+        ("visit_done", rx.badge(v.status_label, color_scheme="amber", variant="soft", size="1")),
+        ("lab_done", rx.badge(v.status_label, color_scheme="blue", variant="soft", size="1")),
+        ("doctor_clinic_validated", rx.badge(v.status_label, color_scheme="violet", variant="soft", size="1")),
+        ("doctor_company_validated", rx.badge(v.status_label, color_scheme="green", variant="soft", size="1")),
+        rx.badge(v.status_label, color_scheme="gray", variant="soft", size="1"),
+    )
+
+
+def _visit_row(visit: VisitRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(
+            rx.vstack(
+                rx.text(visit.patient_name, size="2", weight="medium"),
+                rx.text(visit.patient_number, size="1", color="var(--gray-9)"),
+                spacing="0",
+            )
+        ),
+        rx.table.cell(rx.text(visit.visit_number, size="2", color="var(--gray-9)")),
+        rx.table.cell(_visit_status_badge(visit)),
+        rx.table.cell(
+            rx.tooltip(
+                rx.icon_button(
+                    rx.icon("chevron-right", size=14), variant="ghost", size="1",
+                    on_click=lambda: CampaignDetailState.go_to_visit(visit.id),
+                ),
+                content=LanguageState.tr["tooltip_view_visit"],
+            )
+        ),
+        style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
+        on_click=lambda: CampaignDetailState.go_to_visit(visit.id),
+    )
+
+
+def _tab_visits() -> rx.Component:
+    return rx.vstack(
+        # Filter toolbar
+        rx.hstack(
+            rx.input(
+                rx.input.slot(rx.icon("search", size=13)),
+                placeholder=LanguageState.tr["filter_visit_patient_placeholder"],
+                value=CampaignDetailState.visit_filter_name,
+                on_change=CampaignDetailState.set_visit_filter_name,
+                size="2", flex="1",
+            ),
+            rx.input(
+                rx.input.slot(rx.icon("hash", size=13)),
+                placeholder=LanguageState.tr["filter_patient_number_placeholder"],
+                value=CampaignDetailState.visit_filter_number,
+                on_change=CampaignDetailState.set_visit_filter_number,
+                size="2", width="130px",
+            ),
+            rx.input(
+                rx.input.slot(rx.icon("ticket", size=13)),
+                placeholder=LanguageState.tr["filter_visit_id_placeholder"],
+                value=CampaignDetailState.visit_filter_visit_id,
+                on_change=CampaignDetailState.set_visit_filter_visit_id,
+                size="2", width="130px",
+            ),
+            rx.select.root(
+                rx.select.trigger(
+                    placeholder=LanguageState.tr["filter_visit_status_placeholder"],
+                    width="170px",
+                ),
+                rx.select.content(
+                    rx.select.item(LanguageState.tr["filter_visit_status_placeholder"], value="__all__"),
+                    rx.select.item(LanguageState.tr["status_pending"], value="pending"),
+                    rx.select.item(LanguageState.tr["status_visit_done"], value="visit_done"),
+                    rx.select.item(LanguageState.tr["status_lab_done"], value="lab_done"),
+                    rx.select.item(LanguageState.tr["status_doctor_clinic_validated"], value="doctor_clinic_validated"),
+                    rx.select.item(LanguageState.tr["status_doctor_company_validated"], value="doctor_company_validated"),
+                ),
+                value=rx.cond(
+                    CampaignDetailState.visit_filter_status != "",
+                    CampaignDetailState.visit_filter_status,
+                    "__all__",
+                ),
+                on_change=CampaignDetailState.set_visit_filter_status,
+                size="2",
+            ),
+            spacing="2", align="center", width="100%", flex_wrap="wrap",
+        ),
+        # Count
+        rx.text(
+            CampaignDetailState.filtered_visits.length().to_string() + " / "
+            + CampaignDetailState.visits.length().to_string() + " visite(s)",
+            size="1", color="var(--gray-9)",
+        ),
+        rx.cond(
+            CampaignDetailState.filtered_visits.length() == 0,
+            rx.center(
+                rx.text(LanguageState.tr["no_visits_in_campaign"], size="2",
+                        color="var(--gray-9)"),
+                padding="2rem", border="1px dashed var(--gray-5)",
+                border_radius="8px", width="100%",
+            ),
+            rx.box(
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            rx.table.column_header_cell(
+                                rx.hstack(
+                                    rx.text(LanguageState.tr["col_patient"], size="2"),
+                                    _sort_icon("patient_name", CampaignDetailState.visit_sort_col,
+                                               CampaignDetailState.visit_sort_dir),
+                                    spacing="1", align="center",
+                                ),
+                                on_click=lambda: CampaignDetailState.sort_visits("patient_name"),
+                                cursor="pointer",
+                            ),
+                            rx.table.column_header_cell(
+                                rx.hstack(
+                                    rx.text(LanguageState.tr["col_visit_number"], size="2"),
+                                    _sort_icon("visit_number", CampaignDetailState.visit_sort_col,
+                                               CampaignDetailState.visit_sort_dir),
+                                    spacing="1", align="center",
+                                ),
+                                on_click=lambda: CampaignDetailState.sort_visits("visit_number"),
+                                cursor="pointer",
+                            ),
+                            rx.table.column_header_cell(
+                                rx.hstack(
+                                    rx.text(LanguageState.tr["col_visit_status"], size="2"),
+                                    _sort_icon("status", CampaignDetailState.visit_sort_col,
+                                               CampaignDetailState.visit_sort_dir),
+                                    spacing="1", align="center",
+                                ),
+                                on_click=lambda: CampaignDetailState.sort_visits("status"),
+                                cursor="pointer",
+                            ),
+                            rx.table.column_header_cell(LanguageState.tr["col_actions"]),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(CampaignDetailState.filtered_visits, _visit_row)
+                    ),
+                    width="100%", variant="surface",
+                ),
+                overflow_x="auto", width="100%",
+            ),
+        ),
+        width="100%", spacing="3",
+    )
+
+
+# ── Dialogs ───────────────────────────────────────────────────────────────────
+
+def _add_patient_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(LanguageState.tr["add_patient_btn"]),
+            rx.vstack(
+                rx.box(
+                    patient_picker_widget(CampaignDetailState),
+                    min_height="320px", width="100%",
+                ),
+                rx.hstack(
+                    rx.dialog.close(
+                        rx.button(
+                            LanguageState.tr["cancel_btn"],
+                            variant="soft", color_scheme="gray",
+                            on_click=CampaignDetailState.close_add_patient_dialog,
+                        )
+                    ),
+                    rx.button(
+                        LanguageState.tr["add"],
+                        on_click=CampaignDetailState.confirm_add_patient,
+                        loading=CampaignDetailState.is_adding_patient,
+                        disabled=CampaignDetailState.picker_selected_id == "",
+                    ),
+                    spacing="2", justify="end", width="100%",
+                ),
+                spacing="4", width="100%",
+            ),
+            on_escape_key_down=CampaignDetailState.close_add_patient_dialog,
+            on_interact_outside=CampaignDetailState.close_add_patient_dialog,
+            max_width="720px",
+        ),
+        open=CampaignDetailState.add_patient_dialog_open,
+    )
+
+
+def _add_exam_type_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(LanguageState.tr["add_exam_type_btn"]),
+            rx.vstack(
+                rx.select.root(
+                    rx.select.trigger(
+                        placeholder=LanguageState.tr["select_exam_type_to_add"],
+                        width="100%",
+                    ),
+                    rx.select.content(
+                        rx.foreach(CampaignDetailState.exam_type_options, _exam_type_option_item)
+                    ),
+                    value=CampaignDetailState.selected_exam_type_id,
+                    on_change=CampaignDetailState.set_selected_exam_type,
+                ),
+                rx.cond(
+                    CampaignDetailState.error_message != "",
+                    rx.callout(
+                        CampaignDetailState.error_message,
+                        color_scheme="red", size="1", icon="triangle-alert",
+                    ),
+                ),
+                rx.hstack(
+                    rx.dialog.close(
+                        rx.button(
+                            LanguageState.tr["cancel_btn"],
+                            variant="soft", color_scheme="gray",
+                            on_click=CampaignDetailState.close_add_exam_type_dialog,
+                        )
+                    ),
+                    rx.button(
+                        LanguageState.tr["add"],
+                        on_click=CampaignDetailState.confirm_add_exam_type,
+                        loading=CampaignDetailState.is_adding_exam_type,
+                        disabled=CampaignDetailState.selected_exam_type_id == "",
+                    ),
+                    spacing="2", justify="end", width="100%",
+                ),
+                spacing="4", width="100%",
+            ),
+            on_escape_key_down=CampaignDetailState.close_add_exam_type_dialog,
+            max_width="440px",
+        ),
+        open=CampaignDetailState.add_exam_type_dialog_open,
+    )
+
+
+# ── Page ─────────────────────────────────────────────────────────────────────
 
 def campaign_detail_page() -> rx.Component:
     return main_component(
         page_layout(
-            rx.vstack(
-                # Nav back
-                rx.hstack(
-                    rx.button(
-                        rx.icon("chevron-left", size=14), "Retour",
-                        variant="ghost", size="2",
-                        on_click=CampaignDetailState.go_back,
-                    ),
-                    width="100%",
-                ),
-                # Loading / error states
+            rx.cond(
+                CampaignDetailState.is_loading,
+                rx.center(rx.spinner(size="3"), padding="4rem"),
                 rx.cond(
-                    CampaignDetailState.is_loading,
-                    rx.center(rx.spinner(size="3"), padding="4rem"),
-                    rx.cond(
-                        CampaignDetailState.campaign != None,
-                        rx.vstack(
-                            rx.cond(
-                                CampaignDetailState.error != "",
-                                rx.card(
-                                    rx.vstack(
-                                        rx.hstack(
-                                            rx.icon("triangle-alert", size=16, color="var(--red-9)"),
-                                            rx.text(CampaignDetailState.error, size="2", color="var(--red-11)"),
-                                            spacing="2", align="center",
-                                        ),
-                                        rx.hstack(
-                                            rx.cond(
-                                                CampaignDetailState.error.contains("médecin")
-                                                | CampaignDetailState.error.contains("doctor")
-                                                | CampaignDetailState.error.contains("PSC"),
-                                                rx.button(
-                                                    rx.icon("settings", size=13),
-                                                    "Configurer les médecins",
-                                                    size="1",
-                                                    variant="soft",
-                                                    color_scheme="red",
-                                                    on_click=CampaignDetailState.open_edit_dialog,
-                                                ),
-                                                rx.fragment(),
-                                            ),
-                                            rx.spacer(),
-                                            rx.button(
-                                                rx.icon("x", size=13),
-                                                size="1", variant="ghost", color_scheme="gray",
-                                                on_click=CampaignDetailState.dismiss_error,
-                                            ),
-                                            width="100%",
-                                        ),
-                                        spacing="2", width="100%",
+                    CampaignDetailState.program == None,  # noqa: E711
+                    rx.center(
+                        rx.callout(
+                            LanguageState.tr["campaign_not_found"],
+                            color_scheme="red", icon="triangle-alert",
+                        ),
+                        padding="4rem",
+                    ),
+                    rx.vstack(
+                        # Header row
+                        rx.hstack(
+                            rx.button(
+                                rx.icon("arrow-left", size=14),
+                                LanguageState.tr["btn_back"],
+                                variant="ghost", size="2",
+                                on_click=CampaignDetailState.go_back,
+                            ),
+                            rx.spacer(),
+                            _workflow_buttons(),
+                            width="100%", align="center", flex_wrap="wrap",
+                        ),
+                        # Campaign info card
+                        rx.card(
+                            rx.hstack(
+                                rx.vstack(
+                                    rx.hstack(
+                                        rx.icon("clipboard-list", size=20,
+                                                color="var(--accent-9)"),
+                                        rx.heading(CampaignDetailState.program.name,
+                                                   size="5"),
+                                        spacing="2", align="center",
                                     ),
-                                    background="var(--red-2)",
-                                    width="100%",
+                                    rx.hstack(
+                                        rx.text(CampaignDetailState.program.campaign_number,
+                                                size="2", color="var(--gray-9)"),
+                                        rx.separator(orientation="vertical"),
+                                        rx.text(CampaignDetailState.program.account_name,
+                                                size="2"),
+                                        spacing="2", align="center",
+                                    ),
+                                    rx.hstack(
+                                        rx.icon("calendar", size=13,
+                                                color="var(--gray-9)"),
+                                        rx.text(
+                                            CampaignDetailState.program.start_date
+                                            + " → "
+                                            + CampaignDetailState.program.end_date,
+                                            size="2", color="var(--gray-9)",
+                                        ),
+                                        spacing="1", align="center",
+                                    ),
+                                    spacing="1", align_items="start",
                                 ),
-                                rx.fragment(),
-                            ),
-                            rx.cond(
-                                CampaignDetailState.success != "",
-                                rx.callout(
-                                    CampaignDetailState.success,
-                                    icon="check", color_scheme="green", size="2",
-                                    on_click=CampaignDetailState.dismiss_success,
-                                    style={"cursor": "pointer"},
+                                rx.spacer(),
+                                rx.vstack(
+                                    rx.cond(
+                                        CampaignDetailState.program.is_individual,
+                                        rx.badge(
+                                            rx.icon("user", size=11), "Individual",
+                                            color_scheme="purple", variant="soft", size="1",
+                                        ),
+                                    ),
+                                    rx.match(
+                                        CampaignDetailState.program.status,
+                                        ("draft", rx.badge(CampaignDetailState.program.status_label, color_scheme="gray", size="2")),
+                                        ("validated", rx.badge(CampaignDetailState.program.status_label, color_scheme="blue", size="2")),
+                                        ("terrain_exam", rx.badge(CampaignDetailState.program.status_label, color_scheme="amber", size="2")),
+                                        ("sample_analysis", rx.badge(CampaignDetailState.program.status_label, color_scheme="orange", size="2")),
+                                        ("lab_done", rx.badge(CampaignDetailState.program.status_label, color_scheme="orange", variant="outline", size="2")),
+                                        ("doctor_clinic_validated", rx.badge(CampaignDetailState.program.status_label, color_scheme="violet", size="2")),
+                                        ("doctor_company_validated", rx.badge(CampaignDetailState.program.status_label, color_scheme="green", size="2")),
+                                        ("closed", rx.badge(CampaignDetailState.program.status_label, color_scheme="green", variant="outline", size="2")),
+                                        ("archived", rx.badge(CampaignDetailState.program.status_label, color_scheme="gray", variant="outline", size="2")),
+                                        rx.badge(CampaignDetailState.program.status_label, color_scheme="gray", size="2"),
+                                    ),
+                                    spacing="1", align="end",
                                 ),
+                                align="start", width="100%",
                             ),
-                            _campaign_info_card(),
-                            _workflow_bar(),
-                            # Tabs
-                            rx.tabs.root(
-                                rx.tabs.list(
-                                    rx.tabs.trigger("Patients", value="patients"),
-                                    rx.tabs.trigger("Examens", value="exams"),
-                                ),
-                                rx.tabs.content(_patients_section(), value="patients"),
-                                rx.tabs.content(_exam_types_section(), value="exams"),
-                                default_value="patients",
-                                width="100%",
-                            ),
-                            spacing="4",
                             width="100%",
                         ),
-                        rx.center(
-                            rx.text("Campagne introuvable.", size="2", color="var(--gray-9)"),
-                            padding="4rem",
+                        # Workflow lifeline
+                        _workflow_lifeline_program(),
+                        # Contextual workflow hint
+                        rx.match(
+                            CampaignDetailState.program.status,
+                            ("draft", rx.callout(
+                                LanguageState.tr["hint_campaign_draft"],
+                                icon="info", color_scheme="gray", size="1",
+                            )),
+                            ("validated", rx.callout(
+                                LanguageState.tr["hint_campaign_validated"],
+                                icon="circle-check", color_scheme="blue", size="1",
+                            )),
+                            ("terrain_exam", rx.callout(
+                                LanguageState.tr["hint_campaign_terrain_exam"],
+                                icon="map-pin", color_scheme="amber", size="1",
+                            )),
+                            ("sample_analysis", rx.callout(
+                                LanguageState.tr["hint_campaign_sample_analysis"],
+                                icon="flask-conical", color_scheme="orange", size="1",
+                            )),
+                            ("closed", rx.callout(
+                                LanguageState.tr["hint_campaign_closed"],
+                                icon="archive", color_scheme="green", size="1",
+                            )),
+                            ("archived", rx.callout(
+                                LanguageState.tr["hint_campaign_archived"],
+                                icon="archive", color_scheme="gray", size="1",
+                            )),
+                            rx.fragment(),
                         ),
-                    ),
-                ),
-                spacing="4",
-                width="100%",
-            ),
-            # Dialogs (see campaign_detail_dialogs_component.py)
-            campaign_detail_dialogs(),
-
-
-
-
-
-
-            # ── Confirm retrait patient ────────────────────────────────────────
-            rx.dialog.root(
-                rx.dialog.content(
-                    rx.dialog.title(
-                        rx.hstack(rx.icon("trash-2", size=18, color="var(--red-9)"),
-                                  rx.text("Retirer ce patient de la campagne ?"), spacing="2"),
-                    ),
-                    rx.dialog.description(
-                        rx.vstack(
-                            rx.text(
-                                "Le patient « ",
-                                rx.text.strong(CampaignDetailState.confirm_remove_patient_name),
-                                " » sera retiré de cette campagne.",
-                                size="2",
+                        # Alerts
+                        rx.cond(
+                            CampaignDetailState.error_message != "",
+                            rx.callout(
+                                CampaignDetailState.error_message,
+                                color_scheme="red", icon="triangle-alert", size="2",
                             ),
-                            rx.text("Ses résultats d'examens saisis ne seront pas supprimés.",
-                                    size="2", color="var(--gray-9)"),
-                            spacing="2",
                         ),
-                    ),
-                    rx.hstack(
-                        rx.dialog.close(
-                            rx.button("Annuler", variant="soft", color_scheme="gray",
-                                      on_click=CampaignDetailState.dismiss_confirm_remove_patient),
+                        rx.cond(
+                            CampaignDetailState.success_message != "",
+                            rx.callout(
+                                CampaignDetailState.success_message,
+                                color_scheme="green", icon="circle_check", size="2",
+                            ),
                         ),
-                        rx.button("Retirer", color_scheme="red",
-                                  on_click=CampaignDetailState.confirmed_remove_patient),
-                        justify="end", spacing="2", margin_top="1rem", width="100%",
+                        # Tabs
+                        rx.tabs.root(
+                            rx.tabs.list(
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("users", size=14),
+                                        LanguageState.tr["tab_campaign_patients"],
+                                        rx.badge(
+                                            CampaignDetailState.patients.length().to_string(),
+                                            color_scheme="gray", variant="soft", size="1",
+                                        ),
+                                        spacing="1", align="center",
+                                    ),
+                                    value="patients",
+                                ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("stethoscope", size=14),
+                                        LanguageState.tr["tab_campaign_exam_types"],
+                                        rx.badge(
+                                            CampaignDetailState.exam_types.length().to_string(),
+                                            color_scheme="gray", variant="soft", size="1",
+                                        ),
+                                        spacing="1", align="center",
+                                    ),
+                                    value="exam_types",
+                                ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("clipboard-check", size=14),
+                                        LanguageState.tr["tab_campaign_visits"],
+                                        rx.badge(
+                                            CampaignDetailState.visits.length().to_string(),
+                                            color_scheme="gray", variant="soft", size="1",
+                                        ),
+                                        spacing="1", align="center",
+                                    ),
+                                    value="visits",
+                                ),
+                            ),
+                            rx.tabs.content(_tab_patients(), value="patients", padding_top="1rem"),
+                            rx.tabs.content(_tab_exam_types(), value="exam_types", padding_top="1rem"),
+                            rx.tabs.content(_tab_visits(), value="visits", padding_top="1rem"),
+                            value=CampaignDetailState.active_tab,
+                            on_change=CampaignDetailState.set_active_tab,
+                            width="100%",
+                        ),
+                        width="100%", spacing="4",
                     ),
-                    max_width="440px",
                 ),
-                open=CampaignDetailState.confirm_remove_patient_open,
-                on_open_change=lambda _: CampaignDetailState.dismiss_confirm_remove_patient(),
             ),
-            # ── Confirm retrait type d'examen ───────────────────────────────────
-            rx.dialog.root(
-                rx.dialog.content(
-                    rx.dialog.title(
-                        rx.hstack(rx.icon("trash-2", size=18, color="var(--red-9)"),
-                                  rx.text("Retirer ce type d'examen ?"), spacing="2"),
-                    ),
-                    rx.dialog.description(
-                        rx.text(
-                            "L'examen « ",
-                            rx.text.strong(CampaignDetailState.confirm_remove_exam_type_name),
-                            " » sera retiré de cette campagne.",
-                            size="2",
-                        ),
-                    ),
-                    rx.hstack(
-                        rx.dialog.close(
-                            rx.button("Annuler", variant="soft", color_scheme="gray",
-                                      on_click=CampaignDetailState.dismiss_confirm_remove_exam_type),
-                        ),
-                        rx.button("Retirer", color_scheme="red",
-                                  on_click=CampaignDetailState.confirmed_remove_exam_type),
-                        justify="end", spacing="2", margin_top="1rem", width="100%",
-                    ),
-                    max_width="440px",
-                ),
-                open=CampaignDetailState.confirm_remove_exam_type_open,
-                on_open_change=lambda _: CampaignDetailState.dismiss_confirm_remove_exam_type(),
-            ),
+            _add_patient_dialog(),
+            _add_exam_type_dialog(),
         )
     )

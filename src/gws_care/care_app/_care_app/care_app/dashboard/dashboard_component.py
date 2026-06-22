@@ -1,762 +1,230 @@
-"""Dashboard V2 component — PSC global operations dashboard."""
+"""Dashboard page component — key statistics at a glance."""
 
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.account_picker_component import account_picker_button, account_picker_dialog
 from ..common.language_state import LanguageState
-from ..common.nav_role_state import NavRoleState
 from ..common.page_layout import page_layout
 from .dashboard_state import (
-    AccountOption,
-    CampaignStatusStat,
+    AppointmentStatusStat,
     DashboardState,
-    RecentCampaignRow,
+    ExamTypeStat,
+    MonthlyExamStat,
 )
 
-# ── Colour constants (aligned with gws_project StatusColors) ─────────────────
-_C_PRIMARY = "var(--accent-9)"
-_C_DONE = "var(--teal-9)"
-_C_WARN = "var(--orange-9)"
-_C_DANGER = "var(--red-9)"
-_C_NEUTRAL = "var(--gray-9)"
-_C_INFO = "var(--blue-9)"
-_C_PURPLE = "var(--violet-9)"
-_C_SURFACE = "var(--gray-1)"
-_C_BORDER = "var(--gray-4)"
+_APPOINTMENT_STATUS_COLORS = {
+    "SCHEDULED": "blue",
+    "IN_PROGRESS": "orange",
+    "DONE": "green",
+    "CANCELLED": "gray",
+}
 
 
-# ── Primitives ────────────────────────────────────────────────────────────────
-
-def _kpi_card(
-    label: str,
-    value: rx.Var,
-    icon: str,
-    color_var: str,
-    *,
-    subtitle: str | None = None,
-) -> rx.Component:
-    """A single KPI tile with icon, value and label."""
+def _kpi_card(label: str, value: rx.Var, icon: str, color: str) -> rx.Component:
     return rx.box(
         rx.vstack(
             rx.hstack(
-                rx.box(
-                    rx.icon(icon, size=18, color=color_var),
-                    width="36px",
-                    height="36px",
-                    border_radius="8px",
-                    background=color_var.replace("9)", "3)"),
-                    display="flex",
-                    align_items="center",
-                    justify_content="center",
-                ),
-                rx.spacer(),
+                rx.icon(icon, size=22, color=f"var(--{color}-9)"),
+                rx.text(label, size="2", color="var(--gray-9)"),
+                spacing="2",
+                align="center",
             ),
-            rx.text(value, size="8", weight="bold", line_height="1"),
-            rx.vstack(
-                rx.text(label, size="2", color="var(--gray-11)", weight="medium"),
-                rx.cond(
-                    subtitle is not None,
-                    rx.text(subtitle or "", size="1", color="var(--gray-9)"),
-                    rx.fragment(),
-                ),
-                spacing="0",
-            ),
+            rx.text(value, size="8", weight="bold"),
             spacing="2",
             align_items="start",
         ),
         padding="1.25rem",
-        border="1px solid " + _C_BORDER,
-        border_radius="12px",
-        background=_C_SURFACE,
+        border="1px solid var(--gray-4)",
+        border_radius="10px",
+        background="var(--gray-1)",
         width="100%",
-        _hover={"border_color": color_var, "box_shadow": f"0 0 0 1px {color_var}"},
-        transition="border-color 0.15s, box-shadow 0.15s",
     )
 
 
-def _section_header(title: str, icon: str) -> rx.Component:
+def _exam_type_row(stat: ExamTypeStat) -> rx.Component:
     return rx.hstack(
+        rx.text(stat.label, size="2", flex="1"),
+        rx.badge(stat.count, variant="soft", size="1"),
         rx.box(
-            rx.icon(icon, size=16, color=_C_PRIMARY),
-            padding="0.4rem",
-            border_radius="8px",
-            background="var(--accent-3)",
+            rx.box(
+                height="8px",
+                border_radius="4px",
+                background="var(--accent-9)",
+                width=f"{stat.count}px",
+                max_width="200px",
+            ),
+            height="8px",
+            background="var(--gray-4)",
+            border_radius="4px",
+            width="200px",
+            overflow="hidden",
         ),
-        rx.heading(title, size="4", weight="bold"),
-        spacing="2",
-        align="center",
-        padding_bottom="0.75rem",
-    )
-
-
-def _panel(*children: rx.Component, title: str, icon: str) -> rx.Component:
-    return rx.vstack(
-        _section_header(title, icon),
-        rx.separator(width="100%"),
-        *children,
-        padding="1.25rem",
-        border="1px solid " + _C_BORDER,
-        border_radius="12px",
-        background=_C_SURFACE,
         width="100%",
+        align="center",
         spacing="3",
     )
 
 
-# ── Campaign status bar ───────────────────────────────────────────────────────
-
-def _status_bar_row(stat: CampaignStatusStat) -> rx.Component:
-    """One row in the campaign-by-status horizontal bar chart."""
-    bar_width = rx.cond(
-        DashboardState.total_campaigns > 0,
-        (stat.count * 280 / DashboardState.total_campaigns).to(int).to(str) + "px",
-        "4px",
+def _appointment_status_row(stat: AppointmentStatusStat) -> rx.Component:
+    color = rx.match(
+        stat.status,
+        ("SCHEDULED", "blue"),
+        ("IN_PROGRESS", "orange"),
+        ("DONE", "green"),
+        ("CANCELLED", "gray"),
+        "gray",
     )
-    color_var = "var(--" + stat.color + "-9)"
-    bg_var = "var(--" + stat.color + "-3)"
     return rx.hstack(
-        rx.badge(
-            stat.label,
-            color_scheme=stat.color,
-            variant="soft",
-            size="1",
-            min_width="210px",
-            white_space="nowrap",
-        ),
+        rx.badge(stat.label, color_scheme=color, variant="soft", size="1", min_width="90px"),
+        rx.text(stat.count, size="2", weight="bold"),
+        spacing="3",
+        align="center",
+        width="100%",
+    )
+
+
+def _monthly_row(stat: MonthlyExamStat) -> rx.Component:
+    return rx.hstack(
+        rx.text(stat.month, size="2", color="var(--gray-9)", min_width="60px"),
         rx.box(
             rx.box(
                 height="10px",
                 border_radius="5px",
-                background=color_var,
-                width=bar_width,
-                min_width="4px",
-                transition="width 0.4s ease",
+                background="var(--accent-9)",
+                width=f"{stat.count * 20}px",
+                max_width="300px",
             ),
             height="10px",
-            background=bg_var,
+            background="var(--gray-4)",
             border_radius="5px",
-            width="280px",
+            width="300px",
             overflow="hidden",
         ),
-        rx.text(stat.count, size="2", weight="bold", color="var(--gray-11)", min_width="24px"),
+        rx.text(stat.count, size="2"),
         spacing="3",
         align="center",
         width="100%",
     )
 
 
-# ── Recent campaigns table ────────────────────────────────────────────────────
-
-def _campaign_row(row: RecentCampaignRow) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(
-            rx.vstack(
-                rx.text(row.name, size="2", weight="medium"),
-                rx.text(row.account_name, size="1", color=_C_NEUTRAL),
-                spacing="0",
-            )
-        ),
-        rx.table.cell(
-            rx.badge(
-                row.status_label,
-                color_scheme=row.status_color,
-                variant="soft",
-                size="1",
-            )
-        ),
-        rx.table.cell(rx.text(row.patient_count, size="2")),
-        rx.table.cell(rx.text(row.start_date, size="2", color=_C_NEUTRAL)),
-        rx.table.cell(rx.text(row.end_date, size="2", color=_C_NEUTRAL)),
-        rx.table.cell(
-            rx.icon_button(
-                rx.icon("arrow-right", size=14),
-                variant="ghost",
-                size="1",
-                on_click=rx.redirect("/campaign/" + row.id),
-                title="Voir la campagne",
-            )
-        ),
-        vertical_align="middle",
-        cursor="pointer",
-        on_click=rx.redirect("/campaign/" + row.id),
-        _hover={"background": "var(--gray-2)"},
-    )
-
-
-def _campaigns_table() -> rx.Component:
-    return rx.table.root(
-        rx.table.header(
-            rx.table.row(
-                rx.table.column_header_cell("Campagne / Entreprise"),
-                rx.table.column_header_cell("Statut"),
-                rx.table.column_header_cell("Patients"),
-                rx.table.column_header_cell("Début"),
-                rx.table.column_header_cell("Fin"),
-                rx.table.column_header_cell(""),
-            )
-        ),
-        rx.table.body(
-            rx.foreach(DashboardState.recent_campaigns, _campaign_row)
-        ),
-        width="100%",
-        variant="surface",
-        size="1",
-    )
-
-
-# ── Filter bar ────────────────────────────────────────────────────────────────
-
-def _filter_account_option(opt: AccountOption) -> rx.Component:
-    return rx.select.item(opt.name, value=opt.id)
-
-
-def _filter_bar() -> rx.Component:
-    return rx.hstack(
-        # Enterprise filter: only relevant for admin role context
-        rx.cond(
-            DashboardState.user_role_context == "admin",
-            rx.hstack(
-                rx.hstack(
-                    rx.icon("search", size=16, color=_C_NEUTRAL),
-                    rx.text("Filtrer par entreprise", size="2", color=_C_NEUTRAL),
-                    spacing="1",
-                    align="center",
-                ),
-                rx.select.root(
-                    rx.select.trigger(placeholder="Toutes les entreprises", width="260px"),
-                    rx.select.content(
-                        rx.select.item("Toutes les entreprises", value="ALL"),
-                        rx.foreach(DashboardState.accounts, _filter_account_option),
-                    ),
-                    on_change=DashboardState.set_filter_account,
-                    value=rx.cond(DashboardState.filter_account_id != "", DashboardState.filter_account_id, "ALL"),
-                ),
-                spacing="2",
-                align="center",
-            ),
-            rx.fragment(),
-        ),
-        rx.cond(
-            DashboardState.is_loading,
-            rx.hstack(
-                rx.spinner(size="2"),
-                rx.text("Chargement…", size="2", color=_C_NEUTRAL),
-                spacing="2",
-                align="center",
-            ),
-            rx.fragment(),
-        ),
-        rx.button(
-            rx.icon("refresh-cw", size=14),
-            "Actualiser",
-            on_click=DashboardState.refresh,
-            variant="soft",
-            size="2",
-            loading=DashboardState.is_loading,
-        ),
-        rx.cond(
-            DashboardState.last_updated != "",
-            rx.text(
-                "Mis à jour à " + DashboardState.last_updated,
-                size="1",
-                color=_C_NEUTRAL,
-            ),
-            rx.fragment(),
-        ),
-        spacing="4",
-        align="center",
-        flex_wrap="wrap",
-    )
-
-
-# ── Error banner ──────────────────────────────────────────────────────────────
-
-def _error_banner() -> rx.Component:
-    return rx.cond(
-        DashboardState.error_message != "",
-        rx.callout(
-            DashboardState.error_message,
-            icon="info",
-            color_scheme="red",
-            width="100%",
-        ),
-        rx.fragment(),
-    )
-
-
-# ── KPI grid row ─────────────────────────────────────────────────────────────
-
-def _kpi_grid_1() -> rx.Component:
-    """Row 1 KPI: campaigns, patients, convocations, présents/absents + taux."""
-    return rx.grid(
-        _kpi_card("Campagnes", DashboardState.total_campaigns, "list", _C_PRIMARY),
-        _kpi_card("Patients", DashboardState.total_patients, "users", _C_INFO),
-        _kpi_card("Convoqués", DashboardState.total_convocations_sent, "mail", _C_WARN),
-        _kpi_card("Présents", DashboardState.total_present, "check", _C_DONE),
-        columns="4",
-        spacing="4",
-        width="100%",
-    )
-
-
-def _kpi_grid_2() -> rx.Component:
-    """Row 2 KPI: absents, taux participation, examens réalisés, certificats."""
-    return rx.grid(
-        _kpi_card("Absents", DashboardState.total_absent, "ban", _C_DANGER),
-        _kpi_card(
-            "Taux de participation",
-            DashboardState.participation_rate.to(str) + " %",
-            "flag",
-            _C_DONE,
-        ),
-        _kpi_card("Examens réalisés", DashboardState.exams_done, "eye", _C_INFO),
-        _kpi_card("Certificats générés", DashboardState.total_certificates, "award", _C_PURPLE),
-        columns="4",
-        spacing="4",
-        width="100%",
-    )
-
-
-def _kpi_grid_3() -> rx.Component:
-    """Row 3 KPI: pipeline médical + notifications."""
-    return rx.grid(
-        _kpi_card(
-            "Examens à saisir",
-            DashboardState.exams_to_enter,
-            "pen-line",
-            _C_WARN,
-        ),
-        _kpi_card(
-            "En attente médecin PSC",
-            DashboardState.dossiers_awaiting_psc,
-            "shield",
-            _C_PURPLE,
-        ),
-        _kpi_card(
-            "Notifs envoyées",
-            DashboardState.notifications_sent,
-            "send",
-            _C_DONE,
-        ),
-        _kpi_card(
-            "Notifs échouées",
-            DashboardState.notifications_failed,
-            "x",
-            _C_DANGER,
-        ),
-        columns="4",
-        spacing="4",
-        width="100%",
-    )
-
-
-# ── Pipeline strip ────────────────────────────────────────────────────────────
-
-def _pipeline_strip() -> rx.Component:
-    """Compact 3-step publication pipeline."""
-    def _step(label: str, value: rx.Var, icon: str, color: str) -> rx.Component:
-        return rx.vstack(
-            rx.box(
-                rx.icon(icon, size=20, color=f"var(--{color}-9)"),
-                rx.text(value, size="6", weight="bold"),
-                display="flex",
-                flex_direction="column",
-                align_items="center",
-                gap="0.25rem",
-                padding="0.75rem 1.25rem",
-                border="1px solid " + _C_BORDER,
-                border_radius="10px",
-                background=f"var(--{color}-2)",
-                min_width="120px",
-            ),
-            rx.text(label, size="1", color=_C_NEUTRAL, text_align="center", max_width="120px"),
-            spacing="1",
+def _panel(title: str, icon: str, *content: rx.Component) -> rx.Component:
+    return rx.vstack(
+        rx.hstack(
+            rx.icon(icon, size=18, color="var(--accent-9)"),
+            rx.heading(title, size="4"),
+            spacing="2",
             align="center",
-        )
-
-    return rx.hstack(
-        _step("Labo validé", DashboardState.exams_labo_validated, "file", "teal"),
-        rx.icon("arrow-right", size=16, color=_C_NEUTRAL),
-        _step("Médecin entreprise", DashboardState.dossiers_available_medecin_entreprise, "building-2", "violet"),
-        rx.icon("arrow-right", size=16, color=_C_NEUTRAL),
-        _step("Publié patient", DashboardState.dossiers_published_patient, "users", "green"),
+        ),
+        rx.separator(width="100%"),
+        *content,
+        width="100%",
+        padding="1.25rem",
+        border="1px solid var(--gray-4)",
+        border_radius="10px",
+        background="var(--gray-1)",
         spacing="3",
-        align="center",
-        flex_wrap="wrap",
-        padding="0.5rem 0",
-    )
-
-
-def _role_kpi_section() -> rx.Component:
-    """Render KPI grids adapted to the current user's role context."""
-    return rx.match(
-        DashboardState.user_role_context,
-        # Admin: priorité — 4 KPIs essentiels + détail secondaire
-        ("admin", rx.vstack(
-            rx.grid(
-                _kpi_card("Campagnes actives", DashboardState.total_campaigns, "list", _C_PRIMARY),
-                _kpi_card("En attente médecin PSC", DashboardState.dossiers_awaiting_psc, "shield", _C_PURPLE),
-                _kpi_card("Taux de participation", DashboardState.participation_rate.to(str) + " %", "flag", _C_DONE),
-                _kpi_card("Notifs \u00e9chou\u00e9es", DashboardState.notifications_failed, "x", _C_DANGER),
-                columns="4", spacing="4", width="100%",
-            ),
-            _kpi_grid_1(),
-            _kpi_grid_3(),
-            spacing="4", width="100%",
-        )),
-        # Doctor PSC: personal interpretation queue + pipeline overview
-        ("doctor_psc", rx.vstack(
-            rx.grid(
-                _kpi_card("À interpréter", DashboardState.my_pending_interpretations, "shield", _C_PURPLE),
-                _kpi_card("À valider", DashboardState.my_pending_validation, "check-circle", _C_DONE),
-                _kpi_card("En attente PSC (global)", DashboardState.dossiers_awaiting_psc, "clock", _C_WARN),
-                _kpi_card("Campagnes actives", DashboardState.total_campaigns, "list", _C_PRIMARY),
-                columns="4", spacing="4", width="100%",
-            ),
-            rx.grid(
-                _kpi_card("Examens à saisir", DashboardState.exams_to_enter, "pen-line", _C_WARN),
-                _kpi_card("Examens réalisés", DashboardState.exams_done, "eye", _C_INFO),
-                _kpi_card("Labo validés", DashboardState.exams_labo_validated, "file", _C_DONE),
-                _kpi_card("Certificats générés", DashboardState.total_certificates, "award", _C_PURPLE),
-                columns="4", spacing="4", width="100%",
-            ),
-            spacing="4", width="100%",
-        )),
-        # Doctor enterprise: dossiers available for interpretation
-        ("doctor_enterprise", rx.vstack(
-            rx.grid(
-                _kpi_card("Dossiers à traiter", DashboardState.my_enterprise_pending, "building-2", _C_PURPLE),
-                _kpi_card("Publiés patients", DashboardState.dossiers_published_patient, "users", _C_DONE),
-                _kpi_card("Total patients", DashboardState.total_patients, "users", _C_INFO),
-                _kpi_card("Taux de participation", DashboardState.participation_rate.to(str) + " %", "flag", _C_DONE),
-                columns="4", spacing="4", width="100%",
-            ),
-            spacing="4", width="100%",
-        )),
-        # RH: participation statistics
-        ("rh", rx.vstack(
-            _kpi_grid_1(),
-            _kpi_grid_2(),
-            spacing="4", width="100%",
-        )),
-        # Operator (terrain / labo): exam-centric view
-        ("operator", rx.vstack(
-            rx.grid(
-                _kpi_card("Campagnes", DashboardState.total_campaigns, "list", _C_PRIMARY),
-                _kpi_card("Patients", DashboardState.total_patients, "users", _C_INFO),
-                _kpi_card("Présents", DashboardState.total_present, "check", _C_DONE),
-                _kpi_card("Absents", DashboardState.total_absent, "ban", _C_DANGER),
-                columns="4", spacing="4", width="100%",
-            ),
-            rx.grid(
-                _kpi_card("Examens à saisir", DashboardState.exams_to_enter, "pen-line", _C_WARN),
-                _kpi_card("Examens réalisés", DashboardState.exams_done, "eye", _C_INFO),
-                _kpi_card("Labo validés", DashboardState.exams_labo_validated, "file", _C_DONE),
-                _kpi_card(
-                    "Taux de participation",
-                    DashboardState.participation_rate.to(str) + " %",
-                    "flag",
-                    _C_DONE,
-                ),
-                columns="4", spacing="4", width="100%",
-            ),
-            spacing="4", width="100%",
-        )),
-        # Default / unknown: basic overview only
-        _kpi_grid_1(),
-    )
-
-
-# ── Role-adaptive header banner ───────────────────────────────────────────────
-
-def _role_banner() -> rx.Component:
-    """Show a contextual banner with role-specific quick actions."""
-    return rx.match(
-        DashboardState.user_role_context,
-        ("doctor_psc", rx.card(
-            rx.hstack(
-                rx.box(rx.icon("shield", size=20, color=_C_PURPLE),
-                       padding="0.5rem", border_radius="8px", background="var(--violet-3)"),
-                rx.vstack(
-                    rx.text("Bonjour " + DashboardState.user_display_name + " — Médecin PSC", size="3", weight="bold"),
-                    rx.text("Dossiers en attente de votre interprétation", size="2", color="var(--gray-9)"),
-                    spacing="0",
-                ),
-                rx.spacer(),
-                rx.hstack(
-                    rx.box(
-                        rx.vstack(
-                            rx.text(DashboardState.my_pending_interpretations, size="6", weight="bold", color=_C_PURPLE),
-                            rx.text("À interpréter", size="1", color="var(--gray-9)"),
-                            align="center", spacing="0",
-                        ),
-                        padding="0.75rem 1rem",
-                        border="2px solid var(--violet-6)",
-                        border_radius="10px",
-                        background="var(--violet-2)",
-                    ),
-                    rx.box(
-                        rx.vstack(
-                            rx.text(DashboardState.my_pending_validation, size="6", weight="bold", color=_C_WARN),
-                            rx.text("À valider", size="1", color="var(--gray-9)"),
-                            align="center", spacing="0",
-                        ),
-                        padding="0.75rem 1rem",
-                        border="2px solid var(--orange-6)",
-                        border_radius="10px",
-                        background="var(--orange-2)",
-                    ),
-                    rx.button(
-                        rx.icon("arrow-right", size=14), "Voir ma file",
-                        color_scheme="violet", size="2",
-                        on_click=rx.redirect("/doctor-psc"),
-                    ),
-                    spacing="3", align="center",
-                ),
-                spacing="3", align="center", width="100%",
-            ),
-            background="var(--violet-1)",
-            border="1px solid var(--violet-4)",
-        )),
-        ("doctor_enterprise", rx.card(
-            rx.hstack(
-                rx.box(rx.icon("heart", size=20, color="var(--green-9)"),
-                       padding="0.5rem", border_radius="8px", background="var(--green-3)"),
-                rx.vstack(
-                    rx.text("Bonjour " + DashboardState.user_display_name + " — Médecin Entreprise", size="3", weight="bold"),
-                    rx.text("Dossiers disponibles pour votre interprétation", size="2", color="var(--gray-9)"),
-                    spacing="0",
-                ),
-                rx.spacer(),
-                rx.hstack(
-                    rx.box(
-                        rx.vstack(
-                            rx.text(DashboardState.my_enterprise_pending, size="6", weight="bold", color="var(--green-9)"),
-                            rx.text("Dossiers à traiter", size="1", color="var(--gray-9)"),
-                            align="center", spacing="0",
-                        ),
-                        padding="0.75rem 1rem",
-                        border="2px solid var(--green-6)",
-                        border_radius="10px",
-                        background="var(--green-2)",
-                    ),
-                    rx.button(
-                        rx.icon("arrow-right", size=14), "Voir les dossiers",
-                        color_scheme="green", size="2",
-                        on_click=rx.redirect("/doctor-psc"),
-                    ),
-                    spacing="3", align="center",
-                ),
-                spacing="3", align="center", width="100%",
-            ),
-            background="var(--green-1)",
-            border="1px solid var(--green-4)",
-        )),
-        ("rh", rx.card(
-            rx.hstack(
-                rx.box(rx.icon("user-plus", size=20, color="var(--blue-9)"),
-                       padding="0.5rem", border_radius="8px", background="var(--blue-3)"),
-                rx.vstack(
-                    rx.text("Bonjour " + DashboardState.user_display_name + " — Responsable RH", size="3", weight="bold"),
-                    rx.text("Suivi administratif de vos campagnes de santé", size="2", color="var(--gray-9)"),
-                    spacing="0",
-                ),
-                rx.spacer(),
-                rx.hstack(
-                    rx.box(
-                        rx.vstack(
-                            rx.text(DashboardState.total_campaigns, size="6", weight="bold", color="var(--blue-9)"),
-                            rx.text("Campagnes actives", size="1", color="var(--gray-9)"),
-                            align="center", spacing="0",
-                        ),
-                        padding="0.75rem 1rem",
-                        border="2px solid var(--blue-6)",
-                        border_radius="10px",
-                        background="var(--blue-2)",
-                    ),
-                    rx.box(
-                        rx.vstack(
-                            rx.text(DashboardState.total_convocations_sent, size="6", weight="bold", color=_C_DONE),
-                            rx.text("Salariés convoqués", size="1", color="var(--gray-9)"),
-                            align="center", spacing="0",
-                        ),
-                        padding="0.75rem 1rem",
-                        border="2px solid var(--teal-6)",
-                        border_radius="10px",
-                        background="var(--teal-2)",
-                    ),
-                    spacing="3", align="center",
-                ),
-                spacing="3", align="center", width="100%",
-            ),
-            background="var(--blue-1)",
-            border="1px solid var(--blue-4)",
-        )),
-        ("operator", rx.card(
-            rx.hstack(
-                rx.box(rx.icon("flask-conical", size=20, color="var(--teal-9)"),
-                       padding="0.5rem", border_radius="8px", background="var(--teal-3)"),
-                rx.vstack(
-                    rx.text("Bonjour " + DashboardState.user_display_name + " — Opérateur", size="3", weight="bold"),
-                    rx.text("Campagnes en cours à gérer", size="2", color="var(--gray-9)"),
-                    spacing="0",
-                ),
-                rx.spacer(),
-                rx.button(
-                    rx.icon("arrow-right", size=14), "Voir les campagnes",
-                    color_scheme="teal", size="2",
-                    on_click=rx.redirect("/campaigns"),
-                ),
-                spacing="3", align="center", width="100%",
-            ),
-            background="var(--teal-1)",
-            border="1px solid var(--teal-4)",
-        )),
-        rx.fragment(),  # admin / unknown: no specific banner
-    )
-
-
-# ── Preview mode callout ──────────────────────────────────────────────────────
-
-def _preview_mode_banner() -> rx.Component:
-    """Amber callout shown when an admin is previewing another user's dashboard."""
-    return rx.cond(
-        DashboardState.is_preview_mode,
-        rx.callout(
-            rx.hstack(
-                rx.text("Mode aperçu — tableau de bord affiché tel que le voit ", size="2"),
-                rx.text(DashboardState.user_display_name, size="2", weight="bold"),
-                rx.spacer(),
-                rx.button(
-                    rx.icon("x", size=13),
-                    "Quitter l'aperçu",
-                    size="1",
-                    variant="soft",
-                    color_scheme="amber",
-                    on_click=[NavRoleState.stop_preview, DashboardState.refresh_role_context],
-                ),
-                spacing="1",
-                align="center",
-                width="100%",
-            ),
-            icon="eye",
-            color_scheme="amber",
-            width="100%",
-        ),
-        rx.fragment(),
-    )
-
-
-# ── Page assembly ─────────────────────────────────────────────────────────────
-
-def _patient_access_block() -> rx.Component:
-    """Shown to pure-patient users who navigate to /dashboard by URL."""
-    return rx.center(
-        rx.vstack(
-            rx.icon("lock", size=40, color="var(--gray-8)"),
-            rx.heading("Accès non autorisé", size="5", weight="medium"),
-            rx.text(
-                "Cette page est réservée au personnel PSC.",
-                size="2",
-                color="var(--gray-9)",
-                text_align="center",
-            ),
-            rx.link(
-                rx.button("Aller à Mon espace", color_scheme="teal"),
-                href="/patient-portal",
-            ),
-            spacing="4",
-            align="center",
-        ),
-        padding="6rem 2rem",
-        width="100%",
     )
 
 
 def dashboard_page() -> rx.Component:
+    """Main dashboard with aggregated statistics."""
     return main_component(
         page_layout(
+            account_picker_dialog(DashboardState),
+            rx.hstack(
+                rx.heading(LanguageState.tr["dashboard_title"], size="6"),
+                rx.spacer(),
+                account_picker_button(DashboardState),
+                width="100%",
+                align="center",
+            ),
             rx.cond(
-                NavRoleState.is_pure_patient,
-                _patient_access_block(),
+                DashboardState.error_message != "",
+                rx.callout(
+                    DashboardState.error_message,
+                    icon="triangle-alert",
+                    color_scheme="red",
+                ),
+            ),
+            rx.cond(
+                DashboardState.is_loading,
+                rx.center(rx.spinner(size="3"), padding="3rem"),
                 rx.vstack(
-                    # Preview mode indicator (visible only when admin simulates another role)
-                    _preview_mode_banner(),
-
-                    # Header
-                    rx.vstack(
-                rx.hstack(
-                    rx.vstack(
-                        rx.heading("Dashboard opérationnel", size="6", weight="bold"),
-                        rx.text(
-                            "Vue globale PSC — campagnes médicales en entreprise",
-                            size="2",
-                            color=_C_NEUTRAL,
+                    # KPI row
+                    rx.grid(
+                        _kpi_card(LanguageState.tr["kpi_patients"], DashboardState.total_patients, "users", "blue"),
+                        _kpi_card(LanguageState.tr["kpi_exams"], DashboardState.total_exams, "stethoscope", "violet"),
+                        _kpi_card(
+                            LanguageState.tr["kpi_appointments"],
+                            DashboardState.total_appointments,
+                            "calendar",
+                            "orange",
                         ),
-                        spacing="1",
-                    ),
-                    rx.spacer(),
-                    _filter_bar(),
-                    align="center",
-                    width="100%",
-                    flex_wrap="wrap",
-                    spacing="4",
-                ),
-                _error_banner(),
-                spacing="3",
-                width="100%",
-            ),
-
-            # Role-specific banner
-            _role_banner(),
-
-            # Role-adaptive KPI rows
-            _role_kpi_section(),
-
-            # Two-column middle section
-            rx.grid(
-                _panel(
-                    rx.foreach(DashboardState.campaigns_by_status, _status_bar_row),
-                    rx.cond(
-                        DashboardState.campaigns_by_status.length() == 0,
-                        rx.center(
-                            rx.text("Aucune campagne", size="2", color=_C_NEUTRAL),
-                            padding="1rem",
-                            width="100%",
+                        _kpi_card(
+                            LanguageState.tr["kpi_certificates"],
+                            DashboardState.total_certificates,
+                            "file-check",
+                            "green",
                         ),
-                        rx.fragment(),
-                    ),
-                    title="Campagnes par statut",
-                    icon="list",
-                ),
-                _panel(
-                    _pipeline_strip(),
-                    title="Pipeline de publication",
-                    icon="arrow-right",
-                ),
-                columns="2",
-                spacing="4",
-                width="100%",
-            ),
-
-            # Recent campaigns table
-            _panel(
-                _campaigns_table(),
-                rx.cond(
-                    DashboardState.recent_campaigns.length() == 0,
-                    rx.center(
-                        rx.text("Aucune campagne récente", size="2", color=_C_NEUTRAL),
-                        padding="1rem",
+                        columns="4",
+                        spacing="4",
                         width="100%",
                     ),
-                    rx.fragment(),
-                ),
-                title="Campagnes récentes",
-                icon="list",
-            ),
-                    spacing="4",
+                    # Charts row
+                    rx.grid(
+                        # Exams by type
+                        _panel(
+                            LanguageState.tr["panel_exams_by_type"],
+                            "bar-chart-2",
+                            rx.cond(
+                                DashboardState.exams_by_type,
+                                rx.vstack(
+                                    rx.foreach(DashboardState.exams_by_type, _exam_type_row),
+                                    width="100%",
+                                    spacing="2",
+                                ),
+                                rx.text(LanguageState.tr["no_exams_yet"], size="2", color="var(--gray-7)"),
+                            ),
+                        ),
+                        # Appointments by status
+                        _panel(
+                            LanguageState.tr["panel_appts_by_status"],
+                            "pie-chart",
+                            rx.cond(
+                                DashboardState.appointments_by_status,
+                                rx.vstack(
+                                    rx.foreach(
+                                        DashboardState.appointments_by_status,
+                                        _appointment_status_row,
+                                    ),
+                                    width="100%",
+                                    spacing="2",
+                                ),
+                                rx.text(LanguageState.tr["no_appts_yet"], size="2", color="var(--gray-7)"),
+                            ),
+                        ),
+                        columns="2",
+                        spacing="4",
+                        width="100%",
+                    ),
+                    # Monthly trend
+                    _panel(
+                        LanguageState.tr["panel_monthly_exams"],
+                        "trending-up",
+                        rx.cond(
+                            DashboardState.monthly_exams,
+                            rx.vstack(
+                                rx.foreach(DashboardState.monthly_exams, _monthly_row),
+                                width="100%",
+                                spacing="2",
+                            ),
+                            rx.text(LanguageState.tr["no_data_yet"], size="2", color="var(--gray-7)"),
+                        ),
+                    ),
                     width="100%",
-                ),   # closes rx.vstack (else branch of rx.cond)
-            ),       # closes rx.cond
+                    spacing="5",
+                ),
+            ),
         )
     )

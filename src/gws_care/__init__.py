@@ -1,24 +1,45 @@
 # Models — must be imported so the ORM registers them (order: dependencies first)
+
+# Core user and account models
+from gws_care.user.user import User
+from gws_care.user.user_language_pref import UserLanguagePref
+from gws_care.user.user_app_config import UserAppConfig
+
 from gws_care.account.account import Account
-from gws_care.appointment.appointment import Appointment
-from gws_care.audit.audit_log import AuditLog
-from gws_care.billing.patient_invoice import PatientInvoice, PatientInvoiceLine
-from gws_care.billing.price_list import PriceList
-from gws_care.campaign.campaign import Campaign
-from gws_care.campaign.campaign_exam import CampaignExam
-from gws_care.campaign.campaign_patient import CampaignPatient
-from gws_care.certificate.medical_certificate import MedicalCertificate
 from gws_care.company.company import Company
-from gws_care.consultation.consultation import Consultation
-from gws_care.correction.correction_request import CorrectionRequest
-from gws_care.dashboard.dashboard_snapshot import DashboardSnapshot
+
+# Patient models (patient_account depends on patient + account)
+from gws_care.patient.patient import Patient
+from gws_care.patient.patient_account import PatientAccount
+from gws_care.patient.patient_doctor import PatientDoctor
+from gws_care.patient.patient_consent import PatientConsent
+from gws_care.patient.patient_deletion_log import PatientDeletionLog
+from gws_care.patient.patient_document import PatientDocument
+from gws_care.patient.patient_note import PatientNote
+
+# Role models
+from gws_care.role.user_care_role import UserCareRole
+
+# Doctor model
+from gws_care.doctor.medical_doctor import MedicalDoctor
+
+# Campaign models
+from gws_care.campaign.campaign import Campaign
+from gws_care.campaign.campaign_exam_type import CampaignExamType
+from gws_care.campaign.campaign_patient import CampaignPatient
+
+# Visit model (depends on campaign, patient, account, doctor)
+from gws_care.visit.visit import Visit
+
+# Exam models (depend on visit, patient, account)
 from gws_care.exam.exam import Exam
-from gws_care.exam.exam_file import ExamFile
-from gws_care.exam.exam_parameter_result import ExamParameterResult
 from gws_care.exam.exam_result import ExamResult
-from gws_care.exam_type_ref.exam_parameter import ExamParameter
-from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
-from gws_care.messaging.patient_message import PatientMessage
+from gws_care.exam.exam_type_model import ExamTypeModel
+
+# Certificate
+from gws_care.certificate.medical_certificate import MedicalCertificate
+
+# Notifications
 from gws_care.notification.notification_models import (
     BrevoConfig,
     NotificationBell,
@@ -26,23 +47,51 @@ from gws_care.notification.notification_models import (
     NotificationPreference,
     SmtpConfig,
 )
-from gws_care.patient.patient import Patient
-from gws_care.patient.patient_consent import PatientConsent
-from gws_care.patient.patient_deletion_log import PatientDeletionLog
-from gws_care.patient.patient_document import PatientDocument
-from gws_care.patient.patient_note import PatientNote
-from gws_care.patient_account.patient_account import PatientAccount
-from gws_care.prebilling.prebilling import Invoice, Prebilling, PrebillingLine
+
+# Document upload (AI analysis)
+from gws_care.document_upload.document_text import DocumentText
+from gws_care.document_upload.uploaded_document import UploadedDocument
+
+# Audit
+from gws_care.audit.audit_log import AuditLog
+
+# Dashboard
+from gws_care.dashboard.dashboard_snapshot import DashboardSnapshot
+
+# Billing / invoicing
+from gws_care.billing.patient_invoice import PatientInvoice, PatientInvoiceLine
+from gws_care.billing.price_list import PriceList
+
+# Prescriptions
 from gws_care.prescription.prescription import Prescription, PrescriptionLine
-from gws_care.role.user_care_role import UserCareRole
-from gws_care.scheduling.doctor_schedule import DoctorSchedule, DoctorUnavailableDay
+
+# TubeQR
 from gws_care.tube_qr.tube_qr import TubeQR
-from gws_care.user.user_language_pref import UserLanguagePref
+
+# Messaging
+from gws_care.messaging.patient_message import PatientMessage
+
+# Exam file / parameter results
+from gws_care.exam.exam_file import ExamFile
+from gws_care.exam.exam_parameter_result import ExamParameterResult
+
+# Scheduling
+from gws_care.scheduling.doctor_schedule import DoctorSchedule, DoctorUnavailableDay
 
 # Reflex app task
 from gws_care.care_app.generate_care_app import GenerateCareApp
 
-# Migrations (in version order)
+# Background tasks
+from gws_care.notification.notification_scheduler_task import CareNotificationSchedulerTask
+from gws_care.document_upload.document_bulk_import_task import DocumentBulkImportTask
+from gws_care.document_upload.document_text_extraction_task import DocumentTextExtractionTask
+
+# Workflow gating models
+from gws_care.workflow.campaign_validation_workflow import CampaignValidationWorkflow
+from gws_care.workflow.campaign_visit_validation_workflow import CampaignVisitValidationWorkflow
+from gws_care.workflow.exam_validation_workflow import ExamValidationWorkflow
+
+# Migrations (in version order — run on startup to bring DB to current schema)
 from gws_care.core.migration_0 import Migration010
 from gws_care.core.migration_1 import Migration020
 from gws_care.core.migration_2 import Migration030
@@ -63,7 +112,7 @@ from gws_care.core.migration_16 import Migration106
 from gws_care.core.migration_17 import Migration107
 from gws_care.core.migration_18 import Migration108
 from gws_care.core.migration_19 import Migration109
+from gws_care.core.migration_20 import Migration200
 
 # User sync service — keeps local User table in sync with gws_core
 from gws_care.user.care_user_sync_service import CareUserSyncService
-from gws_care.user.user import User

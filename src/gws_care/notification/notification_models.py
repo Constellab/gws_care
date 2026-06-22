@@ -13,7 +13,6 @@ from gws_core.core.model.db_field import JSONField
 from peewee import BooleanField, CharField, DateTimeField, ForeignKeyField, IntegerField, TextField
 
 from gws_care.account.account import Account
-from gws_care.appointment.appointment import Appointment
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.notification.notification_enums import (
     NotificationChannel,
@@ -22,6 +21,7 @@ from gws_care.notification.notification_enums import (
 )
 from gws_care.patient.patient import Patient
 from gws_care.user.user import User
+from gws_care.visit.visit import Visit
 
 
 class NotificationLog(Model):
@@ -43,13 +43,15 @@ class NotificationLog(Model):
     recipient_name: str = CharField(max_length=255, null=True)
 
     # Content
-    subject: str = CharField(max_length=500, null=False)
+    subject: str = TextField(null=False)
     body: str = TextField(null=False)
 
     # Metadata
     sent_by: User = ForeignKeyField(User, null=True, backref="+", on_delete="SET NULL")
-    related_appointment: Appointment = ForeignKeyField(
-        Appointment, null=True, backref="notification_logs", on_delete="SET NULL"
+    recipient_user: User = ForeignKeyField(User, null=True, backref="received_notifications", on_delete="SET NULL")
+    parent_log = ForeignKeyField("self", null=True, backref="replies", on_delete="SET NULL")
+    related_visit: Visit = ForeignKeyField(
+        Visit, null=True, backref="notification_logs", on_delete="SET NULL"
     )
     error_message: str = TextField(null=True)
     extra_data: dict = JSONField(null=True)
@@ -80,7 +82,7 @@ class NotificationBell(Model):
     """In-app notification bell entry for a specific user."""
 
     user: User = ForeignKeyField(User, null=False, backref="bell_notifications", on_delete="CASCADE")
-    message: str = CharField(max_length=500, null=False)
+    message: str = TextField(null=False)
     is_read: bool = BooleanField(default=False, null=False)
     related_log: NotificationLog = ForeignKeyField(
         NotificationLog, null=True, backref="+", on_delete="CASCADE"
@@ -102,7 +104,6 @@ class SmtpConfig(Model):
 
     host: str = CharField(max_length=255, null=True)
     port: int = IntegerField(default=587, null=False)
-    username: str = CharField(max_length=255, null=True)
     credentials_name: str = CharField(max_length=255, null=True)
     use_tls: bool = BooleanField(default=True, null=False)
     from_email: str = CharField(max_length=255, null=True)
@@ -114,21 +115,3 @@ class SmtpConfig(Model):
         is_table = True
         db_manager = CareDbManager.get_instance()
 
-
-class BrevoConfig(Model):
-    """Singleton Brevo API configuration for email, SMS and WhatsApp delivery.
-
-    The API key is NOT stored here. Instead, 'credentials_name' references
-    a Constellab Credentials object of type BASIC whose password field holds it.
-    """
-
-    credentials_name: str = CharField(max_length=255, null=True)
-    from_email: str = CharField(max_length=255, null=True)
-    from_name: str = CharField(max_length=255, null=True)
-    sms_sender: str = CharField(max_length=11, null=True)   # alphanumeric, max 11 chars
-
-    class Meta:
-        table_name = "gws_care_brevo_config"
-        database = CareDbManager.get_instance().db
-        is_table = True
-        db_manager = CareDbManager.get_instance()

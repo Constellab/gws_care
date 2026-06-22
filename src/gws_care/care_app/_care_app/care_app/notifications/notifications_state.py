@@ -1,8 +1,17 @@
-"""State for the Notifications page (history + preferences + compose)."""
+"""State for the Notifications page (inbox, sent, compose, preferences)."""
 
 import reflex as rx
-from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
+
+from ..common.account_picker_state import AccountPickerRowDTO
+from ..common.combined_picker_state import CombinedPickerState
+from ..common.patient_picker_state import PatientPickerRowDTO
+
+
+class DoctorPickerRowDTO(BaseModel):
+    id: str
+    full_name: str = ""
+    specialization: str = ""
 
 
 class NotificationLogRow(BaseModel):
@@ -14,111 +23,295 @@ class NotificationLogRow(BaseModel):
     recipient_name: str
     recipient_email: str
     subject: str
+    body_preview: str
     sent_by_name: str
+    parent_log_id: str
 
 
-class AccountOption(BaseModel):
-    id: str
-    name: str
-
-
-class CampaignOption(BaseModel):
-    id: str
-    name: str
-
-
-class PatientOption(BaseModel):
-    id: str
-    display: str   # "LAST First (PAT-XXXX)"
-    email: str
-
-
-class NotificationsState(ReflexMainState):
+class NotificationsState(CombinedPickerState):
     """State for the /notifications page."""
 
-    # ── History tab ───────────────────────────────────────────────────────────
-    logs: list[NotificationLogRow] = []
+    # ── Patient picker vars (declared here for independent state storage) ─────
+    picker_patients: list[PatientPickerRowDTO] = []
+    picker_is_loading: bool = False
+    picker_error: str = ""
+    picker_filter_name: str = ""
+    picker_filter_number: str = ""
+    picker_account_id: str = ""
+    picker_is_open: bool = False
+    picker_selected_id: str = ""
+    picker_selected_label: str = ""
+
+    # ── Account picker vars (declared here for independent state storage) ─────
+    acct_picker_is_open: bool = False
+    acct_picker_filter: str = ""
+    acct_picker_accounts: list[AccountPickerRowDTO] = []
+    acct_picker_is_loading: bool = False
+    acct_picker_error: str = ""
+    acct_picker_selected_id: str = ""
+    acct_picker_selected_name: str = ""
+
+    # ── Patient picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_patient_picker(self):
+        await self._open_patient_picker()
+
+    @rx.event
+    def close_patient_picker(self):
+        self.picker_is_open = False
+
+    @rx.event
+    async def picker_clear_selection(self):
+        self.picker_selected_id = ""
+        self.picker_selected_label = ""
+
+    @rx.event
+    async def picker_set_filter_name(self, value: str):
+        await self._picker_set_filter_name(value)
+
+    @rx.event
+    async def picker_set_filter_number(self, value: str):
+        await self._picker_set_filter_number(value)
+
+    @rx.event
+    async def picker_clear_filters(self):
+        await self._picker_clear_filters()
+
+    @rx.event
+    def picker_select_patient(self, patient_id: str, label: str):
+        self.picker_selected_id = patient_id
+        self.picker_selected_label = label
+        self.picker_is_open = False
+
+    # ── Account picker events ─────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_account_picker(self):
+        await self._open_account_picker()
+
+    @rx.event
+    def close_account_picker(self):
+        self.acct_picker_is_open = False
+
+    @rx.event
+    async def acct_picker_set_filter(self, value: str):
+        await self._acct_picker_set_filter(value)
+
+    @rx.event
+    async def acct_picker_confirm(self, account_id: str, name: str):
+        await self._acct_picker_confirm(account_id, name)
+
+    @rx.event
+    async def acct_picker_clear(self):
+        await self._acct_picker_clear()
+
+    # ── Inbox / Sent box ──────────────────────────────────────────────────────
+    inbox_logs: list[NotificationLogRow] = []
+    sent_logs: list[NotificationLogRow] = []
     is_loading_logs: bool = False
+    history_box: str = "inbox"      # "inbox" | "sent"
     filter_type: str = "ALL"
     sort_column: str = "created_at"
     sort_ascending: bool = False
 
     # ── Preferences tab ───────────────────────────────────────────────────────
     pref_enabled: bool = True
-    pref_new_day: str = ""          # input field for adding a new reminder day
+    pref_new_day: str = ""
     pref_days: list[int] = []
     is_saving_pref: bool = False
     pref_success: str = ""
     pref_error: str = ""
 
     # ── Compose tab ───────────────────────────────────────────────────────────
-    compose_mode: str = "patient"   # "patient" | "account"
-    # Multi-canal : liste des canaux sélectionnés (EMAIL, SMS, WHATSAPP)
-    compose_channels: list[str] = ["EMAIL"]
-    # Multi-patient : liste des IDs patients sélectionnés
-    compose_patient_ids: list[str] = []
-    compose_account_id: str = ""
+    compose_mode: str = "patient"   # "patient" | "account" | "doctor"
     compose_subject: str = ""
     compose_body: str = ""
     is_sending: bool = False
     send_success: str = ""
     send_error: str = ""
 
-    # ── Selects ───────────────────────────────────────────────────────────────
-    patients: list[PatientOption] = []
-    accounts: list[AccountOption] = []
-    campaigns: list[CampaignOption] = []
+    # ── Doctor picker (for compose) ───────────────────────────────────────────
+    doc_picker_is_open: bool = False
+    doc_picker_filter: str = ""
+    doc_picker_rows: list[DoctorPickerRowDTO] = []
+    doc_picker_is_loading: bool = False
+    doc_picker_error: str = ""
+    doc_picker_selected_id: str = ""
+    doc_picker_selected_name: str = ""
 
-    # Compose filter : recherche patient par nom / par campagne
-    compose_patient_search: str = ""
-    compose_campaign_filter_id: str = ""  # filtre optionnel
-    patients_filtered: list[PatientOption] = []  # résultat filtré
+    # ── Reply context ─────────────────────────────────────────────────────────
+    reply_to_id: str = ""
+    reply_to_subject: str = ""
+
     # ── Reminders ─────────────────────────────────────────────────────────────
     reminder_result: str = ""
     is_processing_reminders: bool = False
 
-    # ── SMTP Configuration ────────────────────────────────────────────────────
+    # ── SMTP configuration (admin only) ───────────────────────────────────────
     smtp_host: str = ""
     smtp_port: str = "587"
-    smtp_username: str = ""
     smtp_credentials_name: str = ""
     smtp_use_tls: bool = True
     smtp_from_email: str = ""
     smtp_from_name: str = ""
-    is_saving_smtp: bool = False
+    smtp_is_loading: bool = False
+    smtp_is_saving: bool = False
     smtp_success: str = ""
     smtp_error: str = ""
-
-    # ── Brevo Configuration ───────────────────────────────────────────────────
-    brevo_credentials_name: str = ""
-    brevo_from_email: str = ""
-    brevo_from_name: str = ""
-    brevo_sms_sender: str = ""
-    is_saving_brevo: bool = False
-    brevo_success: str = ""
-    brevo_error: str = ""
+    smtp_test_result: str = ""
+    smtp_is_testing: bool = False
 
     # ── Active tab ────────────────────────────────────────────────────────────
-    active_tab: str = "history"
+    active_tab: str = "inbox"
 
     @rx.event
     async def on_load(self):
-        await self._load_patients_and_accounts()
-        await self._load_logs()
+        await self._load_roles()
+        await self._load_inbox_logs()
+        await self._load_sent_logs()
         await self._load_preferences()
-        await self._load_smtp_config()
-        await self._load_brevo_config()
+        if self.is_admin:
+            await self._load_smtp_config()
+
+    @rx.event
+    async def load_settings(self):
+        """Load preferences and SMTP config for the /settings admin panel."""
+        await self._load_roles()
+        await self._load_preferences()
+        if self.is_admin:
+            await self._load_smtp_config()
+
+    # ── SMTP configuration events (admin only) ────────────────────────────────
+
+    async def _load_smtp_config(self) -> None:
+        self.smtp_is_loading = True
+        self.smtp_error = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.notification.notification_service import NotificationService
+                dto = NotificationService.get_smtp_config()
+                self.smtp_host = dto.host or ""
+                self.smtp_port = str(dto.port) if dto.port else "587"
+                self.smtp_credentials_name = dto.credentials_name or ""
+                self.smtp_use_tls = dto.use_tls
+                self.smtp_from_email = dto.from_email or ""
+                self.smtp_from_name = dto.from_name or ""
+        except Exception as e:
+            print(f"[NotificationsState] Failed to load SMTP config: {e}")
+            self.smtp_error = f"Failed to load SMTP config: {e}"
+        finally:
+            self.smtp_is_loading = False
+
+    @rx.event
+    def smtp_set_host(self, value: str):
+        self.smtp_host = value
+        self.smtp_success = ""
+        self.smtp_error = ""
+
+    @rx.event
+    def smtp_set_port(self, value: str):
+        self.smtp_port = value
+        self.smtp_success = ""
+        self.smtp_error = ""
+
+    @rx.event
+    def smtp_set_credentials_name(self, value: str):
+        self.smtp_credentials_name = value
+        self.smtp_success = ""
+        self.smtp_error = ""
+
+    @rx.event
+    def smtp_set_use_tls(self, value: bool):
+        self.smtp_use_tls = value
+
+    @rx.event
+    def smtp_set_from_email(self, value: str):
+        self.smtp_from_email = value
+        self.smtp_success = ""
+        self.smtp_error = ""
+
+    @rx.event
+    def smtp_set_from_name(self, value: str):
+        self.smtp_from_name = value
+        self.smtp_success = ""
+        self.smtp_error = ""
+
+    @rx.event
+    async def save_smtp_config(self):
+        if not self.is_admin:
+            return
+        if not self.smtp_host.strip():
+            self.smtp_error = "Host is required."
+            return
+        self.smtp_is_saving = True
+        self.smtp_success = ""
+        self.smtp_error = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.notification.notification_dto import SmtpConfigDTO
+                from gws_care.notification.notification_service import NotificationService
+                try:
+                    port = int(self.smtp_port)
+                except (ValueError, TypeError):
+                    port = 587
+                dto = SmtpConfigDTO(
+                    host=self.smtp_host.strip(),
+                    port=port,
+                    credentials_name=self.smtp_credentials_name.strip(),
+                    use_tls=self.smtp_use_tls,
+                    from_email=self.smtp_from_email.strip(),
+                    from_name=self.smtp_from_name.strip(),
+                )
+                NotificationService.save_smtp_config(dto)
+                self.smtp_success = "SMTP configuration saved."
+        except Exception as e:
+            self.smtp_error = f"Error: {e}"
+        finally:
+            self.smtp_is_saving = False
+
+    @rx.event
+    async def test_smtp_connection(self):
+        if not self.is_admin:
+            return
+        if not self.smtp_host.strip():
+            self.smtp_test_result = "Error: host is required."
+            return
+        self.smtp_is_testing = True
+        self.smtp_test_result = ""
+        try:
+            import smtplib
+            try:
+                port = int(self.smtp_port)
+            except (ValueError, TypeError):
+                port = 587
+            if self.smtp_use_tls:
+                server = smtplib.SMTP(self.smtp_host.strip(), port, timeout=10)
+                server.starttls()
+            else:
+                server = smtplib.SMTP(self.smtp_host.strip(), port, timeout=10)
+            server.quit()
+            self.smtp_test_result = "Connection successful."
+        except Exception as e:
+            self.smtp_test_result = f"Connection failed: {e}"
+        finally:
+            self.smtp_is_testing = False
 
     @rx.event
     async def set_active_tab(self, tab: str):
         self.active_tab = tab
 
-    # ── History ───────────────────────────────────────────────────────────────
+    @rx.event
+    async def set_history_box(self, box: str):
+        self.history_box = box
+
+    # ── Inbox / Sent ────────────────────────────────────────────────────────────
 
     @rx.event
     async def set_filter_type(self, value: str):
         self.filter_type = value
-        await self._load_logs()
+        await self._load_inbox_logs()
+        await self._load_sent_logs()
 
     @rx.event
     async def set_sort(self, column: str):
@@ -128,51 +321,76 @@ class NotificationsState(ReflexMainState):
         else:
             self.sort_column = column
             self.sort_ascending = True
-        await self._load_logs()
+        await self._load_inbox_logs()
+        await self._load_sent_logs()
 
-    async def _load_logs(self):
+    async def _make_log_rows(self, logs) -> list[NotificationLogRow]:
+        rows = []
+        for log_entry in logs:
+            body_text = log_entry.body or ""
+            first_line = body_text.split("\n")[0][:120]
+            rows.append(NotificationLogRow(
+                id=str(log_entry.id),
+                created_at=log_entry.created_at.strftime("%Y-%m-%d %H:%M") if log_entry.created_at else "",
+                notification_type=log_entry.notification_type.value,
+                channel=log_entry.channel.value,
+                status=log_entry.status.value,
+                recipient_name=log_entry.recipient_name or "—",
+                recipient_email=log_entry.recipient_email or "—",
+                subject=log_entry.subject,
+                body_preview=first_line,
+                sent_by_name=(
+                    f"{log_entry.sent_by.first_name} {log_entry.sent_by.last_name}"
+                    if log_entry.sent_by_id else "System"
+                ),
+                parent_log_id=str(log_entry.parent_log_id) if log_entry.parent_log_id else "",
+            ))
+        sort_col = self.sort_column
+        return sorted(
+            rows,
+            key=lambda row: (getattr(row, sort_col) or "").lower(),
+            reverse=not self.sort_ascending,
+        )
+
+    async def _load_inbox_logs(self):
         self.is_loading_logs = True
         try:
             with await self.authenticate_user():
                 from gws_care.notification.notification_service import NotificationService
-                logs = NotificationService.list_logs(
+                user = await self._get_current_user()
+                if user is None:
+                    self.inbox_logs = []
+                    return
+                logs = NotificationService.list_inbox_logs(
+                    user_id=str(user.id),
                     notification_type=self.filter_type if self.filter_type != "ALL" else None,
                 )
-                # Batch-load sent_by user names (avoids N+1)
-                user_ids_needed = {l.sent_by_id for l in logs if l.sent_by_id}
-                user_names_map: dict[str, str] = {}
-                if user_ids_needed:
-                    from gws_care.user.user import User
-                    for u in User.select(User.id, User.first_name, User.last_name).where(User.id.in_(user_ids_needed)):
-                        user_names_map[str(u.id)] = f"{u.first_name} {u.last_name}".strip()
-                rows = [
-                    NotificationLogRow(
-                        id=str(l.id),
-                        created_at=l.created_at.strftime("%Y-%m-%d %H:%M") if l.created_at else "",
-                        notification_type=l.notification_type.value,
-                        channel=l.channel.value,
-                        status=l.status.value,
-                        recipient_name=l.recipient_name or "—",
-                        recipient_email=l.recipient_email or "—",
-                        subject=l.subject,
-                        sent_by_name=user_names_map.get(str(l.sent_by_id), "System") if l.sent_by_id else "System",
-                    )
-                    for l in logs
-                ]
-                sort_col = self.sort_column
-                self.logs = sorted(
-                    rows,
-                    key=lambda row: (getattr(row, sort_col) or "").lower(),
-                    reverse=not self.sort_ascending,
-                )
-        except Exception as e:
-            self.logs = []
+                self.inbox_logs = await self._make_log_rows(logs)
+        except Exception:
+            self.inbox_logs = []
         finally:
             self.is_loading_logs = False
+
+    async def _load_sent_logs(self):
+        try:
+            with await self.authenticate_user():
+                from gws_care.notification.notification_service import NotificationService
+                user = await self._get_current_user()
+                if user is None:
+                    self.sent_logs = []
+                    return
+                logs = NotificationService.list_sent_logs(
+                    user_id=str(user.id),
+                    notification_type=self.filter_type if self.filter_type != "ALL" else None,
+                )
+                self.sent_logs = await self._make_log_rows(logs)
+        except Exception:
+            self.sent_logs = []
 
     # ── Preferences ───────────────────────────────────────────────────────────
 
     async def _load_preferences(self):
+        self.pref_error = ""
         try:
             with await self.authenticate_user():
                 from gws_care.notification.notification_service import NotificationService
@@ -182,8 +400,9 @@ class NotificationsState(ReflexMainState):
                 pref = NotificationService.get_or_create_preference(str(user.id))
                 self.pref_enabled = pref.email_reminders_enabled
                 self.pref_days = list(pref.reminder_days or [])
-        except Exception as exc:
-            print(f"[notifications] _load_pref: {exc}")
+        except Exception as e:
+            print(f"[NotificationsState] Failed to load preferences: {e}")
+            self.pref_error = f"Failed to load preferences: {e}"
 
     async def _get_current_user(self):
         from gws_care.user.user import User
@@ -262,7 +481,7 @@ class NotificationsState(ReflexMainState):
                     return
                 count = NotificationService.process_appointment_reminders(user)
                 self.reminder_result = f"{count} reminder(s) sent."
-            await self._load_logs()
+            await self._load_sent_logs()
         except Exception as e:
             self.reminder_result = f"Error: {e}"
         finally:
@@ -273,39 +492,81 @@ class NotificationsState(ReflexMainState):
     @rx.event
     async def set_compose_mode(self, value: str | list[str]):
         self.compose_mode = value if isinstance(value, str) else value[0]
-        self.compose_patient_ids = []
-        self.compose_account_id = ""
-        self.compose_patient_search = ""
-        self.compose_campaign_filter_id = ""
-        self.patients_filtered = list(self.patients)
         self.send_success = ""
         self.send_error = ""
 
     @rx.event
-    def toggle_compose_channel(self, channel: str):
-        """Toggle a channel on/off in the multi-canal selection."""
-        if channel in self.compose_channels:
-            # Keep at least one channel selected
-            if len(self.compose_channels) > 1:
-                self.compose_channels = [c for c in self.compose_channels if c != channel]
-        else:
-            self.compose_channels = sorted(set(self.compose_channels + [channel]))
+    async def open_reply(self, log_id: str, subject: str):
+        """Pre-fill compose form for a reply to the given message."""
+        self.reply_to_id = log_id
+        prefix = "Re: " if not subject.startswith("Re: ") else ""
+        self.reply_to_subject = prefix + subject
+        self.compose_subject = self.reply_to_subject
+        self.compose_body = ""
         self.send_success = ""
         self.send_error = ""
+        self.active_tab = "compose"
 
     @rx.event
-    def toggle_compose_patient(self, patient_id: str):
-        """Toggle a patient in the multi-select list."""
-        if patient_id in self.compose_patient_ids:
-            self.compose_patient_ids = [p for p in self.compose_patient_ids if p != patient_id]
-        else:
-            self.compose_patient_ids = self.compose_patient_ids + [patient_id]
-        self.send_success = ""
-        self.send_error = ""
+    async def clear_reply(self):
+        """Clear reply context."""
+        self.reply_to_id = ""
+        self.reply_to_subject = ""
+
+    async def _on_account_picked(self, account_id: str) -> None:
+        """Account picker callback: store selected account for compose tab."""
+        pass
+
+    # ── Doctor picker events ──────────────────────────────────────────────────
 
     @rx.event
-    async def set_compose_account(self, value: str):
-        self.compose_account_id = value
+    async def open_doctor_picker(self):
+        self.doc_picker_filter = ""
+        self.doc_picker_error = ""
+        self.doc_picker_is_open = True
+        await self._run_doc_search()
+
+    @rx.event
+    def close_doctor_picker(self):
+        self.doc_picker_is_open = False
+
+    @rx.event
+    async def doc_picker_set_filter(self, value: str):
+        self.doc_picker_filter = value
+        await self._run_doc_search()
+
+    @rx.event
+    def doc_picker_confirm(self, doctor_id: str, name: str):
+        self.doc_picker_selected_id = doctor_id
+        self.doc_picker_selected_name = name
+        self.doc_picker_is_open = False
+
+    @rx.event
+    def doc_picker_clear(self):
+        self.doc_picker_selected_id = ""
+        self.doc_picker_selected_name = ""
+
+    async def _run_doc_search(self) -> None:
+        self.doc_picker_is_loading = True
+        self.doc_picker_error = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+                doctors = MedicalDoctorService.list_doctors(active_only=True)
+                f = self.doc_picker_filter.strip().lower()
+                self.doc_picker_rows = [
+                    DoctorPickerRowDTO(
+                        id=d.id,
+                        full_name=d.full_name,
+                        specialization=d.specialization or "",
+                    )
+                    for d in doctors
+                    if not f or f in d.full_name.lower() or f in (d.specialization or "").lower()
+                ]
+        except Exception as e:
+            self.doc_picker_error = str(e)
+        finally:
+            self.doc_picker_is_loading = False
 
     @rx.event
     async def set_compose_subject(self, value: str):
@@ -316,270 +577,84 @@ class NotificationsState(ReflexMainState):
         self.compose_body = value
 
     @rx.event
-    async def set_compose_patient_search(self, value: str):
-        """Filter the patient list by name/number in the compose tab."""
-        self.compose_patient_search = value
-        self._apply_patient_filter()
-
-    @rx.event
-    async def set_compose_campaign_filter(self, campaign_id: str):
-        """Filter patients by campaign membership."""
-        self.compose_campaign_filter_id = "" if campaign_id == "__all__" else campaign_id
-        if self.compose_campaign_filter_id:
-            try:
-                with await self.authenticate_user():
-                    from gws_care.campaign.campaign_patient import CampaignPatient
-                    from gws_care.patient.patient import Patient
-                    cp_patient_ids = set(
-                        str(cp.patient_id)
-                        for cp in CampaignPatient.select(CampaignPatient.patient)
-                        .where(CampaignPatient.campaign == campaign_id)
-                        .limit(5000)
-                    )
-                    self.patients_filtered = [
-                        p for p in self.patients
-                        if p.id in cp_patient_ids
-                        and (not self.compose_patient_search
-                             or self.compose_patient_search.lower() in p.display.lower())
-                    ]
-            except Exception as exc:
-                self._apply_patient_filter()
-        else:
-            self._apply_patient_filter()
-
-    def _apply_patient_filter(self):
-        """Recompute patients_filtered from compose_patient_search."""
-        q = self.compose_patient_search.lower()
-        if q:
-            self.patients_filtered = [
-                p for p in self.patients if q in p.display.lower()
-            ]
-        else:
-            self.patients_filtered = list(self.patients)
-
-    @rx.event
     async def send_message(self):
-        """Send the composed message to all selected patients on all selected channels."""
+        """Send the composed message."""
         self.is_sending = True
         self.send_success = ""
         self.send_error = ""
         try:
             with await self.authenticate_user():
+                from gws_care.notification.notification_models import NotificationLog
                 from gws_care.notification.notification_service import NotificationService
                 user = await self._get_current_user()
                 if user is None:
                     self.send_error = "Could not identify current user."
                     return
 
+                parent_log = None
+                if self.reply_to_id:
+                    parent_log = NotificationLog.get_or_none(NotificationLog.id == self.reply_to_id)
+
                 if self.compose_mode == "patient":
-                    if not self.compose_patient_ids:
-                        self.send_error = "Sélectionnez au moins un patient."
-                        return
                     from gws_care.notification.notification_dto import SendCustomMessageDTO
-                    sent_total = 0
-                    failed_total = 0
-                    for patient_id in self.compose_patient_ids:
-                        for channel in self.compose_channels:
-                            try:
-                                NotificationService.send_to_patient(
-                                    SendCustomMessageDTO(
-                                        patient_id=patient_id,
-                                        subject=self.compose_subject,
-                                        body=self.compose_body,
-                                        channel=channel,
-                                    ),
-                                    sent_by=user,
-                                )
-                                sent_total += 1
-                            except Exception as exc:
-                                failed_total += 1
-                                print(f"[notifications] send_to_patient {patient_id}/{channel}: {exc}")
-                    msg = (
-                        f"{sent_total} message(s) envoyé(s) à "
-                        f"{len(self.compose_patient_ids)} patient(s) sur "
-                        f"{len(self.compose_channels)} canal(aux)."
+                    NotificationService.send_to_patient(
+                        SendCustomMessageDTO(
+                            patient_id=self.picker_selected_id,
+                            subject=self.compose_subject,
+                            body=self.compose_body,
+                        ),
+                        sent_by=user,
+                        parent_log=parent_log,
                     )
-                    if failed_total:
-                        msg += f" ({failed_total} échec(s))."
-                        self.send_error = f"{failed_total} envoi(s) ont échoué."
-                    self.send_success = msg
+                    self.send_success = "Message sent to patient."
+                elif self.compose_mode == "doctor":
+                    from gws_care.doctor.medical_doctor import MedicalDoctor
+                    from gws_care.notification.notification_enums import (
+                        NotificationChannel,
+                        NotificationStatus,
+                        NotificationType,
+                    )
+                    doc = MedicalDoctor.get_or_none(MedicalDoctor.id == self.doc_picker_selected_id)
+                    if doc is None or not doc.email:
+                        self.send_error = "This doctor has no email address on file."
+                        return
+                    log = NotificationService._create_log(
+                        notification_type=NotificationType.MANUAL_PATIENT,
+                        channel=NotificationChannel.EMAIL,
+                        subject=self.compose_subject,
+                        body=self.compose_body,
+                        recipient_email=doc.email,
+                        recipient_phone=doc.phone,
+                        recipient_name=doc.get_full_name(),
+                        sent_by=user,
+                    )
+                    success = NotificationService._dispatch(
+                        NotificationChannel.EMAIL.value,
+                        doc.email, doc.phone, doc.get_full_name(),
+                        self.compose_subject, self.compose_body,
+                    )
+                    NotificationService._finalise_log(log, success)
+                    self.send_success = f"Message sent to {doc.get_full_name()}."
                 else:
                     from gws_care.notification.notification_dto import SendManualNotificationDTO
-                    sent_total = 0
-                    failed_total = 0
-                    for channel in self.compose_channels:
-                        try:
-                            logs = NotificationService.send_to_account(
-                                SendManualNotificationDTO(
-                                    account_id=self.compose_account_id,
-                                    subject=self.compose_subject,
-                                    body=self.compose_body,
-                                    channel=channel,
-                                ),
-                                sent_by=user,
-                            )
-                            sent_total += sum(1 for l in logs if l.status.value == "SENT")
-                        except Exception as exc:
-                            failed_total += 1
-                            print(f"[notifications] send_to_account {channel}: {exc}")
-                    msg = f"{sent_total} message(s) envoyé(s) sur {len(self.compose_channels)} canal(aux)."
-                    if failed_total:
-                        msg += f" ({failed_total} canal(aux) en échec)."
-                        self.send_error = f"{failed_total} canal(aux) ont rencontré une erreur."
-                    self.send_success = msg
+                    logs = NotificationService.send_to_account(
+                        SendManualNotificationDTO(
+                            account_id=self.acct_picker_selected_id,
+                            subject=self.compose_subject,
+                            body=self.compose_body,
+                        ),
+                        sent_by=user,
+                    )
+                    self.send_success = f"Message sent to {len(logs)} recipient(s)."
 
                 self.compose_subject = ""
                 self.compose_body = ""
-            await self._load_logs()
+                self.reply_to_id = ""
+                self.reply_to_subject = ""
+            await self._load_sent_logs()
         except Exception as e:
-            self.send_error = f"Erreur : {e}"
+            self.send_error = f"Error: {e}"
         finally:
             self.is_sending = False
 
-    # ── Loaders ───────────────────────────────────────────────────────────────
 
-    async def _load_smtp_config(self):
-        try:
-            from gws_care.notification.notification_service import NotificationService
-            cfg = NotificationService.get_smtp_config()
-            self.smtp_host = cfg.host
-            self.smtp_port = str(cfg.port)
-            self.smtp_username = cfg.username
-            self.smtp_credentials_name = cfg.credentials_name
-            self.smtp_use_tls = cfg.use_tls
-            self.smtp_from_email = cfg.from_email
-            self.smtp_from_name = cfg.from_name
-        except Exception as exc:
-            print(f"[notifications] _load_smtp_config: {exc}")
-
-    @rx.event
-    async def set_smtp_host(self, value: str):
-        self.smtp_host = value
-
-    @rx.event
-    async def set_smtp_port(self, value: str):
-        self.smtp_port = value
-
-    @rx.event
-    async def set_smtp_username(self, value: str):
-        self.smtp_username = value
-
-    @rx.event
-    async def set_smtp_credentials_name(self, value: str):
-        self.smtp_credentials_name = value
-
-    @rx.event
-    async def set_smtp_use_tls(self, value: bool):
-        self.smtp_use_tls = value
-
-    @rx.event
-    async def set_smtp_from_email(self, value: str):
-        self.smtp_from_email = value
-
-    @rx.event
-    async def set_smtp_from_name(self, value: str):
-        self.smtp_from_name = value
-
-    @rx.event
-    async def save_smtp_config(self):
-        self.is_saving_smtp = True
-        self.smtp_success = ""
-        self.smtp_error = ""
-        try:
-            from gws_care.notification.notification_dto import SmtpConfigDTO
-            from gws_care.notification.notification_service import NotificationService
-            try:
-                port = int(self.smtp_port)
-            except (ValueError, TypeError):
-                self.smtp_error = "Port must be a valid integer."
-                return
-            NotificationService.save_smtp_config(SmtpConfigDTO(
-                host=self.smtp_host,
-                port=port,
-                username=self.smtp_username,
-                credentials_name=self.smtp_credentials_name,
-                use_tls=self.smtp_use_tls,
-                from_email=self.smtp_from_email,
-                from_name=self.smtp_from_name,
-            ))
-            self.smtp_success = "SMTP configuration saved."
-        except Exception as e:
-            self.smtp_error = f"Error: {e}"
-        finally:
-            self.is_saving_smtp = False
-
-    # ── Brevo config loaders / setters ────────────────────────────────────────
-
-    async def _load_brevo_config(self):
-        try:
-            from gws_care.notification.notification_service import NotificationService
-            cfg = NotificationService.get_brevo_config()
-            self.brevo_credentials_name = cfg.credentials_name
-            self.brevo_from_email = cfg.from_email
-            self.brevo_from_name = cfg.from_name
-            self.brevo_sms_sender = cfg.sms_sender
-        except Exception as exc:
-            print(f"[notifications] _load_brevo_config: {exc}")
-
-    @rx.event
-    async def set_brevo_credentials_name(self, value: str):
-        self.brevo_credentials_name = value
-
-    @rx.event
-    async def set_brevo_from_email(self, value: str):
-        self.brevo_from_email = value
-
-    @rx.event
-    async def set_brevo_from_name(self, value: str):
-        self.brevo_from_name = value
-
-    @rx.event
-    async def set_brevo_sms_sender(self, value: str):
-        self.brevo_sms_sender = value
-
-    @rx.event
-    async def save_brevo_config(self):
-        self.is_saving_brevo = True
-        self.brevo_success = ""
-        self.brevo_error = ""
-        try:
-            from gws_care.notification.notification_dto import BrevoConfigDTO
-            from gws_care.notification.notification_service import NotificationService
-            NotificationService.save_brevo_config(BrevoConfigDTO(
-                credentials_name=self.brevo_credentials_name,
-                from_email=self.brevo_from_email,
-                from_name=self.brevo_from_name,
-                sms_sender=self.brevo_sms_sender,
-            ))
-            self.brevo_success = "Brevo configuration saved."
-        except Exception as e:
-            self.brevo_error = f"Error: {e}"
-        finally:
-            self.is_saving_brevo = False
-
-    async def _load_patients_and_accounts(self):
-        try:
-            with await self.authenticate_user():
-                from gws_care.account.account_service import AccountService
-                from gws_care.patient.patient_service import PatientService
-                from gws_care.campaign.campaign_service import CampaignService
-                self.accounts = [
-                    AccountOption(id=str(a.id), name=a.name)
-                    for a in AccountService.list_accounts()
-                ]
-                all_patients = [
-                    PatientOption(
-                        id=str(p.id),
-                        display=f"{p.last_name} {p.first_name} ({p.patient_number})",
-                        email=p.email or "",
-                    )
-                    for p in PatientService.search_patients(limit=500)
-                ]
-                self.patients = all_patients
-                self.patients_filtered = list(all_patients)
-                self.campaigns = [
-                    CampaignOption(id=str(c.id), name=c.name)
-                    for c in CampaignService.list_all_campaigns(limit=500)
-                ]
-        except Exception as exc:
-            print(f"[notifications] compose_data load error: {exc}")

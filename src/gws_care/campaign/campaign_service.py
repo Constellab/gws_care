@@ -1,506 +1,509 @@
-"""CampaignService — CRUD and workflow operations for Campaign and CampaignPatient."""
+"""CRUD service for Campaign."""
 
 from datetime import date, datetime
 
+from gws_core import BadRequestException, NotFoundException
+
 from gws_care.account.account import Account
 from gws_care.campaign.campaign import Campaign
-from gws_care.campaign.campaign_patient import CampaignPatient, MedicalRecordStatus, PresenceStatus
+from gws_care.campaign.campaign_dto import CampaignRowDTO, SaveCampaignDTO
+from gws_care.campaign.campaign_exam_type import CampaignExamType
+from gws_care.campaign.campaign_patient import CampaignPatient
 from gws_care.campaign.campaign_status import CampaignStatus
-from gws_care.company.company import Company
+from gws_care.exam.exam_type_model import ExamTypeModel
+from gws_care.patient.patient import Patient
+from gws_care.role.care_action import CareAction
+from gws_care.role.permission_service import PermissionService
 from gws_care.user.user import User
-
-
-class CampaignValidationError(Exception):
-    """Raised when a workflow transition cannot proceed due to business rules."""
+from gws_care.workflow.campaign_validation_step import CampaignValidationStep
+from gws_care.workflow.campaign_validation_workflow import CampaignValidationWorkflow
 
 
 class CampaignService:
-    """Service layer for Campaign management — CRUD + full lifecycle workflow."""
+    """Service for managing campaigns."""
 
-    # ── CRUD ──────────────────────────────────────────────────────────────
+    # ── Queries ───────────────────────────────────────────────────────────────
 
     @classmethod
-    def create_campaign(
+    def get_campaign(cls, campaign_id: str) -> Campaign:
+        campaign = Campaign.get_or_none(Campaign.id == campaign_id)
+        if campaign is None:
+            raise NotFoundException(f"Campaign '{campaign_id}' not found")
+        return campaign
+
+    @classmethod
+    def list_campaigns(
         cls,
-        name: str,
-        company_id: str | None = None,
         account_id: str | None = None,
-        start_date: date | None = None,
-        end_date: date | None = None,
-        location: str | None = None,
-        psc_doctor_id: str | None = None,
-        enterprise_doctor_id: str | None = None,
-        requires_medical_review: bool = False,
-        notes: str | None = None,
-    ) -> Campaign:
-        if not company_id and not account_id:
-            raise CampaignValidationError("Une entreprise est obligatoire pour créer une campagne.")
-        if start_date and end_date and end_date < start_date:
-            raise CampaignValidationError("La date de fin doit être ≥ à la date de début.")
-        campaign = Campaign()
-        if company_id:
-            company = Company.get_by_id_and_check(company_id)
-            campaign.company = company
-        if account_id:
-            account = Account.get_by_id_and_check(account_id)
-            if not account.is_active:
-                raise CampaignValidationError("Impossible de créer une campagne pour un compte archivé.")
-            campaign.account = account
-        campaign.name = name
-        campaign.status = CampaignStatus.DRAFT
-        campaign.start_date = start_date
-        campaign.end_date = end_date
-        campaign.location = location
-        campaign.requires_medical_review = requires_medical_review
-        campaign.notes = notes
-        if psc_doctor_id:
-            campaign.psc_doctor = User.get_by_id_and_check(psc_doctor_id)
-        if enterprise_doctor_id:
-            campaign.enterprise_doctor = User.get_by_id_and_check(enterprise_doctor_id)
-        campaign.save()
-        return campaign
-
-    @classmethod
-    def update_campaign(
-        cls,
-        campaign_id: str,
-        name: str | None = None,
-        start_date: date | None = None,
-        end_date: date | None = None,
-        location: str | None = None,
-        psc_doctor_id: str | None = None,
-        enterprise_doctor_id: str | None = None,
-        requires_medical_review: bool | None = None,
-        notes: str | None = None,
-    ) -> Campaign:
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status not in (CampaignStatus.DRAFT, CampaignStatus.AWAITING_OP_VALIDATION):
-            raise CampaignValidationError("La campagne ne peut être modifiée qu'en statut Brouillon ou En attente.")
-        _start = start_date if start_date is not None else campaign.start_date
-        _end = end_date if end_date is not None else campaign.end_date
-        if _start and _end and _end < _start:
-            raise CampaignValidationError("La date de fin doit être ≥ à la date de début.")
-        if name is not None:
-            campaign.name = name
-        if start_date is not None:
-            campaign.start_date = start_date
-        if end_date is not None:
-            campaign.end_date = end_date
-        if location is not None:
-            campaign.location = location
-        if requires_medical_review is not None:
-            campaign.requires_medical_review = requires_medical_review
-        if notes is not None:
-            campaign.notes = notes
-        if psc_doctor_id is not None:
-            campaign.psc_doctor_id = psc_doctor_id or None
-        if enterprise_doctor_id is not None:
-            campaign.enterprise_doctor_id = enterprise_doctor_id or None
-        campaign.save()
-        return campaign
-
-    @classmethod
-    def list_campaigns_for_account(cls, account_id: str) -> list[Campaign]:
-        return list(
-            Campaign.select()
-            .where(Campaign.account == account_id)
-            .order_by(Campaign.created_at.desc())
-        )
-
-    @classmethod
-    def count_all_campaigns(cls, status: str | None = None, search: str = "") -> int:
-        q = Campaign.select()
-        if status:
-            q = q.where(Campaign.status == status)
-        if search:
-            q = q.where(Campaign.name ** f"%{search}%")
-        return q.count()
-
-    @classmethod
-    def list_all_campaigns(
-        cls,
-        status: str | None = None,
+        status: CampaignStatus | None = None,
         search: str = "",
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Campaign]:
-        q = Campaign.select().order_by(Campaign.created_at.desc())
+        query = Campaign.select().order_by(Campaign.start_date.desc())
+        if account_id:
+            query = query.where(Campaign.account == account_id)
         if status:
-            q = q.where(Campaign.status == status)
+            query = query.where(Campaign.status == status)
         if search:
-            q = q.where(Campaign.name ** f"%{search}%")
-        if limit is not None:
-            q = q.limit(limit).offset(offset)
-        return list(q)
+            term = f"%{search}%"
+            query = query.where(Campaign.name ** term)
+        if offset:
+            query = query.offset(offset)
+        if limit:
+            query = query.limit(limit)
+        return list(query)
 
     @classmethod
-    def get_campaign(cls, campaign_id: str) -> Campaign:
-        return Campaign.get_by_id_and_check(campaign_id)
-
-    @classmethod
-    def patient_count(cls, campaign_id: str) -> int:
-        return CampaignPatient.select().where(CampaignPatient.campaign == campaign_id).count()
-
-    # ── Patient enrollment ────────────────────────────────────────────────
-
-    @classmethod
-    def add_patient(cls, campaign_id: str, patient_id: str) -> CampaignPatient:
-        """Enroll a patient in a campaign (US-050 rule: patient must be affiliated to the account)."""
-        from gws_care.patient.patient import Patient
-        from gws_care.patient_account.patient_account_service import PatientAccountService
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        account_id = str(campaign.account_id)
-
-        # Deux mécanismes d'affiliation acceptés :
-        # 1. PatientAccount M2M (affiliation formelle avec contrat)
-        # 2. Patient.billing_account FK directe (affiliation simple)
-        affiliated_m2m = PatientAccountService.is_patient_affiliated_to_account(patient_id, account_id)
-        try:
-            affiliated_fk = str(Patient.get_by_id_and_check(patient_id).billing_account_id) == account_id
-        except Exception as exc:
-            print(f"[campaign_service] billing_account_id check for patient={patient_id}: {exc}")
-            affiliated_fk = False
-
-        if not (affiliated_m2m or affiliated_fk):
-            raise CampaignValidationError(
-                "Le patient n'est pas rattaché au Compte de facturation de cette campagne."
-            )
-        if CampaignPatient.select().where(
-            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
-        ).exists():
-            raise CampaignValidationError("Ce patient est déjà inscrit dans cette campagne.")
-        cp = CampaignPatient()
-        cp.campaign_id = campaign_id
-        cp.patient_id = patient_id
-        cp.presence_status = PresenceStatus.PENDING.value
-        cp.medical_status = MedicalRecordStatus.PENDING.value
-        cp.save()
-        return cp
-
-    @classmethod
-    def remove_patient(cls, campaign_id: str, patient_id: str) -> None:
-        CampaignPatient.delete().where(
-            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
-        ).execute()
-
-    @classmethod
-    def set_presence(cls, campaign_id: str, patient_id: str, status: str) -> CampaignPatient:
-        cp = CampaignPatient.get(
-            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
+    def get_patients(cls, campaign_id: str) -> list[Patient]:
+        cls.get_campaign(campaign_id)
+        return list(
+            Patient.select()
+            .join(CampaignPatient)
+            .where(CampaignPatient.campaign == campaign_id)
+            .order_by(Patient.last_name, Patient.first_name)
         )
-        cp.presence_status = status
-        cp.save()
-        return cp
-
-    # ── Workflow transitions ───────────────────────────────────────────────
 
     @classmethod
-    def submit(cls, campaign_id: str) -> Campaign:
-        """DRAFT → AWAITING_OP_VALIDATION. Opérateur submits campaign for admin review."""
-        campaign = Campaign.get_by_id_and_check(campaign_id)
+    def get_exam_types(cls, campaign_id: str) -> list[ExamTypeModel]:
+        cls.get_campaign(campaign_id)
+        return list(
+            ExamTypeModel.select()
+            .join(CampaignExamType)
+            .where(CampaignExamType.campaign == campaign_id)
+            .order_by(ExamTypeModel.name)
+        )
+
+    @classmethod
+    def to_row_dto(cls, campaign: Campaign) -> CampaignRowDTO:
+        patient_count = CampaignPatient.select().where(CampaignPatient.campaign == campaign.id).count()
+        exam_type_count = CampaignExamType.select().where(CampaignExamType.campaign == campaign.id).count()
+        return CampaignRowDTO(
+            id=str(campaign.id),
+            campaign_number=campaign.campaign_number,
+            name=campaign.name,
+            account_name=campaign.account.name if campaign.account_id else None,
+            start_date=str(campaign.start_date),
+            end_date=str(campaign.end_date),
+            status=campaign.status.value,
+            status_label=campaign.status.get_label(),
+            patient_count=patient_count,
+            exam_type_count=exam_type_count,
+        )
+
+    # ── Mutations ─────────────────────────────────────────────────────────────
+
+    @classmethod
+    def create_campaign(cls, dto: SaveCampaignDTO) -> Campaign:
+        cls._validate_dto(dto)
+        account = Account.get_or_none(Account.id == dto.account_id) if dto.account_id else None
+        if dto.account_id and account is None:
+            raise BadRequestException(f"Account '{dto.account_id}' not found")
+
+        campaign = Campaign()
+        campaign.account = account
+        cls._apply_dto(campaign, dto)
+        campaign.save()
+        return campaign
+
+    @classmethod
+    def update_campaign(cls, campaign_id: str, dto: SaveCampaignDTO) -> Campaign:
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status not in (CampaignStatus.DRAFT, CampaignStatus.VALIDATED):
+            raise BadRequestException("Only campaigns in DRAFT or VALIDATED status can be modified")
+        cls._validate_dto(dto)
+
+        new_start = date.fromisoformat(dto.start_date)
+        new_end = date.fromisoformat(dto.end_date)
+        old_start = campaign.start_date
+
+        account = Account.get_or_none(Account.id == dto.account_id)
+        if account is None:
+            raise BadRequestException(f"Account '{dto.account_id}' not found")
+        campaign.account = account
+        cls._apply_dto(campaign, dto)
+        campaign.save()
+
+        return campaign
+
+    @classmethod
+    def validate_campaign(cls, campaign_id: str, user: User) -> Campaign:
+        """Validate a DRAFT campaign (Clinic Doctor or Admin)."""
+        campaign = cls.get_campaign(campaign_id)
         if campaign.status != CampaignStatus.DRAFT:
-            raise CampaignValidationError("Seul un brouillon peut être soumis.")
-        if not campaign.name:
-            raise CampaignValidationError("Le nom de la campagne est obligatoire.")
-        if cls.patient_count(campaign_id) == 0:
-            raise CampaignValidationError("La campagne doit contenir au moins un patient.")
-        campaign.status = CampaignStatus.AWAITING_OP_VALIDATION
+            raise BadRequestException("Only DRAFT campaigns can be validated")
+        now = datetime.utcnow()
+        campaign.status = CampaignStatus.VALIDATED
+        campaign.save()
+        CampaignValidationWorkflow.insert(
+            campaign=campaign,
+            step=CampaignValidationStep.VALIDATED,
+            validated_by=user,
+            validated_at=now,
+        ).on_conflict_ignore().execute()
+        return campaign
+
+    @classmethod
+    def start_campaign(cls, campaign_id: str) -> Campaign:
+        """Mark a campaign as TERRAIN_EXAM (field operations started)."""
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status != CampaignStatus.VALIDATED:
+            raise BadRequestException("Only VALIDATED campaigns can be started")
+        campaign.status = CampaignStatus.TERRAIN_EXAM
         campaign.save()
         return campaign
 
     @classmethod
-    def validate_ops(cls, campaign_id: str) -> Campaign:
-        """AWAITING_OP_VALIDATION → OPERATIONALLY_VALIDATED (Admin PSC, US-051)."""
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status != CampaignStatus.AWAITING_OP_VALIDATION:
-            raise CampaignValidationError("La campagne n'est pas en attente de validation opérationnelle.")
-        errors = []
-        if not campaign.start_date:
-            errors.append("Date de début manquante.")
-        if not campaign.end_date:
-            errors.append("Date de fin manquante.")
-        if not campaign.location:
-            errors.append("Lieu manquant.")
-        if cls.patient_count(campaign_id) == 0:
-            errors.append("Aucun patient inscrit.")
-        if not campaign.psc_doctor_id:
-            errors.append("Médecin PSC non défini.")
-        if not campaign.enterprise_doctor_id:
-            errors.append("Médecin entreprise non défini.")
-        if errors:
-            raise CampaignValidationError(" | ".join(errors))
-        if campaign.requires_medical_review:
-            campaign.status = CampaignStatus.AWAITING_MEDICAL_VALIDATION
-        else:
-            campaign.status = CampaignStatus.OPERATIONALLY_VALIDATED
-        campaign.save()
-        return campaign
+    def complete_terrain_phase(cls, campaign_id: str) -> Campaign:
+        """Transition TERRAIN_EXAM → SAMPLE_ANALYSIS (terrain work done, start lab entry).
 
-    @classmethod
-    def validate_medical(cls, campaign_id: str) -> Campaign:
-        """AWAITING_MEDICAL_VALIDATION → MEDICALLY_VALIDATED (Médecin PSC, US-052)."""
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status != CampaignStatus.AWAITING_MEDICAL_VALIDATION:
-            raise CampaignValidationError("La campagne n'est pas en attente de validation médicale.")
-        campaign.status = CampaignStatus.MEDICALLY_VALIDATED
-        campaign.save()
-        return campaign
-
-    @classmethod
-    def refuse_medical(cls, campaign_id: str, reason: str) -> Campaign:
-        """Medical refusal — goes back to DRAFT with a note."""
-        if not reason or not reason.strip():
-            raise CampaignValidationError("Un motif de refus est obligatoire.")
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status != CampaignStatus.AWAITING_MEDICAL_VALIDATION:
-            raise CampaignValidationError("La campagne n'est pas en attente de validation médicale.")
-        campaign.notes = f"[REFUS MÉDICAL] {reason}\n" + (campaign.notes or "")
-        campaign.status = CampaignStatus.DRAFT
-        campaign.save()
-        return campaign
-
-    @classmethod
-    def ready_for_convocations(cls, campaign_id: str) -> Campaign:
-        """OPERATIONALLY_VALIDATED or MEDICALLY_VALIDATED → READY_FOR_CONVOCATION."""
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status not in (
-            CampaignStatus.OPERATIONALLY_VALIDATED,
-            CampaignStatus.MEDICALLY_VALIDATED,
-        ):
-            raise CampaignValidationError("La campagne n'est pas dans un statut compatible.")
-        campaign.status = CampaignStatus.READY_FOR_CONVOCATION
-        campaign.save()
-        return campaign
-
-    @classmethod
-    def send_convocations(cls, campaign_id: str) -> Campaign:
-        """READY_FOR_CONVOCATION → CONVOCATIONS_SENT."""
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status != CampaignStatus.READY_FOR_CONVOCATION:
-            raise CampaignValidationError("Les convocations ne peuvent être envoyées que depuis le statut 'Prête pour convocation'.")
-        campaign.status = CampaignStatus.CONVOCATIONS_SENT
-        campaign.save()
-        return campaign
-
-    @classmethod
-    def start_terrain(cls, campaign_id: str) -> Campaign:
-        """CONVOCATIONS_SENT → TERRAIN_EN_COURS."""
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status != CampaignStatus.CONVOCATIONS_SENT:
-            raise CampaignValidationError("La phase terrain ne peut commencer que depuis 'Convocations envoyées'.")
-        campaign.status = CampaignStatus.TERRAIN_EN_COURS
-        campaign.save()
-        return campaign
-
-    @classmethod
-    def close_terrain(cls, campaign_id: str) -> Campaign:
-        """TERRAIN_EN_COURS → TERRAIN_CLOTURE (US-100).
-
-        All enrolled patients must have a non-PENDING presence status.
+        Requires every visit to be either visit_done (or beyond) or cancelled.
+        Any pending visit blocks the transition.
         """
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status != CampaignStatus.TERRAIN_EN_COURS:
-            raise CampaignValidationError("La clôture terrain n'est possible qu'en phase Terrain en cours.")
-        pending = CampaignPatient.select().where(
-            (CampaignPatient.campaign == campaign_id)
-            & (CampaignPatient.presence_status == PresenceStatus.PENDING.value)
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status != CampaignStatus.TERRAIN_EXAM:
+            raise BadRequestException("Seules les campagnes en phase Terrain Exam peuvent passer en Analyse.")
+        pending_count = Visit.select().where(
+            Visit.campaign == campaign_id,
+            Visit.campaign_visit_status == CampaignVisitStatus.PENDING,
         ).count()
-        if pending > 0:
-            raise CampaignValidationError(
-                f"{pending} patient(s) sans statut de présence. Veuillez les renseigner avant de clôturer."
+        if pending_count > 0:
+            raise BadRequestException(
+                f"{pending_count} visite(s) sont encore en attente. "
+                "Toutes les visites doivent être terminées ou annulées avant de clôturer la phase terrain."
             )
-        campaign.status = CampaignStatus.TERRAIN_CLOTURE
+        campaign.status = CampaignStatus.SAMPLE_ANALYSIS
         campaign.save()
         return campaign
 
     @classmethod
-    def start_lab(cls, campaign_id: str) -> Campaign:
-        """TERRAIN_CLOTURE → LABO_EN_COURS."""
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status != CampaignStatus.TERRAIN_CLOTURE:
-            raise CampaignValidationError("Le labo ne peut commencer qu'après clôture terrain.")
-        campaign.status = CampaignStatus.LABO_EN_COURS
+    def mark_lab_done(cls, campaign_id: str) -> Campaign:
+        """Mark a campaign as LAB_DONE (Lab Validation)."""
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status not in (CampaignStatus.TERRAIN_EXAM, CampaignStatus.SAMPLE_ANALYSIS):
+            raise BadRequestException("Only TERRAIN_EXAM or SAMPLE_ANALYSIS campaigns can be marked as lab done")
+        campaign.status = CampaignStatus.LAB_DONE
         campaign.save()
         return campaign
 
     @classmethod
-    def mark_lab_entered(cls, campaign_id: str, patient_id: str) -> CampaignPatient:
-        """Transition patient medical status to LAB_ENTERED (results submitted to doctor)."""
-        from gws_care.campaign.campaign_patient import MedicalRecordStatus
-        cp = CampaignPatient.get(
-            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
-        )
-        cp.medical_status = MedicalRecordStatus.LAB_ENTERED.value
-        cp.save()
-        return cp
+    def validate_lab_campaign(cls, campaign_id: str, user: User) -> Campaign:
+        """Phase 2.1 — Lab Validation (HQ Operator).
+
+        Verifies every visit in the campaign has reached LAB_DONE status,
+        then advances the campaign to LAB_DONE and notifies all Clinic Doctor
+        (DOCTOR role) users via bell + email.
+        """
+        PermissionService.require(user, CareAction.CAMPAIGN_VALIDATE_LAB)
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status not in (CampaignStatus.TERRAIN_EXAM, CampaignStatus.SAMPLE_ANALYSIS):
+            raise BadRequestException("Only TERRAIN_EXAM or SAMPLE_ANALYSIS campaigns can be lab-validated")
+
+        from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+        cls._assert_all_visits_at_least_status(campaign_id, CampaignVisitStatus.LAB_DONE)
+
+        now = datetime.utcnow()
+        campaign.status = CampaignStatus.LAB_DONE
+        campaign.save()
+        CampaignValidationWorkflow.insert(
+            campaign=campaign,
+            step=CampaignValidationStep.LAB_DONE,
+            validated_by=user,
+            validated_at=now,
+        ).on_conflict_ignore().execute()
+
+        try:
+            from gws_care.notification.notification_service import NotificationService
+            NotificationService.notify_lab_done_to_doctors(campaign, sent_by=user)
+        except Exception as exc:
+            print(f"[CampaignService] notify_lab_done_to_doctors failed: {exc}")
+
+        return campaign
 
     @classmethod
-    def validate_lab_patient(cls, campaign_id: str, patient_id: str) -> CampaignPatient:
-        """Mark a patient's lab results as validated (US-112)."""
-        cp = CampaignPatient.get(
-            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
-        )
-        if cp.presence_status == PresenceStatus.ABSENT.value:
-            raise CampaignValidationError("Le patient est absent — pas de résultats à valider.")
-        cp.medical_status = MedicalRecordStatus.LAB_VALIDATED.value
-        cp.save()
-        return cp
-
-    @classmethod
-    def validate_lab_campaign(cls, campaign_id: str) -> Campaign:
-        """LABO_EN_COURS → LABO_VALIDE once all present patients are lab-validated (US-113)."""
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status != CampaignStatus.LABO_EN_COURS:
-            raise CampaignValidationError("La validation labo campagne n'est possible qu'en phase Labo en cours.")
-        present_not_validated = CampaignPatient.select().where(
-            (CampaignPatient.campaign == campaign_id)
-            & (CampaignPatient.presence_status == PresenceStatus.PRESENT.value)
-            & (CampaignPatient.medical_status != MedicalRecordStatus.LAB_VALIDATED.value)
-        ).count()
-        if present_not_validated > 0:
-            raise CampaignValidationError(
-                f"{present_not_validated} patient(s) présent(s) dont les résultats ne sont pas encore validés au labo."
-            )
-        campaign.status = CampaignStatus.LABO_VALIDE
+    def validate_doctor_clinic(cls, campaign_id: str) -> Campaign:
+        """Mark campaign as DOCTOR_CLINIC_VALIDATED."""
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status != CampaignStatus.LAB_DONE:
+            raise BadRequestException("Only LAB_DONE campaigns can be clinic-doctor validated")
+        campaign.status = CampaignStatus.DOCTOR_CLINIC_VALIDATED
         campaign.save()
         return campaign
 
     @classmethod
-    def save_psc_notes_draft(cls, campaign_id: str, patient_id: str, notes: str) -> CampaignPatient:
-        """Save PSC notes without changing the workflow status (draft mode)."""
-        cp = CampaignPatient.get(
-            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
-        )
-        cp.psc_notes = notes
-        cp.save()
-        return cp
+    def validate_doctor_clinic_campaign(cls, campaign_id: str, user: User) -> Campaign:
+        """Phase 2.2 — Validation Clinic Doctor.
+
+        Verifies every visit in the campaign has reached DOCTOR_CLINIC_VALIDATED
+        status, then advances the campaign to DOCTOR_CLINIC_VALIDATED and notifies
+        all ACCOUNT_ADMIN users linked to the campaign's account via bell + email.
+        """
+        PermissionService.require(user, CareAction.CAMPAIGN_VALIDATE_CLINIC)
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status != CampaignStatus.LAB_DONE:
+            raise BadRequestException("Only LAB_DONE campaigns can be clinic-doctor validated")
+
+        from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+        cls._assert_all_visits_at_least_status(campaign_id, CampaignVisitStatus.DOCTOR_CLINIC_VALIDATED)
+
+        now = datetime.utcnow()
+        campaign.status = CampaignStatus.DOCTOR_CLINIC_VALIDATED
+        campaign.save()
+        CampaignValidationWorkflow.insert(
+            campaign=campaign,
+            step=CampaignValidationStep.DOCTOR_CLINIC_VALIDATED,
+            validated_by=user,
+            validated_at=now,
+        ).on_conflict_ignore().execute()
+
+        try:
+            from gws_care.notification.notification_service import NotificationService
+            NotificationService.notify_clinic_validated_to_account_admins(campaign, sent_by=user)
+        except Exception as exc:
+            print(f"[CampaignService] notify_clinic_validated_to_account_admins failed: {exc}")
+
+        return campaign
 
     @classmethod
-    def add_psc_interpretation(cls, campaign_id: str, patient_id: str, notes: str) -> CampaignPatient:
-        """Save PSC doctor interpretation for a patient (US-121)."""
-        cp = CampaignPatient.get(
-            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
-        )
-        cp.psc_notes = notes
-        cp.medical_status = MedicalRecordStatus.PSC_INTERPRETED.value
-        cp.save()
-        return cp
+    def check_and_advance_to_company_validated(cls, campaign_id: str) -> Campaign | None:
+        """Phase 2.3 — Auto-advance campaign to DOCTOR_COMPANY_VALIDATED.
+
+        Called after each visit reaches DOCTOR_COMPANY_VALIDATED. When every
+        visit in the campaign has that status, the campaign is automatically
+        advanced. Returns the updated campaign, or None if not all visits are done.
+        """
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status != CampaignStatus.DOCTOR_CLINIC_VALIDATED:
+            return None
+
+        all_done = cls._all_visits_have_status(campaign_id, "doctor_company_validated")
+        if not all_done:
+            return None
+
+        now = datetime.utcnow()
+        campaign.status = CampaignStatus.DOCTOR_COMPANY_VALIDATED
+        campaign.save()
+        CampaignValidationWorkflow.insert(
+            campaign=campaign,
+            step=CampaignValidationStep.DOCTOR_COMPANY_VALIDATED,
+            validated_by=None,
+            validated_at=now,
+        ).on_conflict_ignore().execute()
+        return campaign
 
     @classmethod
-    def validate_psc_patient(cls, campaign_id: str, patient_id: str) -> CampaignPatient:
-        """Lock PSC interpretation for a patient (US-122)."""
-        cp = CampaignPatient.get(
-            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
-        )
-        if cp.medical_status != MedicalRecordStatus.PSC_INTERPRETED.value:
-            raise CampaignValidationError("Le dossier doit être interprété par le médecin PSC avant validation.")
-        cp.medical_status = MedicalRecordStatus.PSC_VALIDATED.value
-        cp.psc_validated_at = datetime.now()
-        cp.save()
-        return cp
-
-    @classmethod
-    def validate_psc_campaign(cls, campaign_id: str) -> Campaign:
-        """LABO_VALIDE → VALIDE_MEDECIN_PSC once all present dossiers are PSC-validated (US-123)."""
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status != CampaignStatus.LABO_VALIDE:
-            raise CampaignValidationError("La validation PSC campagne n'est possible qu'après 'Labo validé'.")
-        not_validated = CampaignPatient.select().where(
-            (CampaignPatient.campaign == campaign_id)
-            & (CampaignPatient.presence_status == PresenceStatus.PRESENT.value)
-            & (CampaignPatient.medical_status != MedicalRecordStatus.PSC_VALIDATED.value)
-        ).count()
-        if not_validated > 0:
-            raise CampaignValidationError(
-                f"{not_validated} dossier(s) non encore validé(s) par le médecin PSC."
-            )
-        campaign.status = CampaignStatus.VALIDE_MEDECIN_PSC
+    def validate_doctor_company(cls, campaign_id: str) -> Campaign:
+        """Mark campaign as DOCTOR_COMPANY_VALIDATED."""
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status != CampaignStatus.DOCTOR_CLINIC_VALIDATED:
+            raise BadRequestException("Only DOCTOR_CLINIC_VALIDATED campaigns can be company-doctor validated")
+        campaign.status = CampaignStatus.DOCTOR_COMPANY_VALIDATED
         campaign.save()
         return campaign
 
     @classmethod
-    def add_enterprise_interpretation(
-        cls, campaign_id: str, patient_id: str, notes: str, patient_message: str
-    ) -> CampaignPatient:
-        """Enterprise doctor adds their interpretation (US-131)."""
-        if not patient_message or not patient_message.strip():
-            raise CampaignValidationError("Le message destiné au patient est obligatoire pour la publication.")
-        cp = CampaignPatient.get(
-            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
-        )
-        cp.enterprise_notes = notes
-        cp.patient_message = patient_message
-        cp.medical_status = MedicalRecordStatus.ENTERPRISE_INTERPRETED.value
-        cp.save()
-        return cp
-
-    @classmethod
-    def validate_enterprise_patient(cls, campaign_id: str, patient_id: str) -> CampaignPatient:
-        """Lock enterprise interpretation for a patient (US-131)."""
-        cp = CampaignPatient.get(
-            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
-        )
-        if cp.medical_status != MedicalRecordStatus.ENTERPRISE_INTERPRETED.value:
-            raise CampaignValidationError("Le dossier doit être interprété par le médecin entreprise avant validation.")
-        cp.medical_status = MedicalRecordStatus.ENTERPRISE_VALIDATED.value
-        cp.enterprise_validated_at = datetime.now()
-        cp.save()
-        return cp
-
-    @classmethod
-    def publish_patient_results(cls, campaign_id: str, patient_id: str) -> CampaignPatient:
-        """Publish results to patient (US-132)."""
-        cp = CampaignPatient.get(
-            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
-        )
-        if not cp.patient_message:
-            raise CampaignValidationError("Un message patient est obligatoire avant publication.")
-        cp.medical_status = MedicalRecordStatus.PUBLISHED.value
-        cp.published_at = datetime.now()
-        cp.save()
-        return cp
-
-    @classmethod
-    def publish_campaign(cls, campaign_id: str) -> Campaign:
-        """VALIDE_MEDECIN_PSC → PUBLIE_MEDECIN_ENTREPRISE."""
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status != CampaignStatus.VALIDE_MEDECIN_PSC:
-            raise CampaignValidationError("La campagne doit être validée PSC avant publication.")
-        campaign.status = CampaignStatus.PUBLIE_MEDECIN_ENTREPRISE
-        campaign.save()
-        return campaign
-
-    @classmethod
-    def publish_to_patients(cls, campaign_id: str) -> Campaign:
-        """PUBLIE_MEDECIN_ENTREPRISE → PUBLIE_PATIENT."""
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        if campaign.status != CampaignStatus.PUBLIE_MEDECIN_ENTREPRISE:
-            raise CampaignValidationError("La campagne doit être publiée médecin entreprise avant d'être publiée au patient.")
-        campaign.status = CampaignStatus.PUBLIE_PATIENT
-        campaign.save()
-        return campaign
-
-    @classmethod
-    def archive(cls, campaign_id: str) -> Campaign:
-        campaign = Campaign.get_by_id_and_check(campaign_id)
+    def archive_campaign(cls, campaign_id: str) -> Campaign:
+        campaign = cls.get_campaign(campaign_id)
         campaign.status = CampaignStatus.ARCHIVED
         campaign.save()
         return campaign
 
-    # Legacy compatibility
     @classmethod
-    def advance_status(cls, campaign_id: str) -> Campaign:
-        """Move campaign to the next logical status (simple linear advance)."""
-        campaign = Campaign.get_by_id_and_check(campaign_id)
-        _NEXT = {
-            CampaignStatus.DRAFT: CampaignStatus.AWAITING_OP_VALIDATION,
-            CampaignStatus.AWAITING_OP_VALIDATION: CampaignStatus.OPERATIONALLY_VALIDATED,
-            CampaignStatus.OPERATIONALLY_VALIDATED: CampaignStatus.READY_FOR_CONVOCATION,
-            CampaignStatus.READY_FOR_CONVOCATION: CampaignStatus.CONVOCATIONS_SENT,
-            CampaignStatus.CONVOCATIONS_SENT: CampaignStatus.TERRAIN_EN_COURS,
-        }
-        next_status = _NEXT.get(campaign.status)
-        if next_status:
-            campaign.status = next_status
-            campaign.save()
+    def close_campaign(cls, campaign_id: str) -> Campaign:
+        campaign = cls.get_campaign(campaign_id)
+        campaign.status = CampaignStatus.CLOSED
+        campaign.save()
         return campaign
+
+    @classmethod
+    def force_set_status(cls, campaign_id: str, status: str) -> Campaign:
+        """Force-set a campaign to any status (used by the workflow lifeline to allow going back)."""
+        campaign = cls.get_campaign(campaign_id)
+        try:
+            campaign.status = CampaignStatus(status)
+        except ValueError:
+            raise BadRequestException(f"Invalid campaign status: '{status}'")
+        campaign.save()
+        return campaign
+
+    # ── Patient management ────────────────────────────────────────────────────
+
+    @classmethod
+    def add_patient(cls, campaign_id: str, patient_id: str) -> None:
+        """Add a patient to a campaign.
+
+        The patient must belong to the campaign's billing account, unless the
+        campaign has no account (individual / auto-created campaign).
+        """
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status not in (CampaignStatus.DRAFT, CampaignStatus.VALIDATED):
+            raise BadRequestException("Les patients ne peuvent être ajoutés qu'aux campagnes en statut Brouillon ou Validée.")
+
+        if campaign.is_individual:
+            raise BadRequestException("Cette campagne est destinée à un seul patient et n'accepte pas de patients supplémentaires.")
+
+        patient = Patient.get_or_none(Patient.id == patient_id)
+        if patient is None:
+            raise BadRequestException(f"Patient '{patient_id}' not found")
+
+        # Skip account check when the campaign has no account (individual campaign)
+        if campaign.account_id:
+            from gws_care.patient.patient_account import PatientAccount
+            has_link = PatientAccount.get_or_none(
+                (PatientAccount.patient_id == patient_id)
+                & (PatientAccount.account_id == str(campaign.account_id))
+            ) is not None
+            if not has_link:
+                raise BadRequestException(
+                    "Ce patient n'est pas rattaché au compte de facturation de cette campagne."
+                )
+
+        if CampaignPatient.get_or_none(
+            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
+        ) is not None:
+            raise BadRequestException("Ce patient est déjà dans cette campagne.")
+
+        CampaignPatient.create(campaign=campaign, patient=patient)
+
+        from gws_care.visit.campaign_visit_service import CampaignVisitService
+        CampaignVisitService.create_visit(campaign_id, patient_id)
+
+    @classmethod
+    def remove_patient(cls, campaign_id: str, patient_id: str) -> None:
+        campaign = cls.get_campaign(campaign_id)
+        # Individual campaigns allow removal at any status (single-patient, error correction)
+        if not campaign.is_individual and campaign.status not in (CampaignStatus.DRAFT, CampaignStatus.VALIDATED):
+            raise BadRequestException("Patients can only be removed from DRAFT or VALIDATED campaigns")
+
+        link = CampaignPatient.get_or_none(
+            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
+        )
+        if link is None:
+            raise BadRequestException("Patient is not in this campaign")
+        link.delete_instance()
+
+        from gws_care.visit.visit import Visit
+        orphan_visit = Visit.get_or_none(
+            (Visit.campaign == campaign_id) & (Visit.patient == patient_id)
+        )
+        if orphan_visit is not None:
+            orphan_visit.delete_instance()
+
+    # ── ExamType management ───────────────────────────────────────────────────
+
+    @classmethod
+    def add_exam_type(cls, campaign_id: str, exam_type_id: str) -> None:
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status not in (CampaignStatus.DRAFT, CampaignStatus.VALIDATED):
+            raise BadRequestException("Exam types can only be added to DRAFT or VALIDATED campaigns")
+
+        exam_type = ExamTypeModel.get_or_none(ExamTypeModel.id == exam_type_id)
+        if exam_type is None:
+            raise BadRequestException(f"ExamType '{exam_type_id}' not found")
+        if not exam_type.is_active:
+            raise BadRequestException(f"ExamType '{exam_type.name}' is inactive and cannot be added")
+
+        if CampaignExamType.get_or_none(
+            (CampaignExamType.campaign == campaign_id) & (CampaignExamType.exam_type == exam_type_id)
+        ) is not None:
+            raise BadRequestException("Ce type d'examen est déjà dans cette campagne.")
+
+        CampaignExamType.create(campaign=campaign, exam_type=exam_type)
+
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.campaign_visit_service import CampaignVisitService
+        for cp in CampaignPatient.select().where(CampaignPatient.campaign == campaign_id):
+            if Visit.get_or_none((Visit.campaign == campaign_id) & (Visit.patient == cp.patient_id)) is None:
+                CampaignVisitService.create_visit(campaign_id, str(cp.patient_id))
+
+    @classmethod
+    def remove_exam_type(cls, campaign_id: str, exam_type_id: str) -> None:
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status not in (CampaignStatus.DRAFT, CampaignStatus.VALIDATED):
+            raise BadRequestException("Exam types can only be removed from DRAFT or VALIDATED campaigns")
+
+        link = CampaignExamType.get_or_none(
+            (CampaignExamType.campaign == campaign_id) & (CampaignExamType.exam_type == exam_type_id)
+        )
+        if link is None:
+            raise BadRequestException("ExamType is not in this campaign")
+        link.delete_instance()
+
+    # ── Internals ─────────────────────────────────────────────────────────────
+
+    @classmethod
+    def _all_visits_have_status(cls, campaign_id: str, status_value: str) -> bool:
+        """Return True only if EVERY visit in the campaign has exactly the given status value.
+
+        Returns False if there are no visits (empty campaign).
+        """
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+        total = Visit.select().where(Visit.campaign == campaign_id).count()
+        if total == 0:
+            return False
+        done = Visit.select().where(
+            Visit.campaign == campaign_id,
+            Visit.campaign_visit_status == CampaignVisitStatus(status_value),
+        ).count()
+        return done == total
+
+    @classmethod
+    def _assert_all_visits_at_least_status(cls, campaign_id: str, min_status: "CampaignVisitStatus") -> None:
+        """Raise BadRequestException if any non-cancelled visit has not yet reached min_status.
+
+        Cancelled visits are explicitly excluded — a patient who did not attend
+        should never block campaign progression.
+        Visits that have advanced past min_status are considered compliant.
+        """
+        from gws_care.visit.visit import Visit
+        from gws_care.visit.campaign_visit_status import CampaignVisitStatus
+        status_order = [s for s in CampaignVisitStatus if s != CampaignVisitStatus.CANCELLED]
+        min_index = status_order.index(min_status)
+        # Statuses that are strictly before the required minimum (cancelled already excluded)
+        statuses_not_ready = status_order[:min_index]
+
+        active_total = Visit.select().where(
+            Visit.campaign == campaign_id,
+            Visit.campaign_visit_status != CampaignVisitStatus.CANCELLED,
+        ).count()
+        if active_total == 0:
+            raise BadRequestException("La campagne n'a aucune visite active — impossible de valider.")
+
+        if statuses_not_ready:
+            not_ready_count = Visit.select().where(
+                Visit.campaign == campaign_id,
+                Visit.campaign_visit_status.in_(statuses_not_ready),
+            ).count()
+        else:
+            not_ready_count = 0
+
+        if not_ready_count > 0:
+            raise BadRequestException(
+                f"{not_ready_count} visite(s) n'ont pas encore atteint le statut requis "
+                f"'{min_status.value}'. Toutes les visites actives doivent être validées avant d'avancer la campagne."
+            )
+
+    @classmethod
+    def _validate_dto(cls, dto: SaveCampaignDTO) -> None:
+        if not dto.name or not dto.name.strip():
+            raise BadRequestException("Campaign name is required")
+        if not dto.account_id:
+            raise BadRequestException("Account ID is required")
+        try:
+            start = date.fromisoformat(dto.start_date)
+            end = date.fromisoformat(dto.end_date)
+        except (ValueError, TypeError):
+            raise BadRequestException("Invalid date format — use YYYY-MM-DD")
+        if end < start:
+            raise BadRequestException("End date must be on or after start date")
+
+    @classmethod
+    def _apply_dto(cls, campaign: Campaign, dto: SaveCampaignDTO) -> None:
+        campaign.name = dto.name.strip()
+        campaign.start_date = date.fromisoformat(dto.start_date)
+        campaign.end_date = date.fromisoformat(dto.end_date)
+        campaign.notes = dto.notes
+

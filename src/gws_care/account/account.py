@@ -1,4 +1,4 @@
-from peewee import BooleanField, CharField
+from peewee import BooleanField, CharField, TextField
 
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
@@ -11,7 +11,6 @@ class Account(ModelWithUser):
     Billing account — a company or individual who pays for health services.
     account_type is either "COMPANY" or "INDIVIDUAL".
     company_id links an account to a Company (employer) when account_type is COMPANY.
-    Chain: Company → Account → Prebilling → Invoice
     """
 
     account_type: str = CharField(max_length=20, default="COMPANY", null=False)
@@ -19,11 +18,14 @@ class Account(ModelWithUser):
     company_id: str = CharField(max_length=36, null=True)
     name: str = CharField(max_length=255, null=False)
     registration_number: str = CharField(max_length=100, null=True)
-    address: str = CharField(max_length=500, null=True)
+    address: str = TextField(null=True)
     postal_code: str = CharField(max_length=20, null=True)
     city: str = CharField(max_length=100, null=True)
     phone: str = CharField(max_length=50, null=True)
     email: str = CharField(max_length=255, null=True)
+    # First name and last name for contact (separate fields per docx remark)
+    contact_first_name: str = CharField(max_length=150, null=True)
+    contact_last_name: str = CharField(max_length=150, null=True)
     contact_name: str = CharField(max_length=255, null=True)
     is_active: bool = BooleanField(default=True, null=False)
 
@@ -41,6 +43,8 @@ class Account(ModelWithUser):
             city=self.city,
             phone=self.phone,
             email=self.email,
+            contact_first_name=self.contact_first_name,
+            contact_last_name=self.contact_last_name,
             contact_name=self.contact_name,
             is_active=self.is_active,
         )

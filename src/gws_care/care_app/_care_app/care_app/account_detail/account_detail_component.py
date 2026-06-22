@@ -5,6 +5,7 @@ from gws_reflex_main import main_component
 
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
+from ..common.patient_picker_component import patient_picker_widget
 from ..patient_list.patient_form_component import patient_form_dialog
 from ..patient_list.patient_form_state import PatientFormState
 from .account_detail_state import (
@@ -21,11 +22,12 @@ def _info_item(label: str, value: rx.Var) -> rx.Component:
         rx.text(label, size="1", color="var(--gray-9)", weight="medium"),
         rx.cond(
             value != "",
-            rx.text(value, size="2"),
+            rx.text(value, size="2", overflow_wrap="break-word", word_break="break-word"),
             rx.text("—", size="2", color="var(--gray-7)"),
         ),
         spacing="0",
         align_items="start",
+        min_width="0",
     )
 
 
@@ -85,27 +87,30 @@ def _patient_row(p: AccountPatientRowDTO) -> rx.Component:
             rx.cond(p.phone, rx.text(p.phone, size="2"), rx.text("—", size="2", color="var(--gray-8)"))
         ),
         rx.table.cell(
-            rx.hstack(
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("chevron-right", size=14),
-                        variant="ghost",
-                        size="1",
-                        on_click=lambda: AccountDetailState.go_to_patient(p.id),
+            rx.box(
+                rx.hstack(
+                    rx.tooltip(
+                        rx.icon_button(
+                            rx.icon("chevron-right", size=14),
+                            variant="ghost",
+                            size="1",
+                            on_click=lambda: AccountDetailState.go_to_patient(p.id),
+                        ),
+                        content=LanguageState.tr["tooltip_view_patient"],
                     ),
-                    content=LanguageState.tr["tooltip_view_patient"],
-                ),
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("unlink", size=14),
-                        variant="ghost",
-                        size="1",
-                        color_scheme="red",
-                        on_click=lambda: AccountDetailState.remove_patient(p.id),
+                    rx.tooltip(
+                        rx.icon_button(
+                            rx.icon("unlink", size=14),
+                            variant="ghost",
+                            size="1",
+                            color_scheme="red",
+                            on_click=lambda: AccountDetailState.remove_patient(p.id),
+                        ),
+                        content=LanguageState.tr["tooltip_remove_from_account"],
                     ),
-                    content=LanguageState.tr["tooltip_remove_from_account"],
+                    spacing="1",
                 ),
-                spacing="1",
+                on_click=rx.stop_propagation,
             )
         ),
         style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
@@ -114,75 +119,45 @@ def _patient_row(p: AccountPatientRowDTO) -> rx.Component:
 
 
 def _assign_patient_dialog() -> rx.Component:
-    """Dialog to assign an existing unlinked patient to this account."""
+    """Dialog to assign an existing patient to this account."""
     return rx.dialog.root(
         rx.dialog.content(
             rx.dialog.title(LanguageState.tr["assign_patient_dialog_title"]),
             rx.dialog.description(
                 LanguageState.tr["assign_patient_dialog_desc"],
                 size="2",
-                margin_bottom="1rem",
+                margin_bottom="0.5rem",
             ),
-            rx.cond(
-                AccountDetailState.unassigned_patients.length() > 0,
-                rx.vstack(
-                    rx.select.root(
-                        rx.select.trigger(placeholder=LanguageState.tr["search_a_patient_placeholder"], width="100%"),
-                        rx.select.content(
-                            rx.foreach(
-                                AccountDetailState.unassigned_patients,
-                                lambda p: rx.select.item(p.label, value=p.id),
-                            )
-                        ),
-                        value=AccountDetailState.assign_patient_id,
-                        on_change=AccountDetailState.set_assign_patient_id,
-                        width="100%",
-                    ),
-                    rx.hstack(
-                        rx.button(
-                            LanguageState.tr["cancel_btn"],
-                            variant="soft",
-                            color_scheme="gray",
-                            on_click=AccountDetailState.close_assign_dialog,
-                            disabled=AccountDetailState.is_assigning,
-                        ),
-                        rx.button(
-                            rx.cond(
-                                AccountDetailState.is_assigning,
-                                rx.spinner(size="2"),
-                                rx.text(LanguageState.tr["assign_btn"]),
-                            ),
-                            on_click=AccountDetailState.confirm_assign,
-                            disabled=(AccountDetailState.assign_patient_id == "")
-                            | AccountDetailState.is_assigning,
-                        ),
-                        spacing="3",
-                        justify="end",
-                        width="100%",
-                    ),
-                    width="100%",
-                    spacing="4",
-                ),
-                rx.vstack(
-                    rx.text(
-                        LanguageState.tr["all_patients_assigned"],
-                        size="2",
-                        color="var(--gray-9)",
-                    ),
+            rx.vstack(
+                patient_picker_widget(AccountDetailState),
+                rx.hstack(
                     rx.button(
-                        LanguageState.tr["close_btn"],
+                        LanguageState.tr["cancel_btn"],
                         variant="soft",
                         color_scheme="gray",
                         on_click=AccountDetailState.close_assign_dialog,
+                        disabled=AccountDetailState.is_assigning,
+                    ),
+                    rx.button(
+                        rx.cond(
+                            AccountDetailState.is_assigning,
+                            rx.spinner(size="2"),
+                            rx.text(LanguageState.tr["assign_btn"]),
+                        ),
+                        on_click=AccountDetailState.confirm_assign,
+                        disabled=(AccountDetailState.picker_selected_id == "")
+                        | AccountDetailState.is_assigning,
                     ),
                     spacing="3",
-                    align_items="end",
+                    justify="end",
                     width="100%",
                 ),
+                spacing="4",
+                width="100%",
             ),
             on_interact_outside=AccountDetailState.close_assign_dialog,
             on_escape_key_down=AccountDetailState.close_assign_dialog,
-            max_width="480px",
+            max_width="700px",
         ),
         open=AccountDetailState.assign_dialog_open,
     )
@@ -205,7 +180,7 @@ def _patients_section() -> rx.Component:
                     rx.icon("plus", size=14),
                     LanguageState.tr["new_patient_small_btn"],
                     size="2",
-                    on_click=lambda: PatientFormState.open_create_for_account(AccountDetailState.account.id),
+                    on_click=PatientFormState.open_create_dialog,
                 ),
                 spacing="2",
             ),
@@ -215,23 +190,27 @@ def _patients_section() -> rx.Component:
         rx.separator(width="100%"),
         rx.cond(
             AccountDetailState.patients.length() > 0,
-            rx.table.root(
-                rx.table.header(
-                    rx.table.row(
-                        rx.table.column_header_cell(LanguageState.tr["col_patient_number"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_patient"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_gender"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_dob"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_city"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_phone"]),
-                        rx.table.column_header_cell(LanguageState.tr["col_actions"]),
-                    )
+            rx.box(
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            rx.table.column_header_cell(LanguageState.tr["col_patient_number"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_patient"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_gender"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_dob"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_city"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_phone"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_actions"]),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(AccountDetailState.patients, _patient_row)
+                    ),
+                    width="100%",
+                    variant="surface",
                 ),
-                rx.table.body(
-                    rx.foreach(AccountDetailState.patients, _patient_row)
-                ),
+                overflow_x="auto",
                 width="100%",
-                variant="surface",
             ),
             rx.center(
                 rx.text(
@@ -500,7 +479,7 @@ def account_detail_page() -> rx.Component:
         page_layout(
             rx.button(
                 rx.icon("arrow-left", size=16),
-                LanguageState.tr["back_to_accounts"],
+                LanguageState.tr["btn_back"],
                 on_click=AccountDetailState.go_back,
                 variant="ghost",
                 size="2",

@@ -1,8 +1,8 @@
+import json
 from datetime import date
 
-from peewee import CharField, DateField, ForeignKeyField, TextField
+from peewee import CharField, DateField, DecimalField, ForeignKeyField, TextField
 
-from gws_care.account.account import Account
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
 
@@ -21,19 +21,36 @@ class Patient(ModelWithUser):
     date_of_birth: date = DateField(null=False)
     # M / F / Other
     gender: str = CharField(max_length=10, null=False)
-    photo: str = CharField(max_length=500, null=True)
-    address: str = CharField(max_length=500, null=True)
+    sex: str = CharField(max_length=10, null=True)  # M / F / Autre (used on patient card)
+    nationality: str = CharField(max_length=100, null=True)
+    photo: str = TextField(null=True)
+    address: str = TextField(null=True)
     postal_code: str = CharField(max_length=20, null=True)
     city: str = CharField(max_length=100, null=True)
+    # Phone stored as "<country_code>|<number>", e.g. "+33|0612345678"
     phone: str = CharField(max_length=50, null=True)
+    phone_country: str = CharField(max_length=10, null=True)
     email: str = CharField(max_length=255, null=True)
+    social_security_number: str = CharField(max_length=30, null=True)
+    weight = DecimalField(null=True, decimal_places=2, max_digits=6)  # kg
+    height = DecimalField(null=True, decimal_places=2, max_digits=5)  # cm
+    # JSON: {"email": bool, "sms": bool, "whatsapp": bool}
+    notification_preferences: str = TextField(null=True)
+    # QR code stored as base64 PNG string (data:image/png;base64,...)
+    qr_code: str = TextField(null=True)
+    # Permanent token for QR identity
+    qr_token: str = CharField(max_length=12, unique=True, null=True, index=True)
+
+    # Primary physician info
     primary_physician_name: str = CharField(max_length=255, null=True)
     primary_physician_phone: str = CharField(max_length=50, null=True)
+
+    # Billing account FK
+    from gws_care.account.account import Account
     billing_account: Account = ForeignKeyField(Account, null=True, backref="patients", on_delete="SET NULL")
-    # company_id: plain string FK — column managed via migration, not a Peewee FK constraint
+
+    # company_id: plain string FK — column managed via migration
     company_id: str = CharField(max_length=36, null=True)
-    # Permanent token used to generate the patient's identity QR code
-    qr_token: str = CharField(max_length=12, unique=True, null=True, index=True)
 
     def get_full_name(self) -> str:
         return f"{self.first_name} {self.last_name}"
@@ -50,6 +67,17 @@ class Patient(ModelWithUser):
         )
 
     def to_dto(self) -> PatientDTO:
+        notif_prefs = None
+        if self.notification_preferences:
+            try:
+                notif_prefs = json.loads(self.notification_preferences)
+            except Exception:
+                notif_prefs = None
+        from gws_care.patient.patient_account import PatientAccount
+        account_ids = [
+            str(pa.account_id)
+            for pa in PatientAccount.select().where(PatientAccount.patient == self.id)
+        ]
         return PatientDTO(
             id=self.id,
             created_at=self.created_at,
@@ -60,16 +88,23 @@ class Patient(ModelWithUser):
             birth_name=self.birth_name,
             date_of_birth=self.date_of_birth,
             gender=self.gender,
+            sex=self.sex,
+            nationality=self.nationality,
             photo=self.photo,
             address=self.address,
             postal_code=self.postal_code,
             city=self.city,
             phone=self.phone,
+            phone_country=self.phone_country,
             email=self.email,
             primary_physician_name=self.primary_physician_name,
             primary_physician_phone=self.primary_physician_phone,
-            account_id=str(self.billing_account_id) if self.billing_account_id else None,
+            account_ids=account_ids,
             company_id=self.company_id or None,
+            social_security_number=self.social_security_number,
+            weight=float(self.weight) if self.weight is not None else None,
+            height=float(self.height) if self.height is not None else None,
+            notification_preferences=notif_prefs,
         )
 
     class Meta:

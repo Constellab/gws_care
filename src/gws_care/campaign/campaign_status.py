@@ -1,64 +1,31 @@
-"""Campaign status enum — 15 lifecycle states."""
+"""CampaignStatus enumeration."""
 
 from enum import Enum
 
 
-class CampaignStatus(str, Enum):
-    """Full lifecycle of a medical campaign at PSC."""
+class CampaignStatus(Enum):
+    """Lifecycle status of a Campaign."""
 
-    DRAFT = "DRAFT"
-    AWAITING_OP_VALIDATION = "AWAITING_OP_VALIDATION"
-    OPERATIONALLY_VALIDATED = "OPERATIONALLY_VALIDATED"
-    AWAITING_MEDICAL_VALIDATION = "AWAITING_MEDICAL_VALIDATION"
-    MEDICALLY_VALIDATED = "MEDICALLY_VALIDATED"
-    READY_FOR_CONVOCATION = "READY_FOR_CONVOCATION"
-    CONVOCATIONS_SENT = "CONVOCATIONS_SENT"
-    TERRAIN_EN_COURS = "TERRAIN_EN_COURS"
-    TERRAIN_CLOTURE = "TERRAIN_CLOTURE"
-    LABO_EN_COURS = "LABO_EN_COURS"
-    LABO_VALIDE = "LABO_VALIDE"
-    VALIDE_MEDECIN_PSC = "VALIDE_MEDECIN_PSC"
-    PUBLIE_MEDECIN_ENTREPRISE = "PUBLIE_MEDECIN_ENTREPRISE"
-    PUBLIE_PATIENT = "PUBLIE_PATIENT"
-    ARCHIVED = "ARCHIVED"
+    DRAFT = "draft"                             # Created, not yet validated
+    VALIDATED = "validated"                     # Validated by clinic doctor or admin — ready for field
+    TERRAIN_EXAM = "terrain_exam"               # On-site: exams are collected and validated on terrain
+    SAMPLE_ANALYSIS = "sample_analysis"         # Lab: exam results are entered and analysed
+    LAB_DONE = "lab_done"                       # All lab results entered and lab-validated
+    DOCTOR_CLINIC_VALIDATED = "doctor_clinic_validated"     # Clinic doctor has interpreted all visits
+    DOCTOR_COMPANY_VALIDATED = "doctor_company_validated"   # Company doctor has validated all visits
+    CLOSED = "closed"                           # All visits validated — campaign formally closed
+    ARCHIVED = "archived"                       # Archived (manual or automatic)
 
     def get_label(self) -> str:
         labels = {
-            CampaignStatus.DRAFT: "Brouillon",
-            CampaignStatus.AWAITING_OP_VALIDATION: "En attente validation opérationnelle",
-            CampaignStatus.OPERATIONALLY_VALIDATED: "Validée opérationnellement",
-            CampaignStatus.AWAITING_MEDICAL_VALIDATION: "En attente validation médicale",
-            CampaignStatus.MEDICALLY_VALIDATED: "Validée médicalement",
-            CampaignStatus.READY_FOR_CONVOCATION: "Prête pour convocation",
-            CampaignStatus.CONVOCATIONS_SENT: "Convocations envoyées",
-            CampaignStatus.TERRAIN_EN_COURS: "Terrain en cours",
-            CampaignStatus.TERRAIN_CLOTURE: "Terrain clôturé",
-            CampaignStatus.LABO_EN_COURS: "Labo en cours",
-            CampaignStatus.LABO_VALIDE: "Labo validé",
-            CampaignStatus.VALIDE_MEDECIN_PSC: "Validée médecin PSC",
-            CampaignStatus.PUBLIE_MEDECIN_ENTREPRISE: "Publiée médecin entreprise",
-            CampaignStatus.PUBLIE_PATIENT: "Publiée patient",
-            CampaignStatus.ARCHIVED: "Archivée",
+            CampaignStatus.DRAFT: "Draft",
+            CampaignStatus.VALIDATED: "Validated",
+            CampaignStatus.TERRAIN_EXAM: "Terrain Exam",
+            CampaignStatus.SAMPLE_ANALYSIS: "Sample Analysis",
+            CampaignStatus.LAB_DONE: "Lab Done",
+            CampaignStatus.DOCTOR_CLINIC_VALIDATED: "Clinic Doctor Validated",
+            CampaignStatus.DOCTOR_COMPANY_VALIDATED: "Company Doctor Validated",
+            CampaignStatus.CLOSED: "Closed",
+            CampaignStatus.ARCHIVED: "Archived",
         }
-        return labels[self]
-
-    def get_color(self) -> str:
-        """Return a Radix color scheme name for this status."""
-        colors = {
-            CampaignStatus.DRAFT: "gray",
-            CampaignStatus.AWAITING_OP_VALIDATION: "blue",
-            CampaignStatus.OPERATIONALLY_VALIDATED: "cyan",
-            CampaignStatus.AWAITING_MEDICAL_VALIDATION: "violet",
-            CampaignStatus.MEDICALLY_VALIDATED: "purple",
-            CampaignStatus.READY_FOR_CONVOCATION: "indigo",
-            CampaignStatus.CONVOCATIONS_SENT: "sky",
-            CampaignStatus.TERRAIN_EN_COURS: "orange",
-            CampaignStatus.TERRAIN_CLOTURE: "amber",
-            CampaignStatus.LABO_EN_COURS: "yellow",
-            CampaignStatus.LABO_VALIDE: "lime",
-            CampaignStatus.VALIDE_MEDECIN_PSC: "teal",
-            CampaignStatus.PUBLIE_MEDECIN_ENTREPRISE: "mint",
-            CampaignStatus.PUBLIE_PATIENT: "green",
-            CampaignStatus.ARCHIVED: "gray",
-        }
-        return colors[self]
+        return labels.get(self, self.value)

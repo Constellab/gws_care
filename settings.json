@@ -1,7 +1,7 @@
 {
   "name": "gws_care",
-  "author": "",
-  "version": "0.10.9",
+  "author": "Gencovery",
+  "version": "0.29.0",
   "variables": {
     "gws_care:testdata_dir": "${CURRENT_DIR}/tests/testdata"
   },
@@ -10,13 +10,16 @@
     "bricks": [
       {
         "name": "gws_core",
-        "version": "0.21.0"
+        "version": "0.22.0"
       }
     ],
     "pip": [
       {
         "source": "https://pypi.python.org/simple",
         "packages": [
+          {"name": "reportlab"},
+          {"name": "pdfplumber"},
+          {"name": "rapidfuzz"},
           {"name": "qrcode[pil]"}
         ]
       }

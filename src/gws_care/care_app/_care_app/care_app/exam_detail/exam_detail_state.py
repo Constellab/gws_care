@@ -1,6 +1,5 @@
 """State management for the exam detail page."""
 
-import re
 import uuid
 from typing import Any
 
@@ -8,53 +7,6 @@ import reflex as rx
 from pydantic import BaseModel
 
 from ..common.role_state import RoleState
-
-
-def _auto_detect_status(value_str: str, ref_range: str, critical_low: str = "", critical_high: str = "") -> str | None:
-    """Parse reference_range and return status for a numeric value.
-
-    Levels (same as campaign workflow):
-      critical_high | high | normal | low | critical_low
-    Supported ref_range formats: '4.5–11.0', '4.5-11.0', '<200', '>40'.
-    Returns None if value or range cannot be parsed numerically.
-    """
-    if not value_str.strip():
-        return None
-    try:
-        val = float(value_str.replace(",", ".").strip())
-    except ValueError:
-        return None
-
-    # Check critical thresholds first
-    try:
-        if critical_low and val < float(critical_low):
-            return "critical"
-        if critical_high and val > float(critical_high):
-            return "critical"
-    except (ValueError, TypeError):
-        pass
-
-    if not ref_range.strip():
-        return None
-    ref = ref_range.strip()
-    # Range: X–Y  (en-dash, em-dash, or plain hyphen)
-    m = re.match(r'^([0-9.]+)\s*[\u2013\u2014\-]\s*([0-9.]+)$', ref)
-    if m:
-        low, high = float(m.group(1)), float(m.group(2))
-        if val < low:
-            return "low"
-        if val > high:
-            return "high"
-        return "normal"
-    # Upper bound only: <X
-    m = re.match(r'^<\s*([0-9.]+)$', ref)
-    if m:
-        return "high" if val > float(m.group(1)) else "normal"
-    # Lower bound only: >X
-    m = re.match(r'^>\s*([0-9.]+)$', ref)
-    if m:
-        return "low" if val < float(m.group(1)) else "normal"
-    return None
 
 
 class ExamDetailDTO(BaseModel):
@@ -71,80 +23,124 @@ class ExamDetailDTO(BaseModel):
     blood_pressure: str | None = None
     heart_rate: float | None = None
     temperature: float | None = None
-    conclusion: str | None = None
+    interpretation: str | None = None
+    interpreted_by_name: str = ""
     patient_id: str
     patient_name: str
-    requested_param_ids: list[str] = []
-    consultation_id: str = ""   # non-empty when exam belongs to a Consultation
-    prescribed_exam_ref_ids: list[str] = []  # follow-up exams prescribed by doctor
-    follow_up_exam_ids: list[str] = []        # Exam.id list of actual follow-up records
-    is_follow_up: bool = False                # True when this exam was created as a follow-up prescription
+    visit_id: str = ""
 
 
-class ConsultationContextDTO(BaseModel):
-    """Clinical context from the parent Consultation, shown read-only on exam detail."""
+# ── Predefined laboratory parameters ────────────────────────────────────────
 
-    id: str
-    consultation_date: str
-    reason_for_visit: str = ""
-    medical_history: str = ""
-    weight: float | None = None
-    height: float | None = None
-    bmi: float | None = None
-    blood_pressure: str | None = None
-    heart_rate: float | None = None
-    temperature: float | None = None
-    conclusion: str | None = None
+PREDEFINED_LAB_PARAMS: list[dict] = [
+    # Complete Blood Count (CBC)
+    {"name": "WBC", "unit": "10³/μL", "reference_range": "4.5–11.0"},
+    {"name": "RBC", "unit": "10⁶/μL", "reference_range": "4.5–5.5"},
+    {"name": "Hemoglobin", "unit": "g/dL", "reference_range": "12.0–17.5"},
+    {"name": "Hematocrit", "unit": "%", "reference_range": "36–50"},
+    {"name": "MCV", "unit": "fL", "reference_range": "80–100"},
+    {"name": "MCH", "unit": "pg", "reference_range": "27–33"},
+    {"name": "MCHC", "unit": "g/dL", "reference_range": "32–36"},
+    {"name": "Platelets", "unit": "10³/μL", "reference_range": "150–400"},
+    # Basic Metabolic Panel
+    {"name": "Glucose", "unit": "mg/dL", "reference_range": "70–100"},
+    {"name": "BUN", "unit": "mg/dL", "reference_range": "7–20"},
+    {"name": "Creatinine", "unit": "mg/dL", "reference_range": "0.6–1.2"},
+    {"name": "eGFR", "unit": "mL/min/1.73m²", "reference_range": ">60"},
+    {"name": "Sodium", "unit": "mmol/L", "reference_range": "136–145"},
+    {"name": "Potassium", "unit": "mmol/L", "reference_range": "3.5–5.1"},
+    {"name": "Chloride", "unit": "mmol/L", "reference_range": "98–107"},
+    {"name": "Bicarbonate", "unit": "mmol/L", "reference_range": "22–29"},
+    {"name": "Calcium", "unit": "mg/dL", "reference_range": "8.5–10.5"},
+    # Liver Function Tests (LFT)
+    {"name": "ALT", "unit": "U/L", "reference_range": "7–56"},
+    {"name": "AST", "unit": "U/L", "reference_range": "10–40"},
+    {"name": "ALP", "unit": "U/L", "reference_range": "44–147"},
+    {"name": "GGT", "unit": "U/L", "reference_range": "9–48"},
+    {"name": "Total Bilirubin", "unit": "mg/dL", "reference_range": "0.1–1.2"},
+    {"name": "Direct Bilirubin", "unit": "mg/dL", "reference_range": "0.0–0.3"},
+    {"name": "Total Protein", "unit": "g/dL", "reference_range": "6.3–8.2"},
+    {"name": "Albumin", "unit": "g/dL", "reference_range": "3.5–5.0"},
+    # Lipid Panel
+    {"name": "Total Cholesterol", "unit": "mg/dL", "reference_range": "<200"},
+    {"name": "LDL", "unit": "mg/dL", "reference_range": "<100"},
+    {"name": "HDL", "unit": "mg/dL", "reference_range": ">40"},
+    {"name": "Triglycerides", "unit": "mg/dL", "reference_range": "<150"},
+    # Diabetes
+    {"name": "HbA1c", "unit": "%", "reference_range": "<5.7"},
+    {"name": "Fasting Glucose", "unit": "mmol/L", "reference_range": "3.9–5.6"},
+    {"name": "Insulin", "unit": "μIU/mL", "reference_range": "2.6–24.9"},
+    # Thyroid
+    {"name": "TSH", "unit": "μIU/mL", "reference_range": "0.4–4.0"},
+    {"name": "fT4", "unit": "ng/dL", "reference_range": "0.8–1.8"},
+    {"name": "fT3", "unit": "pg/mL", "reference_range": "2.3–4.2"},
+    # Inflammation
+    {"name": "CRP", "unit": "mg/L", "reference_range": "<5.0"},
+    {"name": "ESR", "unit": "mm/hr", "reference_range": "0–20"},
+    {"name": "Ferritin", "unit": "ng/mL", "reference_range": "12–300"},
+    # Coagulation
+    {"name": "PT", "unit": "seconds", "reference_range": "11–13"},
+    {"name": "INR", "unit": "—", "reference_range": "0.8–1.2"},
+    {"name": "aPTT", "unit": "seconds", "reference_range": "25–35"},
+    # Iron & Vitamins
+    {"name": "Iron", "unit": "μg/dL", "reference_range": "60–170"},
+    {"name": "Transferrin", "unit": "mg/dL", "reference_range": "200–380"},
+    {"name": "Saturation (%)", "unit": "%", "reference_range": "20–50"},
+    {"name": "Vitamin B12", "unit": "pg/mL", "reference_range": "200–900"},
+    {"name": "Folate", "unit": "ng/mL", "reference_range": "2.7–17.0"},
+    {"name": "Vitamin D", "unit": "ng/mL", "reference_range": "30–100"},
+    # Hormones
+    {"name": "Testosterone", "unit": "ng/dL", "reference_range": "300–1000"},
+    {"name": "FSH", "unit": "mIU/mL", "reference_range": "1.5–12.4"},
+    {"name": "LH", "unit": "mIU/mL", "reference_range": "1.7–8.6"},
+    {"name": "Estradiol", "unit": "pg/mL", "reference_range": "15–350"},
+    {"name": "Prolactin", "unit": "ng/mL", "reference_range": "2–18"},
+    # Urinalysis
+    {"name": "Glucose (urine)", "unit": "mg/dL", "reference_range": "Negative"},
+    {"name": "Protein (urine)", "unit": "mg/dL", "reference_range": "Negative"},
+    {"name": "Blood (urine)", "unit": "", "reference_range": "Negative"},
+    {"name": "pH (urine)", "unit": "", "reference_range": "4.5–8.0"},
+    {"name": "Creatinine (urine)", "unit": "mg/dL", "reference_range": "20–320"},
+    # Radiology — chest X-ray
+    {"name": "ICT", "unit": "ratio", "reference_range": "<0.50"},
+    {"name": "Silhouette médiastinale", "unit": "", "reference_range": "Normale"},
+    {"name": "Parenchyme pulmonaire", "unit": "", "reference_range": "Normal"},
+    {"name": "Plèvres", "unit": "", "reference_range": "Libres"},
+    # Spirometry / EFR
+    {"name": "CVF (FVC)", "unit": "L", "reference_range": ">80% pred."},
+    {"name": "VEMS (FEV1)", "unit": "L", "reference_range": ">80% pred."},
+    {"name": "VEMS/CVF (Tiffeneau)", "unit": "%", "reference_range": ">70%"},
+    {"name": "DEP (PEF)", "unit": "L/min", "reference_range": ">80% pred."},
+    {"name": "DEM 25-75%", "unit": "L/s", "reference_range": ">60% pred."},
+    # ECG
+    {"name": "Rythme", "unit": "", "reference_range": "Sinusal"},
+    {"name": "FC (bpm)", "unit": "bpm", "reference_range": "60–100"},
+    {"name": "PR", "unit": "ms", "reference_range": "120–200"},
+    {"name": "QRS", "unit": "ms", "reference_range": "<120"},
+    {"name": "QTc", "unit": "ms", "reference_range": "<440"},
+    {"name": "Axe électrique", "unit": "°", "reference_range": "-30 à +90"},
+    # Ophthalmology
+    {"name": "AV OD (sc)", "unit": "/10", "reference_range": "10/10"},
+    {"name": "AV OG (sc)", "unit": "/10", "reference_range": "10/10"},
+    {"name": "AV ODG (ac)", "unit": "/10", "reference_range": "10/10"},
+    {"name": "Tonus OD", "unit": "mmHg", "reference_range": "10–21"},
+    {"name": "Tonus OG", "unit": "mmHg", "reference_range": "10–21"},
+    {"name": "Vision couleurs", "unit": "", "reference_range": "Normale"},
+    {"name": "Champ visuel", "unit": "", "reference_range": "Normal"},
+    # ORL / Audiometry
+    {"name": "Seuil OD 500Hz", "unit": "dB", "reference_range": "≤25"},
+    {"name": "Seuil OD 1kHz", "unit": "dB", "reference_range": "≤25"},
+    {"name": "Seuil OD 2kHz", "unit": "dB", "reference_range": "≤25"},
+    {"name": "Seuil OD 4kHz", "unit": "dB", "reference_range": "≤25"},
+    {"name": "Seuil OD 8kHz", "unit": "dB", "reference_range": "≤25"},
+    {"name": "Seuil OG 500Hz", "unit": "dB", "reference_range": "≤25"},
+    {"name": "Seuil OG 1kHz", "unit": "dB", "reference_range": "≤25"},
+    {"name": "Seuil OG 2kHz", "unit": "dB", "reference_range": "≤25"},
+    {"name": "Seuil OG 4kHz", "unit": "dB", "reference_range": "≤25"},
+    {"name": "Seuil OG 8kHz", "unit": "dB", "reference_range": "≤25"},
+]
 
-
-class RequestedParamDTO(BaseModel):
-    """A prescribed lab parameter displayed on the exam detail page."""
-
-    id: str
-    name: str
-    unit: str = ""
-    is_resulted: bool = False  # True if a lab_result row already exists for this param name
-
-
-
-
-class AvailableParamOption(BaseModel):
-    """One parameter available from the exam type referential."""
-
-    id: str
-    name: str
-    unit: str = ""
-    ref_range: str = ""
-    critical_low: str = ""   # raw float string; empty = no threshold
-    critical_high: str = ""  # raw float string; empty = no threshold
-
-
-class FollowUpParamOption(BaseModel):
-    """One parameter within an exam type for the prescribe-follow-up dialog."""
-    id: str
-    name: str
-    unit: str = ""
-    ref_range: str = ""
-    is_selected: bool = True  # all selected by default
-
-
-class FollowUpExamOption(BaseModel):
-    """One exam type that the doctor can prescribe as a follow-up."""
-
-    id: str
-    name: str
-    category_label: str = ""
-    params: list[FollowUpParamOption] = []   # available parameters for this exam type
-    params_expanded: bool = False            # whether param list is shown in UI
-
-
-class FollowUpExamRowDTO(BaseModel):
-    """A follow-up Exam record created from a doctor's prescription."""
-
-    exam_id: str
-    exam_type_label: str
-    status: str = "draft"
-    link_url: str = ""
+_PREDEFINED_LAB_PARAMS_DICT: dict[str, dict] = {p["name"]: p for p in PREDEFINED_LAB_PARAMS}
 
 
 class LabResultRowDTO(BaseModel):
@@ -187,13 +183,11 @@ class ExamDetailState(RoleState):
     """State for the exam detail / result-entry page."""
 
     exam: ExamDetailDTO | None = None
-    consultation_context: ConsultationContextDTO | None = None
     result: ExamResultDetailDTO | None = None
     certificates: list[CertificateRowDTO] = []
     exam_files: list[ExamFileRowDTO] = []
     is_loading: bool = False
     error_message: str = ""
-    is_edit_mode: bool = False
 
     # Medical sections form
     form_reason_for_visit: str = ""
@@ -204,37 +198,123 @@ class ExamDetailState(RoleState):
     form_blood_pressure: str = ""
     form_heart_rate: str = ""
     form_temperature: str = ""
-    form_conclusion: str = ""
-    is_saving_sections: bool = False
+    form_interpretation: str = ""
+    is_saving_reason: bool = False
+    is_saving_physical: bool = False
+    is_saving_lab: bool = False
+    is_submitting_review: bool = False
+    is_submitting_interpretation: bool = False
 
     # Laboratory results
     lab_results: list[LabResultRowDTO] = []
-    available_params: list[AvailableParamOption] = []
-    requested_params: list[RequestedParamDTO] = []  # parameters prescribed by the doctor
     new_lab_selected_preset: str = ""
     new_lab_parameter: str = ""
     new_lab_unit: str = ""
     new_lab_value: str = ""
     new_lab_reference_range: str = ""
+    new_lab_status: str = "normal"
 
     # File upload on detail page
     is_uploading_file: bool = False
 
-    # Prescribe follow-up exams (doctor selects ExamTypeRef items from the clinical exam form)
-    prescribe_exam_options: list[FollowUpExamOption] = []
-    prescribe_form_open: bool = False
-    prescribe_selected_ids: list[str] = []  # toggled by doctor
-    is_saving_prescription: bool = False
-    is_submitting: bool = False  # True while submit_exam is running
-    # Names of prescribed follow-up exams (for display in UI — kept for backward compat)
-    prescribed_exam_names: list[str] = []
-    # Actual follow-up Exam records created for prescribed exams (clickable by lab tech)
-    follow_up_exams: list[FollowUpExamRowDTO] = []
+    # File delete confirmation dialog
+    file_delete_confirm_open: bool = False
+    file_to_delete_id: str = ""
 
-    # Request specific parameters for current exam (doctor selects which tests to run)
-    request_params_form_open: bool = False
-    request_params_selected_ids: list[str] = []
-    is_saving_requested_params: bool = False
+    # Tab navigation
+    active_tab: str = "informations"
+
+    # File preview dialog
+    preview_dialog_open: bool = False
+    selected_file_id: str = ""
+    selected_file_name: str = ""
+    selected_file_type: str = ""   # image | pdf | table | other | ""
+    selected_file_preview_url: str = ""
+    # Plotly data stored as {"figure": <dict>, "name": <str>} so it can be
+    # accessed via dict subscript in the component — rx.plotly rejects direct
+    # dict|None vars but accepts dict["key"] subscript vars without type checking.
+    selected_file_data: dict | None = None
+    is_loading_preview: bool = False
+    preview_error: str = ""
+    # Table preview (CSV / Excel)
+    table_preview_columns: list[str] = []
+    table_preview_rows: list[list[str]] = []
+    table_preview_total_rows: int = 0
+    # Plot-from-prompt
+    plot_prompt: str = ""
+    plot_chart: dict | None = None   # {"figure": dict, "name": str}
+    is_generating_plot: bool = False
+    plot_generation_error: str = ""
+
+    @rx.var
+    def computed_bmi(self) -> float | None:
+        """Auto-calculate BMI from form_weight and form_height."""
+        try:
+            w = float(self.form_weight)
+            h = float(self.form_height) / 100.0
+            if w > 0 and h > 0:
+                return round(w / (h * h), 1)
+        except (ValueError, TypeError, ZeroDivisionError):
+            pass
+        return None
+
+    @rx.var
+    def bmi_category(self) -> str:
+        bmi = self.computed_bmi
+        if bmi is None:
+            return ""
+        if bmi < 18.5:
+            return "underweight"
+        if bmi < 25.0:
+            return "normal"
+        if bmi < 30.0:
+            return "overweight"
+        return "obese"
+
+    @rx.var
+    def is_sections_editable(self) -> bool:
+        """True for all statuses except DONE — forms stay editable until interpretation is complete."""
+        if self.exam is None:
+            return False
+        return self.exam.status != "done"
+
+    @rx.var
+    def is_results_editable(self) -> bool:
+        """True whenever an exam is loaded — editing remains allowed after Done."""
+        return self.exam is not None
+
+    @rx.var
+    def exam_status_index(self) -> int:
+        """Map exam status to a 0-based workflow step index."""
+        if self.exam is None:
+            return 0
+        if self.exam.status == "in_progress_results":
+            return 1
+        if self.exam.status == "in_progress_interpretation":
+            return 2
+        if self.exam.status == "done":
+            return 3
+        return 0  # todo
+
+    @rx.var
+    def missing_sections_for_review(self) -> list[str]:
+        """List of section names that are still empty, blocking submit-for-review."""
+        if self.exam is None:
+            return ["All sections"]
+        missing: list[str] = []
+        if not self.exam.reason_for_visit:
+            missing.append("Reason for visit")
+        if not self.exam.medical_history:
+            missing.append("Medical history")
+        has_physical = bool(
+            self.exam.weight or self.exam.height or self.exam.bmi
+            or self.exam.blood_pressure or self.exam.heart_rate or self.exam.temperature
+        )
+        if not has_physical:
+            missing.append("Physical examination")
+        if not self.lab_results and not self.exam_files:
+            missing.append("Laboratory results or Medical documents (at least one required)")
+        return missing
 
     @rx.var
     def result_data_items(self) -> list[list[str]]:
@@ -245,52 +325,64 @@ class ExamDetailState(RoleState):
 
     @rx.event
     async def on_load(self):
+        # Clear stale state immediately so no previous error/exam flashes on screen
+        self.exam = None
+        self.error_message = ""
+        self.is_loading = True
+        yield
         await self._load_roles()
         await self._load_exam()
-        self.is_edit_mode = False
+        if self.exam:
+            status = self.exam.status
+            if status == "in_progress_results":
+                self.active_tab = "results"
+            elif status in ("in_progress_interpretation", "done"):
+                self.active_tab = "interpretation"
+            else:
+                self.active_tab = "informations"
+        # Reset preview state so a previously viewed file doesn't linger
+        self.preview_dialog_open = False
+        self.selected_file_id = ""
+        self.selected_file_name = ""
+        self.selected_file_type = ""
+        self.selected_file_preview_url = ""
+        self.selected_file_data = None
+        self.is_loading_preview = False
+        self.preview_error = ""
+        self.table_preview_columns = []
+        self.table_preview_rows = []
+        self.table_preview_total_rows = 0
+        self.plot_prompt = ""
+        self.plot_chart = None
+        self.is_generating_plot = False
+        self.plot_generation_error = ""
 
     @rx.event
-    def set_edit_mode(self, value: bool):
-        self.is_edit_mode = value
-
-    @rx.event
-    async def notify_doctor_results_ready(self):
-        """Explicitly notify the prescribing doctor that lab results are ready."""
-        if not self.exam or not self.exam.requested_param_ids:
-            yield rx.toast.error("Aucune analyse prescrite associée à cet examen.")
+    async def save_informations(self):
+        """Save Informations. First save advances TODO→IN_PROGRESS_RESULTS and opens Results tab.
+        Subsequent saves (re-edits, including after the exam is Done) just persist
+        without changing status or tab."""
+        if self.exam is None:
             return
-        try:
-            with await self.authenticate_user():
-                from gws_care.exam.exam import Exam
-                from gws_care.notification.notification_service import NotificationService
-                from gws_care.role.care_role import CareRole
-                from gws_care.role.user_care_role import UserCareRole
-                exam_obj = Exam.get_or_none(Exam.id == self.exam_id_param)
-                notified_ids: set[str] = set()
-                msg = (
-                    f"Résultats disponibles — {self.exam.patient_name} ({self.exam.exam_type_label})"
-                )
-                if exam_obj and exam_obj.created_by_id:
-                    NotificationService.create_bell(
-                        user_id=str(exam_obj.created_by_id),
-                        message=msg,
-                    )
-                    notified_ids.add(str(exam_obj.created_by_id))
-                for ur in UserCareRole.select().where(
-                    UserCareRole.role == CareRole.MEDECIN_PSC.value
-                ):
-                    uid = str(ur.user_id)
-                    if uid not in notified_ids:
-                        NotificationService.create_bell(user_id=uid, message=msg)
-            yield rx.toast.success("Médecin notifié.")
-        except Exception as exc:
-            yield rx.toast.error(f"Erreur lors de la notification : {exc}")
+        await self._persist_reason_and_history()
+        await self._persist_physical()
+        if self.exam.status == "todo":
+            with await self.authenticate_user() as auth_user:
+                from gws_care.exam.exam_service import ExamService
+                from gws_care.user.user import User
+                user = User.get_by_id(str(auth_user.id))
+                ExamService.set_in_progress_results(self.exam_id_param, user=user)
+            self.exam = self.exam.copy(update={"status": "in_progress_results"})
+            self.active_tab = "results"
+        yield rx.toast.success("Informations saved.")
 
     @rx.event
     def go_back(self):
-        if self.exam:
-            return rx.redirect(f"/patient/{self.exam.patient_id}")
-        return rx.redirect("/")
+        return rx.call_script("window.history.back()")
+
+    @rx.event
+    def set_active_tab(self, value: str):
+        self.active_tab = value
 
     @rx.event
     def set_form_reason_for_visit(self, value: str):
@@ -325,56 +417,23 @@ class ExamDetailState(RoleState):
         self.form_temperature = value
 
     @rx.event
-    def set_form_conclusion(self, value: str):
-        self.form_conclusion = value
+    def set_form_interpretation(self, value: str):
+        self.form_interpretation = value
 
     @rx.event
-    def select_available_param(self, param_id: str):
-        """Auto-fill parameter fields when a referential parameter is selected."""
-        self.new_lab_selected_preset = param_id
-        if not param_id:
+    def select_predefined_param(self, preset_name: str):
+        """Auto-fill parameter fields when a predefined parameter is selected."""
+        self.new_lab_selected_preset = preset_name
+        if preset_name == "CUSTOM":
             self.new_lab_parameter = ""
             self.new_lab_unit = ""
             self.new_lab_reference_range = ""
         else:
-            for p in self.available_params:
-                if p.id == param_id:
-                    self.new_lab_parameter = p.name
-                    self.new_lab_unit = p.unit
-                    self.new_lab_reference_range = p.ref_range
-                    break
-
-    @rx.event
-    def start_edit_lab_row(self, row_id: str):
-        """No-op kept for compatibility — rows are now edited inline."""
-        pass
-
-    @rx.event
-    def set_lab_row_value(self, row_id: str, value: str):
-        """Update the value of a lab result row and auto-compute its status."""
-        # Build a lookup of param name → critical thresholds from the referential
-        crit_map: dict[str, tuple[str, str]] = {
-            p.name: (p.critical_low, p.critical_high)
-            for p in self.available_params
-        }
-        self.lab_results = [
-            LabResultRowDTO(
-                id=row.id,
-                parameter=row.parameter,
-                unit=row.unit,
-                value=value if row.id == row_id else row.value,
-                reference_range=row.reference_range,
-                status=(
-                    (_auto_detect_status(
-                        value, row.reference_range,
-                        *crit_map.get(row.parameter, ("", ""))
-                    ) or "normal")
-                    if row.id == row_id
-                    else row.status
-                ),
-            )
-            for row in self.lab_results
-        ]
+            p = _PREDEFINED_LAB_PARAMS_DICT.get(preset_name)
+            if p:
+                self.new_lab_parameter = p["name"]
+                self.new_lab_unit = p["unit"]
+                self.new_lab_reference_range = p["reference_range"]
 
     @rx.event
     def set_new_lab_parameter(self, value: str):
@@ -393,23 +452,14 @@ class ExamDetailState(RoleState):
         self.new_lab_reference_range = value
 
     @rx.event
-    def add_lab_row(self):
-        """Add a new row to lab results (parameter name is required). Status is auto-detected."""
+    def set_new_lab_status(self, value: str):
+        self.new_lab_status = value
+
+    @rx.event
+    async def add_lab_row(self):
+        """Add a new row to lab results and persist immediately."""
         if not self.new_lab_parameter.strip():
             return
-        # Look up critical thresholds for this param from the referential
-        crit_low, crit_high = "", ""
-        for p in self.available_params:
-            if p.name == self.new_lab_parameter.strip():
-                crit_low, crit_high = p.critical_low, p.critical_high
-                break
-        auto = _auto_detect_status(
-            self.new_lab_value,
-            self.new_lab_reference_range,
-            crit_low,
-            crit_high,
-        )
-        final_status = auto if auto is not None else "normal"
         self.lab_results = self.lab_results + [
             LabResultRowDTO(
                 id=str(uuid.uuid4()),
@@ -417,7 +467,7 @@ class ExamDetailState(RoleState):
                 unit=self.new_lab_unit.strip(),
                 value=self.new_lab_value.strip(),
                 reference_range=self.new_lab_reference_range.strip(),
-                status=final_status,
+                status=self.new_lab_status or "normal",
             )
         ]
         self.new_lab_selected_preset = ""
@@ -425,391 +475,179 @@ class ExamDetailState(RoleState):
         self.new_lab_unit = ""
         self.new_lab_value = ""
         self.new_lab_reference_range = ""
+        self.new_lab_status = "normal"
+        await self._persist_lab_results()
 
     @rx.event
-    def remove_lab_row(self, row_id: str):
-        """Remove a lab result row by its id."""
+    async def remove_lab_row(self, row_id: str):
+        """Remove a lab result row and persist immediately."""
         self.lab_results = [row for row in self.lab_results if row.id != row_id]
+        await self._persist_lab_results()
 
     @rx.event
-    async def save_sections(self):
-        """Save the medical sections of the exam."""
-        self.is_saving_sections = True
+    async def submit_for_review(self):
+        """Transition exam IN_PROGRESS_RESULTS→IN_PROGRESS_INTERPRETATION."""
+        if self.exam is None or self.exam.status != "in_progress_results":
+            return
+        self.is_submitting_review = True
+        self.error_message = ""
+        try:
+            with await self.authenticate_user() as auth_user:
+                from gws_care.exam.exam_service import ExamService
+                from gws_care.user.user import User
+                user = User.get_by_id(str(auth_user.id))
+                ExamService.set_in_progress_interpretation(self.exam.id, user=user)
+            self.exam = self.exam.copy(update={"status": "in_progress_interpretation"})
+            self.active_tab = "interpretation"
+            yield rx.toast.success("Exam submitted for review.")
+        except Exception as e:
+            self.error_message = f"Error: {e}"
+        finally:
+            self.is_submitting_review = False
+
+    @rx.event
+    async def submit_interpretation(self):
+        """Save doctor's interpretation and transition exam to DONE."""
+        if self.exam is None or self.exam.status != "in_progress_interpretation":
+            return
+        if not self.form_interpretation.strip():
+            self.error_message = "Please enter the medical interpretation before submitting."
+            return
+        self.is_submitting_interpretation = True
+        self.error_message = ""
+        try:
+            with await self.authenticate_user() as auth_user:
+                from gws_care.exam.exam_dto import InterpretExamDTO
+                from gws_care.exam.exam_service import ExamService
+                from gws_care.user.user import User
+                doctor = User.get_by_id(str(auth_user.id))
+                dto = InterpretExamDTO(interpretation=self.form_interpretation.strip())
+                exam = ExamService.interpret_exam(self.exam.id, dto, doctor)
+                interpreted_by_name = f"{doctor.first_name} {doctor.last_name}"
+            self.exam = self.exam.copy(update={
+                "status": "done",
+                "interpretation": self.form_interpretation.strip(),
+                "interpreted_by_name": interpreted_by_name,
+            })
+            yield rx.toast.success("Interpretation submitted. Exam is now locked.")
+        except Exception as e:
+            self.error_message = f"Error: {e}"
+        finally:
+            self.is_submitting_interpretation = False
+
+    @rx.event
+    async def save_reason_and_history(self):
+        """Save Reason for visit + Medical history (called from frontend button if exposed)."""
+        await self._persist_reason_and_history()
+
+    @rx.event
+    async def save_physical(self):
+        """Save Physical examination fields (called from frontend button if exposed)."""
+        await self._persist_physical()
+
+    @rx.event
+    async def save_lab_results(self):
+        """Save Laboratory results (called from frontend button if exposed)."""
+        await self._persist_lab_results()
+
+    async def _persist_reason_and_history(self):
+        if self.exam is None:
+            return
+        self.is_saving_reason = True
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam.exam_service import ExamService
+                ExamService.update_reason_and_history(
+                    self.exam_id_param,
+                    self.form_reason_for_visit or None,
+                    self.form_medical_history or None,
+                )
+            self.exam = self.exam.copy(update={
+                "reason_for_visit": self.form_reason_for_visit or None,
+                "medical_history": self.form_medical_history or None,
+            })
+        except Exception as e:
+            self.error_message = f"Error: {e}"
+        finally:
+            self.is_saving_reason = False
+
+    async def _persist_physical(self):
+        if self.exam is None:
+            return
+        self.is_saving_physical = True
         self.error_message = ""
 
-        def _to_float(val: str) -> float | None:
-            val = val.strip()
-            if not val:
+        def _f(val: str) -> float | None:
+            v = val.strip()
+            if not v:
                 return None
             try:
-                return float(val)
+                return float(v)
             except ValueError:
                 return None
 
         try:
-            with await self.authenticate_user():
-                from gws_care.exam.exam_dto import UpdateExamSectionsDTO
-                from gws_care.exam.exam_service import ExamService
-
-                dto = UpdateExamSectionsDTO(
-                    reason_for_visit=self.form_reason_for_visit or None,
-                    medical_history=self.form_medical_history or None,
-                    weight=_to_float(self.form_weight),
-                    height=_to_float(self.form_height),
-                    bmi=_to_float(self.form_bmi),
-                    blood_pressure=self.form_blood_pressure or None,
-                    heart_rate=_to_float(self.form_heart_rate),
-                    temperature=_to_float(self.form_temperature),
-                    conclusion=self.form_conclusion or None,
-                    lab_results=[row.dict() for row in self.lab_results],
-                )
-                ExamService.update_sections(self.exam_id_param, dto)
-            # Refresh the local exam DTO
-            if self.exam:
-                self.exam = self.exam.copy(update={
-                    "reason_for_visit": self.form_reason_for_visit or None,
-                    "medical_history": self.form_medical_history or None,
-                    "weight": _to_float(self.form_weight),
-                    "height": _to_float(self.form_height),
-                    "bmi": _to_float(self.form_bmi),
-                    "blood_pressure": self.form_blood_pressure or None,
-                    "heart_rate": _to_float(self.form_heart_rate),
-                    "temperature": _to_float(self.form_temperature),
-                    "conclusion": self.form_conclusion or None,
-                })
-            yield rx.toast.success("Sections saved.")
-            # Refresh requested_params completion status after new lab results are saved
-            self._refresh_requested_params_status()
-            # Notify the prescribing doctor (exam creator) when lab results are submitted
-            if self.exam and self.exam.requested_param_ids and self.lab_results:
-                try:
-                    with await self.authenticate_user():
-                        from gws_care.exam.exam import Exam
-                        from gws_care.notification.notification_service import NotificationService
-                        from gws_care.role.care_role import CareRole
-                        from gws_care.role.user_care_role import UserCareRole
-                        exam_obj = Exam.get_or_none(Exam.id == self.exam_id_param)
-                        notified_ids: set[str] = set()
-                        # Notify exam creator if they have a doctor role
-                        if exam_obj and exam_obj.created_by_id:
-                            creator_role = UserCareRole.get_or_none(
-                                (UserCareRole.user == exam_obj.created_by_id)
-                            )
-                            if creator_role:
-                                NotificationService.create_bell(
-                                    user_id=str(exam_obj.created_by_id),
-                                    message=(
-                                        f"Résultats disponibles \u2014 {self.exam.patient_name} ({self.exam.exam_type_label})"
-                                    ),
-                                )
-                                notified_ids.add(str(exam_obj.created_by_id))
-                        # Also notify all MEDECIN_PSC not yet notified
-                        for ur in UserCareRole.select().where(
-                            UserCareRole.role == CareRole.MEDECIN_PSC.value
-                        ):
-                            uid = str(ur.user_id)
-                            if uid not in notified_ids:
-                                NotificationService.create_bell(
-                                    user_id=uid,
-                                    message=(
-                                        f"Résultats disponibles \u2014 {self.exam.patient_name} ({self.exam.exam_type_label})"
-                                    ),
-                                )
-                except Exception as notify_exc:
-                    print(f"[ExamDetailState] Doctor notification failed: {notify_exc}")
-        except Exception as e:
-            self.error_message = f"Error saving sections: {e}"
-        finally:
-            self.is_saving_sections = False
-
-    # ── Prescribe follow-up exams ─────────────────────────────────────────────
-
-    @rx.event
-    async def open_prescribe_dialog(self):
-        """Open the dialog for prescribing follow-up exams. Loads exam types with their parameters."""
-        self.prescribe_form_open = True
-        self.prescribe_selected_ids = list(self.exam.prescribed_exam_ref_ids) if self.exam else []
-        try:
-            with await self.authenticate_user():
-                from gws_care.exam_type_ref.exam_parameter import ExamParameter
-                from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
-
-                refs = list(
-                    ExamTypeRef.select()
-                    .where(ExamTypeRef.is_active == True)  # noqa: E712
-                    .order_by(ExamTypeRef.category, ExamTypeRef.name)
-                )
-                ref_ids = [str(r.id) for r in refs]
-                # Batch-load all parameters for all refs
-                params_by_ref: dict[str, list[FollowUpParamOption]] = {}
-                if ref_ids:
-                    for p in (
-                        ExamParameter.select()
-                        .where(ExamParameter.exam_type_ref.in_(ref_ids))
-                        .order_by(ExamParameter.display_order)
-                    ):
-                        ref_key = str(p.exam_type_ref_id)
-                        ref_range = ""
-                        if p.ref_low is not None and p.ref_high is not None:
-                            ref_range = f"{p.ref_low}–{p.ref_high}"
-                        elif p.ref_low is not None:
-                            ref_range = f">{p.ref_low}"
-                        elif p.ref_high is not None:
-                            ref_range = f"<{p.ref_high}"
-                        params_by_ref.setdefault(ref_key, []).append(
-                            FollowUpParamOption(
-                                id=str(p.id),
-                                name=p.name,
-                                unit=p.unit or "",
-                                ref_range=ref_range,
-                                is_selected=True,
-                            )
-                        )
-
-                # If re-opening for an exam that already has follow-up records,
-                # restore previously selected param IDs per exam type
-                existing_param_ids_by_ref: dict[str, set[str]] = {}
-                if self.exam and self.exam.follow_up_exam_ids:
-                    from gws_care.exam.exam import Exam as ExamModel
-                    for fid in self.exam.follow_up_exam_ids:
-                        fex = ExamModel.get_or_none(ExamModel.id == fid)
-                        if fex and fex.exam_type_ref_id:
-                            existing_param_ids_by_ref[str(fex.exam_type_ref_id)] = set(fex.requested_param_ids or [])
-
-                options = []
-                for r in refs:
-                    rid = str(r.id)
-                    raw_params = params_by_ref.get(rid, [])
-                    prev_selected = existing_param_ids_by_ref.get(rid)
-                    if prev_selected is not None:
-                        # Restore previous selection
-                        raw_params = [
-                            FollowUpParamOption(**{**p.model_dump(), "is_selected": p.id in prev_selected})
-                            for p in raw_params
-                        ]
-                    options.append(FollowUpExamOption(
-                        id=rid,
-                        name=r.name,
-                        category_label=r.get_category_label(),
-                        params=raw_params,
-                        params_expanded=rid in self.prescribe_selected_ids,
-                    ))
-                self.prescribe_exam_options = options
-        except Exception as exc:
-            self.error_message = str(exc)
-
-    @rx.event
-    def close_prescribe_dialog(self):
-        self.prescribe_form_open = False
-
-    @rx.event
-    def toggle_prescribe_exam(self, ref_id: str):
-        """Toggle an exam type in the prescription selection; expand params on select."""
-        updated = []
-        for o in self.prescribe_exam_options:
-            if o.id == ref_id:
-                new_selected = ref_id not in self.prescribe_selected_ids
-                updated.append(FollowUpExamOption(**{
-                    **o.model_dump(),
-                    "params_expanded": new_selected,
-                }))
-            else:
-                updated.append(o)
-        self.prescribe_exam_options = updated
-        if ref_id in self.prescribe_selected_ids:
-            self.prescribe_selected_ids = [x for x in self.prescribe_selected_ids if x != ref_id]
-        else:
-            self.prescribe_selected_ids = self.prescribe_selected_ids + [ref_id]
-
-    @rx.event
-    def toggle_prescribe_params_expanded(self, ref_id: str):
-        """Toggle visibility of parameter list for a selected exam type."""
-        self.prescribe_exam_options = [
-            FollowUpExamOption(**{**o.model_dump(), "params_expanded": not o.params_expanded})
-            if o.id == ref_id else o
-            for o in self.prescribe_exam_options
-        ]
-
-    @rx.event
-    def toggle_prescribe_param(self, ref_id: str, param_id: str):
-        """Toggle one parameter within a prescribed exam type."""
-        updated = []
-        for o in self.prescribe_exam_options:
-            if o.id == ref_id:
-                new_params = [
-                    FollowUpParamOption(**{**p.model_dump(), "is_selected": not p.is_selected})
-                    if p.id == param_id else p
-                    for p in o.params
-                ]
-                updated.append(FollowUpExamOption(**{**o.model_dump(), "params": new_params}))
-            else:
-                updated.append(o)
-        self.prescribe_exam_options = updated
-
-    @rx.event
-    def select_all_prescribe_params(self, ref_id: str):
-        """Select all parameters for a prescribed exam type."""
-        self.prescribe_exam_options = [
-            FollowUpExamOption(**{
-                **o.model_dump(),
-                "params": [FollowUpParamOption(**{**p.model_dump(), "is_selected": True}) for p in o.params],
-            }) if o.id == ref_id else o
-            for o in self.prescribe_exam_options
-        ]
-
-    @rx.event
-    def open_request_params_dialog(self):
-        """Open dialog for doctor to select which parameters to request for this exam."""
-        self.request_params_selected_ids = list(self.exam.requested_param_ids) if self.exam else []
-        self.request_params_form_open = True
-
-    @rx.event
-    def close_request_params_dialog(self):
-        self.request_params_form_open = False
-
-    @rx.event
-    def toggle_request_param(self, param_id: str):
-        """Toggle a parameter in the doctor's request selection."""
-        if param_id in self.request_params_selected_ids:
-            self.request_params_selected_ids = [x for x in self.request_params_selected_ids if x != param_id]
-        else:
-            self.request_params_selected_ids = self.request_params_selected_ids + [param_id]
-
-    @rx.event
-    async def save_requested_params(self):
-        """Persist the requested parameter list and reload exam."""
-        self.is_saving_requested_params = True
-        try:
+            bmi_to_save = self.computed_bmi if self.computed_bmi is not None else _f(self.form_bmi)
             with await self.authenticate_user():
                 from gws_care.exam.exam_service import ExamService
-                ExamService.update_requested_params(
+                from gws_care.patient.patient import Patient
+                ExamService.update_physical(
                     self.exam_id_param,
-                    list(self.request_params_selected_ids),
+                    weight=_f(self.form_weight),
+                    height=_f(self.form_height),
+                    bmi=bmi_to_save,
+                    blood_pressure=self.form_blood_pressure or None,
+                    heart_rate=_f(self.form_heart_rate),
+                    temperature=_f(self.form_temperature),
                 )
-            self.request_params_form_open = False
-            await self._load_exam()
-        except Exception as exc:
-            yield rx.toast.error(str(exc))
-        finally:
-            self.is_saving_requested_params = False
-
-    @rx.event
-    async def save_prescribed_exams(self):
-        """Persist prescribed follow-up exams and create actual Exam records for each."""
-        self.is_saving_prescription = True
-        try:
-            with await self.authenticate_user():
-                from datetime import date
-
-                from gws_care.exam.exam import Exam as ExamModel
-                from gws_care.exam.exam_dto import UpdateExamSectionsDTO
-                from gws_care.exam.exam_service import ExamService
-                from gws_care.exam.exam_type import ExamStatus, ExamType
-
-                parent_exam = ExamService.get_exam(self.exam_id_param)
-                patient_id = str(parent_exam.patient_id)
-                new_ref_ids: list[str] = list(self.prescribe_selected_ids)
-
-                # Build a map: ref_id → list of selected param IDs for that exam type
-                selected_params_by_ref: dict[str, list[str]] = {}
-                for opt in self.prescribe_exam_options:
-                    if opt.id in new_ref_ids:
-                        selected_params_by_ref[opt.id] = [p.id for p in opt.params if p.is_selected]
-
-                # Existing follow-up exam records keyed by exam_type_ref_id
-                existing_followup: dict[str, str] = {}  # {exam_type_ref_id: exam_id}
-                for eid in (parent_exam.follow_up_exam_ids or []):
-                    ex = ExamModel.get_or_none(ExamModel.id == eid)
-                    if ex:
-                        existing_followup[str(ex.exam_type_ref_id)] = eid
-
-                # Create or update Exam records for selected ref IDs
-                follow_up_ids: list[str] = []
-                for ref_id in new_ref_ids:
-                    param_ids = selected_params_by_ref.get(ref_id, [])
-                    if ref_id in existing_followup:
-                        # Update param selection on existing follow-up record
-                        existing_id = existing_followup[ref_id]
-                        fex = ExamModel.get_or_none(ExamModel.id == existing_id)
-                        if fex:
-                            fex.requested_param_ids = param_ids or None
-                            fex.save()
-                        follow_up_ids.append(existing_id)
-                    else:
-                        # Create a new DRAFT Exam record marked as follow-up
-                        new_exam = ExamModel()
-                        new_exam.patient_id = patient_id
-                        new_exam.exam_date = date.today()
-                        new_exam.exam_type = ExamType.OTHER
-                        new_exam.exam_type_ref_id = ref_id
-                        new_exam.status = ExamStatus.DRAFT
-                        new_exam.billing_account_id = parent_exam.billing_account_id
-                        new_exam.requested_param_ids = param_ids or None
-                        new_exam.is_follow_up = True
-                        new_exam.save()
-                        follow_up_ids.append(str(new_exam.id))
-
-                # Delete orphaned follow-up exams that were deselected (only DRAFT ones)
-                deselected_ref_ids = set(existing_followup.keys()) - set(new_ref_ids)
-                for ref_id in deselected_ref_ids:
-                    orphan_id = existing_followup[ref_id]
-                    orphan = ExamModel.get_or_none(ExamModel.id == orphan_id)
-                    if orphan and orphan.status == ExamStatus.DRAFT:
-                        orphan.delete_instance()
-
-                # Persist the updated lists on the parent exam
-                dto = UpdateExamSectionsDTO(
-                    prescribed_exam_ref_ids=new_ref_ids,
-                    follow_up_exam_ids=follow_up_ids,
-                )
-                ExamService.update_sections(self.exam_id_param, dto)
-
-            if self.exam:
-                self.exam = self.exam.copy(update={
-                    "prescribed_exam_ref_ids": list(self.prescribe_selected_ids),
-                    "follow_up_exam_ids": follow_up_ids,
-                })
-            self.prescribe_form_open = False
-            yield rx.toast.success("Ordonnances d'examens enregistrées.")
-            await self._load_exam()
-        except Exception as exc:
-            self.error_message = str(exc)
-            yield rx.toast.error(f"Erreur : {exc}")
-        finally:
-            self.is_saving_prescription = False
-
-    @rx.event
-    async def submit_exam(self):
-        """Mark exam as PENDING (lab results to be entered). Keeps draft data intact."""
-        if not self.exam:
-            return
-        self.is_submitting = True
-        try:
-            with await self.authenticate_user():
-                from gws_care.exam.exam_service import ExamService
-                ExamService.set_pending(self.exam_id_param)
-            if self.exam:
-                self.exam = self.exam.copy(update={"status": "pending"})
-            yield rx.toast.success("Examen soumis — en attente de résultats laboratoire.")
+                if self.exam and (self.form_weight or self.form_height):
+                    try:
+                        patient = Patient.get_by_id(str(self.exam.patient_id))
+                        if _f(self.form_weight):
+                            patient.weight = _f(self.form_weight)
+                        if _f(self.form_height):
+                            patient.height = _f(self.form_height)
+                        patient.save()
+                    except Exception:
+                        pass
+            self.exam = self.exam.copy(update={
+                "weight": _f(self.form_weight),
+                "height": _f(self.form_height),
+                "bmi": bmi_to_save,
+                "blood_pressure": self.form_blood_pressure or None,
+                "heart_rate": _f(self.form_heart_rate),
+                "temperature": _f(self.form_temperature),
+            })
         except Exception as e:
-            yield rx.toast.error(f"Erreur lors de la soumission : {e}")
+            self.error_message = f"Error: {e}"
         finally:
-            self.is_submitting = False
+            self.is_saving_physical = False
 
-    def _refresh_requested_params_status(self):
-        """Update is_resulted flags on requested_params based on current lab_results."""
-        if not self.requested_params:
+    async def _persist_lab_results(self):
+        if self.exam is None:
             return
-        resulted_names = {row.parameter.lower() for row in self.lab_results}
-        self.requested_params = [
-            RequestedParamDTO(
-                id=p.id,
-                name=p.name,
-                unit=p.unit,
-                is_resulted=p.name.lower() in resulted_names,
-            )
-            for p in self.requested_params
+        self.is_saving_lab = True
+        self.error_message = ""
+        rows_payload = [
+            {
+                "id": row.id,
+                "parameter": row.parameter,
+                "unit": row.unit,
+                "value": row.value,
+                "reference_range": row.reference_range,
+                "status": row.status,
+            }
+            for row in self.lab_results
         ]
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam.exam_service import ExamService
+                ExamService.update_lab_results(self.exam_id_param, rows_payload)
+        except Exception as e:
+            self.error_message = f"Error saving lab results: {e}"
+        finally:
+            self.is_saving_lab = False
 
     async def _load_exam(self):
         if not await self.check_authentication():
@@ -828,45 +666,22 @@ class ExamDetailState(RoleState):
                 from gws_care.certificate.medical_certificate import MedicalCertificate
                 from gws_care.exam.exam_result_service import ExamResultService
                 from gws_care.exam.exam_service import ExamService
-                from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
 
                 exam = ExamService.get_exam(exam_id)
                 patient = exam.patient
-
-                # Resolve exam type label: prefer referential name when available
-                from gws_care.exam_type_ref.exam_parameter import ExamParameter
-                if exam.exam_type_ref_id:
-                    ref = ExamTypeRef.get_or_none(ExamTypeRef.id == exam.exam_type_ref_id)
-                    exam_type_label = ref.name if ref else exam.exam_type.get_label()
-                    params = (
-                        ExamParameter.select()
-                        .where(ExamParameter.exam_type_ref == exam.exam_type_ref_id)
-                        .order_by(ExamParameter.display_order)
-                    )
-                    self.available_params = [
-                        AvailableParamOption(
-                            id=str(p.id),
-                            name=p.name,
-                            unit=p.unit or "",
-                            ref_range=(
-                                f"{p.ref_low}\u2013{p.ref_high}"
-                                if p.ref_low is not None and p.ref_high is not None
-                                else (f">{p.ref_low}" if p.ref_low is not None else (f"<{p.ref_high}" if p.ref_high is not None else ""))
-                            ),
-                            critical_low=str(p.critical_low) if p.critical_low is not None else "",
-                            critical_high=str(p.critical_high) if p.critical_high is not None else "",
-                        )
-                        for p in params
-                    ]
-                else:
-                    exam_type_label = exam.exam_type.get_label()
-                    self.available_params = []
-
+                interpreted_by_name = ""
+                if exam.interpreted_by_id:
+                    try:
+                        from gws_care.user.user import User as UserModel
+                        u = UserModel.get_by_id(str(exam.interpreted_by_id))
+                        interpreted_by_name = f"{u.first_name} {u.last_name}"
+                    except Exception:
+                        pass
                 self.exam = ExamDetailDTO(
                     id=str(exam.id),
                     exam_date=exam.exam_date.isoformat(),
                     exam_type=exam.exam_type.value,
-                    exam_type_label=exam_type_label,
+                    exam_type_label=exam.exam_type.get_label(),
                     status=exam.status.value,
                     reason_for_visit=exam.reason_for_visit,
                     medical_history=exam.medical_history,
@@ -876,69 +691,12 @@ class ExamDetailState(RoleState):
                     blood_pressure=exam.blood_pressure,
                     heart_rate=exam.heart_rate,
                     temperature=exam.temperature,
-                    conclusion=exam.conclusion,
+                    interpretation=exam.interpretation,
+                    interpreted_by_name=interpreted_by_name,
                     patient_id=str(patient.id),
                     patient_name=f"{patient.first_name} {patient.last_name}",
-                    requested_param_ids=exam.requested_param_ids or [],
-                    consultation_id=exam.consultation_id or "",
-                    prescribed_exam_ref_ids=exam.prescribed_exam_ref_ids or [],
-                    follow_up_exam_ids=exam.follow_up_exam_ids or [],
-                    is_follow_up=bool(exam.is_follow_up),
+                    visit_id=str(exam.visit_id) if exam.visit_id else "",
                 )
-
-                # Load names of prescribed follow-up exams for display
-                pref_ids = exam.prescribed_exam_ref_ids or []
-                if pref_ids:
-                    prefs = list(
-                        ExamTypeRef.select(ExamTypeRef.id, ExamTypeRef.name)
-                        .where(ExamTypeRef.id.in_(pref_ids))
-                    )
-                    ref_name_map = {str(r.id): r.name for r in prefs}
-                    self.prescribed_exam_names = [ref_name_map.get(rid, rid) for rid in pref_ids]
-                else:
-                    self.prescribed_exam_names = []
-
-                # Load follow-up Exam records (created when doctor saved prescriptions)
-                followup_ids = exam.follow_up_exam_ids or []
-                if followup_ids:
-                    from gws_care.exam.exam import Exam as ExamModel
-                    followup_rows = []
-                    for fid in followup_ids:
-                        fex = ExamModel.get_or_none(ExamModel.id == fid)
-                        if fex:
-                            flbl = ref_name_map.get(str(fex.exam_type_ref_id), str(fex.exam_type_ref_id)) if fex.exam_type_ref_id else fex.exam_type.get_label()
-                            followup_rows.append(FollowUpExamRowDTO(
-                                exam_id=str(fex.id),
-                                exam_type_label=flbl,
-                                status=fex.status.value,
-                                link_url=f"/exam/{fex.id}",
-                            ))
-                    self.follow_up_exams = followup_rows
-                else:
-                    self.follow_up_exams = []
-
-                # Load consultation context if this exam belongs to one
-                if exam.consultation_id:
-                    from gws_care.consultation.consultation import Consultation
-                    consult = Consultation.get_or_none(Consultation.id == exam.consultation_id)
-                    if consult:
-                        self.consultation_context = ConsultationContextDTO(
-                            id=str(consult.id),
-                            consultation_date=consult.consultation_date.isoformat() if consult.consultation_date else "",
-                            reason_for_visit=consult.reason_for_visit or "",
-                            medical_history=consult.medical_history or "",
-                            weight=consult.weight,
-                            height=consult.height,
-                            bmi=consult.bmi,
-                            blood_pressure=consult.blood_pressure,
-                            heart_rate=consult.heart_rate,
-                            temperature=consult.temperature,
-                            conclusion=consult.conclusion,
-                        )
-                    else:
-                        self.consultation_context = None
-                else:
-                    self.consultation_context = None
                 result = ExamResultService.get_result_for_exam(exam_id)
                 if result:
                     self.result = ExamResultDetailDTO(
@@ -956,7 +714,7 @@ class ExamDetailState(RoleState):
                 self.form_blood_pressure = exam.blood_pressure or ""
                 self.form_heart_rate = str(exam.heart_rate) if exam.heart_rate is not None else ""
                 self.form_temperature = str(exam.temperature) if exam.temperature is not None else ""
-                self.form_conclusion = exam.conclusion or ""
+                self.form_interpretation = exam.interpretation or ""
                 self.lab_results = [
                     LabResultRowDTO(
                         id=r.get("id") or str(uuid.uuid4()),
@@ -968,49 +726,6 @@ class ExamDetailState(RoleState):
                     )
                     for r in (exam.lab_results or [])
                 ]
-
-                # Build requested_params from prescribed IDs and
-                # pre-populate lab_results rows for any not yet filled
-                req_ids: list[str] = exam.requested_param_ids or []
-                if req_ids:
-                    req_params = list(
-                        ExamParameter.select()
-                        .where(ExamParameter.id.in_(req_ids))
-                        .order_by(ExamParameter.display_order)
-                    )
-                    resulted_names = {row.parameter.lower() for row in self.lab_results}
-                    self.requested_params = [
-                        RequestedParamDTO(
-                            id=str(p.id),
-                            name=p.name,
-                            unit=p.unit or "",
-                            is_resulted=p.name.lower() in resulted_names,
-                        )
-                        for p in req_params
-                    ]
-                    # Pre-populate empty rows for prescribed params not yet entered
-                    for p in req_params:
-                        if p.name.lower() not in resulted_names:
-                            ref_range = (
-                                f"{p.ref_low}\u2013{p.ref_high}"
-                                if p.ref_low is not None and p.ref_high is not None
-                                else (
-                                    f">{p.ref_low}" if p.ref_low is not None
-                                    else (f"<{p.ref_high}" if p.ref_high is not None else "")
-                                )
-                            )
-                            self.lab_results = self.lab_results + [
-                                LabResultRowDTO(
-                                    id=str(uuid.uuid4()),
-                                    parameter=p.name,
-                                    unit=p.unit or "",
-                                    value="",
-                                    reference_range=ref_range,
-                                    status="normal",
-                                )
-                            ]
-                else:
-                    self.requested_params = []
 
                 certs = list(
                     MedicalCertificate.select()
@@ -1126,6 +841,33 @@ class ExamDetailState(RoleState):
             self.error_message = f"Error updating document type: {e}"
 
     @rx.event
+    def confirm_delete_file(self, file_id: str):
+        """Open the delete confirmation dialog for a file."""
+        self.file_to_delete_id = file_id
+        self.file_delete_confirm_open = True
+
+    @rx.event
+    def close_delete_file_confirm(self):
+        """Close the delete confirmation dialog without deleting."""
+        self.file_delete_confirm_open = False
+        self.file_to_delete_id = ""
+
+    @rx.event
+    async def delete_file_confirmed(self):
+        """Delete the file after user confirmation."""
+        file_id = self.file_to_delete_id
+        self.file_delete_confirm_open = False
+        self.file_to_delete_id = ""
+        if not file_id:
+            return
+        try:
+            from gws_care.exam.exam_file_service import ExamFileService
+            ExamFileService.delete_file(file_id)
+            await self._load_exam()
+        except Exception as e:
+            self.error_message = f"Error deleting file: {e}"
+
+    @rx.event
     async def delete_file(self, file_id: str):
         """Delete an attached file."""
         try:
@@ -1134,3 +876,256 @@ class ExamDetailState(RoleState):
             await self._load_exam()
         except Exception as e:
             self.error_message = f"Error deleting file: {e}"
+
+    # ── Phase 8 — Certificate PDF download ───────────────────────────────────
+
+    @rx.event
+    async def download_certificate_pdf(self, certificate_id: str):
+        """Generate and download a medical certificate PDF."""
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.pdf import generate_certificate_pdf
+                pdf_bytes = generate_certificate_pdf(certificate_id)
+            return rx.download(data=pdf_bytes, filename=f"certificat_{certificate_id[:8]}.pdf")
+        except Exception as e:
+            self.error_message = f"Erreur génération PDF : {e}"
+
+    # ── File preview dialog ───────────────────────────────────────────────────────
+
+    @rx.event
+    def open_preview_dialog(self, file_id: str):
+        """Open the preview dialog and start loading the file."""
+        self.preview_dialog_open = True
+        self.selected_file_id = file_id
+        self.selected_file_name = ""
+        self.selected_file_type = ""
+        self.selected_file_preview_url = ""
+        self.selected_file_data = None
+        self.is_loading_preview = True
+        self.preview_error = ""
+        self.table_preview_columns = []
+        self.table_preview_rows = []
+        self.table_preview_total_rows = 0
+        self.plot_prompt = ""
+        self.plot_chart = None
+        self.is_generating_plot = False
+        self.plot_generation_error = ""
+        return ExamDetailState.select_file_for_preview(file_id)
+
+    @rx.event
+    def close_preview_dialog(self):
+        self.preview_dialog_open = False
+
+    @rx.event
+    def set_plot_prompt(self, value: str):
+        self.plot_prompt = value
+
+    @rx.event(background=True)
+    async def generate_plot_from_prompt(self):
+        """Generate a Plotly chart from the user's text prompt using stored table data."""
+        async with self:
+            if not self.table_preview_columns:
+                self.plot_generation_error = "No table data loaded."
+                return
+            self.is_generating_plot = True
+            self.plot_generation_error = ""
+            prompt = self.plot_prompt.strip()
+            file_id = self.selected_file_id
+            file_name = self.selected_file_name
+            columns = list(self.table_preview_columns)
+
+        try:
+            from gws_care.exam.exam_file import ExamFile
+
+            file_rec = ExamFile.get_by_id(file_id)
+            import os
+            ext = os.path.splitext(file_rec.original_name or "")[1].lower()
+            is_excel = ext in {".xlsx", ".xls"}
+            figure_dict = ExamDetailState._prompt_to_plotly(file_rec, is_excel, prompt, columns)
+            async with self:
+                if figure_dict:
+                    self.plot_chart = {"figure": figure_dict, "name": file_name}
+                    self.plot_generation_error = ""
+                else:
+                    self.plot_generation_error = f"Could not generate chart. Available columns: {', '.join(columns)}"
+        except Exception as e:
+            async with self:
+                self.plot_generation_error = str(e)
+        finally:
+            async with self:
+                self.is_generating_plot = False
+
+    @staticmethod
+    def _prompt_to_plotly(file_rec, is_excel: bool, prompt: str, columns: list[str]) -> dict | None:
+        """Parse prompt and generate a plotly chart from the file data."""
+        try:
+            import os
+            from json import loads
+
+            import pandas as pd
+            import plotly.express as px
+            from gws_core.impl.file.file import File
+            from gws_core.resource.resource_model import ResourceModel
+
+            if not file_rec.resource_id:
+                return None
+            rm = ResourceModel.get_by_id_and_check(file_rec.resource_id)
+            resource = rm.get_resource()
+            if not isinstance(resource, File):
+                return None
+            path = resource.path
+            if not path or not os.path.exists(path):
+                return None
+
+            df = pd.read_excel(path) if is_excel else pd.read_csv(path)
+            if df.empty:
+                return None
+
+            prompt_lower = prompt.lower()
+            chart_type = "scatter"
+            if any(k in prompt_lower for k in ["bar", "barre", "histogram", "histogramme", "count"]):
+                chart_type = "bar"
+            elif any(k in prompt_lower for k in ["line", "ligne", "courbe", "trend", "tendance", "time", "temps"]):
+                chart_type = "line"
+            elif any(k in prompt_lower for k in ["pie", "camembert", "donut"]):
+                chart_type = "pie"
+            elif any(k in prompt_lower for k in ["box", "boite", "whisker"]):
+                chart_type = "box"
+
+            mentioned_cols: list[str] = [col for col in df.columns if col.lower() in prompt_lower]
+            numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+
+            if len(mentioned_cols) >= 2:
+                x_col, y_col = mentioned_cols[0], mentioned_cols[1]
+            elif len(mentioned_cols) == 1:
+                x_col = mentioned_cols[0]
+                candidates = [c for c in numeric_cols if c != x_col]
+                y_col = candidates[0] if candidates else x_col
+            elif len(numeric_cols) >= 2:
+                x_col, y_col = numeric_cols[0], numeric_cols[1]
+            elif len(numeric_cols) == 1:
+                x_col = df.columns[0] if df.columns[0] != numeric_cols[0] else None
+                y_col = numeric_cols[0]
+            else:
+                x_col = df.columns[0]
+                y_col = df.columns[1] if len(df.columns) > 1 else df.columns[0]
+
+            title = file_rec.original_name or "Data"
+            if chart_type == "pie":
+                fig = px.pie(df, names=x_col, values=y_col if y_col != x_col else None, title=title)
+            elif chart_type == "bar":
+                fig = px.bar(df, x=x_col, y=y_col, title=title) if x_col else px.bar(df, y=y_col, title=title)
+            elif chart_type == "line":
+                fig = px.line(df, x=x_col, y=y_col, title=title) if x_col else px.line(df, y=y_col, title=title)
+            elif chart_type == "box":
+                fig = px.box(df, y=y_col, title=title)
+            else:
+                fig = px.scatter(df, x=x_col, y=y_col, title=title) if x_col else px.scatter(df, y=y_col, title=title)
+
+            return loads(fig.to_json())
+        except Exception:
+            return None
+
+    @rx.event(background=True)
+    async def select_file_for_preview(self, file_id: str):
+        """Load and prepare a file for preview."""
+        async with self:
+            self.selected_file_id = file_id
+            self.is_loading_preview = True
+            self.preview_error = ""
+            self.selected_file_data = None
+            self.selected_file_preview_url = ""
+            self.selected_file_type = ""
+            self.selected_file_name = ""
+            self.table_preview_columns = []
+            self.table_preview_rows = []
+            self.table_preview_total_rows = 0
+
+        try:
+            import os
+            from json import loads
+
+            from gws_care.exam.exam_file import ExamFile
+            from gws_care.exam.exam_file_service import ExamFileService
+
+            file_rec = ExamFile.get_by_id(file_id)
+            name = file_rec.original_name or ""
+            ext = os.path.splitext(name)[1].lower()
+            mime = (file_rec.mime_type or "").lower()
+
+            async with self:
+                self.selected_file_name = name
+
+            is_image = mime.startswith("image/") or ext in {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tiff", ".gif"}
+            is_pdf = "pdf" in mime or ext == ".pdf"
+            is_csv = ext == ".csv" or "text/csv" in mime or (ext == ".txt" and not is_pdf)
+            is_excel = ext in {".xlsx", ".xls"} or "spreadsheet" in mime or "excel" in mime
+
+            if is_image:
+                url = ExamFileService.get_resource_download_url(file_rec.resource_id) if file_rec.resource_id else ""
+                async with self:
+                    self.selected_file_type = "image"
+                    self.selected_file_preview_url = url
+
+            elif is_pdf:
+                url = ExamFileService.get_resource_download_url(file_rec.resource_id) if file_rec.resource_id else ""
+                async with self:
+                    self.selected_file_type = "pdf"
+                    self.selected_file_preview_url = url
+
+            elif is_csv or is_excel:
+                table_cols, table_rows, total_rows = self._file_to_table(file_rec, is_excel)
+                async with self:
+                    self.selected_file_type = "table"
+                    self.table_preview_columns = table_cols
+                    self.table_preview_rows = table_rows
+                    self.table_preview_total_rows = total_rows
+
+            else:
+                url = ExamFileService.get_resource_download_url(file_rec.resource_id) if file_rec.resource_id else ""
+                async with self:
+                    self.selected_file_type = "other"
+                    self.selected_file_preview_url = url
+
+        except Exception as e:
+            async with self:
+                self.preview_error = str(e)
+        finally:
+            async with self:
+                self.is_loading_preview = False
+
+    _TABLE_PREVIEW_MAX_ROWS = 50
+
+    @staticmethod
+    def _file_to_table(file_rec, is_excel: bool) -> tuple[list[str], list[list[str]], int]:
+        """Parse a CSV/Excel file resource into (columns, rows, total_rows) for table preview."""
+        try:
+            import os
+
+            import pandas as pd
+            from gws_core.impl.file.file import File
+            from gws_core.resource.resource_model import ResourceModel
+
+            if not file_rec.resource_id:
+                return [], [], 0
+            rm = ResourceModel.get_by_id_and_check(file_rec.resource_id)
+            resource = rm.get_resource()
+            if not isinstance(resource, File):
+                return [], [], 0
+            path = resource.path
+            if not path or not os.path.exists(path):
+                return [], [], 0
+
+            df = pd.read_excel(path) if is_excel else pd.read_csv(path)
+            if df.empty:
+                return [], [], 0
+
+            total = len(df)
+            cols = [str(c) for c in df.columns.tolist()]
+            preview = df.head(ExamDetailState._TABLE_PREVIEW_MAX_ROWS)
+            rows = [[str(v) if v is not None else "" for v in row] for row in preview.values.tolist()]
+            return cols, rows, total
+        except Exception:
+            return [], [], 0
+

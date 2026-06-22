@@ -4,11 +4,10 @@ import reflex as rx
 from gws_reflex_base import form_dialog_component
 
 from ..common.language_state import LanguageState
-from .patient_form_state import CompanyOption, PatientFormState
+from .patient_form_state import PatientFormState
 
 
 def _field(label: str, input_component: rx.Component) -> rx.Component:
-    """Render a labeled form field."""
     return rx.vstack(
         rx.text(label, size="2", weight="medium"),
         input_component,
@@ -18,7 +17,6 @@ def _field(label: str, input_component: rx.Component) -> rx.Component:
 
 
 def _form_fields() -> rx.Component:
-    """Build the form content with all patient fields."""
     return rx.vstack(
         rx.grid(
             _field(
@@ -26,9 +24,8 @@ def _form_fields() -> rx.Component:
                 rx.input(
                     value=PatientFormState.form_last_name,
                     on_change=PatientFormState.set_form_last_name,
-                    placeholder="DUPONT",
-                    size="2",
-                    width="100%",
+                    placeholder=LanguageState.tr["placeholder_last_name"],
+                    size="2", width="100%",
                 ),
             ),
             _field(
@@ -36,14 +33,11 @@ def _form_fields() -> rx.Component:
                 rx.input(
                     value=PatientFormState.form_first_name,
                     on_change=PatientFormState.set_form_first_name,
-                    placeholder="Marie",
-                    size="2",
-                    width="100%",
+                    placeholder=LanguageState.tr["placeholder_first_name"],
+                    size="2", width="100%",
                 ),
             ),
-            columns="2",
-            spacing="3",
-            width="100%",
+            columns="2", spacing="3", width="100%",
         ),
         _field(
             LanguageState.tr["field_birth_name"],
@@ -51,8 +45,7 @@ def _form_fields() -> rx.Component:
                 value=PatientFormState.form_birth_name,
                 on_change=PatientFormState.set_form_birth_name,
                 placeholder=LanguageState.tr["birth_name_placeholder"],
-                size="2",
-                width="100%",
+                size="2", width="100%",
             ),
         ),
         rx.grid(
@@ -61,9 +54,7 @@ def _form_fields() -> rx.Component:
                 rx.input(
                     value=PatientFormState.form_date_of_birth,
                     on_change=PatientFormState.set_form_date_of_birth,
-                    type="date",
-                    size="2",
-                    width="100%",
+                    type="date", size="2", width="100%",
                 ),
             ),
             _field(
@@ -77,41 +68,59 @@ def _form_fields() -> rx.Component:
                     ),
                     value=PatientFormState.form_gender,
                     on_change=PatientFormState.set_form_gender,
-                    size="2",
-                    width="100%",
+                    size="2", width="100%",
                 ),
             ),
-            columns="2",
-            spacing="3",
-            width="100%",
+            columns="2", spacing="3", width="100%",
+        ),
+        _field(
+            LanguageState.tr["field_nationality"],
+            rx.input(
+                value=PatientFormState.form_nationality,
+                on_change=PatientFormState.set_form_nationality,
+                placeholder=LanguageState.tr["placeholder_nationality"],
+                size="2", width="100%",
+            ),
         ),
         rx.separator(width="100%"),
         rx.text(LanguageState.tr["section_contact"], size="2", weight="bold", color="var(--gray-9)"),
         rx.grid(
             _field(
+                LanguageState.tr["field_phone_country"],
+                rx.select.root(
+                    rx.select.trigger(placeholder=LanguageState.tr["field_phone_country"]),
+                    rx.select.content(
+                        rx.select.item(LanguageState.tr["phone_country_fr"], value="+33"),
+                        rx.select.item(LanguageState.tr["phone_country_ma"], value="+212"),
+                        rx.select.item(LanguageState.tr["phone_country_dz"], value="+213"),
+                        rx.select.item(LanguageState.tr["phone_country_tn"], value="+216"),
+                        rx.select.item(LanguageState.tr["phone_country_sn"], value="+221"),
+                        rx.select.item(LanguageState.tr["phone_country_other"], value=""),
+                    ),
+                    value=PatientFormState.form_phone_country,
+                    on_change=PatientFormState.set_form_phone_country,
+                    size="2", width="100%",
+                ),
+            ),
+            _field(
                 LanguageState.tr["field_phone"],
                 rx.input(
                     value=PatientFormState.form_phone,
                     on_change=PatientFormState.set_form_phone,
-                    placeholder="+33 6 00 00 00 00",
-                    size="2",
-                    width="100%",
+                    placeholder="06 00 00 00 00",
+                    size="2", width="100%",
                 ),
             ),
             _field(
-                "Email *",
+                LanguageState.tr["field_email"],
                 rx.input(
                     value=PatientFormState.form_email,
                     on_change=PatientFormState.set_form_email,
                     placeholder="patient@email.com",
-                    type="email",
-                    size="2",
-                    width="100%",
+                    type="email", size="2", width="100%",
                 ),
             ),
-            columns="2",
-            spacing="3",
-            width="100%",
+            columns="3", spacing="3", width="100%",
         ),
         _field(
             LanguageState.tr["field_address"],
@@ -119,8 +128,7 @@ def _form_fields() -> rx.Component:
                 value=PatientFormState.form_address,
                 on_change=PatientFormState.set_form_address,
                 placeholder="12 rue de la Paix",
-                size="2",
-                width="100%",
+                size="2", width="100%",
             ),
         ),
         rx.grid(
@@ -130,8 +138,7 @@ def _form_fields() -> rx.Component:
                     value=PatientFormState.form_postal_code,
                     on_change=PatientFormState.set_form_postal_code,
                     placeholder="75001",
-                    size="2",
-                    width="100%",
+                    size="2", width="100%",
                 ),
             ),
             _field(
@@ -139,134 +146,43 @@ def _form_fields() -> rx.Component:
                 rx.input(
                     value=PatientFormState.form_city,
                     on_change=PatientFormState.set_form_city,
-                    placeholder="Paris",
-                    size="2",
-                    width="100%",
+                    placeholder=LanguageState.tr["placeholder_city"],
+                    size="2", width="100%",
                 ),
             ),
-            columns="2",
-            spacing="3",
-            width="100%",
+            columns="2", spacing="3", width="100%",
         ),
         rx.separator(width="100%"),
-        # Company dropdown — shown when creating from general list (not pre-linked)
-        rx.cond(
-            PatientFormState.company_options.length() > 0,
-            rx.vstack(
-                rx.text("Entreprise employeur", size="2", weight="bold", color="var(--gray-9)"),
-                rx.select.root(
-                    rx.select.trigger(placeholder="Sélectionner une entreprise (optionnel)"),
-                    rx.select.content(
-                        rx.select.item("— Aucune —", value="__none__"),
-                        rx.foreach(
-                            PatientFormState.company_options,
-                            lambda c: rx.select.item(c.name, value=c.id),
-                        ),
-                    ),
-                    value=PatientFormState.form_company_id,
-                    on_change=PatientFormState.set_form_company_id,
-                    size="2",
-                    width="100%",
-                ),
-                width="100%",
-                spacing="1",
+        rx.text(LanguageState.tr["section_medical_info"], size="2", weight="bold", color="var(--gray-9)"),
+        _field(
+            LanguageState.tr["field_ssn"],
+            rx.input(
+                value=PatientFormState.form_social_security_number,
+                on_change=PatientFormState.set_form_social_security_number,
+                placeholder="1 85 07 75 123 456 78",
+                size="2", width="100%",
             ),
-            rx.fragment(),
         ),
-        rx.separator(width="100%"),
-        rx.text(LanguageState.tr["section_primary_physician"], size="2", weight="bold", color="var(--gray-9)"),
-        # Smart doctor dropdown — populated from staff directory
-        rx.cond(
-            PatientFormState.doctor_options.length() > 0,
-            rx.vstack(
-                rx.select.root(
-                    rx.select.trigger(
-                        placeholder="Sélectionner un médecin du personnel…",
-                        width="100%",
-                    ),
-                    rx.select.content(
-                        rx.select.group(
-                            rx.select.label("Médecins référencés"),
-                            rx.foreach(
-                                PatientFormState.doctor_options,
-                                lambda d: rx.select.item(
-                                    d.name + rx.cond(d.role_label != "", " (— " + d.role_label + ")", ""),
-                                    value=d.user_id,
-                                ),
-                            ),
-                        ),
-                        rx.select.separator(),
-                        rx.select.item("⊕ Autre médecin / médecin extérieur", value="__other__"),
-                    ),
-                    value=PatientFormState.form_physician_user_id,
-                    on_change=PatientFormState.select_physician_from_directory,
-                    size="2",
-                    width="100%",
-                ),
-                # When a doctor was picked or Other selected, show name field
-                rx.vstack(
-                    _field(
-                        LanguageState.tr["field_physician_name"],
-                        rx.input(
-                            value=PatientFormState.form_primary_physician_name,
-                            on_change=PatientFormState.set_form_primary_physician_name,
-                            placeholder="Dr. Martin",
-                            size="2",
-                            width="100%",
-                        ),
-                    ),
-                    width="100%",
-                ),
-                spacing="2",
-                width="100%",
-            ),
-            # Fallback when no doctors in system yet: free text
+        rx.grid(
             _field(
-                LanguageState.tr["field_physician_name"],
+                LanguageState.tr["field_weight"],
                 rx.input(
-                    value=PatientFormState.form_primary_physician_name,
-                    on_change=PatientFormState.set_form_primary_physician_name,
-                    placeholder="Dr. Martin",
-                    size="2",
-                    width="100%",
+                    value=PatientFormState.form_weight,
+                    on_change=PatientFormState.set_form_weight,
+                    placeholder="70", type="number",
+                    size="2", width="100%",
                 ),
             ),
-        ),
-        rx.cond(
-            PatientFormState.form_error != "",
-            rx.callout(
-                PatientFormState.form_error,
-                icon="triangle-alert",
-                color_scheme="red",
-                size="1",
-            ),
-            rx.fragment(),
-        ),
-        rx.hstack(
-            rx.button(
-                LanguageState.tr["cancel_btn"],
-                variant="soft",
-                color_scheme="gray",
-                on_click=PatientFormState.close_dialog,
-                disabled=PatientFormState.is_loading,
-            ),
-            rx.button(
-                rx.cond(
-                    PatientFormState.is_loading,
-                    rx.spinner(size="2"),
-                    rx.cond(
-                        PatientFormState.is_create_mode,
-                        rx.text(LanguageState.tr["create_patient_btn"]),
-                        rx.text(LanguageState.tr["save_changes_btn"]),
-                    ),
+            _field(
+                LanguageState.tr["field_height"],
+                rx.input(
+                    value=PatientFormState.form_height,
+                    on_change=PatientFormState.set_form_height,
+                    placeholder="175", type="number",
+                    size="2", width="100%",
                 ),
-                type="submit",
-                disabled=PatientFormState.is_loading,
             ),
-            spacing="3",
-            justify="end",
-            width="100%",
-            padding_top="0.5rem",
+            columns="2", spacing="3", width="100%",
         ),
         width="100%",
         spacing="3",
@@ -274,7 +190,7 @@ def _form_fields() -> rx.Component:
 
 
 def patient_form_dialog() -> rx.Component:
-    """The patient create / edit dialog. Include once per page that needs it."""
+    """The patient create / edit dialog."""
     return form_dialog_component(
         state=PatientFormState,
         title=rx.cond(

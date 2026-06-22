@@ -7,10 +7,10 @@ from ..common.language_state import LanguageState
 from .company_form_state import CompanyFormState
 
 
-def _field(label: rx.Component | str, input_component: rx.Component) -> rx.Component:
+def _field(label, input_component: rx.Component) -> rx.Component:
     """Render a labeled form field."""
     return rx.vstack(
-        rx.text(label, size="2", weight="medium"),
+        label if not isinstance(label, str) else rx.text(label, size="2", weight="medium"),
         input_component,
         width="100%",
         spacing="1",
@@ -68,7 +68,7 @@ def _form_fields() -> rx.Component:
                 rx.input(
                     value=CompanyFormState.form_city,
                     on_change=CompanyFormState.set_form_city,
-                    placeholder="Paris",
+                    placeholder=LanguageState.tr["placeholder_city"],
                     size="2",
                     width="100%",
                 ),
@@ -84,7 +84,7 @@ def _form_fields() -> rx.Component:
             rx.input(
                 value=CompanyFormState.form_contact_name,
                 on_change=CompanyFormState.set_form_contact_name,
-                placeholder="Jean Dupont",
+                placeholder=LanguageState.tr["placeholder_contact_name"],
                 size="2",
                 width="100%",
             ),
@@ -115,16 +115,6 @@ def _form_fields() -> rx.Component:
             spacing="3",
             width="100%",
         ),
-        rx.cond(
-            CompanyFormState.form_error != "",
-            rx.callout(
-                CompanyFormState.form_error,
-                icon="triangle-alert",
-                color_scheme="red",
-                size="1",
-            ),
-            rx.fragment(),
-        ),
         rx.hstack(
             rx.button(
                 LanguageState.tr["cancel_btn"],
@@ -139,8 +129,8 @@ def _form_fields() -> rx.Component:
                     rx.spinner(size="2"),
                     rx.cond(
                         CompanyFormState.is_create_mode,
-                        rx.text(LanguageState.tr["create_company_btn"]),
-                        rx.text(LanguageState.tr["save_changes_btn"]),
+                        LanguageState.tr["create_company_btn"],
+                        LanguageState.tr["save_changes_btn"],
                     ),
                 ),
                 type="submit",
@@ -162,14 +152,15 @@ def company_form_dialog() -> rx.Component:
         state=CompanyFormState,
         title=rx.cond(
             CompanyFormState.is_create_mode,
-            LanguageState.tr["new_company_form_title"],
-            LanguageState.tr["edit_company_form_title"],
+            "New Company",
+            "Edit Company",
         ),
         description=rx.cond(
             CompanyFormState.is_create_mode,
-            LanguageState.tr["new_company_desc"],
-            LanguageState.tr["edit_company_desc"],
+            "Register a new client company.",
+            "Update the company's information.",
         ),
         form_content=_form_fields(),
         max_width="600px",
     )
+
