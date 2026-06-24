@@ -31,6 +31,7 @@ class DoctorListState(RoleState):
     form_first_name: str = ""
     form_last_name: str = ""
     form_specialization: str = ""
+    form_phone_dial_code: str = "+33"
     form_phone: str = ""
     form_email: str = ""
     form_rpps: str = ""
@@ -88,6 +89,10 @@ class DoctorListState(RoleState):
     @rx.event
     def set_form_specialization(self, value: str):
         self.form_specialization = value
+
+    @rx.event
+    def set_form_phone_dial_code(self, value: str):
+        self.form_phone_dial_code = value
 
     @rx.event
     def set_form_phone(self, value: str):
@@ -153,6 +158,7 @@ class DoctorListState(RoleState):
         self.form_first_name = ""
         self.form_last_name = ""
         self.form_specialization = ""
+        self.form_phone_dial_code = "+33"
         self.form_phone = ""
         self.form_email = ""
         self.form_rpps = ""

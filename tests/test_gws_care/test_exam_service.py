@@ -49,12 +49,12 @@ class TestExamService(BaseTestCase):
     # ── create_exam ───────────────────────────────────────────────────────────
 
     def test_create_exam_happy_path(self):
-        """Exam is created with DRAFT status and patient linked."""
+        """Exam is created with TODO status and patient linked."""
         patient = _make_patient()
         exam = ExamService.create_exam(_make_exam_dto(str(patient.id)))
 
         self.assertIsNotNone(exam.id)
-        self.assertEqual(exam.status, ExamStatus.DRAFT)
+        self.assertEqual(exam.status, ExamStatus.TODO)
         self.assertEqual(str(exam.patient_id), str(patient.id))
         self.assertEqual(exam.exam_type, ExamType.CLINICAL)
 
@@ -100,12 +100,12 @@ class TestExamService(BaseTestCase):
         exam = ExamService.create_exam(_make_exam_dto(str(patient.id)))
         updated = ExamService.update_exam(
             str(exam.id),
-            _make_exam_dto(str(patient.id), exam_type=ExamType.BIOLOGY, weight=80.0, conclusion="Normal"),
+            _make_exam_dto(str(patient.id), exam_type=ExamType.BIOLOGY, weight=80.0, blood_pressure="120/80"),
         )
 
         self.assertEqual(updated.exam_type, ExamType.BIOLOGY)
         self.assertEqual(updated.weight, 80.0)
-        self.assertEqual(updated.conclusion, "Normal")
+        self.assertEqual(updated.blood_pressure, "120/80")
 
     def test_update_exam_not_found(self):
         """update_exam raises NotFoundException for unknown exam id."""
@@ -153,24 +153,24 @@ class TestExamService(BaseTestCase):
         self.assertIsNone(refreshed.reason_for_visit)
         self.assertIsNone(refreshed.weight)
 
-    # ── set_pending ───────────────────────────────────────────────────────────
+    # ── set_in_progress_results ───────────────────────────────────────────────
 
     def test_set_pending(self):
-        """set_pending transitions exam from DRAFT to PENDING."""
+        """set_in_progress_results transitions exam from TODO to IN_PROGRESS_RESULTS."""
         patient = _make_patient()
         exam = ExamService.create_exam(_make_exam_dto(str(patient.id)))
-        self.assertEqual(exam.status, ExamStatus.DRAFT)
+        self.assertEqual(exam.status, ExamStatus.TODO)
 
-        pending = ExamService.set_pending(str(exam.id))
-        self.assertEqual(pending.status, ExamStatus.PENDING)
+        pending = ExamService.set_in_progress_results(str(exam.id))
+        self.assertEqual(pending.status, ExamStatus.IN_PROGRESS_RESULTS)
 
     # ── interpret_exam ────────────────────────────────────────────────────────
 
     def test_interpret_exam_happy_path(self):
-        """interpret_exam sets INTERPRETED status, stores text and doctor FK."""
+        """interpret_exam sets DONE status, stores text and doctor FK."""
         patient = _make_patient()
         exam = ExamService.create_exam(_make_exam_dto(str(patient.id)))
-        ExamService.set_pending(str(exam.id))
+        ExamService.set_in_progress_results(str(exam.id))
         doctor = _get_doctor()
 
         interpreted = ExamService.interpret_exam(
@@ -179,7 +179,7 @@ class TestExamService(BaseTestCase):
             doctor,
         )
 
-        self.assertEqual(interpreted.status, ExamStatus.INTERPRETED)
+        self.assertEqual(interpreted.status, ExamStatus.DONE)
         self.assertEqual(interpreted.interpretation, "Patient is healthy")
         self.assertEqual(str(interpreted.interpreted_by_id), str(doctor.id))
 
@@ -187,6 +187,7 @@ class TestExamService(BaseTestCase):
         """Empty interpretation text raises BadRequestException."""
         patient = _make_patient()
         exam = ExamService.create_exam(_make_exam_dto(str(patient.id)))
+        ExamService.set_in_progress_results(str(exam.id))
         doctor = _get_doctor()
 
         with self.assertRaises(BadRequestException):
@@ -198,6 +199,7 @@ class TestExamService(BaseTestCase):
         """Whitespace-only interpretation raises BadRequestException."""
         patient = _make_patient()
         exam = ExamService.create_exam(_make_exam_dto(str(patient.id)))
+        ExamService.set_in_progress_results(str(exam.id))
         doctor = _get_doctor()
 
         with self.assertRaises(BadRequestException):
@@ -209,6 +211,7 @@ class TestExamService(BaseTestCase):
         """Leading/trailing whitespace in interpretation is stripped."""
         patient = _make_patient()
         exam = ExamService.create_exam(_make_exam_dto(str(patient.id)))
+        ExamService.set_in_progress_results(str(exam.id))
         doctor = _get_doctor()
 
         result = ExamService.interpret_exam(
@@ -271,7 +274,7 @@ class TestExamService(BaseTestCase):
         self.assertEqual(dto.id, str(exam.id))
         self.assertEqual(dto.exam_type, ExamType.BIOLOGY.value)
         self.assertEqual(dto.exam_type_label, ExamType.BIOLOGY.get_label())
-        self.assertEqual(dto.status, ExamStatus.DRAFT.value)
+        self.assertEqual(dto.status, ExamStatus.TODO.value)
 
 
 class TestExamResultService(BaseTestCase):
@@ -297,9 +300,9 @@ class TestExamResultService(BaseTestCase):
     # ── save_result ───────────────────────────────────────────────────────────
 
     def test_save_result_creates_result(self):
-        """save_result creates an ExamResult and auto-advances exam to PENDING."""
+        """save_result creates an ExamResult and auto-advances exam to IN_PROGRESS_INTERPRETATION."""
         exam = self._create_exam()
-        self.assertEqual(exam.status, ExamStatus.DRAFT)
+        self.assertEqual(exam.status, ExamStatus.TODO)
 
         result = ExamResultService.save_result(
             str(exam.id),
@@ -309,7 +312,7 @@ class TestExamResultService(BaseTestCase):
         self.assertIsNotNone(result.id)
         self.assertEqual(result.result_data, {"hemoglobin": "14"})
         refreshed_exam = ExamService.get_exam(str(exam.id))
-        self.assertEqual(refreshed_exam.status, ExamStatus.PENDING)
+        self.assertEqual(refreshed_exam.status, ExamStatus.IN_PROGRESS_INTERPRETATION)
 
     def test_save_result_updates_existing(self):
         """Second save_result call overwrites result_data on the same record."""
@@ -328,17 +331,17 @@ class TestExamResultService(BaseTestCase):
         self.assertIn("glucose", result.result_data)
 
     def test_save_result_does_not_regress_status(self):
-        """If exam is already PENDING, status stays PENDING after a second save."""
+        """If exam is already IN_PROGRESS_INTERPRETATION, status stays after a second save."""
         exam = self._create_exam()
         ExamResultService.save_result(
             str(exam.id), SaveExamResultDTO(result_data={}, image_paths=[])
         )
-        # Exam is now PENDING — save again
+        # Exam is now IN_PROGRESS_INTERPRETATION — save again
         ExamResultService.save_result(
             str(exam.id), SaveExamResultDTO(result_data={"note": "updated"}, image_paths=[])
         )
         refreshed = ExamService.get_exam(str(exam.id))
-        self.assertEqual(refreshed.status, ExamStatus.PENDING)
+        self.assertEqual(refreshed.status, ExamStatus.IN_PROGRESS_INTERPRETATION)
 
     def test_save_result_stores_image_paths(self):
         """image_paths list is persisted in the ExamResult."""
@@ -353,7 +356,7 @@ class TestExamResultService(BaseTestCase):
     # ── delete_result ─────────────────────────────────────────────────────────
 
     def test_delete_result_resets_status_to_draft(self):
-        """delete_result removes ExamResult and resets exam to DRAFT."""
+        """delete_result removes ExamResult and resets exam to TODO."""
         exam = self._create_exam()
         ExamResultService.save_result(
             str(exam.id), SaveExamResultDTO(result_data={"x": "1"}, image_paths=[])
@@ -365,7 +368,7 @@ class TestExamResultService(BaseTestCase):
         ExamResultService.delete_result(str(exam.id))
 
         refreshed = ExamService.get_exam(str(exam.id))
-        self.assertEqual(refreshed.status, ExamStatus.DRAFT)
+        self.assertEqual(refreshed.status, ExamStatus.TODO)
         self.assertIsNone(refreshed.interpretation)
         self.assertIsNone(refreshed.interpreted_by_id)
 
@@ -374,4 +377,4 @@ class TestExamResultService(BaseTestCase):
         exam = self._create_exam()
         # Should not raise
         ExamResultService.delete_result(str(exam.id))
-        self.assertEqual(ExamService.get_exam(str(exam.id)).status, ExamStatus.DRAFT)
+        self.assertEqual(ExamService.get_exam(str(exam.id)).status, ExamStatus.TODO)

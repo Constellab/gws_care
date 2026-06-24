@@ -18,6 +18,7 @@ class PatientRowDTO(BaseModel):
     city: str | None = None
     phone: str | None = None
     account_name: str | None = None
+    is_draft: bool = False
 
 
 class PatientListState(AccountPickerState):
@@ -37,6 +38,14 @@ class PatientListState(AccountPickerState):
     is_loading_more: bool = False
     has_more: bool = False
     error_message: str = ""
+    is_doctor_view: bool = False
+
+    # Pagination
+    page: int = 1
+    total_count: int = 0
+    total_pages: int = 1
+    has_prev_page: bool = False
+    has_next_page: bool = False
 
     _page_offset: int = 0
     _current_page_size: int = 50
@@ -156,17 +165,35 @@ class PatientListState(AccountPickerState):
         self.is_loading_more = True
         await self._load_patients(reset=False)
 
-    async def _load_patients(self, reset: bool = True):
+    @rx.event
+    async def prev_page(self):
+        if self.page > 1:
+            self.page -= 1
+            self._page_offset = (self.page - 1) * self._current_page_size
+            await self._load_patients(reset=False, page_override=True)
+
+    @rx.event
+    async def next_page(self):
+        if self.has_next_page:
+            self.page += 1
+            self._page_offset = (self.page - 1) * self._current_page_size
+            await self._load_patients(reset=False, page_override=True)
+
+    async def _load_patients(self, reset: bool = True, page_override: bool = False):
         """Internal: load patients from DB with current filters."""
+        import math
         if not await self.check_authentication():
             self.error_message = "Authentication required"
             return
 
         if reset:
             self._page_offset = 0
+            self.page = 1
             self.is_loading = True
             from gws_care.core.care_app_config_service import CareAppConfigService
             self._current_page_size = CareAppConfigService.get_page_size()
+        elif page_override:
+            self.is_loading = True
         self.error_message = ""
 
         try:
@@ -178,32 +205,44 @@ class PatientListState(AccountPickerState):
                 raw_pn = self.search_patient_number.strip()
                 if raw_pn.upper().startswith("PAT-"):
                     raw_pn = raw_pn[4:]
-                patients = PatientService.search_patients(
+                search_kwargs = dict(
                     name=self.search_name or None,
                     patient_number_prefix=f"PAT-{raw_pn}" if raw_pn else None,
                     phone=self.search_phone or None,
                     account_id=self.filter_account_id or None,
                     dob_from=self.filter_dob_from or None,
                     dob_to=self.filter_dob_to or None,
-                    limit=self._current_page_size + 1,
+                )
+                # Total count for pagination display
+                all_for_count = PatientService.search_patients(**search_kwargs)
+                total = len(all_for_count)
+                self.total_count = total
+                ps = self._current_page_size
+                self.total_pages = max(1, math.ceil(total / ps)) if ps > 0 else 1
+
+                patients = PatientService.search_patients(
+                    **search_kwargs,
+                    limit=ps + 1,
                     offset=self._page_offset,
                 )
-                has_more = len(patients) > self._current_page_size
-                patients = patients[:self._current_page_size]
+                has_more = len(patients) > ps
+                patients = patients[:ps]
                 # Batch-fetch account names via join table
-                patient_ids = [p.id for p in patients]
+                patient_ids = [str(p.id) for p in patients]
                 account_names_by_patient: dict[str, list[str]] = {}
                 if patient_ids:
                     from gws_care.account.account import Account
                     from gws_care.patient.patient_account import PatientAccount
-                    links = (
-                        PatientAccount.select(PatientAccount, Account)
-                        .join(Account)
-                        .where(PatientAccount.patient_id.in_(patient_ids))
+                    from peewee import JOIN
+                    rows = (
+                        PatientAccount.select(PatientAccount.patient, Account.name)
+                        .join(Account, JOIN.INNER, on=(PatientAccount.account == Account.id))
+                        .where(PatientAccount.patient.in_(patient_ids))
+                        .tuples()
                     )
-                    for link in links:
-                        pid = str(link.patient_id)
-                        account_names_by_patient.setdefault(pid, []).append(link.account.name)
+                    for patient_fk, account_name in rows:
+                        pid = str(patient_fk)
+                        account_names_by_patient.setdefault(pid, []).append(account_name)
                 new_rows = [
                     PatientRowDTO(
                         id=str(p.id),
@@ -215,18 +254,22 @@ class PatientListState(AccountPickerState):
                         city=p.city,
                         phone=p.phone,
                         account_name=", ".join(account_names_by_patient.get(str(p.id), [])) or None,
+                        is_draft=bool(getattr(p, "is_draft", False)),
                     )
                     for p in patients
                 ]
                 sort_col = self.sort_column
-                all_rows = new_rows if reset else self.patients + new_rows
+                all_rows = new_rows if (reset or page_override) else self.patients + new_rows
                 self.patients = sorted(
                     all_rows,
                     key=lambda row: (getattr(row, sort_col) or "").lower(),
                     reverse=not self.sort_ascending,
                 )
                 self.has_more = has_more
-                self._page_offset += self._current_page_size
+                self.has_next_page = has_more
+                self.has_prev_page = self.page > 1
+                if not page_override:
+                    self._page_offset += ps
         except Exception as e:
             self.error_message = f"Error loading patients: {e}"
         finally:

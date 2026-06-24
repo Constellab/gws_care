@@ -63,7 +63,7 @@ from gws_care.billing.patient_invoice import PatientInvoice, PatientInvoiceLine
 from gws_care.billing.price_list import PriceList
 
 # Prescriptions
-from gws_care.prescription.prescription import Prescription, PrescriptionLine
+from gws_care.prescription.prescription import Prescription
 
 # TubeQR
 from gws_care.tube_qr.tube_qr import TubeQR
@@ -74,6 +74,10 @@ from gws_care.messaging.patient_message import PatientMessage
 # Exam file / parameter results
 from gws_care.exam.exam_file import ExamFile
 from gws_care.exam.exam_parameter_result import ExamParameterResult
+
+# Exam type referential (configurable exam types + parameters)
+from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+from gws_care.exam_type_ref.exam_parameter import ExamParameter
 
 # Scheduling
 from gws_care.scheduling.doctor_schedule import DoctorSchedule, DoctorUnavailableDay
@@ -113,6 +117,9 @@ from gws_care.core.migration_17 import Migration107
 from gws_care.core.migration_18 import Migration108
 from gws_care.core.migration_19 import Migration109
 from gws_care.core.migration_20 import Migration200
+from gws_care.core.migration_21 import Migration210
+from gws_care.core.migration_22 import Migration220
+from gws_care.core.migration_23 import Migration230
 
 # User sync service — keeps local User table in sync with gws_core
 from gws_care.user.care_user_sync_service import CareUserSyncService

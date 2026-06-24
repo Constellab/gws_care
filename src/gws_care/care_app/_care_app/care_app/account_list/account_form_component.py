@@ -4,6 +4,7 @@ import reflex as rx
 from gws_reflex_base import form_dialog_component
 
 from ..common.language_state import LanguageState
+from ..common.shared_address_phone_components import address_section, phone_input_field
 from .account_form_state import AccountFormState
 
 
@@ -201,7 +202,7 @@ def _company_selector() -> rx.Component:
             rx.select.root(
                 rx.select.trigger(placeholder="Sélectionner une entreprise…", width="100%"),
                 rx.select.content(
-                    rx.select.item("— Aucune —", value=""),
+                    rx.select.item("— Aucune —", value="none"),
                     rx.foreach(
                         AccountFormState.company_options,
                         lambda c: rx.select.item(c.name, value=c.id),
@@ -222,78 +223,59 @@ def _form_fields() -> rx.Component:
         _company_selector(),
         _fill_from_patient_section(),
         rx.separator(width="100%"),
-        _field(
-            rx.text(
-                rx.cond(
-                    AccountFormState.form_account_type == "COMPANY",
-                    LanguageState.tr["field_company_name"],
-                    LanguageState.tr["field_full_name"],
-                ),
-                size="2",
-                weight="medium",
-            ),
-            rx.input(
-                value=AccountFormState.form_name,
-                on_change=AccountFormState.set_form_name,
-                placeholder=rx.cond(
-                    AccountFormState.form_account_type == "COMPANY",
-                    "PS CONSULTING",
-                    "Jean Dupont",
-                ),
-                size="2",
-                width="100%",
-            ),
-        ),
         rx.cond(
             AccountFormState.form_account_type == "COMPANY",
-            _field(
-                LanguageState.tr["field_registration_number"],
-                rx.input(
-                    value=AccountFormState.form_registration_number,
-                    on_change=AccountFormState.set_form_registration_number,
-                    placeholder="SIRET / Registration ID",
-                    size="2",
-                    width="100%",
+            rx.vstack(
+                _field(
+                    LanguageState.tr["field_company_name"],
+                    rx.input(
+                        value=AccountFormState.form_name,
+                        on_change=AccountFormState.set_form_name,
+                        placeholder="PS CONSULTING",
+                        size="2",
+                        width="100%",
+                    ),
                 ),
+                _field(
+                    LanguageState.tr["field_registration_number"],
+                    rx.input(
+                        value=AccountFormState.form_registration_number,
+                        on_change=AccountFormState.set_form_registration_number,
+                        placeholder="SIRET / Registration ID",
+                        size="2",
+                        width="100%",
+                    ),
+                ),
+                spacing="3",
+                width="100%",
             ),
-        ),
-        rx.separator(width="100%"),
-        rx.text(LanguageState.tr["section_address"], size="2", weight="bold", color="var(--gray-9)"),
-        _field(
-            LanguageState.tr["field_street_address"],
-            rx.input(
-                value=AccountFormState.form_address,
-                on_change=AccountFormState.set_form_address,
-                placeholder="12 rue de la Paix",
-                size="2",
+            rx.grid(
+                _field(
+                    LanguageState.tr["field_last_name"],
+                    rx.input(
+                        value=AccountFormState.form_contact_last_name,
+                        on_change=AccountFormState.set_form_contact_last_name,
+                        placeholder="DUPONT",
+                        size="2",
+                        width="100%",
+                    ),
+                ),
+                _field(
+                    LanguageState.tr["field_first_name"],
+                    rx.input(
+                        value=AccountFormState.form_contact_first_name,
+                        on_change=AccountFormState.set_form_contact_first_name,
+                        placeholder="Jean",
+                        size="2",
+                        width="100%",
+                    ),
+                ),
+                columns="2",
+                spacing="3",
                 width="100%",
             ),
         ),
-        rx.grid(
-            _field(
-                LanguageState.tr["field_postal_code"],
-                rx.input(
-                    value=AccountFormState.form_postal_code,
-                    on_change=AccountFormState.set_form_postal_code,
-                    placeholder="75001",
-                    size="2",
-                    width="100%",
-                ),
-            ),
-            _field(
-                LanguageState.tr["field_city"],
-                rx.input(
-                    value=AccountFormState.form_city,
-                    on_change=AccountFormState.set_form_city,
-                    placeholder="Paris",
-                    size="2",
-                    width="100%",
-                ),
-            ),
-            columns="2",
-            spacing="3",
-            width="100%",
-        ),
+        address_section(AccountFormState, include_complement=False),
         rx.separator(width="100%"),
         rx.text(LanguageState.tr["section_contact"], size="2", weight="bold", color="var(--gray-9)"),
         rx.cond(
@@ -323,18 +305,10 @@ def _form_fields() -> rx.Component:
                 spacing="3",
                 width="100%",
             ),
+            rx.fragment(),
         ),
         rx.grid(
-            _field(
-                LanguageState.tr["field_phone"],
-                rx.input(
-                    value=AccountFormState.form_phone,
-                    on_change=AccountFormState.set_form_phone,
-                    placeholder="+33 1 00 00 00 00",
-                    size="2",
-                    width="100%",
-                ),
-            ),
+            phone_input_field(AccountFormState),
             _field(
                 LanguageState.tr["field_email"],
                 rx.input(

@@ -7,8 +7,7 @@ from ..common.account_picker_component import account_picker_button, account_pic
 from ..common.empty_state_component import empty_state
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
-from .patient_delete_component import patient_delete_dialog
-from .patient_delete_state import PatientDeleteState
+from ..account_list.account_form_component import account_form_dialog
 from .patient_form_component import patient_form_dialog
 from .patient_form_state import PatientFormState
 from .patient_list_state import PatientListState, PatientRowDTO
@@ -25,7 +24,18 @@ def _gender_badge(gender: str) -> rx.Component:
 
 def _patient_row(patient: PatientRowDTO) -> rx.Component:
     return rx.table.row(
-        rx.table.cell(rx.text(patient.patient_number, size="2", weight="medium")),
+        rx.table.cell(
+            rx.hstack(
+                rx.text(patient.patient_number, size="2", weight="medium"),
+                rx.cond(
+                    patient.is_draft,
+                    rx.badge("Brouillon", color_scheme="orange", variant="soft", size="1"),
+                    rx.fragment(),
+                ),
+                spacing="2",
+                align="center",
+            )
+        ),
         rx.table.cell(
             rx.text(f"{patient.first_name} {patient.last_name}", size="2")
         ),
@@ -41,32 +51,15 @@ def _patient_row(patient: PatientRowDTO) -> rx.Component:
             rx.cond(patient.phone, rx.text(patient.phone, size="2"), rx.text("—", color="var(--gray-8)", size="2"))
         ),
         rx.table.cell(
-            rx.hstack(
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("chevron-right", size=16),
-                        variant="ghost",
-                        size="1",
-                        on_click=lambda: PatientListState.go_to_patient(patient.id),
-                    ),
-                    content=LanguageState.tr["tooltip_view_patient"],
+            rx.tooltip(
+                rx.icon_button(
+                    rx.icon("chevron-right", size=16),
+                    variant="ghost",
+                    size="1",
+                    on_click=lambda: PatientListState.go_to_patient(patient.id),
                 ),
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("trash-2", size=14),
-                        variant="ghost",
-                        size="1",
-                        color_scheme="red",
-                        on_click=lambda: PatientDeleteState.open_delete_dialog(
-                            patient.id,
-                            patient.first_name + " " + patient.last_name,
-                            "/",
-                        ),
-                    ),
-                    content=LanguageState.tr["tooltip_delete_patient"],
-                ),
-                spacing="1",
-            )
+                content=LanguageState.tr["tooltip_view_patient"],
+            ),
         ),
         style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
         on_click=lambda: PatientListState.go_to_patient(patient.id),
@@ -183,8 +176,8 @@ def patient_list_page() -> rx.Component:
                 width="100%",
                 align="center",
             ),
+            account_form_dialog(),
             patient_form_dialog(),
-            patient_delete_dialog(),
             rx.cond(
                 PatientListState.is_doctor_view,
                 rx.callout(

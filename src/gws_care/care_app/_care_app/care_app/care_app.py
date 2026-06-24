@@ -10,6 +10,8 @@ from .admin.admin_state import AdminState
 from .admin.general_settings_state import GeneralSettingsState
 from .campaign_detail.campaign_detail_component import campaign_detail_page
 from .campaign_detail.campaign_detail_state import CampaignDetailState
+from .campaign_detail.campaign_patient_exams_component import campaign_patient_exams_page
+from .campaign_detail.campaign_patient_exams_state import CampaignPatientExamsState
 from .campaign_list.campaign_list_component import campaign_list_page
 from .campaign_list.campaign_list_state import CampaignListState
 from .certificate_detail.certificate_detail_component import certificate_detail_page
@@ -61,6 +63,10 @@ from .visit_list.visit_list_component import visit_list_page
 from .visit_list.visit_list_state import VisitListState
 from .doctor_list.doctor_list_component import doctor_list_page
 from .doctor_list.doctor_list_state import DoctorListState
+from .doctor_schedule.doctor_schedule_component import doctor_schedule_page
+from .doctor_schedule.doctor_schedule_state import DoctorScheduleState
+from .exam_types.exam_types_component import exam_types_page
+from .exam_types.exam_types_state import ExamTypesState
 from .admin_documents.admin_documents_component import admin_documents_page
 from .admin_documents.admin_documents_state import AdminDocumentsState
 from .appointments_list.appointments_list_component import appointments_list_page
@@ -137,6 +143,18 @@ def doctors():
     return doctor_list_page()
 
 
+@rx.page(route="/doctor-schedule", on_load=[DoctorScheduleState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def doctor_schedule():
+    """Doctor availability / schedule management page."""
+    return doctor_schedule_page()
+
+
+@rx.page(route="/exam-types", on_load=[ExamTypesState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def exam_types():
+    """Exam type referential page — manage exam templates and parameters."""
+    return exam_types_page()
+
+
 @rx.page(route="/settings", on_load=[AdminState.on_load, NotificationsState.load_settings, GeneralSettingsState.on_load])
 def settings():
     """Settings page — import, user roles, and notification configuration."""
@@ -165,6 +183,12 @@ def campaigns():
 def campaign_detail():
     """Campaign detail page with patients, exam types and visits."""
     return campaign_detail_page()
+
+
+@rx.page(route="/campaign-patient/[cp_campaign_id]/[cp_patient_id]", on_load=[CampaignPatientExamsState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def campaign_patient_exams():
+    """Per-patient exam results entry page within a campaign."""
+    return campaign_patient_exams_page()
 
 
 @rx.page(route="/visit/[visit_id_param]", on_load=[VisitDetailState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])

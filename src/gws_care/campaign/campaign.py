@@ -35,6 +35,7 @@ class Campaign(ModelWithUser):
     status: CampaignStatus = EnumField(choices=CampaignStatus, default=CampaignStatus.DRAFT, null=False)
     notes: str = TextField(null=True)
     is_individual: bool = BooleanField(default=False, null=False)
+    archive_reason: str = TextField(null=True)
 
     def _before_insert(self) -> None:
         super()._before_insert()

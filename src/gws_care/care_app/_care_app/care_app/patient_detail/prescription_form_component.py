@@ -5,48 +5,133 @@ import reflex as rx
 from ..common.language_state import LanguageState
 from .patient_detail_state import DrugLineDTO, PatientDetailState
 
+_DOSAGE_UNITS = ["mg", "g", "µg", "ml", "UI", "gouttes", "comprimé(s)", "sachet(s)", "ampoule(s)"]
+_FREQUENCY_UNITS = ["fois/jour", "fois/semaine", "fois/mois", "le matin", "le soir", "matin et soir", "si besoin"]
+_DURATION_UNITS = ["jours", "semaines", "mois", "jusqu'à amélioration"]
+
+
+def _unit_select(
+    options: list[str],
+    value: rx.Var,
+    on_change,
+) -> rx.Component:
+    return rx.select.root(
+        rx.select.trigger(width="100%"),
+        rx.select.content(
+            *[rx.select.item(u, value=u) for u in options],
+        ),
+        value=value,
+        on_change=on_change,
+        size="1",
+        width="100%",
+    )
+
 
 def _drug_row(drug: DrugLineDTO, index: int) -> rx.Component:
-    """One row of the drug lines form."""
-    return rx.hstack(
-        rx.input(
-            placeholder=LanguageState.tr["prescription_drug_name"],
-            value=drug.name,
-            on_change=lambda v: PatientDetailState.prescription_set_drug_name(index, v),
-            size="2",
-            flex="2",
+    """One row of the drug lines form — name + dosage/unit + freq/unit + dur/unit + delete."""
+    return rx.vstack(
+        # Row 1: Médicament
+        rx.hstack(
+            rx.icon("pill", size=13, color="var(--gray-9)"),
+            rx.input(
+                placeholder=LanguageState.tr["prescription_drug_name"],
+                value=drug.name,
+                on_change=lambda v: PatientDetailState.prescription_set_drug_name(index, v),
+                size="2",
+                flex="1",
+            ),
+            rx.icon_button(
+                rx.icon("trash-2", size=13),
+                on_click=lambda: PatientDetailState.prescription_remove_drug(index),
+                variant="ghost",
+                color_scheme="red",
+                size="2",
+                flex_shrink="0",
+            ),
+            spacing="2",
+            align="center",
+            width="100%",
         ),
-        rx.input(
-            placeholder=LanguageState.tr["prescription_drug_dosage"],
-            value=drug.dosage,
-            on_change=lambda v: PatientDetailState.prescription_set_drug_dosage(index, v),
-            size="2",
-            flex="1",
+        # Row 2: Posologie + Fréquence + Durée avec unités
+        rx.grid(
+            # Posologie
+            rx.vstack(
+                rx.text(LanguageState.tr["prescription_drug_dosage"], size="1", color="var(--gray-9)"),
+                rx.hstack(
+                    rx.input(
+                        placeholder="ex: 500",
+                        value=drug.dosage,
+                        on_change=lambda v: PatientDetailState.prescription_set_drug_dosage(index, v),
+                        size="2",
+                        flex="1",
+                    ),
+                    _unit_select(
+                        _DOSAGE_UNITS,
+                        drug.dosage_unit,
+                        lambda v: PatientDetailState.prescription_set_drug_dosage_unit(index, v),
+                    ),
+                    spacing="1",
+                    width="100%",
+                ),
+                spacing="1",
+                width="100%",
+            ),
+            # Fréquence
+            rx.vstack(
+                rx.text(LanguageState.tr["prescription_drug_frequency"], size="1", color="var(--gray-9)"),
+                rx.hstack(
+                    rx.input(
+                        placeholder="ex: 3",
+                        value=drug.frequency,
+                        on_change=lambda v: PatientDetailState.prescription_set_drug_frequency(index, v),
+                        size="2",
+                        flex="1",
+                        max_width="60px",
+                    ),
+                    _unit_select(
+                        _FREQUENCY_UNITS,
+                        drug.frequency_unit,
+                        lambda v: PatientDetailState.prescription_set_drug_frequency_unit(index, v),
+                    ),
+                    spacing="1",
+                    width="100%",
+                ),
+                spacing="1",
+                width="100%",
+            ),
+            # Durée
+            rx.vstack(
+                rx.text(LanguageState.tr["prescription_drug_duration"], size="1", color="var(--gray-9)"),
+                rx.hstack(
+                    rx.input(
+                        placeholder="ex: 7",
+                        value=drug.duration,
+                        on_change=lambda v: PatientDetailState.prescription_set_drug_duration(index, v),
+                        size="2",
+                        flex="1",
+                        max_width="60px",
+                    ),
+                    _unit_select(
+                        _DURATION_UNITS,
+                        drug.duration_unit,
+                        lambda v: PatientDetailState.prescription_set_drug_duration_unit(index, v),
+                    ),
+                    spacing="1",
+                    width="100%",
+                ),
+                spacing="1",
+                width="100%",
+            ),
+            columns="3",
+            spacing="2",
+            width="100%",
         ),
-        rx.input(
-            placeholder=LanguageState.tr["prescription_drug_frequency"],
-            value=drug.frequency,
-            on_change=lambda v: PatientDetailState.prescription_set_drug_frequency(index, v),
-            size="2",
-            flex="1",
-        ),
-        rx.input(
-            placeholder=LanguageState.tr["prescription_drug_duration"],
-            value=drug.duration,
-            on_change=lambda v: PatientDetailState.prescription_set_drug_duration(index, v),
-            size="2",
-            flex="1",
-        ),
-        rx.icon_button(
-            rx.icon("trash-2", size=14),
-            on_click=lambda: PatientDetailState.prescription_remove_drug(index),
-            variant="ghost",
-            color_scheme="red",
-            size="2",
-        ),
-        spacing="2",
-        align="center",
+        padding="0.6rem 0.75rem",
+        border="1px solid var(--gray-4)",
+        border_radius="var(--radius-2)",
+        background="var(--gray-1)",
         width="100%",
+        spacing="2",
     )
 
 
@@ -107,20 +192,14 @@ def prescription_form_dialog() -> rx.Component:
                     width="100%",
                     align="center",
                 ),
-                # Column headers
-                rx.hstack(
-                    rx.text(LanguageState.tr["prescription_drug_name"], size="1", color="var(--gray-8)", flex="2"),
-                    rx.text(LanguageState.tr["prescription_drug_dosage"], size="1", color="var(--gray-8)", flex="1"),
-                    rx.text(LanguageState.tr["prescription_drug_frequency"], size="1", color="var(--gray-8)", flex="1"),
-                    rx.text(LanguageState.tr["prescription_drug_duration"], size="1", color="var(--gray-8)", flex="1"),
-                    rx.box(width="32px"),  # spacer for trash icon
+                # Drug rows (each drug card includes dosage + freq + duration with units)
+                rx.vstack(
+                    rx.foreach(
+                        PatientDetailState.prescription_form_drugs,
+                        lambda drug, i: _drug_row(drug, i),
+                    ),
                     spacing="2",
                     width="100%",
-                ),
-                # Drug rows
-                rx.foreach(
-                    PatientDetailState.prescription_form_drugs,
-                    lambda drug, i: _drug_row(drug, i),
                 ),
                 # Instructions
                 rx.vstack(
@@ -164,7 +243,7 @@ def prescription_form_dialog() -> rx.Component:
                 spacing="3",
                 width="100%",
             ),
-            max_width="760px",
+            max_width="820px",
             on_interact_outside=PatientDetailState.close_prescription_dialog,
             on_escape_key_down=PatientDetailState.close_prescription_dialog,
         ),

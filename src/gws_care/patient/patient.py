@@ -1,7 +1,7 @@
 import json
 from datetime import date
 
-from peewee import CharField, DateField, DecimalField, ForeignKeyField, TextField
+from peewee import BooleanField, CharField, DateField, DecimalField, ForeignKeyField, TextField
 
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
@@ -25,8 +25,10 @@ class Patient(ModelWithUser):
     nationality: str = CharField(max_length=100, null=True)
     photo: str = TextField(null=True)
     address: str = TextField(null=True)
+    address_complement: str = TextField(null=True)
     postal_code: str = CharField(max_length=20, null=True)
     city: str = CharField(max_length=100, null=True)
+    country: str = CharField(max_length=100, null=True)
     # Phone stored as "<country_code>|<number>", e.g. "+33|0612345678"
     phone: str = CharField(max_length=50, null=True)
     phone_country: str = CharField(max_length=10, null=True)
@@ -51,6 +53,14 @@ class Patient(ModelWithUser):
 
     # company_id: plain string FK — column managed via migration
     company_id: str = CharField(max_length=36, null=True)
+
+    # Draft flag: True = patient record is incomplete, to be completed later
+    is_draft: bool = BooleanField(default=False, null=False)
+
+    # Archive flag
+    is_archived: bool = BooleanField(default=False, null=False)
+    archived_reason: str = TextField(null=True)
+    archived_at: str = CharField(max_length=50, null=True)
 
     def get_full_name(self) -> str:
         return f"{self.first_name} {self.last_name}"
@@ -92,8 +102,10 @@ class Patient(ModelWithUser):
             nationality=self.nationality,
             photo=self.photo,
             address=self.address,
+            address_complement=self.address_complement,
             postal_code=self.postal_code,
             city=self.city,
+            country=self.country,
             phone=self.phone,
             phone_country=self.phone_country,
             email=self.email,
@@ -105,6 +117,7 @@ class Patient(ModelWithUser):
             weight=float(self.weight) if self.weight is not None else None,
             height=float(self.height) if self.height is not None else None,
             notification_preferences=notif_prefs,
+            is_draft=bool(self.is_draft),
         )
 
     class Meta:

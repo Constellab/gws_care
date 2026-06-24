@@ -64,17 +64,42 @@ def _doctor_form_dialog() -> rx.Component:
                         width="100%",
                     ),
                 ),
-                rx.grid(
-                    _field(
-                        LanguageState.tr["field_phone"],
+                _field(
+                    LanguageState.tr["field_phone"],
+                    rx.hstack(
+                        rx.select.root(
+                            rx.select.trigger(width="110px"),
+                            rx.select.content(
+                                rx.select.item("🇫🇷 +33  France", value="+33"),
+                                rx.select.item("🇲🇦 +212  Maroc", value="+212"),
+                                rx.select.item("🇩🇿 +213  Algérie", value="+213"),
+                                rx.select.item("🇹🇳 +216  Tunisie", value="+216"),
+                                rx.select.item("🇸🇳 +221  Sénégal", value="+221"),
+                                rx.select.item("🇨🇮 +225  Côte d'Ivoire", value="+225"),
+                                rx.select.item("🇧🇪 +32  Belgique", value="+32"),
+                                rx.select.item("🇨🇭 +41  Suisse", value="+41"),
+                                rx.select.item("🇨🇦 +1  Canada", value="+1"),
+                                rx.select.item("🇩🇪 +49  Allemagne", value="+49"),
+                                rx.select.item("🇬🇧 +44  Royaume-Uni", value="+44"),
+                                rx.select.item("🌐 Autre", value="other"),
+                            ),
+                            value=DoctorListState.form_phone_dial_code,
+                            on_change=DoctorListState.set_form_phone_dial_code,
+                            size="2",
+                        ),
                         rx.input(
                             value=DoctorListState.form_phone,
                             on_change=DoctorListState.set_form_phone,
-                            placeholder="+33 1 00 00 00 00",
+                            placeholder="6 00 00 00 00",
                             size="2",
-                            width="100%",
+                            flex="1",
                         ),
+                        spacing="2",
+                        align="center",
+                        width="100%",
                     ),
+                ),
+                rx.grid(
                     _field(
                         LanguageState.tr["field_email"],
                         rx.input(
@@ -86,29 +111,19 @@ def _doctor_form_dialog() -> rx.Component:
                             width="100%",
                         ),
                     ),
+                    _field(
+                        LanguageState.tr["field_rpps"],
+                        rx.input(
+                            value=DoctorListState.form_rpps,
+                            on_change=DoctorListState.set_form_rpps,
+                            placeholder="10 chiffres",
+                            size="2",
+                            width="100%",
+                        ),
+                    ),
                     columns="2",
                     spacing="3",
                     width="100%",
-                ),
-                _field(
-                    LanguageState.tr["field_rpps"],
-                    rx.input(
-                        value=DoctorListState.form_rpps,
-                        on_change=DoctorListState.set_form_rpps,
-                        placeholder="10 chiffres",
-                        size="2",
-                        width="100%",
-                    ),
-                ),
-                _field(
-                    LanguageState.tr["field_address"],
-                    rx.input(
-                        value=DoctorListState.form_address,
-                        on_change=DoctorListState.set_form_address,
-                        placeholder="12 rue de la Paix, 75001 Paris",
-                        size="2",
-                        width="100%",
-                    ),
                 ),
                 rx.cond(
                     DoctorListState.form_error != "",

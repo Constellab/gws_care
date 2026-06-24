@@ -304,9 +304,11 @@ class CampaignService:
         return campaign
 
     @classmethod
-    def archive_campaign(cls, campaign_id: str) -> Campaign:
+    def archive_campaign(cls, campaign_id: str, reason: str | None = None) -> Campaign:
         campaign = cls.get_campaign(campaign_id)
         campaign.status = CampaignStatus.ARCHIVED
+        if reason:
+            campaign.archive_reason = reason
         campaign.save()
         return campaign
 

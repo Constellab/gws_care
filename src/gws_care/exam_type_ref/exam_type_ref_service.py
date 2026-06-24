@@ -47,6 +47,7 @@ class ExamTypeRefService:
         ref = ExamTypeRef()
         ref.name = dto.name
         ref.category = dto.category
+        ref.department = getattr(dto, "department", None) or None
         ref.description = dto.description
         ref.is_active = dto.is_active
         ref.allows_attachment = dto.allows_attachment
@@ -60,6 +61,7 @@ class ExamTypeRefService:
         ref = ExamTypeRef.get_by_id_and_check(exam_type_ref_id)
         ref.name = dto.name
         ref.category = dto.category
+        ref.department = getattr(dto, "department", None) or None
         ref.description = dto.description
         ref.is_active = dto.is_active
         ref.allows_attachment = dto.allows_attachment
@@ -132,6 +134,7 @@ class ExamTypeRefService:
             name=ref.name,
             category=ref.category,
             category_label=ref.get_category_label(),
+            department=getattr(ref, "department", None) or None,
             is_active=ref.is_active,
             allows_attachment=ref.allows_attachment,
             requires_attachment=ref.requires_attachment,

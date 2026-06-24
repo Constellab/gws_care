@@ -3,6 +3,8 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..account_list.account_form_component import account_form_dialog
+from ..account_list.account_form_state import AccountFormState
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..common.patient_picker_component import patient_picker_widget
@@ -42,8 +44,17 @@ def _account_info_card(account: AccountDetailDTO) -> rx.Component:
                     rx.badge(LanguageState.tr["active_badge"], color_scheme="green", variant="soft", size="1"),
                     rx.badge(LanguageState.tr["inactive_badge"], color_scheme="gray", variant="soft", size="1"),
                 ),
+                rx.spacer(),
+                rx.button(
+                    rx.icon("pencil", size=15),
+                    LanguageState.tr["edit_btn"],
+                    on_click=lambda: AccountFormState.open_edit_dialog(account.id),
+                    variant="outline",
+                    size="2",
+                ),
                 spacing="2",
                 align="center",
+                width="100%",
             ),
             rx.separator(width="100%"),
             rx.grid(
@@ -180,7 +191,7 @@ def _patients_section() -> rx.Component:
                     rx.icon("plus", size=14),
                     LanguageState.tr["new_patient_small_btn"],
                     size="2",
-                    on_click=PatientFormState.open_create_dialog,
+                    on_click=lambda: PatientFormState.open_create_dialog_for_account(AccountDetailState.account.id),
                 ),
                 spacing="2",
             ),
@@ -512,6 +523,7 @@ def account_detail_page() -> rx.Component:
             ),
             _assign_patient_dialog(),
             _campaign_dialog(),
+            account_form_dialog(),
             patient_form_dialog(),
         )
     )

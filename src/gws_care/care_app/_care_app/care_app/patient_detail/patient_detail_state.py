@@ -17,8 +17,10 @@ class PatientDetailDTO(BaseModel):
     gender: str
     photo: str | None = None
     address: str | None = None
+    address_complement: str | None = None
     postal_code: str | None = None
     city: str | None = None
+    country: str | None = None
     phone: str | None = None
     email: str | None = None
     # Medical / identity fields
@@ -37,6 +39,10 @@ class PatientDetailDTO(BaseModel):
     primary_physician_specialization: str = ""
     primary_physician_phone: str = ""
     primary_physician_email: str = ""
+    # Archive status
+    is_archived: bool = False
+    archived_reason: str | None = None
+    archived_at: str | None = None
 
 
 class ExamRowDTO(BaseModel):
@@ -85,8 +91,11 @@ class DrugLineDTO(BaseModel):
 
     name: str = ""
     dosage: str = ""
+    dosage_unit: str = "mg"
     frequency: str = ""
+    frequency_unit: str = "fois/jour"
     duration: str = ""
+    duration_unit: str = "jours"
 
 
 class CertificateRowDTO(BaseModel):
@@ -177,6 +186,17 @@ class PatientDetailState(ReflexMainState):
     visit_filter_doctor: str = ""
     visit_filter_status: str = ""
     visit_doctor_options: list[str] = []
+
+    # ── Archive / delete dialogs ───────────────────────────────
+    show_archive_dialog: bool = False
+    archive_reason: str = ""
+    archive_error: str = ""
+    is_archiving: bool = False
+
+    show_delete_dialog: bool = False
+    delete_reason: str = ""
+    delete_error: str = ""
+    is_deleting: bool = False
 
     @rx.event
     async def set_visit_sort(self, column: str):
@@ -402,8 +422,10 @@ class PatientDetailState(ReflexMainState):
         if patient_id:
             from .patient_doctor_tab_state import PatientDoctorTabState
             from .patient_account_tab_state import PatientAccountTabState
+            from .patient_campaign_tab_state import PatientCampaignTabState
             yield PatientDoctorTabState.load(patient_id)
             yield PatientAccountTabState.load(patient_id)
+            yield PatientCampaignTabState.load(patient_id)
 
     @rx.event
     def go_back(self):
@@ -484,6 +506,27 @@ class PatientDetailState(ReflexMainState):
         drugs = [DrugLineDTO(**d.dict()) for d in self.prescription_form_drugs]
         if 0 <= index < len(drugs):
             drugs[index].duration = value
+        self.prescription_form_drugs = drugs
+
+    @rx.event
+    def prescription_set_drug_dosage_unit(self, index: int, value: str):
+        drugs = [DrugLineDTO(**d.dict()) for d in self.prescription_form_drugs]
+        if 0 <= index < len(drugs):
+            drugs[index].dosage_unit = value
+        self.prescription_form_drugs = drugs
+
+    @rx.event
+    def prescription_set_drug_frequency_unit(self, index: int, value: str):
+        drugs = [DrugLineDTO(**d.dict()) for d in self.prescription_form_drugs]
+        if 0 <= index < len(drugs):
+            drugs[index].frequency_unit = value
+        self.prescription_form_drugs = drugs
+
+    @rx.event
+    def prescription_set_drug_duration_unit(self, index: int, value: str):
+        drugs = [DrugLineDTO(**d.dict()) for d in self.prescription_form_drugs]
+        if 0 <= index < len(drugs):
+            drugs[index].duration_unit = value
         self.prescription_form_drugs = drugs
 
     @rx.event
@@ -711,8 +754,10 @@ class PatientDetailState(ReflexMainState):
                     gender=p.gender,
                     photo=p.photo,
                     address=p.address,
+                    address_complement=p.address_complement if hasattr(p, "address_complement") else None,
                     postal_code=p.postal_code,
                     city=p.city,
+                    country=p.country if hasattr(p, "country") else None,
                     phone=p.phone,
                     email=p.email,
                     social_security_number=p.social_security_number,
@@ -727,6 +772,9 @@ class PatientDetailState(ReflexMainState):
                     primary_physician_specialization=physician_specialization,
                     primary_physician_phone=physician_phone,
                     primary_physician_email=physician_email,
+                    is_archived=bool(getattr(p, "is_archived", False)),
+                    archived_reason=getattr(p, "archived_reason", None) or None,
+                    archived_at=getattr(p, "archived_at", None) or None,
                 )
                 exams = ExamService.list_exams_for_patient(patient_id)
                 self.exams = [
@@ -1050,3 +1098,89 @@ class PatientDetailState(ReflexMainState):
                 ]
         except Exception as e:
             self.error_message = f"Error loading certificates: {e}"
+
+    # ── Archive events ─────────────────────────────────────────────────────────
+
+    @rx.event
+    def open_archive_dialog(self):
+        self.show_archive_dialog = True
+        self.archive_reason = ""
+        self.archive_error = ""
+
+    @rx.event
+    def close_archive_dialog(self):
+        self.show_archive_dialog = False
+
+    @rx.event
+    def set_archive_reason(self, value: str):
+        self.archive_reason = value
+
+    @rx.event(background=True)
+    async def confirm_archive(self):
+        async with self:
+            if not self.archive_reason.strip():
+                self.archive_error = "Veuillez saisir un motif d'archivage"
+                return
+            self.is_archiving = True
+            self.archive_error = ""
+            patient_id = self.patient_id_param
+            reason = self.archive_reason.strip()
+            _main = await self.get_state(ReflexMainState)
+        try:
+            with await _main.authenticate_user():
+                from gws_care.patient.patient_service import PatientService
+                PatientService.archive_patient(patient_id, reason)
+            async with self:
+                self.show_archive_dialog = False
+            yield rx.toast.success("Patient archivé")
+            from ..patient_list.patient_list_state import PatientListState
+            yield PatientListState.on_load
+            yield PatientDetailState.on_load()
+        except Exception as e:
+            async with self:
+                self.archive_error = str(e)
+        finally:
+            async with self:
+                self.is_archiving = False
+
+    # ── Delete events ──────────────────────────────────────────────────────────
+
+    @rx.event
+    def open_delete_dialog(self):
+        self.show_delete_dialog = True
+        self.delete_reason = ""
+        self.delete_error = ""
+
+    @rx.event
+    def close_delete_dialog(self):
+        self.show_delete_dialog = False
+
+    @rx.event
+    def set_delete_reason(self, value: str):
+        self.delete_reason = value
+
+    @rx.event(background=True)
+    async def confirm_delete(self):
+        async with self:
+            if not self.delete_reason.strip():
+                self.delete_error = "Veuillez saisir un motif de suppression"
+                return
+            self.is_deleting = True
+            self.delete_error = ""
+            patient_id = self.patient_id_param
+            reason = self.delete_reason.strip()
+            _main = await self.get_state(ReflexMainState)
+        try:
+            with await _main.authenticate_user():
+                from gws_care.patient.patient_service import PatientService
+                PatientService.delete_patient(patient_id, reason)
+            yield rx.toast.success("Patient supprimé définitivement")
+            from ..patient_list.patient_list_state import PatientListState
+            yield PatientListState.on_load
+            yield rx.redirect("/")
+        except Exception as e:
+            async with self:
+                self.delete_error = str(e)
+        finally:
+            async with self:
+                self.is_deleting = False

@@ -10,6 +10,7 @@ class ExamTypeRowVM(BaseModel):
     name: str
     category: str
     category_label: str
+    department: str = ""
     is_active: bool
     allows_attachment: bool
     requires_attachment: bool
@@ -33,6 +34,7 @@ class ExamParamVM(BaseModel):
 class ExamTypeFormVM(BaseModel):
     name: str = ""
     category: str = ""          # vide — l'utilisateur doit choisir
+    department: str = ""        # département (ex: Radiologie, Cytologie…)
     description: str = ""
     is_active: bool = True
     allows_attachment: bool = False
@@ -180,6 +182,10 @@ class ExamTypesState(ReflexMainState):
         self.type_form = ExamTypeFormVM(**{**self.type_form.dict(), "requires_attachment": v})
 
     @rx.event
+    def set_type_department(self, v: str):
+        self.type_form = ExamTypeFormVM(**{**self.type_form.dict(), "department": v})
+
+    @rx.event
     def set_type_required_sample_type(self, v: str):
         self.type_form = ExamTypeFormVM(**{**self.type_form.dict(), "required_sample_type": v if v != "NONE" else ""})
 
@@ -200,6 +206,7 @@ class ExamTypesState(ReflexMainState):
                 dto = SaveExamTypeRefDTO(
                     name=self.type_form.name.strip(),
                     category=self.type_form.category,
+                    department=self.type_form.department or None,
                     description=self.type_form.description or None,
                     is_active=self.type_form.is_active,
                     allows_attachment=self.type_form.allows_attachment,
@@ -475,7 +482,9 @@ class ExamTypesState(ReflexMainState):
                 self.exam_types = [
                     ExamTypeRowVM(
                         id=r.id, name=r.name, category=r.category,
-                        category_label=r.category_label, is_active=r.is_active,
+                        category_label=r.category_label,
+                        department=r.department or "",
+                        is_active=r.is_active,
                         allows_attachment=r.allows_attachment,
                         requires_attachment=r.requires_attachment,
                         parameter_count=r.parameter_count,

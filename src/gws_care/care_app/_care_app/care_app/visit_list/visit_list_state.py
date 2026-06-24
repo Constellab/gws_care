@@ -406,9 +406,6 @@ class VisitListState(CombinedPickerState):
         self.new_visit_is_saving = True
         try:
             if self.new_visit_type == "campaign":
-                if not self.new_visit_account_id:
-                    self.new_visit_error = "Veuillez sélectionner un compte de facturation."
-                    return
                 if not self.new_visit_scheduled_at:
                     self.new_visit_error = "Veuillez sélectionner une date et heure."
                     return

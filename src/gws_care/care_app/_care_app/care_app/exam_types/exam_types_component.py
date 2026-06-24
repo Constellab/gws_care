@@ -24,7 +24,15 @@ def _type_row(t: ExamTypeRowVM) -> rx.Component:
         rx.table.cell(
             rx.vstack(
                 rx.text(t.name, size="2", weight="bold"),
-                rx.text(t.category_label, size="1", color="var(--gray-9)"),
+                rx.hstack(
+                    rx.text(t.category_label, size="1", color="var(--gray-9)"),
+                    rx.cond(
+                        t.department != "",
+                        rx.badge(t.department, color_scheme="purple", size="1", variant="soft"),
+                    ),
+                    spacing="2",
+                    align="center",
+                ),
                 spacing="0",
             )
         ),
@@ -396,6 +404,17 @@ def _type_dialog() -> rx.Component:
                             padding_top="0.25rem",
                         ),
                         rx.fragment(),
+                    ),
+                    spacing="1", width="100%",
+                ),
+                rx.vstack(
+                    rx.text("Département", size="2", weight="medium"),
+                    rx.text("Service ou département responsable de cet examen.", size="1", color="var(--gray-9)"),
+                    rx.input(
+                        placeholder="ex: Cytologie, Radiologie, Cardiologie, ORL, Biologie…",
+                        value=ExamTypesState.type_form.department,
+                        on_change=ExamTypesState.set_type_department,
+                        width="100%",
                     ),
                     spacing="1", width="100%",
                 ),

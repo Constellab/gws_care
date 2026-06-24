@@ -146,7 +146,7 @@ class PatientAccountTabState(rx.State):
             _main = await self.get_state(ReflexMainState)
             with await _main.authenticate_user():
                 from gws_care.account.account_service import AccountService
-                accounts = AccountService.list_accounts(active_only=True)
+                accounts = AccountService.list_accounts(active_only=False)
                 f = self.picker_filter.strip().lower()
                 self.picker_rows = [
                     AccountPickerRowDTO(
@@ -157,7 +157,6 @@ class PatientAccountTabState(rx.State):
                     )
                     for a in accounts
                     if str(a.id) not in already_linked
-                    and a.account_type == "COMPANY"
                     and (not f or f in (a.name or "").lower() or f in (a.city or "").lower())
                 ]
         except Exception as e:

@@ -5,6 +5,7 @@ from gws_reflex_main import main_component
 
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
+from ..account_list.account_form_component import account_form_dialog
 from ..patient_list.patient_form_component import patient_form_dialog
 from ..patient_list.patient_form_state import PatientFormState
 from .certificate_form_component import certificate_form_dialog
@@ -19,6 +20,7 @@ from .patient_detail_state import (
     PrescriptionRowDTO,
 )
 from .patient_account_tab_state import AccountPickerRowDTO, LinkedAccountRowDTO, PatientAccountTabState
+from .patient_campaign_tab_state import PatientCampaignRowDTO, PatientCampaignTabState
 from .patient_doctor_tab_state import DoctorPickerRowDTO, LinkedDoctorRowDTO, PatientDoctorTabState
 from .prescription_form_component import prescription_form_dialog
 
@@ -119,6 +121,13 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
                             color_scheme="violet", variant="soft", size="2",
                         ),
                     ),
+                    rx.cond(
+                        patient.is_archived,
+                        rx.badge(
+                            rx.hstack(rx.icon("archive", size=12), rx.text("Archivé"), spacing="1", align="center"),
+                            color_scheme="orange", variant="solid", size="2",
+                        ),
+                    ),
                     spacing="2",
                     align="center",
                     flex_wrap="wrap",
@@ -150,6 +159,26 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
                     variant="outline",
                     size="2",
                 ),
+                rx.cond(
+                    patient.is_archived,
+                    rx.fragment(),
+                    rx.button(
+                        rx.icon("archive", size=15),
+                        "Archiver",
+                        on_click=PatientDetailState.open_archive_dialog,
+                        variant="outline",
+                        size="2",
+                        color_scheme="orange",
+                    ),
+                ),
+                rx.button(
+                    rx.icon("trash-2", size=15),
+                    "Supprimer",
+                    on_click=PatientDetailState.open_delete_dialog,
+                    variant="outline",
+                    size="2",
+                    color_scheme="red",
+                ),
                 spacing="2",
                 flex_shrink="0",
                 flex_wrap="wrap",
@@ -160,6 +189,26 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
             wrap="wrap",
         ),
         rx.separator(width="100%"),
+        rx.cond(
+            patient.is_archived,
+            rx.callout(
+                rx.vstack(
+                    rx.hstack(rx.icon("archive", size=14), rx.text("Patient archivé", weight="bold"), spacing="2", align="center"),
+                    rx.cond(
+                        patient.archived_reason,
+                        rx.text("Motif : " + patient.archived_reason, size="2"),
+                    ),
+                    rx.cond(
+                        patient.archived_at,
+                        rx.text("Date : " + patient.archived_at, size="1", color="var(--gray-9)"),
+                    ),
+                    spacing="1",
+                ),
+                color_scheme="orange",
+                variant="soft",
+                width="100%",
+            ),
+        ),
         # Sections
         rx.grid(
             _section(
@@ -174,7 +223,9 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
                 LanguageState.tr["section_contact"],
                 _info_row(LanguageState.tr["info_phone"], patient.phone),
                 _info_row(LanguageState.tr["info_email"], patient.email),
+                _info_row(LanguageState.tr["info_country"], patient.country),
                 _info_row(LanguageState.tr["info_address"], patient.address),
+                _info_row(LanguageState.tr["info_address_complement"], patient.address_complement),
                 _info_row(LanguageState.tr["info_postal_code"], patient.postal_code),
                 _info_row(LanguageState.tr["info_city"], patient.city),
             ),
@@ -1404,6 +1455,10 @@ def _account_picker_dialog_tab() -> rx.Component:
                     size="2", width="100%",
                 ),
                 rx.cond(
+                    PatientAccountTabState.picker_error != "",
+                    rx.callout(PatientAccountTabState.picker_error, icon="alert-circle", color_scheme="red", size="1"),
+                ),
+                rx.cond(
                     PatientAccountTabState.picker_is_loading,
                     rx.center(rx.spinner(size="2"), padding="1.5rem"),
                     rx.cond(
@@ -1495,6 +1550,50 @@ def _account_confirm_unlink_dialog() -> rx.Component:
     )
 
 
+def _campaign_row(c: PatientCampaignRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(rx.link(c.name, on_click=lambda: PatientCampaignTabState.go_to_campaign(c.campaign_id), cursor="pointer", color="var(--accent-9)")),
+        rx.table.cell(rx.text(c.campaign_number, size="2")),
+        rx.table.cell(rx.text(c.start_date, size="2")),
+        rx.table.cell(rx.badge(c.status_label, color_scheme=c.status_color, variant="soft", size="1")),
+    )
+
+
+def _campaigns_tab() -> rx.Component:
+    return rx.vstack(
+        rx.cond(
+            PatientCampaignTabState.error_message != "",
+            rx.callout(PatientCampaignTabState.error_message, icon="alert-circle", color_scheme="red", size="1"),
+        ),
+        rx.cond(
+            PatientCampaignTabState.is_loading,
+            rx.center(rx.spinner(size="2"), padding="2rem"),
+            rx.cond(
+                PatientCampaignTabState.campaigns.length() > 0,
+                rx.table.root(
+                    rx.table.header(rx.table.row(
+                        rx.table.column_header_cell("Campagne"),
+                        rx.table.column_header_cell("Numéro"),
+                        rx.table.column_header_cell("Date début"),
+                        rx.table.column_header_cell("Statut"),
+                    )),
+                    rx.table.body(rx.foreach(PatientCampaignTabState.campaigns, _campaign_row)),
+                    width="100%", variant="surface",
+                ),
+                rx.center(
+                    rx.vstack(
+                        rx.icon("clipboard-x", size=40, color="var(--gray-6)"),
+                        rx.text("Aucune campagne trouvée", size="2", color="var(--gray-9)"),
+                        spacing="2", align="center",
+                    ),
+                    padding="4rem", border="1px dashed var(--gray-5)", border_radius="8px", width="100%",
+                ),
+            ),
+        ),
+        width="100%", spacing="3",
+    )
+
+
 def _accounts_tab() -> rx.Component:
     return rx.vstack(
         _account_picker_dialog_tab(),
@@ -1546,10 +1645,121 @@ def _accounts_tab() -> rx.Component:
     )
 
 
+def _archive_dialog() -> rx.Component:
+    """Confirmation dialog for archiving a patient."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(
+                rx.hstack(rx.icon("archive", size=18, color="var(--orange-9)"), rx.text("Archiver le patient"), spacing="2", align="center"),
+            ),
+            rx.dialog.description(
+                "Le patient sera archivé et masqué des listes actives. Cette action est réversible. Un motif est obligatoire.",
+                size="2",
+                color="var(--gray-11)",
+                margin_bottom="1rem",
+            ),
+            rx.vstack(
+                rx.text("Motif d'archivage *", size="2", weight="medium"),
+                rx.text_area(
+                    value=PatientDetailState.archive_reason,
+                    on_change=PatientDetailState.set_archive_reason,
+                    placeholder="Indiquez le motif d'archivage (ex : départ de l'entreprise, doublon, erreur de saisie...)",
+                    rows="3",
+                    width="100%",
+                ),
+                rx.cond(
+                    PatientDetailState.archive_error != "",
+                    rx.callout(PatientDetailState.archive_error, icon="triangle-alert", color_scheme="red", size="1"),
+                ),
+                rx.hstack(
+                    rx.dialog.close(
+                        rx.button("Annuler", variant="outline", size="2", on_click=PatientDetailState.close_archive_dialog),
+                    ),
+                    rx.button(
+                        rx.cond(PatientDetailState.is_archiving, rx.spinner(size="2"), rx.icon("archive", size=15)),
+                        "Confirmer l'archivage",
+                        on_click=PatientDetailState.confirm_archive,
+                        disabled=PatientDetailState.is_archiving,
+                        color_scheme="orange",
+                        size="2",
+                    ),
+                    spacing="3",
+                    justify="end",
+                    width="100%",
+                    margin_top="0.5rem",
+                ),
+                spacing="3",
+                width="100%",
+            ),
+            max_width="480px",
+        ),
+        open=PatientDetailState.show_archive_dialog,
+        on_open_change=PatientDetailState.close_archive_dialog,
+    )
+
+
+def _delete_dialog() -> rx.Component:
+    """Confirmation dialog for permanently deleting a patient."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(
+                rx.hstack(rx.icon("trash-2", size=18, color="var(--red-9)"), rx.text("Supprimer définitivement"), spacing="2", align="center"),
+            ),
+            rx.dialog.description(
+                rx.vstack(
+                    rx.text("⚠️ Cette action est irréversible.", size="2", weight="bold", color="var(--red-11)"),
+                    rx.text("Toutes les données du patient seront supprimées définitivement. Un motif est obligatoire.", size="2", color="var(--gray-11)"),
+                    spacing="1",
+                ),
+                margin_bottom="1rem",
+            ),
+            rx.vstack(
+                rx.text("Motif de suppression *", size="2", weight="medium"),
+                rx.text_area(
+                    value=PatientDetailState.delete_reason,
+                    on_change=PatientDetailState.set_delete_reason,
+                    placeholder="Indiquez le motif de suppression (ex : doublon confirmé, demande RGPD, erreur de création...)",
+                    rows="3",
+                    width="100%",
+                ),
+                rx.cond(
+                    PatientDetailState.delete_error != "",
+                    rx.callout(PatientDetailState.delete_error, icon="triangle-alert", color_scheme="red", size="1"),
+                ),
+                rx.hstack(
+                    rx.dialog.close(
+                        rx.button("Annuler", variant="outline", size="2", on_click=PatientDetailState.close_delete_dialog),
+                    ),
+                    rx.button(
+                        rx.cond(PatientDetailState.is_deleting, rx.spinner(size="2"), rx.icon("trash-2", size=15)),
+                        "Supprimer définitivement",
+                        on_click=PatientDetailState.confirm_delete,
+                        disabled=PatientDetailState.is_deleting,
+                        color_scheme="red",
+                        size="2",
+                    ),
+                    spacing="3",
+                    justify="end",
+                    width="100%",
+                    margin_top="0.5rem",
+                ),
+                spacing="3",
+                width="100%",
+            ),
+            max_width="480px",
+        ),
+        open=PatientDetailState.show_delete_dialog,
+        on_open_change=PatientDetailState.close_delete_dialog,
+    )
+
+
 def patient_detail_page() -> rx.Component:
     """Patient detail page."""
     return main_component(
         page_layout(
+            _archive_dialog(),
+            _delete_dialog(),
+            account_form_dialog(),
             patient_form_dialog(),
             exam_form_dialog(),
             prescription_form_dialog(),
@@ -1634,6 +1844,15 @@ def patient_detail_page() -> rx.Component:
                                     ),
                                     value="accounts",
                                 ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("clipboard-list", size=15),
+                                        rx.text(LanguageState.tr["tab_campaigns"]),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="campaigns",
+                                ),
                             ),
                             rx.tabs.content(_visits_section(), value="visits", padding_top="1rem"),
                             rx.tabs.content(_exams_section(), value="exams", padding_top="1rem"),
@@ -1641,6 +1860,7 @@ def patient_detail_page() -> rx.Component:
                             rx.tabs.content(_certificates_tab(), value="certificates", padding_top="1rem"),
                             rx.tabs.content(_doctors_tab(), value="doctors", padding_top="1rem"),
                             rx.tabs.content(_accounts_tab(), value="accounts", padding_top="1rem"),
+                            rx.tabs.content(_campaigns_tab(), value="campaigns", padding_top="1rem"),
                             default_value="visits",
                             width="100%",
                         ),

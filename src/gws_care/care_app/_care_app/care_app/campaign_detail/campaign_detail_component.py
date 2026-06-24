@@ -140,7 +140,7 @@ def _workflow_buttons() -> rx.Component:
             rx.button(
                 rx.icon("archive", size=16),
                 LanguageState.tr["btn_archive_campaign"],
-                on_click=CampaignDetailState.archive_campaign,
+                on_click=CampaignDetailState.open_archive_dialog,
                 color_scheme="gray", size="2",
             ),
         ),
@@ -402,12 +402,26 @@ def _visit_row(visit: VisitRowDTO) -> rx.Component:
         rx.table.cell(rx.text(visit.visit_number, size="2", color="var(--gray-9)")),
         rx.table.cell(_visit_status_badge(visit)),
         rx.table.cell(
-            rx.tooltip(
-                rx.icon_button(
-                    rx.icon("chevron-right", size=14), variant="ghost", size="1",
-                    on_click=lambda: CampaignDetailState.go_to_visit(visit.id),
+            rx.hstack(
+                rx.cond(
+                    visit.patient_id != "",
+                    rx.tooltip(
+                        rx.icon_button(
+                            rx.icon("file-pen", size=14), variant="soft", size="1",
+                            color_scheme="blue",
+                            on_click=lambda: CampaignDetailState.go_to_patient_exams(visit.campaign_id, visit.patient_id),
+                        ),
+                        content="Saisir les résultats",
+                    ),
                 ),
-                content=LanguageState.tr["tooltip_view_visit"],
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("chevron-right", size=14), variant="ghost", size="1",
+                        on_click=lambda: CampaignDetailState.go_to_visit(visit.id),
+                    ),
+                    content=LanguageState.tr["tooltip_view_visit"],
+                ),
+                spacing="1",
             )
         ),
         style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
@@ -529,37 +543,112 @@ def _tab_visits() -> rx.Component:
 # ── Dialogs ───────────────────────────────────────────────────────────────────
 
 def _add_patient_dialog() -> rx.Component:
+    def _patient_row(p) -> rx.Component:
+        is_sel = CampaignDetailState.selected_patient_ids.contains(p.id)
+        return rx.hstack(
+            rx.checkbox(checked=is_sel, on_change=lambda _: CampaignDetailState.toggle_patient_selection(p.id), size="2"),
+            rx.text(p.label, size="2"),
+            spacing="2", align="center", width="100%",
+            padding="0.35rem 0.5rem", border_radius="var(--radius-1)",
+            background=rx.cond(is_sel, "var(--accent-3)", "transparent"),
+            _hover={"background": rx.cond(is_sel, "var(--accent-4)", "var(--gray-2)")},
+            cursor="pointer",
+            on_click=lambda: CampaignDetailState.toggle_patient_selection(p.id),
+        )
+
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title(LanguageState.tr["add_patient_btn"]),
+            rx.dialog.title("Ajouter des patients à la campagne"),
+            rx.dialog.description("Patients affiliés au compte de cette campagne non encore inscrits.", size="2", color="var(--gray-9)"),
             rx.vstack(
-                rx.box(
-                    patient_picker_widget(CampaignDetailState),
-                    min_height="320px", width="100%",
+                rx.hstack(
+                    rx.input(
+                        placeholder="Filtrer par nom, prénom ou n° dossier…",
+                        value=CampaignDetailState.patient_search,
+                        on_change=CampaignDetailState.search_patients,
+                        width="100%", flex="1",
+                    ),
+                    rx.cond(
+                        CampaignDetailState.selected_patient_ids.length() > 0,
+                        rx.badge(CampaignDetailState.selected_patient_ids.length(), " sélectionné(s)", color_scheme="blue", size="2"),
+                    ),
+                    spacing="2", width="100%", align="center",
+                ),
+                rx.cond(
+                    CampaignDetailState.patient_options.length() > 0,
+                    rx.box(
+                        rx.foreach(CampaignDetailState.patient_options, _patient_row),
+                        max_height="280px", overflow_y="auto",
+                        border="1px solid var(--gray-4)", border_radius="var(--radius-2)",
+                        padding="0.25rem", width="100%",
+                    ),
+                    rx.callout("Aucun patient disponible — vérifiez que des employés sont affiliés à ce compte entreprise.", icon="info", color_scheme="orange", size="1"),
                 ),
                 rx.hstack(
-                    rx.dialog.close(
-                        rx.button(
-                            LanguageState.tr["cancel_btn"],
-                            variant="soft", color_scheme="gray",
-                            on_click=CampaignDetailState.close_add_patient_dialog,
-                        )
-                    ),
+                    rx.dialog.close(rx.button(LanguageState.tr["cancel_btn"], variant="soft", color_scheme="gray", on_click=CampaignDetailState.close_add_patient_dialog)),
                     rx.button(
-                        LanguageState.tr["add"],
+                        rx.icon("user-plus", size=14),
+                        rx.cond(
+                            CampaignDetailState.selected_patient_ids.length() > 0,
+                            "Ajouter (" + CampaignDetailState.selected_patient_ids.length().to_string() + ")",
+                            "Ajouter",
+                        ),
                         on_click=CampaignDetailState.confirm_add_patient,
                         loading=CampaignDetailState.is_adding_patient,
-                        disabled=CampaignDetailState.picker_selected_id == "",
+                        disabled=CampaignDetailState.selected_patient_ids.length() == 0,
                     ),
                     spacing="2", justify="end", width="100%",
                 ),
-                spacing="4", width="100%",
+                spacing="3", width="100%", margin_top="1rem",
             ),
             on_escape_key_down=CampaignDetailState.close_add_patient_dialog,
             on_interact_outside=CampaignDetailState.close_add_patient_dialog,
-            max_width="720px",
+            max_width="520px",
         ),
         open=CampaignDetailState.add_patient_dialog_open,
+    )
+
+
+def _archive_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Archiver la campagne"),
+            rx.dialog.description("Cette action est irréversible. Saisissez un motif obligatoire.", size="2", color="var(--gray-9)"),
+            rx.vstack(
+                rx.vstack(
+                    rx.text("Motif d'archivage *", size="2", weight="medium"),
+                    rx.text_area(
+                        placeholder="Ex : campagne terminée, données traitées…",
+                        value=CampaignDetailState.archive_reason_input,
+                        on_change=CampaignDetailState.set_archive_reason_input,
+                        rows="3",
+                        width="100%",
+                    ),
+                    spacing="1", width="100%",
+                ),
+                rx.cond(
+                    CampaignDetailState.error_message != "",
+                    rx.callout(CampaignDetailState.error_message, icon="triangle-alert", color_scheme="red", size="1"),
+                ),
+                rx.hstack(
+                    rx.dialog.close(rx.button("Annuler", variant="ghost", on_click=CampaignDetailState.close_archive_dialog)),
+                    rx.button(
+                        rx.icon("archive", size=14),
+                        "Archiver",
+                        color_scheme="red",
+                        on_click=CampaignDetailState.archive_campaign,
+                        loading=CampaignDetailState.is_archiving,
+                        disabled=CampaignDetailState.archive_reason_input.strip() == "",
+                    ),
+                    justify="end", spacing="2", width="100%",
+                ),
+                spacing="3", width="100%", margin_top="1rem",
+            ),
+            on_escape_key_down=CampaignDetailState.close_archive_dialog,
+            on_interact_outside=CampaignDetailState.close_archive_dialog,
+            max_width="480px",
+        ),
+        open=CampaignDetailState.archive_dialog_open,
     )
 
 
@@ -800,5 +889,6 @@ def campaign_detail_page() -> rx.Component:
             ),
             _add_patient_dialog(),
             _add_exam_type_dialog(),
+            _archive_dialog(),
         )
     )

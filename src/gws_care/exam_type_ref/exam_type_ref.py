@@ -37,6 +37,7 @@ class ExamTypeRef(ModelWithUser):
 
     name: str = CharField(max_length=200, null=False)
     category: str = CharField(max_length=50, default=ExamCategory.OTHER.value, null=False)
+    department: str = CharField(max_length=100, null=True)
     description: str = TextField(null=True)
     is_active: bool = BooleanField(default=True, null=False)
     allows_attachment: bool = BooleanField(default=True, null=False)

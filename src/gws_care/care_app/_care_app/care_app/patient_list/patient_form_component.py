@@ -4,7 +4,8 @@ import reflex as rx
 from gws_reflex_base import form_dialog_component
 
 from ..common.language_state import LanguageState
-from .patient_form_state import PatientFormState
+from ..common.shared_address_phone_components import address_section, phone_input_field
+from .patient_form_state import AccountOption, PatientFormState
 
 
 def _field(label: str, input_component: rx.Component) -> rx.Component:
@@ -15,6 +16,146 @@ def _field(label: str, input_component: rx.Component) -> rx.Component:
         spacing="1",
     )
 
+
+# ── Account picker ────────────────────────────────────────────────────────────
+
+def _account_row(a: AccountOption) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(
+            rx.hstack(
+                rx.icon(
+                    rx.cond(a.account_type == "COMPANY", "building-2", "user"),
+                    size=12,
+                    color="var(--gray-9)",
+                ),
+                rx.text(a.name, size="2"),
+                spacing="2",
+                align="center",
+            )
+        ),
+        rx.table.cell(rx.text(a.city, size="2", color="var(--gray-9)")),
+        cursor="pointer",
+        _hover={"background": "var(--accent-2)"},
+        on_click=lambda: PatientFormState.select_account(a.id, a.name),
+    )
+
+
+def _account_picker_section() -> rx.Component:
+    """Account linker — shown in create mode and when editing a draft patient."""
+    return rx.cond(
+        PatientFormState.show_account_section,
+        rx.vstack(
+            rx.separator(width="100%"),
+            rx.hstack(
+                rx.icon("link", size=14, color="var(--accent-9)"),
+                rx.text(LanguageState.tr["section_link_account"], size="2", weight="bold", color="var(--gray-9)"),
+                rx.badge("Requis", color_scheme="red", variant="soft", size="1"),
+                rx.spacer(),
+                rx.cond(
+                    PatientFormState.form_account_id != "",
+                    rx.icon_button(
+                        rx.icon("x", size=12),
+                        on_click=PatientFormState.clear_account_selection,
+                        type="button",
+                        variant="ghost",
+                        size="1",
+                        color_scheme="gray",
+                    ),
+                ),
+                rx.button(
+                    rx.cond(
+                        PatientFormState.show_account_picker,
+                        rx.icon("chevron-up", size=13),
+                        rx.icon("chevron-down", size=13),
+                    ),
+                    LanguageState.tr["btn_select_account"],
+                    on_click=PatientFormState.toggle_account_picker,
+                    type="button",
+                    variant="outline",
+                    size="1",
+                    color_scheme="gray",
+                ),
+                rx.button(
+                    rx.icon("plus", size=13),
+                    "Créer un compte",
+                    on_click=PatientFormState.trigger_account_create,
+                    type="button",
+                    variant="soft",
+                    size="1",
+                    color_scheme="blue",
+                ),
+                spacing="2",
+                align="center",
+                width="100%",
+            ),
+            rx.cond(
+                PatientFormState.form_account_id != "",
+                rx.hstack(
+                    rx.icon("check-circle", size=16, color="var(--green-9)"),
+                    rx.text(PatientFormState.selected_account_label, size="2", color="var(--green-11)", weight="medium"),
+                    spacing="2",
+                    align="center",
+                    padding="0.4rem 0.75rem",
+                    border="1px solid var(--green-6)",
+                    border_radius="var(--radius-2)",
+                    background="var(--green-2)",
+                    width="100%",
+                ),
+            ),
+            rx.cond(
+                PatientFormState.show_account_picker,
+                rx.vstack(
+                    rx.input(
+                        placeholder=LanguageState.tr["search_account_placeholder"],
+                        value=PatientFormState.account_filter,
+                        on_change=PatientFormState.set_account_filter,
+                        size="2",
+                        width="100%",
+                    ),
+                    rx.cond(
+                        PatientFormState.is_loading_accounts,
+                        rx.center(rx.spinner(size="2"), padding="0.75rem"),
+                        rx.cond(
+                            PatientFormState.account_options.length() > 0,
+                            rx.box(
+                                rx.table.root(
+                                    rx.table.header(
+                                        rx.table.row(
+                                            rx.table.column_header_cell(rx.text("Compte", size="1")),
+                                            rx.table.column_header_cell(rx.text("Ville", size="1")),
+                                        )
+                                    ),
+                                    rx.table.body(rx.foreach(PatientFormState.account_options, _account_row)),
+                                    size="1",
+                                    variant="surface",
+                                    width="100%",
+                                ),
+                                max_height="200px",
+                                overflow_y="auto",
+                                width="100%",
+                                border_radius="var(--radius-2)",
+                            ),
+                            rx.center(
+                                rx.text(LanguageState.tr["no_accounts_found"], size="2", color="var(--gray-9)"),
+                                padding="0.75rem",
+                            ),
+                        ),
+                    ),
+                    spacing="2",
+                    width="100%",
+                    padding="0.75rem",
+                    border="1px solid var(--gray-4)",
+                    border_radius="var(--radius-2)",
+                    background="var(--gray-1)",
+                ),
+            ),
+            width="100%",
+            spacing="2",
+        ),
+    )
+
+
+# ── Main form fields ──────────────────────────────────────────────────────────
 
 def _form_fields() -> rx.Component:
     return rx.vstack(
@@ -73,44 +214,13 @@ def _form_fields() -> rx.Component:
             ),
             columns="2", spacing="3", width="100%",
         ),
-        _field(
-            LanguageState.tr["field_nationality"],
-            rx.input(
-                value=PatientFormState.form_nationality,
-                on_change=PatientFormState.set_form_nationality,
-                placeholder=LanguageState.tr["placeholder_nationality"],
-                size="2", width="100%",
-            ),
-        ),
+        # ── Address section (IGN autocomplete for France, manual for other countries) ──
+        address_section(PatientFormState),
+        # ── Contact ───────────────────────────────────────────────────────────
         rx.separator(width="100%"),
         rx.text(LanguageState.tr["section_contact"], size="2", weight="bold", color="var(--gray-9)"),
         rx.grid(
-            _field(
-                LanguageState.tr["field_phone_country"],
-                rx.select.root(
-                    rx.select.trigger(placeholder=LanguageState.tr["field_phone_country"]),
-                    rx.select.content(
-                        rx.select.item(LanguageState.tr["phone_country_fr"], value="+33"),
-                        rx.select.item(LanguageState.tr["phone_country_ma"], value="+212"),
-                        rx.select.item(LanguageState.tr["phone_country_dz"], value="+213"),
-                        rx.select.item(LanguageState.tr["phone_country_tn"], value="+216"),
-                        rx.select.item(LanguageState.tr["phone_country_sn"], value="+221"),
-                        rx.select.item(LanguageState.tr["phone_country_other"], value=""),
-                    ),
-                    value=PatientFormState.form_phone_country,
-                    on_change=PatientFormState.set_form_phone_country,
-                    size="2", width="100%",
-                ),
-            ),
-            _field(
-                LanguageState.tr["field_phone"],
-                rx.input(
-                    value=PatientFormState.form_phone,
-                    on_change=PatientFormState.set_form_phone,
-                    placeholder="06 00 00 00 00",
-                    size="2", width="100%",
-                ),
-            ),
+            phone_input_field(PatientFormState),
             _field(
                 LanguageState.tr["field_email"],
                 rx.input(
@@ -120,38 +230,9 @@ def _form_fields() -> rx.Component:
                     type="email", size="2", width="100%",
                 ),
             ),
-            columns="3", spacing="3", width="100%",
-        ),
-        _field(
-            LanguageState.tr["field_address"],
-            rx.input(
-                value=PatientFormState.form_address,
-                on_change=PatientFormState.set_form_address,
-                placeholder="12 rue de la Paix",
-                size="2", width="100%",
-            ),
-        ),
-        rx.grid(
-            _field(
-                LanguageState.tr["field_postal_code"],
-                rx.input(
-                    value=PatientFormState.form_postal_code,
-                    on_change=PatientFormState.set_form_postal_code,
-                    placeholder="75001",
-                    size="2", width="100%",
-                ),
-            ),
-            _field(
-                LanguageState.tr["field_city"],
-                rx.input(
-                    value=PatientFormState.form_city,
-                    on_change=PatientFormState.set_form_city,
-                    placeholder=LanguageState.tr["placeholder_city"],
-                    size="2", width="100%",
-                ),
-            ),
             columns="2", spacing="3", width="100%",
         ),
+        # ── Medical info ───────────────────────────────────────────────────────
         rx.separator(width="100%"),
         rx.text(LanguageState.tr["section_medical_info"], size="2", weight="bold", color="var(--gray-9)"),
         _field(
@@ -159,30 +240,45 @@ def _form_fields() -> rx.Component:
             rx.input(
                 value=PatientFormState.form_social_security_number,
                 on_change=PatientFormState.set_form_social_security_number,
-                placeholder="1 85 07 75 123 456 78",
+                placeholder=rx.cond(
+                    PatientFormState.form_country == "France",
+                    "1 85 07 75 123 456 78",
+                    "Numéro de sécurité sociale",
+                ),
                 size="2", width="100%",
             ),
         ),
-        rx.grid(
-            _field(
-                LanguageState.tr["field_weight"],
-                rx.input(
-                    value=PatientFormState.form_weight,
-                    on_change=PatientFormState.set_form_weight,
-                    placeholder="70", type="number",
-                    size="2", width="100%",
-                ),
+        # ── Account linking (required) ─────────────────────────────────────────
+        _account_picker_section(),
+        # ── Inline error ─────────────────────────────────────────────────────
+        rx.cond(
+            PatientFormState.form_error != "",
+            rx.callout(
+                PatientFormState.form_error,
+                icon="triangle-alert",
+                color_scheme="red",
+                size="1",
+                width="100%",
             ),
-            _field(
-                LanguageState.tr["field_height"],
-                rx.input(
-                    value=PatientFormState.form_height,
-                    on_change=PatientFormState.set_form_height,
-                    placeholder="175", type="number",
-                    size="2", width="100%",
-                ),
+            rx.fragment(),
+        ),
+        # ── Draft save button ─────────────────────────────────────────────────
+        rx.cond(
+            PatientFormState.is_create_mode,
+            rx.hstack(
+                rx.icon("save", size=14, color="var(--orange-9)"),
+                rx.text("Sauvegarder en brouillon", size="2", color="var(--orange-11)"),
+                rx.text("(données partielles acceptées)", size="1", color="var(--gray-9)"),
+                spacing="2",
+                align="center",
+                padding="0.5rem 0.75rem",
+                border="1px dashed var(--orange-6)",
+                border_radius="var(--radius-2)",
+                background="var(--orange-2)",
+                cursor="pointer",
+                width="100%",
+                on_click=PatientFormState.save_as_draft,
             ),
-            columns="2", spacing="3", width="100%",
         ),
         width="100%",
         spacing="3",
@@ -204,5 +300,5 @@ def patient_form_dialog() -> rx.Component:
             LanguageState.tr["edit_patient_desc"],
         ),
         form_content=_form_fields(),
-        max_width="680px",
+        max_width="720px",
     )

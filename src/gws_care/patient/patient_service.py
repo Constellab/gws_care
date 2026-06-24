@@ -107,7 +107,11 @@ class PatientService:
 
     @classmethod
     def create_patient(cls, dto: SavePatientDTO) -> Patient:
-        cls._validate(dto)
+        if not getattr(dto, "is_draft", False):
+            cls._validate(dto)
+        else:
+            if not dto.last_name or not dto.last_name.strip():
+                raise BadRequestException("Last name is required even for drafts")
         patient = Patient()
         patient.patient_number = cls._generate_patient_number()
         cls._apply_dto(patient, dto)
@@ -118,6 +122,9 @@ class PatientService:
         except Exception:
             patient.qr_code = None  # non-fatal
         patient.save()
+        # Optionally link patient to an account at creation time
+        if getattr(dto, "account_id", None):
+            cls.add_account(str(patient.id), dto.account_id)
         return patient
 
     @classmethod
@@ -166,19 +173,49 @@ class PatientService:
         patient.gender = dto.gender
         patient.photo = dto.photo
         patient.address = dto.address
+        patient.address_complement = getattr(dto, "address_complement", None)
         patient.postal_code = dto.postal_code
         patient.city = dto.city
+        patient.country = getattr(dto, "country", None)
         patient.phone = dto.phone
         patient.email = dto.email
         patient.social_security_number = dto.social_security_number
         patient.weight = dto.weight
         patient.height = dto.height
-        patient.sex = dto.sex if dto.sex in ("M", "F", "Autre") else None
+        if dto.sex in ("M", "F", "Autre"):
+            patient.sex = dto.sex
+        else:
+            patient.sex = {"M": "M", "F": "F"}.get(dto.gender, "Autre")
         patient.nationality = getattr(dto, "nationality", None)
         patient.phone_country = getattr(dto, "phone_country", None)
+        patient.primary_physician_name = getattr(dto, "primary_physician_name", None)
+        patient.primary_physician_phone = getattr(dto, "primary_physician_phone", None)
         patient.notification_preferences = (
             json.dumps(dto.notification_preferences) if dto.notification_preferences else None
         )
+        patient.is_draft = getattr(dto, "is_draft", False)
+
+    @classmethod
+    def archive_patient(cls, patient_id: str, reason: str) -> Patient:
+        """Soft-archive a patient: mark as archived with a mandatory reason."""
+        from datetime import datetime
+        if not reason or not reason.strip():
+            raise BadRequestException("Un motif est obligatoire pour archiver un patient")
+        patient = cls.get_patient(patient_id)
+        patient.is_archived = True
+        patient.archived_reason = reason.strip()
+        patient.archived_at = datetime.now().isoformat(timespec="seconds")
+        patient.save()
+        return patient
+
+    @classmethod
+    def delete_patient(cls, patient_id: str, reason: str) -> None:
+        """Permanently delete a patient after confirming with a reason."""
+        if not reason or not reason.strip():
+            raise BadRequestException("Un motif est obligatoire pour supprimer un patient")
+        patient = cls.get_patient(patient_id)
+        PatientAccount.delete().where(PatientAccount.patient == patient.id).execute()
+        patient.delete_instance()
 
     @classmethod
     def _generate_patient_number(cls) -> str:

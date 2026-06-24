@@ -50,6 +50,10 @@ class Migration200(BrickMigration):
 
             # ── gws_care_exam — new fields from main branch ───────────────────
             "ALTER TABLE gws_care_exam ADD COLUMN IF NOT EXISTS exam_type_ref_id VARCHAR(36) NULL DEFAULT NULL",
+
+            # ── gws_care_medical_program (campaign) — new fields ──────────────
+            "ALTER TABLE gws_care_medical_program ADD COLUMN IF NOT EXISTS is_individual TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE gws_care_medical_program ADD COLUMN IF NOT EXISTS archive_reason LONGTEXT NULL DEFAULT NULL",
         ]
 
         # ── Create new tables from main branch (safe=True = IF NOT EXISTS) ────
@@ -58,10 +62,11 @@ class Migration200(BrickMigration):
         from gws_care.patient.patient_doctor import PatientDoctor
         from gws_care.user.user_app_config import UserAppConfig
         from gws_care.visit.visit import Visit
-        from gws_care.document_upload.document_text import DocumentText
         from gws_care.document_upload.uploaded_document import UploadedDocument
         from gws_care.role.user_care_role_account import UserCareRoleAccount
         from gws_care.campaign.campaign_exam_type import CampaignExamType
+        from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+        from gws_care.exam_type_ref.exam_parameter import ExamParameter
 
         db.create_tables([
             MedicalDoctor,
@@ -69,10 +74,11 @@ class Migration200(BrickMigration):
             PatientDoctor,
             UserAppConfig,
             Visit,
-            DocumentText,
             UploadedDocument,
             UserCareRoleAccount,
             CampaignExamType,
+            ExamTypeRef,
+            ExamParameter,
         ], safe=True)
 
         for stmt in stmts:

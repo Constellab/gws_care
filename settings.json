@@ -1,7 +1,7 @@
 {
   "name": "gws_care",
   "author": "Gencovery",
-  "version": "0.29.0",
+  "version": "0.32.0",
   "variables": {
     "gws_care:testdata_dir": "${CURRENT_DIR}/tests/testdata"
   },
@@ -20,7 +20,9 @@
           {"name": "reportlab"},
           {"name": "pdfplumber"},
           {"name": "rapidfuzz"},
-          {"name": "qrcode[pil]"}
+          {"name": "qrcode[pil]"},
+          {"name": "phonenumbers"},
+          {"name": "httpx"}
         ]
       }
     ],

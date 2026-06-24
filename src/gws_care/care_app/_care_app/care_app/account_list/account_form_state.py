@@ -1,11 +1,55 @@
 """State for the account create / edit form dialog."""
 
+import traceback
 from typing import AsyncGenerator
 
 import reflex as rx
 from gws_reflex_base import FormDialogState
 from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
+
+_IGN_SEARCH_URL = "https://data.geopf.fr/geocodage/search"
+_COUNTRIES_CDN_URL = "https://cdn.jsdelivr.net/npm/world-countries/countries.json"
+_FRANCE_COUNTRIES = {"France"}
+_DEFAULT_COUNTRY_OPTIONS = [
+    "France", "Côte d'Ivoire", "Maroc", "Algérie", "Tunisie",
+    "Sénégal", "Belgique", "Suisse", "Canada", "Autre",
+]
+
+_PRIORITY_DIAL = ["France", "Côte d'Ivoire", "Maroc", "Algérie", "Tunisie",
+                  "Sénégal", "Belgique", "Suisse", "Canada"]
+
+
+class AddressSuggestion(BaseModel):
+    fulltext: str
+    street: str = ""
+    zip_code: str = ""
+    city: str = ""
+
+
+class DialCodeOption(BaseModel):
+    flag: str = "🌐"
+    code: str = ""
+    name: str = ""
+
+
+_DEFAULT_DIAL_CODE_OPTIONS: list[DialCodeOption] = [
+    DialCodeOption(flag="🇫🇷", code="+33", name="France"),
+    DialCodeOption(flag="🇨🇮", code="+225", name="Côte d'Ivoire"),
+    DialCodeOption(flag="🇲🇦", code="+212", name="Maroc"),
+    DialCodeOption(flag="🇩🇿", code="+213", name="Algérie"),
+    DialCodeOption(flag="🇹🇳", code="+216", name="Tunisie"),
+    DialCodeOption(flag="🇸🇳", code="+221", name="Sénégal"),
+    DialCodeOption(flag="🇧🇪", code="+32", name="Belgique"),
+    DialCodeOption(flag="🇨🇭", code="+41", name="Suisse"),
+    DialCodeOption(flag="🇨🇦", code="+1", name="Canada"),
+    DialCodeOption(flag="🇩🇪", code="+49", name="Allemagne"),
+    DialCodeOption(flag="🇬🇧", code="+44", name="Royaume-Uni"),
+    DialCodeOption(flag="🇪🇸", code="+34", name="Espagne"),
+    DialCodeOption(flag="🇮🇹", code="+39", name="Italie"),
+    DialCodeOption(flag="🇵🇹", code="+351", name="Portugal"),
+    DialCodeOption(flag="🇺🇸", code="+1", name="États-Unis"),
+]
 
 
 class PatientFillOption(BaseModel):
@@ -34,15 +78,30 @@ class AccountFormState(FormDialogState, rx.State):
     # Form fields (public — bound to inputs in the UI)
     form_name: str = ""
     form_registration_number: str = ""
-    form_address: str = ""
-    form_postal_code: str = ""
-    form_city: str = ""
     form_phone: str = ""
+    form_phone_dial_code: str = "+33"
     form_email: str = ""
     form_contact_first_name: str = ""
     form_contact_last_name: str = ""
     form_contact_name: str = ""  # kept for backward compat, auto-computed
     form_error: str = ""
+    # ── Address autocomplete ───────────────────────────────────────────────────
+    form_country: str = "France"
+    country_filter: str = "France"
+    country_options: list[str] = list(_DEFAULT_COUNTRY_OPTIONS)
+    filtered_countries: list[str] = []
+    show_country_suggestions: bool = False
+    dial_code_options: list[DialCodeOption] = list(_DEFAULT_DIAL_CODE_OPTIONS)
+    dial_code_filter: str = "🇫🇷 +33"
+    filtered_dial_codes: list[DialCodeOption] = []
+    show_dial_code_suggestions: bool = False
+    form_address: str = ""
+    form_postal_code: str = ""
+    form_city: str = ""
+    address_suggestions: list[AddressSuggestion] = []
+    show_address_suggestions: bool = False
+    address_manual_mode: bool = False
+    is_fetching_suggestions: bool = False
 
     # Fill-from-patient
     patient_fill_options: list[PatientFillOption] = []
@@ -54,6 +113,8 @@ class AccountFormState(FormDialogState, rx.State):
 
     # Set when editing an existing account
     _editing_account_id: str = ""
+    # True when dialog was opened from the patient creation form
+    _from_patient_form: bool = False
 
     # ── Setters ───────────────────────────────────────────────────────────────
 
@@ -63,11 +124,11 @@ class AccountFormState(FormDialogState, rx.State):
 
     @rx.event
     def set_form_company_id(self, value: str):
-        self.form_company_id = value
+        self.form_company_id = "" if value == "none" else value
         # Auto-fill form name from company if empty
-        if value and not self.form_name.strip():
+        if self.form_company_id and not self.form_name.strip():
             for c in self.company_options:
-                if c.id == value:
+                if c.id == self.form_company_id:
                     self.form_name = c.name
                     break
 
@@ -92,6 +153,35 @@ class AccountFormState(FormDialogState, rx.State):
         self.form_city = value
 
     @rx.event
+    def set_form_phone_dial_code(self, value: str):
+        self.form_phone_dial_code = value
+
+    @rx.event
+    def set_dial_code_filter(self, value: str):
+        self.dial_code_filter = value
+        q = value.lower()
+        if not value:
+            self.filtered_dial_codes = list(self.dial_code_options[:20])
+            self.show_dial_code_suggestions = True
+        else:
+            self.filtered_dial_codes = [
+                d for d in self.dial_code_options
+                if q in d.name.lower() or q in d.code
+            ][:12]
+            self.show_dial_code_suggestions = len(self.filtered_dial_codes) > 0
+
+    @rx.event
+    def select_dial_code_option(self, code: str, flag: str):
+        self.form_phone_dial_code = code
+        self.dial_code_filter = f"{flag} {code}"
+        self.filtered_dial_codes = []
+        self.show_dial_code_suggestions = False
+
+    @rx.event
+    def close_dial_code_suggestions(self):
+        self.show_dial_code_suggestions = False
+
+    @rx.event
     def set_form_phone(self, value: str):
         self.form_phone = value
 
@@ -103,11 +193,15 @@ class AccountFormState(FormDialogState, rx.State):
     def set_form_contact_first_name(self, value: str):
         self.form_contact_first_name = value
         self.form_contact_name = f"{self.form_contact_first_name} {self.form_contact_last_name}".strip()
+        if self.form_account_type == "INDIVIDUAL":
+            self.form_name = f"{self.form_contact_last_name} {self.form_contact_first_name}".strip()
 
     @rx.event
     def set_form_contact_last_name(self, value: str):
         self.form_contact_last_name = value
         self.form_contact_name = f"{self.form_contact_first_name} {self.form_contact_last_name}".strip()
+        if self.form_account_type == "INDIVIDUAL":
+            self.form_name = f"{self.form_contact_last_name} {self.form_contact_first_name}".strip()
 
     @rx.event
     def set_form_contact_name(self, value: str):
@@ -147,6 +241,135 @@ class AccountFormState(FormDialogState, rx.State):
         self.patient_fill_filter_name = ""
         self.patient_fill_filter_number = ""
         await self._load_patient_fill_options()
+
+    # ── Country autocomplete ───────────────────────────────────────────────────
+
+    @rx.event
+    def set_country_filter(self, value: str):
+        self.country_filter = value
+        if not value:
+            self.filtered_countries = []
+            self.show_country_suggestions = False
+            return
+        q = value.lower()
+        self.filtered_countries = [c for c in self.country_options if q in c.lower()][:8]
+        self.show_country_suggestions = len(self.filtered_countries) > 0
+
+    @rx.event
+    def select_country_suggestion(self, country: str):
+        self.form_country = country
+        self.country_filter = country
+        self.filtered_countries = []
+        self.show_country_suggestions = False
+        if country not in _FRANCE_COUNTRIES:
+            self.address_manual_mode = True
+            self.address_suggestions = []
+            self.show_address_suggestions = False
+        else:
+            self.address_manual_mode = False
+
+    @rx.event
+    def close_autocomplete_dropdowns(self):
+        self.show_country_suggestions = False
+        self.show_address_suggestions = False
+        self.show_dial_code_suggestions = False
+
+    @rx.event
+    def toggle_address_manual_mode(self):
+        self.address_manual_mode = not self.address_manual_mode
+        if self.address_manual_mode:
+            self.address_suggestions = []
+            self.show_address_suggestions = False
+
+    @rx.event
+    async def fetch_address_suggestions(self, query: str):
+        self.form_address = query
+        if not query or len(query) < 3 or self.address_manual_mode or self.form_country not in _FRANCE_COUNTRIES:
+            self.address_suggestions = []
+            self.show_address_suggestions = False
+            return
+        self.is_fetching_suggestions = True
+        try:
+            import httpx
+            params = {"q": query, "limit": 6}
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                resp = await client.get(_IGN_SEARCH_URL, params=params)
+                data = resp.json()
+            features = data.get("features", [])
+            suggestions = []
+            for f in features:
+                props = f.get("properties", {})
+                fulltext = props.get("label", "")
+                street = props.get("name", "")
+                if not street:
+                    hn = props.get("housenumber", "")
+                    sn = props.get("street", "")
+                    street = f"{hn} {sn}".strip() if hn or sn else fulltext.split(",")[0]
+                suggestions.append(AddressSuggestion(
+                    fulltext=fulltext,
+                    street=street,
+                    zip_code=props.get("postcode", ""),
+                    city=props.get("city", ""),
+                ))
+            self.address_suggestions = suggestions
+            self.show_address_suggestions = len(suggestions) > 0
+        except Exception:
+            self.address_suggestions = []
+            self.show_address_suggestions = False
+        finally:
+            self.is_fetching_suggestions = False
+
+    @rx.event
+    def select_address_suggestion(self, street: str, zip_code: str, city: str):
+        self.form_address = street
+        self.form_postal_code = zip_code
+        self.form_city = city
+        self.address_suggestions = []
+        self.show_address_suggestions = False
+
+    @rx.event
+    async def fetch_countries(self):
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(_COUNTRIES_CDN_URL, follow_redirects=True)
+                data = resp.json()
+            names: list[str] = []
+            raw_dial: list[DialCodeOption] = []
+            for country in data:
+                fr_name = (
+                    (country.get("translations") or {}).get("fra", {}).get("common")
+                    or country.get("name", {}).get("common")
+                    or ""
+                )
+                if not fr_name:
+                    continue
+                names.append(fr_name)
+                idd = country.get("idd") or {}
+                root = idd.get("root", "")
+                suffixes = idd.get("suffixes") or []
+                if root:
+                    if len(suffixes) == 1 and len(suffixes[0]) <= 2:
+                        code = root + suffixes[0]
+                    else:
+                        code = root
+                    if len(code) >= 2:
+                        raw_dial.append(DialCodeOption(
+                            flag=country.get("flag", "🌐"),
+                            code=code,
+                            name=fr_name,
+                        ))
+            others = sorted(n for n in names if n != "France")
+            self.country_options = ["France"] + others
+            priority = {n: i for i, n in enumerate(_PRIORITY_DIAL)}
+            def _dial_key(opt: DialCodeOption):
+                idx = priority.get(opt.name)
+                return (0, idx) if idx is not None else (1, opt.name)
+            self.dial_code_options = sorted(raw_dial, key=_dial_key)
+        except Exception:
+            pass
+
+    # ── Internal loaders ─────────────────────────────────────────────────────
 
     async def _load_patient_fill_options(self) -> None:
         """Load patients into the fill selector, applying current filters."""
@@ -198,6 +421,95 @@ class AccountFormState(FormDialogState, rx.State):
         await self._load_patient_fill_options()
         await self._load_company_options()
         self.dialog_opened = True
+        yield AccountFormState.fetch_countries
+
+    @rx.event
+    async def open_with_prefilled_data(
+        self,
+        last: str,
+        first: str,
+        phone: str,
+        email: str,
+        address: str,
+        postal_code: str,
+        city: str,
+    ):
+        """Open account creation dialog pre-filled with patient data.
+
+        Called from PatientFormState.trigger_account_create which has already
+        closed the patient form dialog before dispatching this event.
+        """
+        self.is_update_mode = False
+        self._editing_account_id = ""
+        await self._clear_form_state()
+        await self._load_company_options()
+        self._from_patient_form = True
+        self.form_account_type = "INDIVIDUAL"
+        if last:
+            self.form_contact_last_name = last
+        if first:
+            self.form_contact_first_name = first
+        if last or first:
+            self.form_name = f"{last} {first}".strip()
+        if phone:
+            self.form_phone = phone
+        if email:
+            self.form_email = email
+        if address:
+            self.form_address = address
+        if postal_code:
+            self.form_postal_code = postal_code
+        if city:
+            self.form_city = city
+        self.dialog_opened = True
+        yield AccountFormState.fetch_countries
+
+    @rx.event(background=True)
+    async def open_create_dialog_from_patient(self):
+        """Open account creation dialog from the patient form — keeps patient form open.
+
+        Reads patient form data directly from PatientFormState via get_state.
+        """
+        from ..patient_list.patient_form_state import PatientFormState as PFS
+
+        # get_state must be called inside async with self:
+        async with self:
+            patient_state = await self.get_state(PFS)
+
+        last = (patient_state.form_last_name or "").strip()
+        first = (patient_state.form_first_name or "").strip()
+        phone = (patient_state.form_phone or "").strip()
+        email = (patient_state.form_email or "").strip()
+        address = (patient_state.form_address or "").strip()
+        postal_code = (patient_state.form_postal_code or "").strip()
+        city = (patient_state.form_city or "").strip()
+
+        async with self:
+            self.is_update_mode = False
+            self._editing_account_id = ""
+            await self._clear_form_state()
+            await self._load_company_options()
+            self._from_patient_form = True
+            self.form_account_type = "INDIVIDUAL"
+            if last:
+                self.form_contact_last_name = last
+            if first:
+                self.form_contact_first_name = first
+            if last or first:
+                self.form_name = f"{last} {first}".strip()
+            if phone:
+                self.form_phone = phone
+            if email:
+                self.form_email = email
+            if address:
+                self.form_address = address
+            if postal_code:
+                self.form_postal_code = postal_code
+            if city:
+                self.form_city = city
+            self.dialog_opened = True
+
+        yield AccountFormState.fetch_countries
 
     @rx.event
     async def open_create_dialog_for_company(self, company_id: str, company_name: str):
@@ -233,10 +545,17 @@ class AccountFormState(FormDialogState, rx.State):
             self.form_contact_first_name = a.contact_first_name or ""
             self.form_contact_last_name = a.contact_last_name or ""
             self.form_contact_name = a.contact_name or ""
+            self.form_country = "France"
+            self.country_filter = "France"
+            self.address_manual_mode = False
+            self.address_suggestions = []
+            self.show_address_suggestions = False
+            self.show_country_suggestions = False
 
         await self._load_patient_fill_options()
         await self._load_company_options()
         self.dialog_opened = True
+        yield AccountFormState.fetch_countries
 
     # ── FormDialogState abstract method implementations ───────────────────────
 
@@ -249,10 +568,22 @@ class AccountFormState(FormDialogState, rx.State):
         self.form_postal_code = ""
         self.form_city = ""
         self.form_phone = ""
+        self.form_phone_dial_code = "+33"
+        self.dial_code_filter = "🇫🇷 +33"
+        self.filtered_dial_codes = []
+        self.show_dial_code_suggestions = False
         self.form_email = ""
         self.form_contact_first_name = ""
         self.form_contact_last_name = ""
         self.form_contact_name = ""
+        self.form_country = "France"
+        self.country_filter = "France"
+        self.filtered_countries = []
+        self.show_country_suggestions = False
+        self.address_suggestions = []
+        self.show_address_suggestions = False
+        self.address_manual_mode = False
+        self.is_fetching_suggestions = False
         self.selected_patient_fill = ""
         self.patient_fill_selected_label = ""
         self.patient_fill_filter_name = ""
@@ -260,10 +591,13 @@ class AccountFormState(FormDialogState, rx.State):
         self._editing_account_id = ""
         self.is_update_mode = False
         self.form_error = ""
+        self._from_patient_form = False
 
     def _build_save_dto(self):
         from gws_care.account.account_dto import SaveAccountDTO
         name = self.form_name.strip()
+        if not name and self.form_account_type == "INDIVIDUAL":
+            name = f"{self.form_contact_last_name} {self.form_contact_first_name}".strip()
         return name, SaveAccountDTO(
             account_type=self.form_account_type,
             company_id=self.form_company_id or None,
@@ -293,13 +627,25 @@ class AccountFormState(FormDialogState, rx.State):
 
         async with self:
             _main = await self.get_state(ReflexMainState)
+            patient_to_link = self.selected_patient_fill
+            from_patient = self._from_patient_form
         with await _main.authenticate_user():
             account = AccountService.create_account(dto)
+            if patient_to_link:
+                from gws_care.patient.patient_service import PatientService
+                try:
+                    PatientService.add_account(patient_to_link, str(account.id))
+                except Exception:
+                    pass
 
         yield rx.toast.success(f"Account '{account.name}' created")
 
-        from ..account_list.account_list_state import AccountListState
-        yield AccountListState.on_load()
+        if from_patient:
+            from ..patient_list.patient_form_state import PatientFormState
+            yield PatientFormState.select_account(str(account.id), account.name)
+        else:
+            from ..account_list.account_list_state import AccountListState
+            yield AccountListState.on_load()
 
     async def _update(self, form_data: dict) -> AsyncGenerator:
         """Update an existing account from form data."""
@@ -322,3 +668,8 @@ class AccountFormState(FormDialogState, rx.State):
 
         from ..account_list.account_list_state import AccountListState
         yield AccountListState.on_load()
+        try:
+            from ..account_detail.account_detail_state import AccountDetailState
+            yield AccountDetailState.on_load()
+        except Exception:
+            pass

@@ -47,11 +47,18 @@ class VisitRowDTO(BaseModel):
     visit_number: str
     patient_name: str = ""
     patient_number: str = ""
+    patient_id: str = ""
+    campaign_id: str = ""
     campaign_visit_status: str = ""
     status_label: str = ""
 
 
 class ExamTypeOptionDTO(BaseModel):
+    id: str
+    label: str
+
+
+class PatientOptionDTO(BaseModel):
     id: str
     label: str
 
@@ -111,9 +118,13 @@ class CampaignDetailState(PatientPickerState):
     error_message: str = ""
     success_message: str = ""
 
-    # Add patient dialog
+    # Add patient dialog (multi-select)
     add_patient_dialog_open: bool = False
     is_adding_patient: bool = False
+    patient_options: list[PatientOptionDTO] = []
+    selected_patient_ids: list[str] = []
+    patient_search: str = ""
+    _all_patient_options: list[PatientOptionDTO] = []
 
     # Add exam type dialog
     add_exam_type_dialog_open: bool = False
@@ -123,6 +134,11 @@ class CampaignDetailState(PatientPickerState):
 
     # PDF download
     is_downloading_pdf: bool = False
+
+    # Archive dialog
+    archive_dialog_open: bool = False
+    archive_reason_input: str = ""
+    is_archiving: bool = False
 
     # ── Tabs ──────────────────────────────────────────────────────────────────
     active_tab: str = "patients"
@@ -160,6 +176,10 @@ class CampaignDetailState(PatientPickerState):
     @rx.event
     def go_to_visit(self, visit_id: str):
         return rx.redirect(f"/visit/{visit_id}")
+
+    @rx.event
+    def go_to_patient_exams(self, campaign_id: str, patient_id: str):
+        return rx.redirect(f"/campaign-patient/{campaign_id}/{patient_id}")
 
     @rx.event
     def set_active_tab(self, tab: str):
@@ -438,20 +458,46 @@ class CampaignDetailState(PatientPickerState):
             self.error_message = str(e)
 
     @rx.event
+    @rx.event
+    def open_archive_dialog(self):
+        """Open the archive confirmation dialog."""
+        self.archive_reason_input = ""
+        self.archive_dialog_open = True
+
+    @rx.event
+    def close_archive_dialog(self):
+        """Close the archive dialog without archiving."""
+        self.archive_dialog_open = False
+        self.archive_reason_input = ""
+
+    @rx.event
+    def set_archive_reason_input(self, value: str):
+        self.archive_reason_input = value
+
+    @rx.event
     async def archive_campaign(self):
-        """Archive the campaign (CLOSED → ARCHIVED)."""
+        """Archive the campaign (CLOSED → ARCHIVED) with mandatory reason."""
         if not self.program:
+            return
+        reason = self.archive_reason_input.strip()
+        if not reason:
+            self.error_message = "Un motif d'archivage est obligatoire."
             return
         self.error_message = ""
         self.success_message = ""
+        self.is_archiving = True
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
-                CampaignService.archive_campaign(self.program.id)
+                CampaignService.archive_campaign(self.program.id, reason=reason)
+            self.archive_dialog_open = False
+            self.archive_reason_input = ""
             await self._load_program(preserve_tab=True)
-            self.success_message = "Campaign archived successfully."
+            self.success_message = "Campagne archivée."
         except Exception as e:
             self.error_message = str(e)
+        finally:
+            self.is_archiving = False
 
     # ── PDF downloads ─────────────────────────────────────────────────────────
 
@@ -497,23 +543,71 @@ class CampaignDetailState(PatientPickerState):
     async def open_add_patient_dialog(self):
         if not self.program:
             return
-        await self._open_picker(account_id=self.program.account_id)
+        self.selected_patient_ids = []
+        self.patient_search = ""
+        self.patient_options = []
+        self._all_patient_options = []
+        try:
+            with await self.authenticate_user():
+                from gws_care.patient.patient_service import PatientService
+                from gws_care.campaign.campaign_patient import CampaignPatient
+                already_ids = {
+                    str(cp.patient_id)
+                    for cp in CampaignPatient.select().where(CampaignPatient.program == self.program.id)
+                }
+                patients = PatientService.search_patients(
+                    account_id=self.program.account_id or None,
+                    limit=200,
+                )
+                opts = [
+                    PatientOptionDTO(
+                        id=str(p.id),
+                        label=f"{p.last_name} {p.first_name} ({p.patient_number})",
+                    )
+                    for p in patients
+                    if str(p.id) not in already_ids
+                ]
+                self._all_patient_options = opts
+                self.patient_options = opts
+        except Exception as e:
+            self.error_message = str(e)
         self.add_patient_dialog_open = True
 
     @rx.event
     def close_add_patient_dialog(self):
         self.add_patient_dialog_open = False
+        self.selected_patient_ids = []
+        self.patient_search = ""
+
+    @rx.event
+    def toggle_patient_selection(self, patient_id: str):
+        if patient_id in self.selected_patient_ids:
+            self.selected_patient_ids = [pid for pid in self.selected_patient_ids if pid != patient_id]
+        else:
+            self.selected_patient_ids = self.selected_patient_ids + [patient_id]
+
+    @rx.event
+    def search_patients(self, value: str):
+        self.patient_search = value
+        f = value.strip().lower()
+        if not f:
+            self.patient_options = self._all_patient_options
+        else:
+            self.patient_options = [p for p in self._all_patient_options if f in p.label.lower()]
 
     @rx.event
     async def confirm_add_patient(self):
-        if not self.program or not self.picker_selected_id:
+        if not self.program or not self.selected_patient_ids:
             return
         self.is_adding_patient = True
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
-                CampaignService.add_patient(self.program.id, self.picker_selected_id)
+                for pid in self.selected_patient_ids:
+                    CampaignService.add_patient(self.program.id, pid)
             self.add_patient_dialog_open = False
+            self.selected_patient_ids = []
+            self.patient_search = ""
             await self._load_program(preserve_tab=True)
         except Exception as e:
             self.error_message = str(e)
@@ -661,6 +755,8 @@ class CampaignDetailState(PatientPickerState):
                         visit_number=v.visit_number,
                         patient_name=v.patient.get_full_name() if v.patient_id else "",
                         patient_number=v.patient.patient_number if v.patient_id else "",
+                        patient_id=str(v.patient_id) if v.patient_id else "",
+                        campaign_id=page_id,
                         campaign_visit_status=v.campaign_visit_status.value,
                         status_label=v.campaign_visit_status.get_label(),
                     )

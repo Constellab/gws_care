@@ -46,6 +46,7 @@ class ExamTypeRefRowDTO(BaseModel):
     name: str
     category: str
     category_label: str
+    department: str | None = None
     is_active: bool
     allows_attachment: bool
     requires_attachment: bool
@@ -55,6 +56,7 @@ class ExamTypeRefRowDTO(BaseModel):
 class SaveExamTypeRefDTO(BaseModel):
     name: str
     category: str = "OTHER"
+    department: str | None = None
     description: str | None = None
     is_active: bool = True
     allows_attachment: bool = True

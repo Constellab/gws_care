@@ -13,19 +13,13 @@ from datetime import date, datetime, timedelta
 
 from gws_care.account.account_dto import SaveAccountDTO
 from gws_care.account.account_service import AccountService
-from gws_care.appointment.appointment import Appointment
-from gws_care.appointment.appointment_dto import SaveAppointmentDTO
-from gws_care.appointment.appointment_service import AppointmentService
-from gws_care.appointment.appointment_status import AppointmentStatus
 from gws_care.campaign.campaign_dto import SaveCampaignDTO
 from gws_care.campaign.campaign_service import CampaignService
 from gws_care.certificate.medical_certificate import (
-    MedicalCertificate,
     MedicalCertificateService,
     SaveMedicalCertificateDTO,
 )
-from gws_care.exam.exam_type import ExamType
-from gws_care.notification.notification_enums import NotificationStatus, NotificationType
+from gws_care.notification.notification_enums import NotificationType
 from gws_care.notification.notification_models import NotificationBell, NotificationLog
 from gws_care.notification.notification_service import NotificationService
 from gws_care.patient.patient_dto import SavePatientDTO
@@ -35,8 +29,10 @@ from gws_care.role.user_care_role import UserCareRole
 from gws_care.role.user_role_service import UserRoleService
 from gws_care.user.care_user_sync_service import CareUserSyncService
 from gws_care.user.user import User
-from gws_care.visit.campaign_visit_service import CampaignVisitService
+from gws_care.visit.consultation_service import ConsultationService
+from gws_care.visit.consultation_visit_status import ConsultationVisitStatus
 from gws_care.visit.visit import Visit
+from gws_care.visit.visit_type import VisitType
 from gws_core import BaseTestCase
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -59,15 +55,12 @@ def _make_account():
     return AccountService.create_account(SaveAccountDTO(name=f"Scheduler Test Acct {uuid.uuid4().hex[:8]}"))
 
 
-def _make_scheduled_appointment(patient, days_from_now: int) -> Appointment:
-    """Create a SCHEDULED appointment exactly *days_from_now* days from today."""
+def _make_scheduled_appointment(patient, days_from_now: int) -> Visit:
+    """Create a SCHEDULED consultation visit exactly *days_from_now* days from today."""
     target_dt = (datetime.now() + timedelta(days=days_from_now)).strftime("%Y-%m-%dT09:00")
-    return AppointmentService.create_appointment(
-        SaveAppointmentDTO(
-            patient_id=str(patient.id),
-            scheduled_at=target_dt,
-            exam_type=ExamType.CLINICAL.value,
-        )
+    return ConsultationService.create_consultation(
+        patient_id=str(patient.id),
+        scheduled_at_str=target_dt,
     )
 
 
@@ -139,16 +132,16 @@ class TestAppointmentReminderScheduler(BaseTestCase):
         self.assertEqual(total_logs, 0)
 
     def test_no_reminder_for_appointment_in_the_past(self):
-        """No reminder is sent for a past appointment."""
+        """No reminder is sent for a past visit."""
         patient = _make_patient_with_email("past@example.com")
-        # Directly create a past appointment bypassing service validation
+        # Directly create a past consultation visit bypassing service validation
         past_dt = datetime.now() - timedelta(days=2)
-        appt = Appointment()
-        appt.patient = patient
-        appt.scheduled_at = past_dt
-        appt.exam_type = ExamType.CLINICAL
-        appt.status = AppointmentStatus.SCHEDULED
-        appt.save()
+        visit = Visit()
+        visit.patient = patient
+        visit.scheduled_at = past_dt
+        visit.visit_type = VisitType.CONSULTATION
+        visit.consultation_visit_status = ConsultationVisitStatus.SCHEDULED
+        visit.save()
 
         NotificationService.send_daily_appointment_reminders()
 
@@ -189,12 +182,11 @@ class TestAppointmentReminderScheduler(BaseTestCase):
         self.assertEqual(logs, 1)
 
     def test_done_appointment_not_reminded(self):
-        """A DONE appointment does not trigger a reminder."""
+        """A DONE visit does not trigger a reminder."""
         patient = _make_patient_with_email("done@example.com")
-        appt = _make_scheduled_appointment(patient, 15)
-        # Mark as done directly
-        appt.status = AppointmentStatus.DONE
-        appt.save()
+        visit = _make_scheduled_appointment(patient, 15)
+        visit.consultation_visit_status = ConsultationVisitStatus.DONE
+        visit.save()
 
         NotificationService.send_daily_appointment_reminders()
 
@@ -202,11 +194,11 @@ class TestAppointmentReminderScheduler(BaseTestCase):
         self.assertEqual(logs, 0)
 
     def test_cancelled_appointment_not_reminded(self):
-        """A CANCELLED appointment does not trigger a reminder."""
+        """A CANCELLED visit does not trigger a reminder."""
         patient = _make_patient_with_email("cancelled@example.com")
-        appt = _make_scheduled_appointment(patient, 3)
-        appt.status = AppointmentStatus.CANCELLED
-        appt.save()
+        visit = _make_scheduled_appointment(patient, 3)
+        visit.consultation_visit_status = ConsultationVisitStatus.CANCELLED
+        visit.save()
 
         NotificationService.send_daily_appointment_reminders()
 
