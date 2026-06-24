@@ -40,6 +40,7 @@ class ExamTypeRef(ModelWithUser):
     department: str = CharField(max_length=100, null=True)
     description: str = TextField(null=True)
     is_active: bool = BooleanField(default=True, null=False)
+    deactivation_reason: str = TextField(null=True)
     allows_attachment: bool = BooleanField(default=True, null=False)
     requires_attachment: bool = BooleanField(default=False, null=False)
     required_sample_type: str = CharField(max_length=200, null=True)  # e.g. "Sang total (EDTA)"

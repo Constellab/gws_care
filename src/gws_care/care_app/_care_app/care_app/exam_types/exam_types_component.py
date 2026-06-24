@@ -370,6 +370,18 @@ def _category_suggestion(cat: str) -> rx.Component:
     )
 
 
+def _department_suggestion(dept: str) -> rx.Component:
+    return rx.badge(
+        dept,
+        color_scheme="purple",
+        variant="outline",
+        size="1",
+        cursor="pointer",
+        on_click=ExamTypesState.set_type_department(dept),
+        _hover={"background": "var(--purple-3)", "border_color": "var(--purple-9)"},
+    )
+
+
 def _type_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
@@ -409,12 +421,22 @@ def _type_dialog() -> rx.Component:
                 ),
                 rx.vstack(
                     rx.text("Département", size="2", weight="medium"),
-                    rx.text("Service ou département responsable de cet examen.", size="1", color="var(--gray-9)"),
+                    rx.text("Saisie libre — cliquez sur une suggestion pour la réutiliser.", size="1", color="var(--gray-9)"),
                     rx.input(
                         placeholder="ex: Cytologie, Radiologie, Cardiologie, ORL, Biologie…",
                         value=ExamTypesState.type_form.department,
                         on_change=ExamTypesState.set_type_department,
                         width="100%",
+                    ),
+                    rx.cond(
+                        ExamTypesState.existing_departments.length() > 0,
+                        rx.flex(
+                            rx.foreach(ExamTypesState.existing_departments, _department_suggestion),
+                            flex_wrap="wrap",
+                            gap="0.4rem",
+                            padding_top="0.25rem",
+                        ),
+                        rx.fragment(),
                     ),
                     spacing="1", width="100%",
                 ),

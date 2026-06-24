@@ -34,11 +34,21 @@ class ExamService:
 
     @classmethod
     def to_row_dto(cls, exam: Exam) -> ExamRowDTO:
+        label = exam.exam_type.get_label()
+        ref_id = exam.exam_type_ref_id or ""
+        if ref_id:
+            try:
+                from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+                ref = ExamTypeRef.get_or_none(ExamTypeRef.id == ref_id)
+                if ref:
+                    label = ref.name
+            except Exception:
+                pass
         return ExamRowDTO(
             id=str(exam.id),
             exam_date=exam.exam_date.isoformat(),
             exam_type=exam.exam_type.value,
-            exam_type_label=exam.exam_type.get_label(),
+            exam_type_label=label,
             status=exam.status.value,
         )
 
@@ -70,6 +80,8 @@ class ExamService:
         exam.billing_account_id = dto.account_id
         exam.exam_date = dto.exam_date
         exam.exam_type = dto.exam_type
+        exam.exam_type_ref_id = dto.exam_type_ref_id
+        exam.requested_param_ids = dto.requested_param_ids or []
         exam.status = ExamStatus.TODO
         exam.reason_for_visit = dto.reason_for_visit
         exam.medical_history = dto.medical_history

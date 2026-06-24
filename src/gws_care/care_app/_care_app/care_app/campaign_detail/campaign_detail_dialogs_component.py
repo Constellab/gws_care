@@ -155,18 +155,23 @@ def _add_exam_type_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title("Ajouter un type d'examen"),
             rx.vstack(
-                rx.select.root(
-                    rx.select.trigger(placeholder="Sélectionner un type d'examen", width="100%"),
-                    rx.select.content(
-                        rx.foreach(
-                            CampaignDetailState.exam_type_options,
-                            lambda e: rx.select.item(
-                                f"{e.name} ({e.category_label})", value=e.id
-                            ),
-                        )
+                rx.cond(
+                    CampaignDetailState.exam_type_options.length() > 0,
+                    rx.select.root(
+                        rx.select.trigger(placeholder="Sélectionner un type d'examen…", width="100%"),
+                        rx.select.content(
+                            rx.foreach(
+                                CampaignDetailState.exam_type_options,
+                                lambda e: rx.select.item(e.label, value=e.id),
+                            )
+                        ),
+                        value=CampaignDetailState.selected_exam_type_id,
+                        on_change=CampaignDetailState.set_selected_exam_type,
                     ),
-                    value=CampaignDetailState.selected_exam_type_id,
-                    on_change=CampaignDetailState.set_selected_exam_type,
+                    rx.callout(
+                        "Aucun type d'examen disponible. Créez-en dans l'onglet Référentiel des examens.",
+                        icon="info", color_scheme="orange", size="1",
+                    ),
                 ),
                 spacing="3", width="100%", margin_top="1rem",
             ),
@@ -174,7 +179,8 @@ def _add_exam_type_dialog() -> rx.Component:
                 rx.dialog.close(rx.button("Annuler", variant="soft", color_scheme="gray",
                                           on_click=CampaignDetailState.close_add_exam_type_dialog)),
                 rx.button("Ajouter", on_click=CampaignDetailState.confirm_add_exam_type,
-                          loading=CampaignDetailState.is_adding_exam_type),
+                          loading=CampaignDetailState.is_adding_exam_type,
+                          disabled=CampaignDetailState.selected_exam_type_id == ""),
                 spacing="2", justify="end", margin_top="1rem", width="100%",
             ),
             max_width="480px",

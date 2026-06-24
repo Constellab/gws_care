@@ -20,12 +20,34 @@ class StagedFile(BaseModel):
     document_type: str = ""  # DocumentType enum value, empty means unset
 
 
+class ExamTypeRefOption(BaseModel):
+    """A row from the exam type referential for the dropdown selector."""
+
+    id: str
+    name: str
+    category_label: str
+    department: str = ""
+    parameter_count: int = 0
+
+
+class ExamParamOption(BaseModel):
+    """A single test/parameter belonging to an exam type ref."""
+
+    id: str
+    name: str
+    unit: str = ""
+    value_type: str = "NUMERIC"
+    is_required: bool = False
+    is_selected: bool = False
+
+
 class ExamFormState(FormDialogState, rx.State):
     """Manages the create exam dialog on the patient detail page."""
 
     # Form fields
     form_exam_date: str = ""
-    form_exam_type: str = "biology"
+    form_exam_type_ref_id: str = ""
+    form_exam_type_ref_name: str = ""
     form_account_id: str = ""
     form_reason_for_visit: str = ""
     form_medical_history: str = ""
@@ -36,6 +58,15 @@ class ExamFormState(FormDialogState, rx.State):
     form_heart_rate: str = ""
     form_temperature: str = ""
     form_conclusion: str = ""
+
+    # Exam type referential
+    exam_type_ref_options: list[ExamTypeRefOption] = []
+    available_params: list[ExamParamOption] = []
+    is_loading_exam_types: bool = False
+
+    @rx.var
+    def selected_param_count(self) -> int:
+        return sum(1 for p in self.available_params if p.is_selected)
 
     # Staged file attachments (selected but exam not yet created)
     staged_files: list[StagedFile] = []
@@ -49,10 +80,6 @@ class ExamFormState(FormDialogState, rx.State):
     @rx.event
     def set_form_exam_date(self, value: str):
         self.form_exam_date = value
-
-    @rx.event
-    def set_form_exam_type(self, value: str):
-        self.form_exam_type = value
 
     @rx.event
     def set_form_account_id(self, value: str):
@@ -102,6 +129,61 @@ class ExamFormState(FormDialogState, rx.State):
             if sf.stored_filename == stored_filename
             else sf
             for sf in self.staged_files
+        ]
+
+    # ── Exam type ref selection ───────────────────────────────────────────────
+
+    @rx.event
+    async def select_exam_type_ref(self, ref_id: str):
+        """Load parameters for the selected exam type ref and auto-select required ones."""
+        self.form_exam_type_ref_id = ref_id
+        found = next((o for o in self.exam_type_ref_options if o.id == ref_id), None)
+        self.form_exam_type_ref_name = found.name if found else ""
+        self.available_params = []
+        if not ref_id:
+            return
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
+                detail = ExamTypeRefService.get(ref_id)
+                self.available_params = [
+                    ExamParamOption(
+                        id=p.id,
+                        name=p.name,
+                        unit=p.unit or "",
+                        value_type=p.value_type,
+                        is_required=p.is_required,
+                        is_selected=p.is_required,  # auto-select required params
+                    )
+                    for p in detail.parameters
+                ]
+        except Exception:
+            pass
+
+    @rx.event
+    def toggle_param(self, param_id: str):
+        """Toggle a test/parameter in the selection."""
+        self.available_params = [
+            ExamParamOption(**{**p.dict(), "is_selected": not p.is_selected})
+            if p.id == param_id
+            else p
+            for p in self.available_params
+        ]
+
+    @rx.event
+    def select_all_params(self):
+        """Select all available parameters."""
+        self.available_params = [
+            ExamParamOption(**{**p.dict(), "is_selected": True})
+            for p in self.available_params
+        ]
+
+    @rx.event
+    def clear_all_params(self):
+        """Deselect all parameters."""
+        self.available_params = [
+            ExamParamOption(**{**p.dict(), "is_selected": False})
+            for p in self.available_params
         ]
 
     # ── File upload ───────────────────────────────────────────────────────────
@@ -154,13 +236,14 @@ class ExamFormState(FormDialogState, rx.State):
     # ── Open ──────────────────────────────────────────────────────────────────
 
     @rx.event
-    def open_create_dialog(self, patient_id: str):
+    async def open_create_dialog(self, patient_id: str):
         """Open the dialog to create a new exam for the given patient."""
         from datetime import date
 
         self._patient_id = patient_id
         self.form_exam_date = date.today().isoformat()
-        self.form_exam_type = "biology"
+        self.form_exam_type_ref_id = ""
+        self.form_exam_type_ref_name = ""
         self.form_account_id = ""
         self.form_reason_for_visit = ""
         self.form_medical_history = ""
@@ -173,15 +256,40 @@ class ExamFormState(FormDialogState, rx.State):
         self.form_conclusion = ""
         self.staged_files = []
         self.is_uploading = False
+        self.available_params = []
         self.is_update_mode = False
+        await self._load_exam_type_refs()
         self.dialog_opened = True
+
+    async def _load_exam_type_refs(self):
+        """Load active exam type refs from the referential."""
+        self.is_loading_exam_types = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
+                rows = ExamTypeRefService.list_all(active_only=True)
+                self.exam_type_ref_options = [
+                    ExamTypeRefOption(
+                        id=r.id,
+                        name=r.name,
+                        category_label=r.category_label,
+                        department=r.department or "",
+                        parameter_count=r.parameter_count,
+                    )
+                    for r in rows
+                ]
+        except Exception:
+            self.exam_type_ref_options = []
+        finally:
+            self.is_loading_exam_types = False
 
     # ── FormDialogState implementation ───────────────────────────────────────
 
     async def _clear_form_state(self) -> None:
         from datetime import date
         self.form_exam_date = date.today().isoformat()
-        self.form_exam_type = "biology"
+        self.form_exam_type_ref_id = ""
+        self.form_exam_type_ref_name = ""
         self.form_account_id = ""
         self.form_reason_for_visit = ""
         self.form_medical_history = ""
@@ -194,13 +302,16 @@ class ExamFormState(FormDialogState, rx.State):
         self.form_conclusion = ""
         self.staged_files = []
         self.is_uploading = False
+        self.available_params = []
+        self.exam_type_ref_options = []
+        self.is_loading_exam_types = False
         self._patient_id = ""
         self.is_update_mode = False
 
     async def _create(self, form_data: dict) -> AsyncGenerator:
         """Create a new exam and attach any staged files."""
-        if not self.form_exam_date or not self.form_exam_type:
-            yield rx.toast.error("Exam date and type are required.")
+        if not self.form_exam_date or not self.form_exam_type_ref_id:
+            yield rx.toast.error("La date et le type d'examen sont obligatoires.")
             return
 
         async with self:
@@ -222,7 +333,9 @@ class ExamFormState(FormDialogState, rx.State):
             dto = SaveExamDTO(
                 patient_id=self._patient_id,
                 exam_date=self.form_exam_date,
-                exam_type=self.form_exam_type,
+                exam_type="other",
+                exam_type_ref_id=self.form_exam_type_ref_id or None,
+                requested_param_ids=[p.id for p in self.available_params if p.is_selected],
                 account_id=self.form_account_id or None,
                 reason_for_visit=self.form_reason_for_visit or None,
                 medical_history=self.form_medical_history or None,
@@ -236,7 +349,7 @@ class ExamFormState(FormDialogState, rx.State):
             exam = ExamService.create_exam(dto)
             exam_id = str(exam.id)
 
-            # Persist staged files as ExamFile records, registering each as a gws_core Resource
+            # Persist staged files as ExamFile records
             for sf in self.staged_files:
                 ExamFileService.attach_staged_file(
                     exam_id=exam_id,
@@ -247,7 +360,7 @@ class ExamFormState(FormDialogState, rx.State):
                     document_type=sf.document_type or None,
                 )
 
-        yield rx.toast.success("Exam created")
+        yield rx.toast.success("Examen créé avec succès")
         from .patient_detail_state import PatientDetailState
         yield PatientDetailState.on_load()
 

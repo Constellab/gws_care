@@ -179,7 +179,13 @@ def _exam_info_card() -> rx.Component:
             ),
             rx.spacer(),
             _status_badge(exam.status),
-            align="start", width="100%",
+            rx.icon_button(
+                rx.icon("trash-2", size=14),
+                variant="soft", color_scheme="red", size="2",
+                on_click=ExamDetailState.open_delete_exam_dialog,
+                title="Supprimer l'examen",
+            ),
+            align="center", width="100%",
         ),
         width="100%",
     )
@@ -426,7 +432,7 @@ def _lab_row_edit(row: LabResultRowDTO) -> rx.Component:
             rx.icon_button(
                 rx.icon("trash-2", size=13),
                 variant="ghost", size="1", color_scheme="red",
-                on_click=lambda: ExamDetailState.remove_lab_row(row.id),
+                on_click=lambda: ExamDetailState.open_delete_lab_row_dialog(row.id),
             ),
             padding="0",
             vertical_align="middle",
@@ -557,6 +563,80 @@ def _delete_file_confirm_dialog() -> rx.Component:
             ),
         ),
         open=ExamDetailState.file_delete_confirm_open,
+    )
+
+
+def _delete_exam_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title("Supprimer l'examen"),
+            rx.alert_dialog.description(
+                "Cette action est irréversible. Veuillez saisir un commentaire obligatoire avant de confirmer.",
+                size="2",
+            ),
+            rx.vstack(
+                rx.text_area(
+                    value=ExamDetailState.delete_exam_comment,
+                    on_change=ExamDetailState.set_delete_exam_comment,
+                    placeholder="Motif de suppression (obligatoire)...",
+                    size="2", width="100%", rows="3",
+                ),
+                rx.flex(
+                    rx.button(
+                        "Annuler",
+                        variant="soft", color_scheme="gray", size="2",
+                        on_click=ExamDetailState.close_delete_exam_dialog,
+                    ),
+                    rx.button(
+                        rx.icon("trash-2", size=14),
+                        "Supprimer l'examen",
+                        color_scheme="red", size="2",
+                        on_click=ExamDetailState.confirm_delete_exam,
+                        disabled=ExamDetailState.delete_exam_comment.length() == 0,
+                    ),
+                    spacing="3", justify="end",
+                ),
+                spacing="3", margin_top="0.75rem", width="100%",
+            ),
+        ),
+        open=ExamDetailState.delete_exam_confirm_open,
+    )
+
+
+def _delete_lab_row_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title("Supprimer le résultat"),
+            rx.alert_dialog.description(
+                "Veuillez saisir un commentaire obligatoire avant de supprimer ce résultat.",
+                size="2",
+            ),
+            rx.vstack(
+                rx.text_area(
+                    value=ExamDetailState.delete_lab_comment,
+                    on_change=ExamDetailState.set_delete_lab_comment,
+                    placeholder="Motif de suppression (obligatoire)...",
+                    size="2", width="100%", rows="3",
+                ),
+                rx.flex(
+                    rx.button(
+                        "Annuler",
+                        variant="soft", color_scheme="gray", size="2",
+                        on_click=ExamDetailState.close_delete_lab_row_dialog,
+                    ),
+                    rx.button(
+                        rx.icon("trash-2", size=14),
+                        "Supprimer",
+                        color_scheme="red", size="2",
+                        on_click=ExamDetailState.confirm_delete_lab_row,
+                        disabled=ExamDetailState.delete_lab_comment.length() == 0,
+                    ),
+                    spacing="3", justify="end",
+                ),
+                spacing="3", margin_top="0.75rem", width="100%",
+            ),
+        ),
+        open=ExamDetailState.delete_lab_confirm_open,
     )
 
 
@@ -957,5 +1037,7 @@ def exam_detail_page() -> rx.Component:
             plotly_fullscreen_dialog(),
             _file_preview_dialog(),
             _delete_file_confirm_dialog(),
+            _delete_exam_dialog(),
+            _delete_lab_row_dialog(),
         )
     )

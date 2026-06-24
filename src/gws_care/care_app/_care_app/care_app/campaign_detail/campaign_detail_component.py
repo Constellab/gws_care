@@ -285,7 +285,6 @@ def _tab_patients() -> rx.Component:
 def _exam_type_row(et: ExamTypeRowDTO) -> rx.Component:
     return rx.table.row(
         rx.table.cell(rx.text(et.name, size="2", weight="medium")),
-        rx.table.cell(rx.text(et.code, size="2", color="var(--gray-9)")),
         rx.table.cell(rx.text(et.category, size="2", color="var(--gray-8)")),
         rx.table.cell(
             rx.cond(
@@ -341,16 +340,6 @@ def _tab_exam_types() -> rx.Component:
                                 spacing="1", align="center",
                             ),
                             on_click=lambda: CampaignDetailState.sort_exam_types("name"),
-                            cursor="pointer",
-                        ),
-                        rx.table.column_header_cell(
-                            rx.hstack(
-                                rx.text(LanguageState.tr["col_code"], size="2"),
-                                _sort_icon("code", CampaignDetailState.exam_sort_col,
-                                           CampaignDetailState.exam_sort_dir),
-                                spacing="1", align="center",
-                            ),
-                            on_click=lambda: CampaignDetailState.sort_exam_types("code"),
                             cursor="pointer",
                         ),
                         rx.table.column_header_cell(

@@ -6,6 +6,22 @@ from pydantic import BaseModel
 from ..common.role_state import RoleState
 
 
+class ExamTypeRefOption(BaseModel):
+    id: str
+    name: str
+    category_label: str
+    department: str = ""
+
+
+class ExamParamOption(BaseModel):
+    id: str
+    name: str
+    unit: str = ""
+    value_type: str = "NUMERIC"
+    is_required: bool = False
+    is_selected: bool = False
+
+
 class ConsultationDTO(BaseModel):
     id: str
     visit_number: str
@@ -70,10 +86,17 @@ class ConsultationDetailState(RoleState):
 
     # ── New Exam dialog ───────────────────────────────────────────────────────
     show_new_exam_dialog: bool = False
-    new_exam_type: str = ""
+    new_exam_type: str = ""           # holds ExamTypeRef.id
     new_exam_date: str = ""
     new_exam_error: str = ""
     new_exam_is_saving: bool = False
+    new_exam_ref_options: list[ExamTypeRefOption] = []
+    new_exam_params: list[ExamParamOption] = []
+    new_exam_is_loading_types: bool = False
+
+    @rx.var
+    def new_exam_selected_param_count(self) -> int:
+        return sum(1 for p in self.new_exam_params if p.is_selected)
 
     # ── New Prescription dialog ───────────────────────────────────────────────
     show_new_prescription_dialog: bool = False
@@ -156,25 +179,89 @@ class ConsultationDetailState(RoleState):
     # ── Exam creation events ──────────────────────────────────────────────────
 
     @rx.event
-    def open_new_exam_dialog(self):
+    async def open_new_exam_dialog(self):
         from datetime import date
         self.new_exam_type = ""
         self.new_exam_date = date.today().isoformat()
         self.new_exam_error = ""
         self.new_exam_is_saving = False
+        self.new_exam_ref_options = []
+        self.new_exam_params = []
+        self.new_exam_is_loading_types = True
         self.show_new_exam_dialog = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
+                rows = ExamTypeRefService.list_all(active_only=True)
+                self.new_exam_ref_options = [
+                    ExamTypeRefOption(
+                        id=r.id,
+                        name=r.name,
+                        category_label=r.category_label,
+                        department=r.department or "",
+                    )
+                    for r in rows
+                ]
+        except Exception:
+            self.new_exam_ref_options = []
+        finally:
+            self.new_exam_is_loading_types = False
 
     @rx.event
     def close_new_exam_dialog(self):
         self.show_new_exam_dialog = False
 
     @rx.event
-    def set_new_exam_type(self, value: str):
-        self.new_exam_type = value
-
-    @rx.event
     def set_new_exam_date(self, value: str):
         self.new_exam_date = value
+
+    @rx.event
+    async def select_new_exam_type_ref(self, ref_id: str):
+        """Load parameters for the selected exam type ref."""
+        self.new_exam_type = ref_id
+        self.new_exam_params = []
+        if not ref_id:
+            return
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
+                detail = ExamTypeRefService.get(ref_id)
+                self.new_exam_params = [
+                    ExamParamOption(
+                        id=p.id,
+                        name=p.name,
+                        unit=p.unit or "",
+                        value_type=p.value_type,
+                        is_required=p.is_required,
+                        is_selected=p.is_required,
+                    )
+                    for p in detail.parameters
+                ]
+        except Exception:
+            pass
+
+    @rx.event
+    def toggle_new_exam_param(self, param_id: str):
+        self.new_exam_params = [
+            ExamParamOption(**{**p.dict(), "is_selected": not p.is_selected})
+            if p.id == param_id
+            else p
+            for p in self.new_exam_params
+        ]
+
+    @rx.event
+    def select_all_new_exam_params(self):
+        self.new_exam_params = [
+            ExamParamOption(**{**p.dict(), "is_selected": True})
+            for p in self.new_exam_params
+        ]
+
+    @rx.event
+    def clear_all_new_exam_params(self):
+        self.new_exam_params = [
+            ExamParamOption(**{**p.dict(), "is_selected": False})
+            for p in self.new_exam_params
+        ]
 
     @rx.event
     async def save_new_exam(self):
@@ -199,7 +286,9 @@ class ConsultationDetailState(RoleState):
                 exam.patient_id = self.consultation.patient_id
                 exam.visit_id = self.consultation.id
                 exam.exam_date = date.fromisoformat(self.new_exam_date)
-                exam.exam_type = ExamType(self.new_exam_type)
+                exam.exam_type = ExamType.OTHER
+                exam.exam_type_ref_id = self.new_exam_type
+                exam.requested_param_ids = [p.id for p in self.new_exam_params if p.is_selected]
                 exam.status = ExamStatus.TODO
                 exam.save()
                 exam_id = str(exam.id)
@@ -444,12 +533,24 @@ class ConsultationDetailState(RoleState):
                     .where(Exam.visit == visit.id)
                     .order_by(Exam.exam_date.desc())
                 )
+                def _exam_label(e) -> str:
+                    ref_id = getattr(e, "exam_type_ref_id", None) or ""
+                    if ref_id:
+                        try:
+                            from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+                            ref = ExamTypeRef.get_or_none(ExamTypeRef.id == ref_id)
+                            if ref:
+                                return ref.name
+                        except Exception:
+                            pass
+                    return e.exam_type.get_label() if hasattr(e.exam_type, "get_label") else e.exam_type.value
+
                 self.exams = [
                     ExamRowDTO(
                         id=str(e.id),
                         exam_date=e.exam_date.isoformat(),
                         exam_type=e.exam_type.value,
-                        exam_type_label=e.exam_type.get_label() if hasattr(e.exam_type, "get_label") else e.exam_type.value,
+                        exam_type_label=_exam_label(e),
                         status=e.status.value,
                         status_label=e.status.get_label() if hasattr(e.status, "get_label") else e.status.value,
                     )

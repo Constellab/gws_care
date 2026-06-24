@@ -10,7 +10,9 @@ from .consultation_detail_state import (
     ConsultationDetailState,
     ConsultationDTO,
     DrugLineDTO,
+    ExamParamOption,
     ExamRowDTO,
+    ExamTypeRefOption,
     PrescriptionRowDTO,
 )
 
@@ -385,40 +387,161 @@ def _drug_row(drug: DrugLineDTO, index: int) -> rx.Component:
     )
 
 
+def _exam_ref_option(opt: ExamTypeRefOption) -> rx.Component:
+    return rx.select.item(opt.name, value=opt.id)
+
+
+def _new_exam_param_item(param: ExamParamOption) -> rx.Component:
+    return rx.flex(
+        rx.cond(
+            param.is_selected,
+            rx.box(
+                rx.icon("check", size=11, color="white"),
+                width="18px", min_width="18px", height="18px",
+                border_radius="3px",
+                background="var(--accent-9)",
+                display="flex", align_items="center", justify_content="center",
+            ),
+            rx.box(
+                width="18px", min_width="18px", height="18px",
+                border_radius="3px",
+                border="2px solid var(--gray-6)",
+                background="white",
+            ),
+        ),
+        rx.flex(
+            rx.hstack(
+                rx.text(param.name, size="2", weight=rx.cond(param.is_selected, "medium", "regular")),
+                rx.cond(
+                    param.is_required,
+                    rx.badge("Requis", size="1", color_scheme="red", variant="soft"),
+                    rx.fragment(),
+                ),
+                spacing="2", align="center", flex_wrap="wrap",
+            ),
+            rx.cond(
+                param.unit != "",
+                rx.text(param.unit, size="1", color="var(--gray-9)"),
+                rx.fragment(),
+            ),
+            direction="column", gap="0",
+        ),
+        rx.spacer(),
+        rx.cond(
+            param.is_selected,
+            rx.icon("check-circle", size=14, color="var(--green-9)"),
+            rx.fragment(),
+        ),
+        align="center", gap="3",
+        padding="0.5rem 0.75rem",
+        border_radius="var(--radius-2)",
+        background=rx.cond(param.is_selected, "var(--accent-2)", "transparent"),
+        border=rx.cond(param.is_selected, "1px solid var(--accent-6)", "1px solid var(--gray-4)"),
+        width="100%", cursor="pointer",
+        on_click=ConsultationDetailState.toggle_new_exam_param(param.id),
+        _hover={"background": rx.cond(param.is_selected, "var(--accent-3)", "var(--gray-2)")},
+    )
+
+
+def _new_exam_params_section() -> rx.Component:
+    return rx.cond(
+        ConsultationDetailState.new_exam_type != "",
+        rx.vstack(
+            rx.hstack(
+                rx.hstack(
+                    rx.icon("flask-conical", size=14, color="var(--accent-9)"),
+                    rx.text("Tests inclus", size="2", weight="bold", color="var(--gray-11)"),
+                    spacing="1", align="center",
+                ),
+                rx.spacer(),
+                rx.hstack(
+                    rx.text(
+                        ConsultationDetailState.new_exam_selected_param_count.to(str),
+                        " / ",
+                        ConsultationDetailState.new_exam_params.length().to(str),
+                        " sélectionné(s)",
+                        size="1", color="var(--gray-9)",
+                    ),
+                    rx.button(
+                        "Tout cocher",
+                        on_click=ConsultationDetailState.select_all_new_exam_params,
+                        variant="ghost", size="1", type="button",
+                    ),
+                    rx.button(
+                        "Tout décocher",
+                        on_click=ConsultationDetailState.clear_all_new_exam_params,
+                        variant="ghost", size="1", type="button", color_scheme="gray",
+                    ),
+                    spacing="2", align="center",
+                ),
+                width="100%", align="center",
+            ),
+            rx.cond(
+                ConsultationDetailState.new_exam_params.length() > 0,
+                rx.vstack(
+                    rx.foreach(ConsultationDetailState.new_exam_params, _new_exam_param_item),
+                    spacing="1", width="100%",
+                    max_height="220px", overflow_y="auto",
+                    padding="0.25rem",
+                    border="1px solid var(--gray-4)",
+                    border_radius="var(--radius-2)",
+                    background="var(--gray-1)",
+                ),
+                rx.center(
+                    rx.text("Aucun test défini pour ce type d'examen.", size="2", color="var(--gray-9)"),
+                    padding="1rem",
+                    border="1px dashed var(--gray-5)",
+                    border_radius="var(--radius-2)",
+                    width="100%",
+                ),
+            ),
+            width="100%", spacing="2",
+        ),
+        rx.fragment(),
+    )
+
+
 def _new_exam_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
             rx.dialog.title("Nouvel examen"),
             rx.vstack(
+                # Type d'examen — from referential
                 rx.vstack(
                     rx.text("Type d'examen", size="2", weight="medium"),
-                    rx.select.root(
-                        rx.select.trigger(placeholder="Sélectionner un type"),
-                        rx.select.content(
-                            rx.select.item("Biologie", value="biology"),
-                            rx.select.item("Radiologie", value="radiology"),
-                            rx.select.item("Ophtalmologie", value="ophthalmology"),
-                            rx.select.item("ORL", value="orl"),
-                            rx.select.item("ECG", value="ecg"),
-                            rx.select.item("Spirométrie", value="spirometry"),
-                            rx.select.item("Examen clinique", value="clinical"),
-                            rx.select.item("Hormones", value="hormones"),
-                            rx.select.item("Hématologie", value="hematology"),
-                            rx.select.item("Bactériologie", value="bacteriology"),
-                            rx.select.item("Parasitologie", value="parasitology"),
-                            rx.select.item("Test drogues", value="drug_test"),
-                            rx.select.item("Immunologie", value="immunology"),
-                            rx.select.item("Marqueurs hépatiques", value="hepatic_markers"),
-                            rx.select.item("Autre", value="other"),
+                    rx.cond(
+                        ConsultationDetailState.new_exam_is_loading_types,
+                        rx.hstack(
+                            rx.spinner(size="1"),
+                            rx.text("Chargement du référentiel…", size="2", color="var(--gray-9)"),
+                            spacing="2", align="center",
                         ),
-                        value=ConsultationDetailState.new_exam_type,
-                        on_change=ConsultationDetailState.set_new_exam_type,
-                        size="2",
-                        width="100%",
+                        rx.cond(
+                            ConsultationDetailState.new_exam_ref_options.length() > 0,
+                            rx.select.root(
+                                rx.select.trigger(
+                                    placeholder="Sélectionner un type d'examen…",
+                                    width="100%",
+                                ),
+                                rx.select.content(
+                                    rx.foreach(ConsultationDetailState.new_exam_ref_options, _exam_ref_option),
+                                ),
+                                value=ConsultationDetailState.new_exam_type,
+                                on_change=ConsultationDetailState.select_new_exam_type_ref,
+                                size="2",
+                                width="100%",
+                            ),
+                            rx.callout(
+                                "Aucun type d'examen disponible. Créez-en dans l'onglet Référentiel des examens.",
+                                icon="info", color_scheme="orange", size="1",
+                            ),
+                        ),
                     ),
-                    spacing="1",
-                    width="100%",
+                    spacing="1", width="100%",
                 ),
+                # Tests (params)
+                _new_exam_params_section(),
+                # Date
                 rx.vstack(
                     rx.text("Date de l'examen", size="2", weight="medium"),
                     rx.input(
@@ -428,16 +551,13 @@ def _new_exam_dialog() -> rx.Component:
                         size="2",
                         width="100%",
                     ),
-                    spacing="1",
-                    width="100%",
+                    spacing="1", width="100%",
                 ),
                 rx.cond(
                     ConsultationDetailState.new_exam_error != "",
                     rx.callout(
                         ConsultationDetailState.new_exam_error,
-                        icon="triangle-alert",
-                        color_scheme="red",
-                        size="1",
+                        icon="triangle-alert", color_scheme="red", size="1",
                     ),
                 ),
                 rx.hstack(
@@ -453,16 +573,13 @@ def _new_exam_dialog() -> rx.Component:
                         loading=ConsultationDetailState.new_exam_is_saving,
                         disabled=(ConsultationDetailState.new_exam_type == ""),
                     ),
-                    spacing="2",
-                    width="100%",
+                    spacing="2", width="100%",
                 ),
-                spacing="4",
-                width="100%",
-                padding_top="1rem",
+                spacing="4", width="100%", padding_top="1rem",
             ),
             on_interact_outside=ConsultationDetailState.close_new_exam_dialog,
             on_escape_key_down=ConsultationDetailState.close_new_exam_dialog,
-            max_width="500px",
+            max_width="540px",
         ),
         open=ConsultationDetailState.show_new_exam_dialog,
     )

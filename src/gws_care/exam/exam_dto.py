@@ -56,7 +56,9 @@ class SaveExamDTO(BaseModelDTO):
     visit_id: str | None = None
     account_id: str | None = None
     exam_date: date
-    exam_type: ExamType
+    exam_type: ExamType = ExamType.OTHER
+    exam_type_ref_id: str | None = None
+    requested_param_ids: list[str] = []
     reason_for_visit: str | None = None
     medical_history: str | None = None
     weight: float | None = None

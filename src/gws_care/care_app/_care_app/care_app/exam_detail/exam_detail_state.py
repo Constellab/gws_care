@@ -179,6 +179,20 @@ class ExamFileRowDTO(BaseModel):
     document_type: str = ""  # DocumentType enum value, empty means unset
 
 
+def _resolve_exam_type_label(exam) -> str:
+    """Return the referential name if set, otherwise fall back to the enum label."""
+    ref_id = getattr(exam, "exam_type_ref_id", None) or ""
+    if ref_id:
+        try:
+            from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+            ref = ExamTypeRef.get_or_none(ExamTypeRef.id == ref_id)
+            if ref:
+                return ref.name
+        except Exception:
+            pass
+    return exam.exam_type.get_label()
+
+
 class ExamDetailState(RoleState):
     """State for the exam detail / result-entry page."""
 
@@ -220,6 +234,16 @@ class ExamDetailState(RoleState):
     # File delete confirmation dialog
     file_delete_confirm_open: bool = False
     file_to_delete_id: str = ""
+
+    # Delete exam dialog
+    delete_exam_confirm_open: bool = False
+    delete_exam_comment: str = ""
+    is_deleting_exam: bool = False
+
+    # Delete lab result row dialog
+    delete_lab_confirm_open: bool = False
+    delete_lab_row_id: str = ""
+    delete_lab_comment: str = ""
 
     # Tab navigation
     active_tab: str = "informations"
@@ -681,7 +705,7 @@ class ExamDetailState(RoleState):
                     id=str(exam.id),
                     exam_date=exam.exam_date.isoformat(),
                     exam_type=exam.exam_type.value,
-                    exam_type_label=exam.exam_type.get_label(),
+                    exam_type_label=_resolve_exam_type_label(exam),
                     status=exam.status.value,
                     reason_for_visit=exam.reason_for_visit,
                     medical_history=exam.medical_history,
@@ -876,6 +900,81 @@ class ExamDetailState(RoleState):
             await self._load_exam()
         except Exception as e:
             self.error_message = f"Error deleting file: {e}"
+
+    # ── Delete exam ───────────────────────────────────────────────────────────
+
+    @rx.event
+    def open_delete_exam_dialog(self):
+        """Open the delete exam confirmation dialog."""
+        self.delete_exam_comment = ""
+        self.delete_exam_confirm_open = True
+
+    @rx.event
+    def close_delete_exam_dialog(self):
+        """Close the delete exam dialog without deleting."""
+        self.delete_exam_confirm_open = False
+        self.delete_exam_comment = ""
+
+    @rx.event
+    def set_delete_exam_comment(self, value: str):
+        self.delete_exam_comment = value
+
+    @rx.event
+    async def confirm_delete_exam(self):
+        """Delete the exam after user confirms with a mandatory comment."""
+        if not self.delete_exam_comment.strip():
+            self.error_message = "Un commentaire est obligatoire pour supprimer un examen."
+            return
+        if not self.exam:
+            return
+        self.is_deleting_exam = True
+        self.delete_exam_confirm_open = False
+        exam_id = self.exam.id
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam.exam import Exam
+                exam_obj = Exam.get_by_id(exam_id)
+                exam_obj.is_active = False
+                exam_obj.save()
+            yield rx.toast.success("Examen supprimé.")
+            yield rx.redirect("/")
+        except Exception as e:
+            self.error_message = f"Erreur suppression examen : {e}"
+        finally:
+            self.is_deleting_exam = False
+
+    # ── Delete lab result row ─────────────────────────────────────────────────
+
+    @rx.event
+    def open_delete_lab_row_dialog(self, row_id: str):
+        """Open the delete lab result row confirmation dialog."""
+        self.delete_lab_row_id = row_id
+        self.delete_lab_comment = ""
+        self.delete_lab_confirm_open = True
+
+    @rx.event
+    def close_delete_lab_row_dialog(self):
+        """Close the delete lab row dialog without deleting."""
+        self.delete_lab_confirm_open = False
+        self.delete_lab_row_id = ""
+        self.delete_lab_comment = ""
+
+    @rx.event
+    def set_delete_lab_comment(self, value: str):
+        self.delete_lab_comment = value
+
+    @rx.event
+    async def confirm_delete_lab_row(self):
+        """Remove the lab result row after user confirms with a mandatory comment."""
+        if not self.delete_lab_comment.strip():
+            self.error_message = "Un commentaire est obligatoire pour supprimer un résultat."
+            return
+        row_id = self.delete_lab_row_id
+        self.delete_lab_confirm_open = False
+        self.delete_lab_row_id = ""
+        self.delete_lab_comment = ""
+        self.lab_results = [row for row in self.lab_results if row.id != row_id]
+        await self._persist_lab_results()
 
     # ── Phase 8 — Certificate PDF download ───────────────────────────────────
 

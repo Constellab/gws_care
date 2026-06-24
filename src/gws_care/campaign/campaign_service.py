@@ -393,7 +393,54 @@ class CampaignService:
         if orphan_visit is not None:
             orphan_visit.delete_instance()
 
-    # ── ExamType management ───────────────────────────────────────────────────
+    # ── ExamTypeRef management (new referential-based system) ─────────────────
+
+    @classmethod
+    def get_exam_refs(cls, campaign_id: str):
+        """Return the list of ExamTypeRef objects linked to the campaign."""
+        from gws_care.campaign.campaign_exam import CampaignExam
+        from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+        return list(
+            ExamTypeRef.select()
+            .join(CampaignExam, on=(CampaignExam.exam_type_ref == ExamTypeRef.id))
+            .where(CampaignExam.campaign == campaign_id)
+            .order_by(ExamTypeRef.category, ExamTypeRef.name)
+        )
+
+    @classmethod
+    def add_exam_ref(cls, campaign_id: str, exam_ref_id: str) -> None:
+        """Link an ExamTypeRef to a campaign."""
+        from gws_care.campaign.campaign_exam import CampaignExam
+        from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status not in (CampaignStatus.DRAFT, CampaignStatus.VALIDATED):
+            raise BadRequestException("Exam types can only be added to DRAFT or VALIDATED campaigns")
+        ref = ExamTypeRef.get_or_none(ExamTypeRef.id == exam_ref_id)
+        if ref is None:
+            raise BadRequestException(f"ExamTypeRef '{exam_ref_id}' not found")
+        if not ref.is_active:
+            raise BadRequestException(f"L'examen '{ref.name}' est inactif.")
+        if CampaignExam.get_or_none(
+            (CampaignExam.campaign == campaign_id) & (CampaignExam.exam_type_ref == exam_ref_id)
+        ) is not None:
+            raise BadRequestException("Ce type d'examen est déjà dans cette campagne.")
+        CampaignExam.create(campaign=campaign, exam_type_ref=ref)
+
+    @classmethod
+    def remove_exam_ref(cls, campaign_id: str, exam_ref_id: str) -> None:
+        """Unlink an ExamTypeRef from a campaign."""
+        from gws_care.campaign.campaign_exam import CampaignExam
+        campaign = cls.get_campaign(campaign_id)
+        if campaign.status not in (CampaignStatus.DRAFT, CampaignStatus.VALIDATED):
+            raise BadRequestException("Exam types can only be removed from DRAFT or VALIDATED campaigns")
+        link = CampaignExam.get_or_none(
+            (CampaignExam.campaign == campaign_id) & (CampaignExam.exam_type_ref == exam_ref_id)
+        )
+        if link is None:
+            raise BadRequestException("Ce type d'examen n'est pas dans cette campagne.")
+        link.delete_instance()
+
+    # ── ExamType management (legacy ExamTypeModel-based) ─────────────────────
 
     @classmethod
     def add_exam_type(cls, campaign_id: str, exam_type_id: str) -> None:

@@ -71,9 +71,11 @@ class ExamTypeRefService:
         return cls.get(exam_type_ref_id)
 
     @classmethod
-    def deactivate(cls, exam_type_ref_id: str) -> None:
+    def deactivate(cls, exam_type_ref_id: str, reason: str = None) -> None:
         ref = ExamTypeRef.get_by_id_and_check(exam_type_ref_id)
         ref.is_active = False
+        if reason:
+            ref.deactivation_reason = reason
         ref.save()
 
     @classmethod

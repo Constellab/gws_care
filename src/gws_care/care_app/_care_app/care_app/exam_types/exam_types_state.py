@@ -73,6 +73,8 @@ class ExamTypesState(ReflexMainState):
 
     # Catégories existantes (pour autocomplete — libres, saisies par l'utilisateur)
     existing_categories: list[str] = []
+    # Départements existants (pour autocomplete)
+    existing_departments: list[str] = []
 
     # Type form dialog
     type_dialog_open: bool = False
@@ -92,11 +94,13 @@ class ExamTypesState(ReflexMainState):
     # Confirm suppression — paramètre
     confirm_delete_param_open: bool = False
     confirm_delete_param_id: str = ""
+    confirm_delete_param_comment: str = ""
 
     # Confirm désactivation — type d'examen
     confirm_deactivate_type_open: bool = False
     confirm_deactivate_type_id: str = ""
     confirm_deactivate_type_name: str = ""
+    confirm_deactivate_type_comment: str = ""
 
     # Confirm réactivation — type d'examen
     confirm_reactivate_type_open: bool = False
@@ -107,6 +111,7 @@ class ExamTypesState(ReflexMainState):
     confirm_delete_type_open: bool = False
     confirm_delete_type_id: str = ""
     confirm_delete_type_name: str = ""
+    confirm_delete_type_comment: str = ""
 
     @rx.event
     async def on_load(self):
@@ -362,18 +367,27 @@ class ExamTypesState(ReflexMainState):
     @rx.event
     def open_confirm_delete_param(self, param_id: str):
         self.confirm_delete_param_id = param_id
+        self.confirm_delete_param_comment = ""
         self.confirm_delete_param_open = True
+
+    @rx.event
+    def set_delete_param_comment(self, v: str):
+        self.confirm_delete_param_comment = v
 
     @rx.event
     def dismiss_confirm_delete_param(self):
         self.confirm_delete_param_open = False
         self.confirm_delete_param_id = ""
+        self.confirm_delete_param_comment = ""
 
     @rx.event
     async def confirmed_delete_param(self):
+        if not self.confirm_delete_param_comment.strip():
+            return
         param_id = self.confirm_delete_param_id
         self.confirm_delete_param_open = False
         self.confirm_delete_param_id = ""
+        self.confirm_delete_param_comment = ""
         try:
             with await self.authenticate_user():
                 from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
@@ -497,6 +511,12 @@ class ExamTypesState(ReflexMainState):
                     if r.category_label and r.category_label not in seen:
                         seen.append(r.category_label)
                 self.existing_categories = seen
+                # Départements uniques (pour l'autocomplete)
+                seen_depts = []
+                for r in rows:
+                    if r.department and r.department not in seen_depts:
+                        seen_depts.append(r.department)
+                self.existing_departments = seen_depts
         except Exception as e:
             self.error = str(e)
         finally:

@@ -36,8 +36,8 @@ class PatientRowDTO(BaseModel):
 
 
 class ExamTypeRowDTO(BaseModel):
-    id: str
-    code: str
+    id: str          # ExamTypeRef.id (primary key in the referential)
+    code: str = ""   # kept for compatibility, unused for new exams
     name: str
     category: str = ""
 
@@ -637,19 +637,16 @@ class CampaignDetailState(PatientPickerState):
         self.exam_type_options = []
         try:
             with await self.authenticate_user():
-                from gws_care.exam.exam_type_service import ExamTypeService
-                # Seed exam types if not yet present (idempotent; startup seed may
-                # have failed due to missing auth context)
-                ExamTypeService.seed_from_enum()
-                all_types = ExamTypeService.list_exam_types(active_only=True)
+                from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
                 enrolled_ids = {et.id for et in self.exam_types}
+                all_refs = ExamTypeRefService.list_all(active_only=True)
                 self.exam_type_options = [
                     ExamTypeOptionDTO(
-                        id=str(et.id),
-                        label=f"{et.name} ({et.code})",
+                        id=r.id,
+                        label=r.name,
                     )
-                    for et in all_types
-                    if str(et.id) not in enrolled_ids
+                    for r in all_refs
+                    if r.id not in enrolled_ids
                 ]
         except Exception as e:
             self.error_message = str(e)
@@ -671,7 +668,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
-                CampaignService.add_exam_type(self.program.id, self.selected_exam_type_id)
+                CampaignService.add_exam_ref(self.program.id, self.selected_exam_type_id)
             self.add_exam_type_dialog_open = False
             await self._load_program(preserve_tab=True)
         except Exception as e:
@@ -686,7 +683,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
-                CampaignService.remove_exam_type(self.program.id, exam_type_id)
+                CampaignService.remove_exam_ref(self.program.id, exam_type_id)
             await self._load_program(preserve_tab=True)
         except Exception as e:
             self.error_message = str(e)
@@ -735,16 +732,15 @@ class CampaignDetailState(PatientPickerState):
                     for p in patients
                 ]
 
-                # ExamTypes
-                exam_types = CampaignService.get_exam_types(page_id)
+                # ExamTypes — loaded from referential (ExamTypeRef)
+                exam_refs = CampaignService.get_exam_refs(page_id)
                 self.exam_types = [
                     ExamTypeRowDTO(
-                        id=str(et.id),
-                        code=et.code,
-                        name=et.name,
-                        category=et.category.value if hasattr(et.category, "value") else str(et.category),
+                        id=str(ref.id),
+                        name=ref.name,
+                        category=ref.get_category_label(),
                     )
-                    for et in exam_types
+                    for ref in exam_refs
                 ]
 
                 # Visits
