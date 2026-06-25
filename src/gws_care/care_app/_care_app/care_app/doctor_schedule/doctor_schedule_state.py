@@ -26,7 +26,7 @@ class ScheduleBlockDTO(BaseModel):
 
 
 class DoctorOptionDTO(BaseModel):
-    id: str = ""
+    id: str = ""          # MedicalDoctor.id (used by DoctorSchedule FK)
     name: str = ""
     specialty: str = ""
 
@@ -35,22 +35,20 @@ class UnavailableDayDTO(BaseModel):
     id: str = ""
     doctor_id: str = ""
     doctor_name: str = ""
-    date: str = ""        # start date
-    date_end: str = ""   # end date (empty = single day)
-    half_day: str = "FULL"  # "FULL" | "AM" | "PM"
+    date: str = ""
+    date_end: str = ""
+    half_day: str = "FULL"
     reason: str = ""
 
 
 class CalendarDayDTO(BaseModel):
-    """One cell in the monthly calendar grid."""
-    date_str: str = ""        # "YYYY-MM-DD"; empty for padding cells
-    day_num: int = 0          # 1-31; 0 for padding
+    date_str: str = ""
+    day_num: int = 0
     is_today: bool = False
     is_padding: bool = True
-    full_blocked: bool = False   # FULL day unavailability
-    am_blocked: bool = False     # Morning unavailability
-    pm_blocked: bool = False     # Afternoon unavailability
-    # Doctor name(s) for tooltip if needed
+    full_blocked: bool = False
+    am_blocked: bool = False
+    pm_blocked: bool = False
     blocked_reason: str = ""
 
 
@@ -59,29 +57,69 @@ class DoctorScheduleState(ReflexMainState):
     doctors: list[DoctorOptionDTO] = []
     is_loading: bool = False
     error_message: str = ""
-    selected_doctor_id: str = "ALL"
-    # Create block form
+    selected_doctor_id: str = "ALL"   # MedicalDoctor.id or "ALL"
+
+    # ── Search / filter ───────────────────────────────────────────────────────
+    search_name: str = ""
+    filter_specialty: str = ""
+
+    # ── Create block form ─────────────────────────────────────────────────────
     create_dialog_open: bool = False
     form_doctor_id: str = ""
-    form_days: list[int] = []   # selected days of week (0=Mon … 6=Sun)
+    form_days: list[int] = []
     form_start: str = "09:00"
     form_end: str = "12:00"
     form_slot: int = 30
     form_room: str = ""
-    # Unavailable days
+
+    # ── Unavailable days ──────────────────────────────────────────────────────
     unavailable_days: list[UnavailableDayDTO] = []
     unavail_form_open: bool = False
     unavail_form_doctor_id: str = ""
-    unavail_form_date: str = ""       # start date
-    unavail_form_date_end: str = ""   # end date (empty = same as start)
-    unavail_form_half_day: str = "FULL"  # "FULL" | "AM" | "PM"
+    unavail_form_date: str = ""
+    unavail_form_date_end: str = ""
+    unavail_form_half_day: str = "FULL"
     unavail_form_reason: str = ""
     unavail_error: str = ""
-    # Calendar view
+
+    # ── Calendar view ─────────────────────────────────────────────────────────
     cal_year: int = 2026
     cal_month: int = 6
 
-    # ── Calendar computed vars ────────────────────────────────────────────────
+    # ── Computed vars ─────────────────────────────────────────────────────────
+
+    @rx.var
+    def available_specialties(self) -> list[str]:
+        return sorted({d.specialty for d in self.doctors if d.specialty})
+
+    @rx.var
+    def filtered_doctors(self) -> list[DoctorOptionDTO]:
+        result = self.doctors
+        if self.filter_specialty:
+            result = [d for d in result if d.specialty == self.filter_specialty]
+        if self.search_name:
+            q = self.search_name.strip().lower()
+            result = [d for d in result if q in d.name.lower()]
+        return result
+
+    @rx.var
+    def selected_doctor_name(self) -> str:
+        for d in self.doctors:
+            if d.id == self.selected_doctor_id:
+                return d.name
+        return "Tous les médecins"
+
+    @rx.var
+    def selected_doctor_specialty(self) -> str:
+        for d in self.doctors:
+            if d.id == self.selected_doctor_id:
+                return d.specialty
+        return ""
+
+    @rx.var
+    def schedulable_doctors(self) -> list[DoctorOptionDTO]:
+        """All active doctors — used for select dropdowns in create/unavailability dialogs."""
+        return self.doctors
 
     @rx.var
     def cal_month_label(self) -> str:
@@ -89,17 +127,15 @@ class DoctorScheduleState(ReflexMainState):
 
     @rx.var
     def calendar_cells(self) -> list[CalendarDayDTO]:
-        """Generate the 42-cell (6×7) calendar grid for the current month."""
         from calendar import monthrange
         from datetime import date, timedelta
 
         today = date.today()
         first_day = date(self.cal_year, self.cal_month, 1)
         num_days = monthrange(self.cal_year, self.cal_month)[1]
-        start_weekday = first_day.weekday()  # 0=Mon
+        start_weekday = first_day.weekday()
 
-        # Build blocked status per date (for filtered doctor)
-        blocked: dict[str, dict] = {}  # date_str -> {"full":bool,"am":bool,"pm":bool,"reasons":list}
+        blocked: dict[str, dict] = {}
         for u in self.unavailable_days:
             if self.selected_doctor_id != "ALL" and u.doctor_id != self.selected_doctor_id:
                 continue
@@ -124,10 +160,8 @@ class DoctorScheduleState(ReflexMainState):
                 cur += timedelta(days=1)
 
         cells: list[CalendarDayDTO] = []
-        # Leading padding
         for _ in range(start_weekday):
             cells.append(CalendarDayDTO(is_padding=True))
-        # Actual days
         for day_n in range(1, num_days + 1):
             d = date(self.cal_year, self.cal_month, day_n)
             ds = d.strftime("%Y-%m-%d")
@@ -146,10 +180,42 @@ class DoctorScheduleState(ReflexMainState):
                 pm_blocked=pm and not full,
                 blocked_reason=", ".join(reasons) if reasons else "",
             ))
-        # Trailing padding
         while len(cells) % 7 != 0:
             cells.append(CalendarDayDTO(is_padding=True))
         return cells
+
+    @rx.var
+    def filtered_blocks(self) -> list[ScheduleBlockDTO]:
+        if self.selected_doctor_id == "ALL":
+            return self.blocks
+        return [b for b in self.blocks if b.doctor_id == self.selected_doctor_id]
+
+    @rx.var
+    def filtered_unavail_days(self) -> list[UnavailableDayDTO]:
+        if self.selected_doctor_id == "ALL":
+            return self.unavailable_days
+        return [d for d in self.unavailable_days if d.doctor_id == self.selected_doctor_id]
+
+    # ── Filter events ─────────────────────────────────────────────────────────
+
+    @rx.event
+    def set_search_name(self, value: str):
+        self.search_name = value
+
+    @rx.event
+    def set_filter_specialty(self, value: str):
+        self.filter_specialty = "" if value == "_all_" else value
+
+    @rx.event
+    def select_doctor(self, doctor_id: str):
+        """Select a doctor card to filter the schedule."""
+        self.selected_doctor_id = doctor_id
+
+    @rx.event
+    def clear_doctor_selection(self):
+        self.selected_doctor_id = "ALL"
+
+    # ── Calendar navigation ───────────────────────────────────────────────────
 
     @rx.event
     def prev_month(self):
@@ -167,20 +233,13 @@ class DoctorScheduleState(ReflexMainState):
         else:
             self.cal_month += 1
 
-    @rx.var
-    def filtered_blocks(self) -> list[ScheduleBlockDTO]:
-        if self.selected_doctor_id == "ALL":
-            return self.blocks
-        return [b for b in self.blocks if b.doctor_id == self.selected_doctor_id]
-
-    @rx.event
-    def set_doctor_filter(self, value: str):
-        self.selected_doctor_id = value
+    # ── Create block dialog ───────────────────────────────────────────────────
 
     @rx.event
     def open_create_dialog(self):
         self.create_dialog_open = True
-        self.form_doctor_id = ""
+        # Pre-select the current doctor if one is selected
+        self.form_doctor_id = "" if self.selected_doctor_id == "ALL" else self.selected_doctor_id
         self.form_days = []
         self.form_start = "09:00"
         self.form_end = "12:00"
@@ -198,7 +257,6 @@ class DoctorScheduleState(ReflexMainState):
 
     @rx.event
     def toggle_form_day(self, day: int):
-        """Toggle a day of week in the multi-selection list."""
         if day in self.form_days:
             self.form_days = [d for d in self.form_days if d != day]
         else:
@@ -248,7 +306,6 @@ class DoctorScheduleState(ReflexMainState):
             await self.on_load()  # type: ignore[misc]
         except Exception as exc:
             self.error_message = str(exc)
-            print(f"[schedule] Erreur création: {exc}")
 
     @rx.event
     async def toggle_block_active(self, block_id: str):
@@ -272,100 +329,12 @@ class DoctorScheduleState(ReflexMainState):
         except Exception as exc:
             self.error_message = str(exc)
 
-    @rx.event
-    async def on_load(self):
-        self.is_loading = True
-        self.error_message = ""
-        # Initialize calendar to current month
-        from datetime import date
-        today = date.today()
-        self.cal_year = today.year
-        self.cal_month = today.month
-        try:
-            with await self.authenticate_user():
-                from gws_care.scheduling.doctor_schedule import DoctorSchedule
-                from gws_care.role.user_care_role import UserCareRole
-                from gws_care.role.care_role import CareRole
-                from gws_care.user.user import User
-
-                # Load all doctors (MEDECIN_PSC + MEDECIN_ENTREPRISE)
-                doctor_role_rows = list(
-                    UserCareRole.select(UserCareRole, User)
-                    .join(User)
-                    .where(UserCareRole.role.in_([CareRole.MEDECIN_PSC.value, CareRole.MEDECIN_ENTREPRISE.value]))
-                    .order_by(User.last_name)
-                )
-                seen_ids: set[str] = set()
-                doctor_opts: list[DoctorOptionDTO] = []
-                for row in doctor_role_rows:
-                    uid = str(row.user.id)
-                    if uid not in seen_ids:
-                        seen_ids.add(uid)
-                        u = row.user
-                        sp = getattr(row, "specialty", None) or ""
-                        doctor_opts.append(DoctorOptionDTO(
-                            id=uid,
-                            name=f"{u.first_name} {u.last_name}".strip() or u.email,
-                            specialty=sp,
-                        ))
-                self.doctors = doctor_opts
-
-                # Build doctor name map
-                doc_name_map = {d.id: d.name for d in self.doctors}
-
-                # Load all schedule blocks
-                all_blocks = list(
-                    DoctorSchedule.select()
-                    .order_by(DoctorSchedule.day_of_week, DoctorSchedule.start_time)
-                    .limit(1000)
-                )
-                self.blocks = [
-                    ScheduleBlockDTO(
-                        id=str(b.id),
-                        doctor_id=str(b.doctor_id),
-                        doctor_name=doc_name_map.get(str(b.doctor_id), "—"),
-                        day_of_week=b.day_of_week,
-                        day_label=_DAY_LABELS[b.day_of_week] if 0 <= b.day_of_week <= 6 else str(b.day_of_week),
-                        start_time=b.start_time,
-                        end_time=b.end_time,
-                        slot_duration_minutes=b.slot_duration_minutes,
-                        room=b.room or "",
-                        is_active=bool(b.is_active),
-                    )
-                    for b in all_blocks
-                ]
-
-                # Load unavailable days
-                from gws_care.scheduling.doctor_schedule import DoctorUnavailableDay
-                all_unavail = list(
-                    DoctorUnavailableDay.select()
-                    .order_by(DoctorUnavailableDay.date)
-                    .limit(1000)
-                )
-                self.unavailable_days = [
-                    UnavailableDayDTO(
-                        id=str(u.id),
-                        doctor_id=str(u.doctor_id),
-                        doctor_name=doc_name_map.get(str(u.doctor_id), "—"),
-                        date=u.date,
-                        date_end=u.date_end or "",
-                        half_day=u.half_day or "FULL",
-                        reason=u.reason or "",
-                    )
-                    for u in all_unavail
-                ]
-        except Exception as exc:
-            self.error_message = str(exc)
-            print(f"[schedule] Erreur chargement: {exc}")
-        finally:
-            self.is_loading = False
-
     # ── Unavailable days ──────────────────────────────────────────────────────
 
     @rx.event
     def open_unavail_form(self):
         self.unavail_form_open = True
-        self.unavail_form_doctor_id = self.form_doctor_id or (self.doctors[0].id if self.doctors else "")
+        self.unavail_form_doctor_id = "" if self.selected_doctor_id == "ALL" else self.selected_doctor_id
         self.unavail_form_date = ""
         self.unavail_form_date_end = ""
         self.unavail_form_half_day = "FULL"
@@ -383,7 +352,6 @@ class DoctorScheduleState(ReflexMainState):
     @rx.event
     def set_unavail_date(self, v: str):
         self.unavail_form_date = v
-        # auto-fill end date if not yet set
         if not self.unavail_form_date_end:
             self.unavail_form_date_end = v
 
@@ -436,35 +404,87 @@ class DoctorScheduleState(ReflexMainState):
         except Exception as exc:
             self.error_message = str(exc)
 
-    @rx.var
-    def filtered_unavail_days(self) -> list[UnavailableDayDTO]:
-        if self.selected_doctor_id == "ALL":
-            return self.unavailable_days
-        return [d for d in self.unavailable_days if d.doctor_id == self.selected_doctor_id]
+    # ── Data loader ───────────────────────────────────────────────────────────
 
     @rx.event
-    async def set_doctor_specialty(self, doctor_id: str, specialty: str):
-        """Update the specialty for a doctor's UserCareRole row."""
+    async def on_load(self):
+        self.is_loading = True
+        self.error_message = ""
+        from datetime import date
+        today = date.today()
+        self.cal_year = today.year
+        self.cal_month = today.month
         try:
             with await self.authenticate_user():
-                from gws_care.role.care_role import CareRole
-                from gws_care.role.user_care_role import UserCareRole
-                # Find any doctor role for this user and update specialty
-                role_row = UserCareRole.get_or_none(
-                    (UserCareRole.user == doctor_id)
-                    & (UserCareRole.role.in_([CareRole.MEDECIN_PSC.value, CareRole.MEDECIN_ENTREPRISE.value]))
+                from gws_care.doctor.medical_doctor import MedicalDoctor
+
+                # Load doctors from MedicalDoctor (active + not archived)
+                medical_doctors = list(
+                    MedicalDoctor.select()
+                    .where(
+                        (MedicalDoctor.is_active == True)
+                        & (MedicalDoctor.is_archived == False)
+                    )
+                    .order_by(MedicalDoctor.last_name, MedicalDoctor.first_name)
                 )
-                if role_row:
-                    role_row.specialty = None if specialty == "__none__" else (specialty or None)
-                    role_row.save()
-                    # Update local state immediately
-                    self.doctors = [
-                        DoctorOptionDTO(
-                            id=d.id,
-                            name=d.name,
-                            specialty=specialty if d.id == doctor_id else d.specialty,
-                        )
-                        for d in self.doctors
-                    ]
+
+                doctor_opts: list[DoctorOptionDTO] = []
+                doc_name_map: dict[str, str] = {}  # MedicalDoctor.id -> display name
+
+                for md in medical_doctors:
+                    mid = str(md.id)
+                    name = md.get_full_name()
+                    doctor_opts.append(DoctorOptionDTO(
+                        id=mid,
+                        name=name,
+                        specialty=md.specialization or "",
+                    ))
+                    doc_name_map[mid] = name
+
+                self.doctors = doctor_opts
+
+                from gws_care.scheduling.doctor_schedule import DoctorSchedule
+                all_blocks = list(
+                    DoctorSchedule.select()
+                    .order_by(DoctorSchedule.day_of_week, DoctorSchedule.start_time)
+                    .limit(2000)
+                )
+                self.blocks = [
+                    ScheduleBlockDTO(
+                        id=str(b.id),
+                        doctor_id=str(b.doctor_id),
+                        doctor_name=doc_name_map.get(str(b.doctor_id), "—"),
+                        day_of_week=b.day_of_week,
+                        day_label=_DAY_LABELS[b.day_of_week] if 0 <= b.day_of_week <= 6 else str(b.day_of_week),
+                        start_time=b.start_time,
+                        end_time=b.end_time,
+                        slot_duration_minutes=b.slot_duration_minutes,
+                        room=b.room or "",
+                        is_active=bool(b.is_active),
+                    )
+                    for b in all_blocks
+                ]
+
+                from gws_care.scheduling.doctor_schedule import DoctorUnavailableDay
+                all_unavail = list(
+                    DoctorUnavailableDay.select()
+                    .order_by(DoctorUnavailableDay.date)
+                    .limit(2000)
+                )
+                self.unavailable_days = [
+                    UnavailableDayDTO(
+                        id=str(u.id),
+                        doctor_id=str(u.doctor_id),
+                        doctor_name=doc_name_map.get(str(u.doctor_id), "—"),
+                        date=u.date,
+                        date_end=u.date_end or "",
+                        half_day=u.half_day or "FULL",
+                        reason=u.reason or "",
+                    )
+                    for u in all_unavail
+                ]
         except Exception as exc:
             self.error_message = str(exc)
+            print(f"[schedule] Erreur chargement: {exc}")
+        finally:
+            self.is_loading = False

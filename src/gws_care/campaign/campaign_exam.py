@@ -7,11 +7,15 @@ from gws_care.campaign.campaign import Campaign
 from gws_care.core.care_db_manager import CareDbManager
 from gws_core import Model
 from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
-from peewee import ForeignKeyField
+from peewee import CharField, ForeignKeyField
 
 
 class CampaignExam(Model):
-    """Associates an exam type to a campaign (M2M)."""
+    """Associates an exam type to a campaign (M2M).
+
+    An optional doctor (MedicalDoctor) can be assigned per exam slot so they
+    receive the results and can submit their clinical interpretation.
+    """
 
     campaign: Campaign = ForeignKeyField(
         Campaign, null=False, backref="exam_types", on_delete="CASCADE"
@@ -19,6 +23,9 @@ class CampaignExam(Model):
     exam_type_ref: ExamTypeRef = ForeignKeyField(
         ExamTypeRef, null=False, backref="campaigns", on_delete="CASCADE"
     )
+    # Optional doctor assignment per exam type in the campaign
+    assigned_doctor_id: str = CharField(max_length=36, null=True, default=None)
+    assigned_doctor_name: str = CharField(max_length=300, null=True, default=None)
 
     class Meta:
         table_name = "gws_care_campaign_exam"

@@ -18,6 +18,7 @@ class DoctorOption(BaseModel):
     id: str
     name: str
     specialty: str = ""
+    doctor_record_id: str = ""   # MedicalDoctor.id (for campaign assignment reference)
 
 
 class AppointmentFormState(FormDialogState, rx.State):
@@ -42,11 +43,19 @@ class AppointmentFormState(FormDialogState, rx.State):
 
     # Exam type options loaded from referential
     exam_type_options: list[ExamTypeOption] = []
-    # Doctor options: users with MEDECIN_PSC or MEDECIN_ENTREPRISE role
+    # Doctor options loaded from MedicalDoctor (enriched with specialty)
     doctor_options: list[DoctorOption] = []
+    # Specialty filter for the doctor picker
+    specialty_filter: str = ""
+    specialty_options: list[str] = []
+    specialty_search: str = ""       # search input for specialty step
 
     # Patient options for standalone mode: list of [id, label]
     patient_options: list[list[str]] = []  # [[id, "LAST First (P0001)"], ...]
+
+    # Step wizard: 1=specialty, 2=doctor, 3=date+slot
+    booking_step: int = 1
+    selected_doctor_name: str = ""  # display name of picked doctor
 
     # Set when editing an existing appointment
     _editing_appointment_id: str = ""
@@ -72,6 +81,72 @@ class AppointmentFormState(FormDialogState, rx.State):
     @rx.event
     def set_form_patient_id(self, value: str):
         self.form_patient_id = value
+
+    @rx.var
+    def filtered_specialty_options(self) -> list[str]:
+        """Specialty options filtered by the search input."""
+        if not self.specialty_search:
+            return self.specialty_options
+        q = self.specialty_search.lower()
+        return [s for s in self.specialty_options if q in s.lower()]
+
+    @rx.event
+    def set_specialty_search(self, value: str):
+        self.specialty_search = value
+
+    @rx.event
+    def set_specialty_filter(self, value: str):
+        """Filter the doctor options list by specialty."""
+        self.specialty_filter = value if value != "_all_" else ""
+        self._load_doctor_options()
+        # Reset doctor selection if current doctor no longer in filtered list
+        if self.form_doctor_id and not any(
+            d.id == self.form_doctor_id for d in self.doctor_options
+        ):
+            self.form_doctor_id = ""
+            self.form_scheduled_at = ""
+            self.form_available_slots = []
+
+    @rx.event
+    def select_booking_specialty(self, specialty: str):
+        """Step 1 → 2: user picked a specialty (or 'all')."""
+        self.specialty_filter = "" if specialty == "_all_" else specialty
+        self.specialty_search = ""
+        self._load_doctor_options()
+        self.form_doctor_id = ""
+        self.selected_doctor_name = ""
+        self.form_scheduled_at = ""
+        self.form_available_slots = []
+        self.form_booking_date = ""
+        self.booking_step = 2
+
+    @rx.event
+    async def select_booking_doctor_card(self, doctor_id: str, doctor_name: str):
+        """Step 2 → 3: user clicked a doctor card; pre-load today's slots."""
+        self.form_doctor_id = doctor_id
+        self.selected_doctor_name = doctor_name
+        self.form_scheduled_at = ""
+        self.form_available_slots = []
+        from datetime import date
+        self.form_booking_date = date.today().strftime("%Y-%m-%d")
+        self.booking_step = 3
+        await self._load_available_slots()
+
+    @rx.event
+    def go_back_to_step(self, step: int):
+        """Navigate back to a previous step."""
+        self.booking_step = step
+        if step <= 1:
+            self.specialty_filter = ""
+            self.form_doctor_id = ""
+            self.selected_doctor_name = ""
+            self._load_doctor_options()
+        if step <= 2:
+            self.form_doctor_id = ""
+            self.selected_doctor_name = ""
+        self.form_scheduled_at = ""
+        self.form_available_slots = []
+        self.form_booking_date = ""
 
     @rx.event
     def set_form_doctor_id(self, value: str):
@@ -152,40 +227,44 @@ class AppointmentFormState(FormDialogState, rx.State):
             self.exam_type_options = []
 
     def _load_doctor_options(self) -> None:
-        """Load users with MEDECIN_PSC or MEDECIN_ENTREPRISE role."""
+        """Load active, non-archived MedicalDoctor records for the doctor picker.
+
+        Uses MedicalDoctor.id as the option id so that DoctorScheduleService.available_slots
+        can be called directly with the selected doctor id.
+        """
         try:
-            from gws_care.role.care_role import CareRole
-            from gws_care.role.user_care_role import UserCareRole
-            from gws_care.user.user import User
-            doctor_roles = [CareRole.MEDECIN_PSC.value, CareRole.MEDECIN_ENTREPRISE.value]
-            rows = (
-                UserCareRole.select(UserCareRole, User)
-                .join(User)
-                .where(UserCareRole.role.in_(doctor_roles))
-            )
-            seen = set()
-            options = []
-            for row in rows:
-                uid = str(row.user.id)
-                if uid not in seen:
-                    seen.add(uid)
-                    sp = getattr(row, "specialty", None) or ""
-                    options.append(DoctorOption(
-                        id=uid,
-                        name=f"Dr {row.user.first_name} {row.user.last_name}",
-                        specialty=sp,
-                    ))
-            self.doctor_options = options
+            from gws_care.doctor.medical_doctor import MedicalDoctor
+
+            all_options: list[DoctorOption] = []
+            for md in (
+                MedicalDoctor.select()
+                .where((MedicalDoctor.is_active == True) & (MedicalDoctor.is_archived == False))
+                .order_by(MedicalDoctor.last_name, MedicalDoctor.first_name)
+            ):
+                all_options.append(DoctorOption(
+                    id=str(md.id),
+                    name=md.get_full_name(),
+                    specialty=md.specialization or "",
+                    doctor_record_id=str(md.id),
+                ))
+
+            specs = sorted({o.specialty for o in all_options if o.specialty})
+            self.specialty_options = specs
+
+            if self.specialty_filter:
+                self.doctor_options = [o for o in all_options if o.specialty == self.specialty_filter]
+            else:
+                self.doctor_options = all_options
         except Exception as exc:
             print(f"[appointment_form] Failed to load doctor options: {exc}")
             self.doctor_options = []
+            self.specialty_options = []
 
     # ── Open ──────────────────────────────────────────────────────────────────
 
     @rx.event
     def open_create_dialog(self, patient_id: str, patient_label: str = ""):
         """Open the dialog pre-filled with a patient."""
-        from datetime import date
         self.form_patient_id = patient_id
         self.form_patient_label = patient_label
         self.form_account_id = ""
@@ -195,9 +274,13 @@ class AppointmentFormState(FormDialogState, rx.State):
         self.form_doctor_id = ""
         self.form_duration = "20"
         self.form_room = ""
-        self.form_booking_date = date.today().strftime("%Y-%m-%d")
+        self.form_booking_date = ""
         self.form_available_slots = []
         self.form_slots_loading = False
+        self.specialty_filter = ""
+        self.specialty_search = ""
+        self.booking_step = 1
+        self.selected_doctor_name = ""
         self._editing_appointment_id = ""
         self.is_update_mode = False
         self._load_exam_type_options()
@@ -207,7 +290,6 @@ class AppointmentFormState(FormDialogState, rx.State):
     @rx.event
     async def open_create_dialog_standalone(self):
         """Open the dialog without a pre-selected patient (from appointments page)."""
-        from datetime import date
         self.form_patient_id = ""
         self.form_patient_label = ""
         self.form_account_id = ""
@@ -217,23 +299,28 @@ class AppointmentFormState(FormDialogState, rx.State):
         self.form_doctor_id = ""
         self.form_duration = "20"
         self.form_room = ""
-        self.form_booking_date = date.today().strftime("%Y-%m-%d")
+        self.form_booking_date = ""
         self.form_available_slots = []
         self.form_slots_loading = False
+        self.specialty_filter = ""
+        self.booking_step = 1
+        self.selected_doctor_name = ""
         self._editing_appointment_id = ""
         self.is_update_mode = False
         self._load_exam_type_options()
         self._load_doctor_options()
-        # If the current user is a doctor, pre-select them
+        # If the current user is a doctor with a MedicalDoctor record, pre-select them
         try:
             _main = await self.get_state(ReflexMainState)
             with await _main.authenticate_user() as auth_user:
-                from gws_care.role.care_role import CareRole
-                from gws_care.role.user_role_service import UserRoleService
-                roles = UserRoleService.get_roles_for_user(str(auth_user.id))
-                _doctor_roles = {CareRole.MEDECIN_PSC, CareRole.MEDECIN_ENTREPRISE}
-                if any(r in _doctor_roles for r in roles):
-                    self.form_doctor_id = str(auth_user.id)
+                from gws_care.doctor.medical_doctor import MedicalDoctor
+                md = MedicalDoctor.get_or_none(
+                    (MedicalDoctor.user == auth_user.id)
+                    & (MedicalDoctor.is_active == True)
+                    & (MedicalDoctor.is_archived == False)
+                )
+                if md:
+                    self.form_doctor_id = str(md.id)
         except Exception:
             pass
         # Load patient options for the selector
@@ -248,6 +335,26 @@ class AppointmentFormState(FormDialogState, rx.State):
             print(f"[appointment_form] Failed to load patient options: {exc}")
             self.patient_options = []
         self.dialog_opened = True
+
+    @rx.event(background=True)
+    async def confirm_booking(self):
+        """Submit the booking form — usable from button on_click without form_data."""
+        async with self:
+            self.is_loading = True
+        try:
+            if self.is_update_mode:
+                async for event in self._update({}):
+                    yield event
+            else:
+                async for event in self._create({}):
+                    yield event
+        except Exception as exc:
+            yield rx.toast.error(str(exc))
+        finally:
+            async with self:
+                self.is_loading = False
+        async with self:
+            await self.close_dialog()
 
     @rx.event
     def open_edit_dialog(self, appointment_id: str):
@@ -275,6 +382,11 @@ class AppointmentFormState(FormDialogState, rx.State):
         self.patient_options = []
         self.exam_type_options = []
         self.doctor_options = []
+        self.specialty_filter = ""
+        self.specialty_search = ""
+        self.specialty_options = []
+        self.booking_step = 1
+        self.selected_doctor_name = ""
         self._editing_appointment_id = ""
         self.is_update_mode = False
         self.form_error = ""
@@ -307,7 +419,7 @@ class AppointmentFormState(FormDialogState, rx.State):
                 patient_id=self.form_patient_id,
                 account_id=self.form_account_id or None,
                 scheduled_at=scheduled_at,
-                exam_type_ref_id=exam_type,
+                exam_type_ref_id=self.form_exam_type or None,
                 notes=self.form_notes or None,
                 assigned_doctor_id=self.form_doctor_id or None,
                 duration_minutes=int(self.form_duration or 20),
@@ -346,7 +458,7 @@ class AppointmentFormState(FormDialogState, rx.State):
                 patient_id=self.form_patient_id,
                 account_id=self.form_account_id or None,
                 scheduled_at=scheduled_at,
-                exam_type_ref_id=exam_type,
+                exam_type_ref_id=self.form_exam_type or None,
                 notes=self.form_notes or None,
                 assigned_doctor_id=self.form_doctor_id or None,
                 duration_minutes=int(self.form_duration or 20),

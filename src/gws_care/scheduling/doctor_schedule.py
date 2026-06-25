@@ -13,7 +13,8 @@ from peewee import BooleanField, CharField, ForeignKeyField, IntegerField
 
 from gws_care.core.care_db_manager import CareDbManager
 from gws_care.core.model_with_user import ModelWithUser
-from gws_care.user.user import User
+from gws_care.user.user import User  # kept for ModelWithUser created_by/last_modified_by
+from gws_care.doctor.medical_doctor import MedicalDoctor
 
 
 class DayOfWeek(int, Enum):
@@ -36,8 +37,8 @@ class DoctorSchedule(ModelWithUser):
     The booking engine uses these blocks to compute free time slots.
     """
 
-    doctor: User = ForeignKeyField(
-        User, null=False, backref="schedule_blocks", on_delete="CASCADE", index=True
+    doctor: MedicalDoctor = ForeignKeyField(
+        MedicalDoctor, null=False, backref="schedule_blocks", on_delete="CASCADE", index=True
     )
     day_of_week: int = IntegerField(null=False)         # DayOfWeek enum value
     # Times stored as "HH:MM" strings for simplicity and timezone-independence
@@ -82,8 +83,8 @@ class DoctorUnavailableDay(ModelWithUser):
     booking engine returns zero or partial slots for those days.
     """
 
-    doctor: User = ForeignKeyField(
-        User, null=False, backref="unavailable_days", on_delete="CASCADE", index=True
+    doctor: MedicalDoctor = ForeignKeyField(
+        MedicalDoctor, null=False, backref="unavailable_days", on_delete="CASCADE", index=True
     )
     date: str = CharField(max_length=10, null=False)       # start date "YYYY-MM-DD"
     date_end: str = CharField(max_length=10, null=True)    # end date (inclusive); None = single day
@@ -187,21 +188,40 @@ class DoctorScheduleService:
         if pm_blocked:
             all_slots = [s for s in all_slots if s.hour < 12]
 
-        # Fetch already-booked slots for this doctor/date
-        booked = set()
+        # Collect already-booked slots from admin Appointment records
+        day_start = datetime(on_date.year, on_date.month, on_date.day, 0, 0)
+        day_end = datetime(on_date.year, on_date.month, on_date.day, 23, 59)
+        booked: set[datetime] = set()
         try:
-            existing = list(
-                Appointment.select()
-                .where(
-                    (Appointment.assigned_doctor_id == doctor_id)
-                    & (Appointment.scheduled_at >= datetime(on_date.year, on_date.month, on_date.day, 0, 0))
-                    & (Appointment.scheduled_at < datetime(on_date.year, on_date.month, on_date.day, 23, 59))
-                    & (Appointment.status != AppointmentStatus.CANCELLED.value)
-                )
-            )
-            for appt in existing:
+            for appt in Appointment.select().where(
+                (Appointment.assigned_doctor_id == doctor_id)
+                & (Appointment.scheduled_at >= day_start)
+                & (Appointment.scheduled_at < day_end)
+                & (Appointment.status != AppointmentStatus.CANCELLED.value)
+            ):
                 booked.add(appt.scheduled_at.replace(second=0, microsecond=0))
         except Exception as exc:
-            print(f"[doctor_schedule] Failed to load booked slots for doctor={doctor_id} date={on_date}: {exc}")
+            print(f"[doctor_schedule] Failed to load Appointment booked slots doctor={doctor_id}: {exc}")
+
+        # Also collect from Visit records (patient portal + campaign bookings)
+        try:
+            from gws_care.visit.visit import Visit
+            for v in Visit.select().where(
+                (Visit.doctor == doctor_id)
+                & (Visit.scheduled_at >= day_start)
+                & (Visit.scheduled_at < day_end)
+            ):
+                if v.scheduled_at is None:
+                    continue
+                # Skip cancelled visits
+                cvs = v.consultation_visit_status
+                if cvs is not None and cvs.value == "cancelled":
+                    continue
+                cmpvs = v.campaign_visit_status
+                if cmpvs is not None and cmpvs.value == "cancelled":
+                    continue
+                booked.add(v.scheduled_at.replace(second=0, microsecond=0))
+        except Exception as exc:
+            print(f"[doctor_schedule] Failed to load Visit booked slots doctor={doctor_id}: {exc}")
 
         return [s for s in all_slots if s.replace(second=0, microsecond=0) not in booked]

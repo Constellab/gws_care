@@ -56,11 +56,46 @@ def _doctor_form_dialog() -> rx.Component:
                 ),
                 _field(
                     LanguageState.tr["field_specialization"],
-                    rx.input(
-                        value=DoctorListState.form_specialization,
-                        on_change=DoctorListState.set_form_specialization,
-                        placeholder="ex. Médecine générale",
-                        size="2",
+                    rx.box(
+                        rx.input(
+                            value=DoctorListState.form_specialization,
+                            on_change=DoctorListState.set_form_specialization,
+                            on_focus=DoctorListState.focus_specialty_input,
+                            on_blur=DoctorListState.hide_specialty_suggestions,
+                            placeholder="ex. Médecine générale",
+                            size="2",
+                            width="100%",
+                        ),
+                        rx.cond(
+                            DoctorListState.show_specialty_suggestions
+                            & (DoctorListState.filtered_specialty_suggestions.length() > 0),
+                            rx.box(
+                                rx.foreach(
+                                    DoctorListState.filtered_specialty_suggestions,
+                                    lambda s: rx.box(
+                                        rx.text(s, size="2"),
+                                        padding="6px 10px",
+                                        cursor="pointer",
+                                        border_bottom="1px solid var(--gray-3)",
+                                        _hover={"background": "var(--accent-2)"},
+                                        on_mouse_down=lambda: DoctorListState.pick_specialty_suggestion(s),
+                                    ),
+                                ),
+                                position="absolute",
+                                top="100%",
+                                left="0",
+                                right="0",
+                                background="white",
+                                border="1px solid var(--gray-5)",
+                                border_radius="6px",
+                                box_shadow="0 4px 12px rgba(0,0,0,0.12)",
+                                z_index="200",
+                                max_height="180px",
+                                overflow_y="auto",
+                            ),
+                            rx.fragment(),
+                        ),
+                        position="relative",
                         width="100%",
                     ),
                 ),
@@ -161,17 +196,100 @@ def _doctor_form_dialog() -> rx.Component:
     )
 
 
+def _action_confirm_dialog() -> rx.Component:
+    """Unified confirmation dialog for deactivate / archive / delete / reactivate."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.vstack(
+                rx.hstack(
+                    rx.cond(
+                        DoctorListState.action_confirm_is_red,
+                        rx.icon("triangle-alert", size=20, color="var(--red-9)"),
+                        rx.icon("info", size=20, color="var(--accent-9)"),
+                    ),
+                    rx.dialog.title(DoctorListState.action_confirm_title, margin="0"),
+                    spacing="2", align="center",
+                ),
+                rx.text(DoctorListState.action_confirm_desc, size="2", color="var(--gray-11)"),
+                rx.cond(
+                    DoctorListState.action_confirm_show_reason,
+                    rx.vstack(
+                        rx.text("Motif *", size="2", weight="medium"),
+                        rx.text_area(
+                            placeholder="Indiquez le motif de cette action…",
+                            value=DoctorListState.action_reason,
+                            on_change=DoctorListState.set_action_reason,
+                            rows="3",
+                            width="100%",
+                        ),
+                        spacing="1", width="100%",
+                    ),
+                    rx.fragment(),
+                ),
+                rx.hstack(
+                    rx.spacer(),
+                    rx.button(
+                        "Annuler",
+                        variant="outline",
+                        color_scheme="gray",
+                        on_click=DoctorListState.close_action_confirm,
+                    ),
+                    rx.cond(
+                        DoctorListState.action_confirm_is_red,
+                        rx.button(
+                            rx.icon("trash-2", size=14),
+                            DoctorListState.action_confirm_btn_label,
+                            color_scheme="red",
+                            loading=DoctorListState.action_is_saving,
+                            on_click=DoctorListState.confirm_action,
+                        ),
+                        rx.button(
+                            DoctorListState.action_confirm_btn_label,
+                            loading=DoctorListState.action_is_saving,
+                            on_click=DoctorListState.confirm_action,
+                        ),
+                    ),
+                    spacing="2", width="100%", padding_top="0.5rem",
+                ),
+                spacing="3", width="100%",
+            ),
+            on_interact_outside=DoctorListState.close_action_confirm,
+            on_escape_key_down=DoctorListState.close_action_confirm,
+            max_width="460px",
+        ),
+        open=DoctorListState.show_action_confirm,
+    )
+
+
 def _doctor_row(doctor: DoctorRowDTO) -> rx.Component:
     return rx.table.row(
+        # Name + status badges + reason
         rx.table.cell(
-            rx.hstack(
-                rx.text(doctor.full_name, size="2", weight="medium"),
-                rx.cond(
-                    ~doctor.is_active,
-                    rx.badge(LanguageState.tr["inactive_badge"], color_scheme="gray", variant="soft", size="1"),
+            rx.vstack(
+                rx.hstack(
+                    rx.text(doctor.full_name, size="2", weight="medium"),
+                    rx.cond(
+                        doctor.is_archived,
+                        rx.badge("Archivé", color_scheme="orange", variant="soft", size="1"),
+                        rx.cond(
+                            ~doctor.is_active,
+                            rx.badge(LanguageState.tr["inactive_badge"], color_scheme="gray", variant="soft", size="1"),
+                            rx.fragment(),
+                        ),
+                    ),
+                    spacing="2", align="center",
                 ),
-                spacing="2",
-                align="center",
+                rx.cond(
+                    (~doctor.is_active | doctor.is_archived) & (doctor.status_reason != ""),
+                    rx.text(
+                        doctor.status_reason,
+                        size="1",
+                        color="var(--gray-9)",
+                        font_style="italic",
+                    ),
+                    rx.fragment(),
+                ),
+                spacing="1", align_items="start",
             )
         ),
         rx.table.cell(
@@ -195,31 +313,62 @@ def _doctor_row(doctor: DoctorRowDTO) -> rx.Component:
                 rx.text("—", size="2", color="var(--gray-8)"),
             )
         ),
+        # Actions dropdown
         rx.table.cell(
-            rx.hstack(
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("pencil", size=14),
-                        on_click=lambda: DoctorListState.open_edit_dialog(doctor.id),
-                        variant="ghost",
-                        size="1",
+            rx.cond(
+                doctor.is_archived,
+                # Archived: reactivate or delete only
+                rx.dropdown_menu.root(
+                    rx.dropdown_menu.trigger(
+                        rx.icon_button(rx.icon("ellipsis-vertical", size=14), variant="ghost", size="1")
                     ),
-                    content=LanguageState.tr["edit_btn"],
-                ),
-                rx.cond(
-                    doctor.is_active,
-                    rx.tooltip(
-                        rx.icon_button(
-                            rx.icon("user-x", size=14),
-                            on_click=lambda: DoctorListState.deactivate_doctor(doctor.id),
-                            variant="ghost",
-                            color_scheme="red",
-                            size="1",
+                    rx.dropdown_menu.content(
+                        rx.dropdown_menu.item(
+                            rx.icon("circle-check", size=14), "Réactiver",
+                            on_click=lambda: DoctorListState.open_action_confirm(doctor.id, doctor.full_name, "reactivate"),
                         ),
-                        content=LanguageState.tr["tooltip_deactivate_account"],
+                        rx.dropdown_menu.separator(),
+                        rx.dropdown_menu.item(
+                            rx.icon("trash-2", size=14), "Supprimer",
+                            color_scheme="red",
+                            on_click=lambda: DoctorListState.open_action_confirm(doctor.id, doctor.full_name, "delete"),
+                        ),
                     ),
                 ),
-                spacing="1",
+                # Active or inactive
+                rx.dropdown_menu.root(
+                    rx.dropdown_menu.trigger(
+                        rx.icon_button(rx.icon("ellipsis-vertical", size=14), variant="ghost", size="1")
+                    ),
+                    rx.dropdown_menu.content(
+                        rx.dropdown_menu.item(
+                            rx.icon("pencil", size=14), LanguageState.tr["edit_btn"],
+                            on_click=lambda: DoctorListState.open_edit_dialog(doctor.id),
+                        ),
+                        rx.dropdown_menu.separator(),
+                        rx.cond(
+                            doctor.is_active,
+                            rx.dropdown_menu.item(
+                                rx.icon("user-x", size=14), "Désactiver",
+                                on_click=lambda: DoctorListState.open_action_confirm(doctor.id, doctor.full_name, "deactivate"),
+                            ),
+                            rx.dropdown_menu.item(
+                                rx.icon("circle-check", size=14), "Réactiver",
+                                on_click=lambda: DoctorListState.open_action_confirm(doctor.id, doctor.full_name, "reactivate"),
+                            ),
+                        ),
+                        rx.dropdown_menu.item(
+                            rx.icon("archive", size=14), "Archiver",
+                            on_click=lambda: DoctorListState.open_action_confirm(doctor.id, doctor.full_name, "archive"),
+                        ),
+                        rx.dropdown_menu.separator(),
+                        rx.dropdown_menu.item(
+                            rx.icon("trash-2", size=14), "Supprimer",
+                            color_scheme="red",
+                            on_click=lambda: DoctorListState.open_action_confirm(doctor.id, doctor.full_name, "delete"),
+                        ),
+                    ),
+                ),
             )
         ),
         style={":hover": {"background_color": "var(--gray-2)"}},
@@ -230,6 +379,7 @@ def doctor_list_page() -> rx.Component:
     return main_component(
         page_layout(
             _doctor_form_dialog(),
+            _action_confirm_dialog(),
             rx.hstack(
                 rx.heading(LanguageState.tr["doctors_page_title"], size="6"),
                 rx.spacer(),

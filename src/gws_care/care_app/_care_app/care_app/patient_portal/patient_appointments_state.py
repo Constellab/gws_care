@@ -31,7 +31,7 @@ class CalendarDayDTO(BaseModel):
 
 
 class DoctorOptionDTO(BaseModel):
-    id: str
+    id: str           # MedicalDoctor.id (used for booking DTO and DoctorScheduleService slot queries)
     name: str
     specialization: str = ""
 
@@ -59,10 +59,16 @@ class PatientAppointmentsState(RoleState):
     sort_column: str = "scheduled_at"
     sort_ascending: bool = True
 
-    # ── Booking dialog ────────────────────────────────────────────────────────
+    # ── Booking dialog (Doctolib-style step wizard) ───────────────────────────
     show_booking_dialog: bool = False
-    booking_scheduled_at: str = ""
-    booking_doctor_id: str = ""
+    booking_step: int = 1              # 1=specialty, 2=doctor, 3=date+slot
+    booking_specialty: str = ""        # selected specialty filter
+    booking_doctor_id: str = ""        # MedicalDoctor.id (for DTO and slot queries)
+    booking_doctor_name: str = ""
+    booking_scheduled_at: str = ""     # chosen slot "YYYY-MM-DDTHH:MM"
+    booking_date: str = ""             # chosen date "YYYY-MM-DD"
+    booking_available_slots: list[str] = []
+    booking_slots_loading: bool = False
     booking_mode: str = "at_home"
     booking_address: str = ""
     booking_notes: str = ""
@@ -71,6 +77,9 @@ class PatientAppointmentsState(RoleState):
 
     # Doctor options for the picker
     doctor_options: list[DoctorOptionDTO] = []
+    booking_available_specialties: list[str] = []
+    filtered_booking_doctors: list[DoctorOptionDTO] = []
+    booking_specialty_search: str = ""  # search input for specialty step
 
     # ── Page guard ────────────────────────────────────────────────────────────
 
@@ -172,15 +181,35 @@ class PatientAppointmentsState(RoleState):
 
     # ── Booking dialog ────────────────────────────────────────────────────────
 
+    @rx.var
+    def filtered_booking_specialties(self) -> list[str]:
+        """Specialties filtered by the search input."""
+        if not self.booking_specialty_search:
+            return self.booking_available_specialties
+        q = self.booking_specialty_search.lower()
+        return [s for s in self.booking_available_specialties if q in s.lower()]
+
+    @rx.event
+    def set_booking_specialty_search(self, value: str):
+        self.booking_specialty_search = value
+
     @rx.event
     async def open_booking_dialog(self):
+        self.booking_step = 1
+        self.booking_specialty = ""
+        self.booking_specialty_search = ""
         self.booking_scheduled_at = ""
         self.booking_doctor_id = ""
+        self.booking_doctor_name = ""
+        self.booking_date = ""
+        self.booking_available_slots = []
+        self.booking_slots_loading = False
         self.booking_mode = "at_home"
         self.booking_address = ""
         self.booking_notes = ""
         self.booking_error = ""
         self.booking_is_saving = False
+        self.filtered_booking_doctors = list(self.doctor_options)
         self.show_booking_dialog = True
 
     @rx.event
@@ -188,12 +217,80 @@ class PatientAppointmentsState(RoleState):
         self.show_booking_dialog = False
 
     @rx.event
-    def set_booking_scheduled_at(self, value: str):
-        self.booking_scheduled_at = value
+    def select_patient_booking_specialty(self, specialty: str):
+        """Step 1 → 2: patient chose a specialty."""
+        self.booking_specialty = "" if specialty == "_all_" else specialty
+        self.booking_specialty_search = ""
+        if self.booking_specialty:
+            self.filtered_booking_doctors = [
+                d for d in self.doctor_options if d.specialization == self.booking_specialty
+            ]
+        else:
+            self.filtered_booking_doctors = list(self.doctor_options)
+        self.booking_doctor_id = ""
+        self.booking_doctor_name = ""
+        self.booking_scheduled_at = ""
+        self.booking_available_slots = []
+        self.booking_date = ""
+        self.booking_step = 2
 
     @rx.event
-    def set_booking_doctor_id(self, value: str):
-        self.booking_doctor_id = "" if value == "none" else value
+    async def select_patient_booking_doctor(self, doctor_id: str, doctor_name: str):
+        """Step 2 → 3: patient clicked a doctor card; pre-load today's slots."""
+        self.booking_doctor_id = doctor_id
+        self.booking_doctor_name = doctor_name
+        self.booking_scheduled_at = ""
+        self.booking_available_slots = []
+        from datetime import date
+        self.booking_date = date.today().strftime("%Y-%m-%d")
+        self.booking_step = 3
+        # Load slots for today immediately
+        await self._load_slots_for_date(self.booking_date)
+
+    async def _load_slots_for_date(self, date_str: str):
+        """Internal helper — loads available slots for booking_doctor_id + date_str."""
+        if not self.booking_doctor_id or not date_str:
+            return
+        self.booking_slots_loading = True
+        try:
+            with await self.authenticate_user():
+                from datetime import date as date_type
+                from gws_care.scheduling.doctor_schedule import DoctorScheduleService
+                d = date_type.fromisoformat(date_str)
+                slots = DoctorScheduleService.available_slots(self.booking_doctor_id, d)
+                self.booking_available_slots = [s.strftime("%Y-%m-%dT%H:%M") for s in slots]
+                if self.booking_available_slots:
+                    self.booking_scheduled_at = self.booking_available_slots[0]
+        except Exception as exc:
+            print(f"[patient_appointments] Failed to load slots: {exc}")
+        finally:
+            self.booking_slots_loading = False
+
+    @rx.event
+    def booking_go_back(self, step: int):
+        self.booking_step = step
+        if step <= 1:
+            self.booking_specialty = ""
+            self.filtered_booking_doctors = list(self.doctor_options)
+            self.booking_doctor_id = ""
+            self.booking_doctor_name = ""
+        if step <= 2:
+            self.booking_doctor_id = ""
+            self.booking_doctor_name = ""
+        self.booking_scheduled_at = ""
+        self.booking_available_slots = []
+        self.booking_date = ""
+
+    @rx.event
+    async def set_booking_date_and_load_slots(self, value: str):
+        self.booking_date = value
+        self.booking_scheduled_at = ""
+        self.booking_available_slots = []
+        await self._load_slots_for_date(value)
+
+    @rx.event
+    def select_booking_slot(self, slot: str):
+        self.booking_scheduled_at = slot
 
     @rx.event
     def set_booking_mode(self, value: str):
@@ -216,28 +313,17 @@ class PatientAppointmentsState(RoleState):
     def set_booking_notes(self, value: str):
         self.booking_notes = value
 
-    @rx.var
-    def booking_min_datetime(self) -> str:
-        """ISO datetime string for today (used as min on the date picker)."""
-        from datetime import datetime
-        return datetime.now().strftime("%Y-%m-%dT%H:%M")
-
     @rx.event
     async def submit_booking(self):
         if not self.booking_scheduled_at:
-            self.booking_error = "Please select a date and time."
+            self.booking_error = "Veuillez sélectionner un créneau disponible."
             return
-        from datetime import datetime
-        try:
-            if datetime.fromisoformat(self.booking_scheduled_at) <= datetime.now():
-                self.booking_error = "The appointment date must be in the future."
-                return
-        except ValueError:
-            self.booking_error = "Invalid date format."
+        if not self.booking_doctor_id:
+            self.booking_error = "Veuillez sélectionner un médecin."
             return
         patient_id = self._linked_patient_id
         if not patient_id:
-            self.booking_error = "Patient identity not found. Please contact your administrator."
+            self.booking_error = "Identité patient introuvable. Contactez votre administrateur."
             return
         self.booking_error = ""
         self.booking_is_saving = True
@@ -268,7 +354,7 @@ class PatientAppointmentsState(RoleState):
                 from gws_care.doctor.medical_doctor import MedicalDoctor
                 doctors = list(
                     MedicalDoctor.select()
-                    .where(MedicalDoctor.is_active == True)
+                    .where((MedicalDoctor.is_active == True) & (MedicalDoctor.is_archived == False))
                     .order_by(MedicalDoctor.last_name)
                 )
                 self.doctor_options = [
@@ -279,8 +365,13 @@ class PatientAppointmentsState(RoleState):
                     )
                     for d in doctors
                 ]
+                self.filtered_booking_doctors = list(self.doctor_options)
+                specs = sorted({d.specialization for d in self.doctor_options if d.specialization})
+                self.booking_available_specialties = specs
         except Exception:
             self.doctor_options = []
+            self.filtered_booking_doctors = []
+            self.booking_available_specialties = []
 
     async def _load_appointments(self):
         if not await self.check_authentication():

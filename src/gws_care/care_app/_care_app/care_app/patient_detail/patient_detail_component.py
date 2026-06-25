@@ -6,6 +6,7 @@ from gws_reflex_main import main_component
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..account_list.account_form_component import account_form_dialog
+from ..appointment_list.appointment_form_component import appointment_form_dialog
 from ..patient_list.patient_form_component import patient_form_dialog
 from ..patient_list.patient_form_state import PatientFormState
 from .certificate_form_component import certificate_form_dialog
@@ -657,13 +658,15 @@ def _visits_section() -> rx.Component:
             rx.heading(LanguageState.tr["visits_section_title"], size="4"),
             rx.spacer(),
             rx.button(
-                rx.icon("plus", size=15),
-                LanguageState.tr["new_visit_btn"],
-                on_click=PatientDetailState.open_create_visit_dialog,
+                rx.icon("calendar-plus", size=15),
+                "Prendre un rendez-vous",
+                on_click=PatientDetailState.open_book_appointment_for_patient,
+                color_scheme="teal",
                 size="2",
             ),
             width="100%",
             align="center",
+            spacing="2",
         ),
         # Filter bar
         rx.hstack(
@@ -1760,6 +1763,7 @@ def patient_detail_page() -> rx.Component:
             _archive_dialog(),
             _delete_dialog(),
             account_form_dialog(),
+            appointment_form_dialog(),
             patient_form_dialog(),
             exam_form_dialog(),
             prescription_form_dialog(),

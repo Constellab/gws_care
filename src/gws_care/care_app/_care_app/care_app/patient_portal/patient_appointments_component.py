@@ -227,146 +227,314 @@ def _calendar_view() -> rx.Component:
     )
 
 
-# ── Booking dialog ────────────────────────────────────────────────────────────
+# ── Booking dialog (Doctolib-style) ──────────────────────────────────────────
 
-def _doctor_option(doctor: DoctorOptionDTO) -> rx.Component:
-    return rx.select.item(
-        doctor.name,
-        value=doctor.id,
+def _booking_step_breadcrumb() -> rx.Component:
+    def _crumb(n: int, label: str) -> rx.Component:
+        is_active = PatientAppointmentsState.booking_step == n
+        is_done = PatientAppointmentsState.booking_step > n
+        return rx.hstack(
+            rx.box(
+                rx.text(str(n), size="1", weight="bold",
+                        color=rx.cond(is_active | is_done, "white", "var(--gray-9)")),
+                width="20px", height="20px", border_radius="50%",
+                background=rx.cond(
+                    is_active, "var(--accent-9)",
+                    rx.cond(is_done, "var(--green-9)", "var(--gray-4)"),
+                ),
+                display="flex", align_items="center", justify_content="center", flex_shrink="0",
+            ),
+            rx.text(label, size="1",
+                    color=rx.cond(is_active, "var(--accent-11)", "var(--gray-9)"),
+                    weight=rx.cond(is_active, "medium", "regular")),
+            spacing="1", align="center",
+        )
+    return rx.hstack(
+        _crumb(1, "Spécialité"),
+        rx.icon("chevron-right", size=12, color="var(--gray-6)"),
+        _crumb(2, "Médecin"),
+        rx.icon("chevron-right", size=12, color="var(--gray-6)"),
+        _crumb(3, "Créneau"),
+        spacing="1", align="center",
+    )
+
+
+def _booking_specialty_row(s: str) -> rx.Component:
+    return rx.box(
+        rx.hstack(
+            rx.icon("stethoscope", size=14, color="var(--accent-9)"),
+            rx.text(s, size="2"),
+            spacing="2", align="center",
+        ),
+        padding="0.4rem 0.75rem",
+        cursor="pointer",
+        _hover={"background": "var(--accent-2)"},
+        on_click=lambda: PatientAppointmentsState.select_patient_booking_specialty(s),
+    )
+
+
+def _booking_doctor_card(doc: DoctorOptionDTO) -> rx.Component:
+    return rx.box(
+        rx.hstack(
+            rx.icon("circle-user-round", size=28, color="var(--accent-9)", flex_shrink="0"),
+            rx.vstack(
+                rx.text(doc.name, size="2", weight="bold"),
+                rx.cond(
+                    doc.specialization != "",
+                    rx.badge(doc.specialization, color_scheme="blue", variant="soft", size="1"),
+                    rx.fragment(),
+                ),
+                spacing="1", align_items="start",
+            ),
+            rx.spacer(),
+            rx.icon("chevron-right", size=16, color="var(--gray-7)"),
+            spacing="3", align="center", width="100%",
+        ),
+        padding="0.75rem 1rem",
+        border="1px solid var(--gray-4)", border_radius="10px",
+        cursor="pointer", width="100%",
+        _hover={"border_color": "var(--accent-7)", "background": "var(--accent-2)"},
+        on_click=lambda: PatientAppointmentsState.select_patient_booking_doctor(
+            doc.id, doc.name
+        ),
+    )
+
+
+def _booking_slot_btn(slot: str) -> rx.Component:
+    is_selected = PatientAppointmentsState.booking_scheduled_at == slot
+    return rx.button(
+        slot[11:16],
+        variant=rx.cond(is_selected, "solid", "soft"),
+        color_scheme=rx.cond(is_selected, "blue", "gray"),
+        size="2", border_radius="8px", min_width="64px",
+        on_click=lambda: PatientAppointmentsState.select_booking_slot(slot),
+    )
+
+
+def _booking_step1() -> rx.Component:
+    return rx.vstack(
+        rx.text("Choisissez une spécialité médicale", size="3", weight="medium"),
+        rx.separator(width="100%"),
+        rx.vstack(
+            rx.input(
+                placeholder="Rechercher une spécialité…",
+                value=PatientAppointmentsState.booking_specialty_search,
+                on_change=PatientAppointmentsState.set_booking_specialty_search,
+                size="2",
+                width="100%",
+            ),
+            rx.cond(
+                PatientAppointmentsState.doctor_options.length() > 0,
+                rx.box(
+                    rx.box(
+                        rx.hstack(
+                            rx.icon("users", size=14, color="var(--gray-9)"),
+                            rx.text("Tous les médecins", size="2", color="var(--gray-11)"),
+                            spacing="2", align="center",
+                        ),
+                        padding="0.4rem 0.75rem",
+                        cursor="pointer",
+                        border_bottom="1px solid var(--gray-3)",
+                        _hover={"background": "var(--gray-2)"},
+                        on_click=lambda: PatientAppointmentsState.select_patient_booking_specialty("_all_"),
+                    ),
+                    rx.cond(
+                        PatientAppointmentsState.filtered_booking_specialties.length() > 0,
+                        rx.foreach(PatientAppointmentsState.filtered_booking_specialties, _booking_specialty_row),
+                        rx.box(
+                            rx.text("Aucune spécialité trouvée.", size="2", color="var(--gray-9)"),
+                            padding="0.5rem 0.75rem",
+                        ),
+                    ),
+                    border="1px solid var(--gray-5)",
+                    border_radius="var(--radius-2)",
+                    background="var(--gray-1)",
+                    width="100%",
+                    max_height="220px",
+                    overflow_y="auto",
+                ),
+                rx.callout(
+                    "Aucun médecin disponible pour l'instant.",
+                    icon="info", color_scheme="orange", size="1", width="100%",
+                ),
+            ),
+            spacing="1",
+            width="100%",
+        ),
+        width="100%", spacing="3", padding_top="0.5rem",
+    )
+
+
+def _booking_step2() -> rx.Component:
+    return rx.vstack(
+        rx.hstack(
+            rx.icon_button(
+                rx.icon("arrow-left", size=14), variant="ghost", size="1",
+                on_click=lambda: PatientAppointmentsState.booking_go_back(1),
+            ),
+            rx.cond(
+                PatientAppointmentsState.booking_specialty != "",
+                rx.hstack(
+                    rx.text("Médecins —", size="3", weight="medium"),
+                    rx.badge(PatientAppointmentsState.booking_specialty, color_scheme="blue", variant="soft", size="2"),
+                    spacing="2", align="center",
+                ),
+                rx.text("Tous les médecins", size="3", weight="medium"),
+            ),
+            spacing="2", align="center", width="100%",
+        ),
+        rx.separator(width="100%"),
+        rx.cond(
+            PatientAppointmentsState.filtered_booking_doctors.length() > 0,
+            rx.vstack(
+                rx.foreach(PatientAppointmentsState.filtered_booking_doctors, _booking_doctor_card),
+                width="100%", spacing="2", max_height="300px", overflow_y="auto",
+            ),
+            rx.callout("Aucun médecin disponible.", icon="info", color_scheme="orange", size="1"),
+        ),
+        width="100%", spacing="3", padding_top="0.5rem",
+    )
+
+
+def _booking_step3() -> rx.Component:
+    return rx.vstack(
+        # Doctor header + back
+        rx.hstack(
+            rx.icon_button(
+                rx.icon("arrow-left", size=14), variant="ghost", size="1",
+                on_click=lambda: PatientAppointmentsState.booking_go_back(2),
+            ),
+            rx.hstack(
+                rx.icon("circle-user-round", size=18, color="var(--accent-9)"),
+                rx.text(PatientAppointmentsState.booking_doctor_name, size="3", weight="medium"),
+                spacing="2", align="center",
+            ),
+            spacing="2", align="center", width="100%",
+        ),
+        rx.separator(width="100%"),
+        # Date
+        rx.vstack(
+            rx.text("Date du rendez-vous *", size="2", weight="medium"),
+            rx.input(
+                type="date",
+                value=PatientAppointmentsState.booking_date,
+                on_change=PatientAppointmentsState.set_booking_date_and_load_slots,
+                size="2", width="100%",
+            ),
+            spacing="1", width="100%",
+        ),
+        # Slots
+        rx.cond(
+            PatientAppointmentsState.booking_date != "",
+            rx.vstack(
+                rx.hstack(
+                    rx.text("Créneaux disponibles *", size="2", weight="medium"),
+                    rx.cond(PatientAppointmentsState.booking_slots_loading, rx.spinner(size="1"), rx.fragment()),
+                    spacing="2", align="center",
+                ),
+                rx.cond(
+                    PatientAppointmentsState.booking_available_slots.length() > 0,
+                    rx.flex(
+                        rx.foreach(PatientAppointmentsState.booking_available_slots, _booking_slot_btn),
+                        wrap="wrap", gap="0.4rem",
+                    ),
+                    rx.callout(
+                        "Aucun créneau disponible pour cette date. Essayez une autre date.",
+                        icon="calendar-x", color_scheme="orange", variant="soft", size="1",
+                    ),
+                ),
+                rx.cond(
+                    PatientAppointmentsState.booking_scheduled_at != "",
+                    rx.hstack(
+                        rx.icon("circle-check", size=14, color="var(--green-9)"),
+                        rx.text(
+                            PatientAppointmentsState.booking_scheduled_at[0:10]
+                            + " à "
+                            + PatientAppointmentsState.booking_scheduled_at[11:16],
+                            size="1", color="var(--green-11)", weight="medium",
+                        ),
+                        spacing="1", align="center",
+                    ),
+                    rx.fragment(),
+                ),
+                spacing="2", width="100%",
+            ),
+            rx.fragment(),
+        ),
+        # Notes
+        rx.vstack(
+            rx.text(LanguageState.tr["appt_notes_label"], size="2", weight="medium"),
+            rx.text_area(
+                placeholder=LanguageState.tr["appt_notes_placeholder"],
+                value=PatientAppointmentsState.booking_notes,
+                on_change=PatientAppointmentsState.set_booking_notes,
+                rows="2", width="100%",
+            ),
+            spacing="1", width="100%",
+        ),
+        # Error
+        rx.cond(
+            PatientAppointmentsState.booking_error != "",
+            rx.callout(PatientAppointmentsState.booking_error, icon="triangle-alert", color_scheme="red", size="1"),
+            rx.fragment(),
+        ),
+        width="100%", spacing="3", padding_top="0.5rem",
     )
 
 
 def _booking_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title(LanguageState.tr["appt_book_title"]),
-            rx.dialog.description(LanguageState.tr["appt_book_desc"]),
-            rx.vstack(
-                # Date & time
-                rx.vstack(
-                    rx.text(LanguageState.tr["appt_date_label"], size="2", weight="medium"),
-                    rx.input(
-                        type="datetime-local",
-                        value=PatientAppointmentsState.booking_scheduled_at,
-                        on_change=PatientAppointmentsState.set_booking_scheduled_at,
-                        min=PatientAppointmentsState.booking_min_datetime,
-                        size="2",
-                        width="100%",
-                    ),
-                    spacing="1", width="100%",
+            rx.hstack(
+                rx.dialog.title(LanguageState.tr["appt_book_title"]),
+                rx.dialog.close(
+                    rx.icon_button(
+                        rx.icon("x", size=14), variant="ghost", size="1", color_scheme="gray",
+                        on_click=PatientAppointmentsState.close_booking_dialog,
+                    )
                 ),
-                # Doctor (optional)
-                rx.vstack(
-                    rx.text(LanguageState.tr["appt_doctor_label"], size="2", weight="medium"),
-                    rx.select.root(
-                        rx.select.trigger(
-                            placeholder=LanguageState.tr["appt_doctor_placeholder"],
-                            width="100%",
-                        ),
-                        rx.select.content(
-                            rx.select.item("— No preference —", value="none"),
-                            rx.foreach(PatientAppointmentsState.doctor_options, _doctor_option),
-                        ),
-                        value=PatientAppointmentsState.booking_doctor_id,
-                        on_change=PatientAppointmentsState.set_booking_doctor_id,
-                        size="2",
-                        width="100%",
-                    ),
-                    spacing="1", width="100%",
-                ),
-                # Mode
-                rx.vstack(
-                    rx.text(LanguageState.tr["place_of_appointment_label"], size="2", weight="medium"),
-                    rx.select.root(
-                        rx.select.trigger(width="100%"),
-                        rx.select.content(
-                            rx.select.item(LanguageState.tr["appt_mode_at_home"], value="at_home"),
-                            rx.select.item(LanguageState.tr["appt_mode_address"], value="address"),
-                            rx.select.item(LanguageState.tr["appt_mode_visio"], value="visio"),
-                            rx.select.item(LanguageState.tr["appt_mode_hospital"], value="hospital"),
-                        ),
-                        value=PatientAppointmentsState.booking_mode,
-                        on_change=PatientAppointmentsState.set_booking_mode,
-                        size="2",
-                        width="100%",
-                    ),
-                    spacing="1", width="100%",
+                justify="between", align="center", width="100%",
+            ),
+            # Breadcrumb (shown on all steps)
+            _booking_step_breadcrumb(),
+            rx.separator(width="100%"),
+            # Step content
+            rx.match(
+                PatientAppointmentsState.booking_step,
+                (1, _booking_step1()),
+                (2, _booking_step2()),
+                (3, _booking_step3()),
+                rx.fragment(),
+            ),
+            # Footer buttons
+            rx.hstack(
+                rx.dialog.close(
+                    rx.button(
+                        LanguageState.tr["cancel_btn"], variant="outline", color_scheme="gray",
+                        on_click=PatientAppointmentsState.close_booking_dialog,
+                    )
                 ),
                 rx.cond(
-                    PatientAppointmentsState.booking_mode == "address",
-                    rx.vstack(
-                        rx.text(LanguageState.tr["appt_address_label"], size="2", weight="medium"),
-                        rx.input(
-                            placeholder=LanguageState.tr["appt_address_placeholder"],
-                            value=PatientAppointmentsState.booking_address,
-                            on_change=PatientAppointmentsState.set_booking_address,
-                            size="2",
-                            width="100%",
-                        ),
-                        rx.button(
-                            rx.icon("map-pin", size=14),
-                            LanguageState.tr["open_in_google_maps_btn"],
-                            on_click=PatientAppointmentsState.open_booking_address_in_google_maps,
-                            variant="soft",
-                            size="1",
-                        ),
-                        spacing="2",
-                        width="100%",
-                    ),
-                ),
-                # Notes
-                rx.vstack(
-                    rx.text(LanguageState.tr["appt_notes_label"], size="2", weight="medium"),
-                    rx.text_area(
-                        placeholder=LanguageState.tr["appt_notes_placeholder"],
-                        value=PatientAppointmentsState.booking_notes,
-                        on_change=PatientAppointmentsState.set_booking_notes,
-                        rows="3",
-                        width="100%",
-                    ),
-                    spacing="1", width="100%",
-                ),
-                # Error
-                rx.cond(
-                    PatientAppointmentsState.booking_error,
-                    rx.callout(
-                        PatientAppointmentsState.booking_error,
-                        icon="alert-circle",
-                        color_scheme="red",
-                        size="1",
+                    PatientAppointmentsState.booking_step == 3,
+                    rx.button(
+                        rx.icon("calendar-plus", size=14),
+                        LanguageState.tr["appt_book_submit"],
+                        on_click=PatientAppointmentsState.submit_booking,
+                        loading=PatientAppointmentsState.booking_is_saving,
+                        disabled=(PatientAppointmentsState.booking_scheduled_at == "")
+                        | PatientAppointmentsState.booking_is_saving,
+                        color_scheme="teal",
                     ),
                     rx.fragment(),
                 ),
-                # Buttons
-                rx.hstack(
-                    rx.button(
-                        LanguageState.tr["cancel_btn"],
-                        variant="outline",
-                        color_scheme="gray",
-                        on_click=PatientAppointmentsState.close_booking_dialog,
-                    ),
-                    rx.button(
-                        rx.cond(
-                            PatientAppointmentsState.booking_is_saving,
-                            rx.spinner(size="2"),
-                            rx.hstack(
-                                rx.icon("calendar-plus", size=14),
-                                rx.text(LanguageState.tr["appt_book_submit"]),
-                                spacing="1",
-                            ),
-                        ),
-                        on_click=PatientAppointmentsState.submit_booking,
-                        disabled=PatientAppointmentsState.booking_is_saving,
-                        color_scheme="teal",
-                    ),
-                    justify="end",
-                    width="100%",
-                    spacing="3",
-                ),
-                spacing="4",
+                justify="end",
                 width="100%",
+                spacing="3",
+                padding_top="0.5rem",
             ),
             max_width="520px",
+            on_interact_outside=PatientAppointmentsState.close_booking_dialog,
+            on_escape_key_down=PatientAppointmentsState.close_booking_dialog,
         ),
         open=PatientAppointmentsState.show_booking_dialog,
     )

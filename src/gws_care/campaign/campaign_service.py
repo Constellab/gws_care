@@ -408,6 +408,19 @@ class CampaignService:
         )
 
     @classmethod
+    def get_exam_refs_with_doctor(cls, campaign_id: str) -> list[tuple]:
+        """Return list of (ExamTypeRef, CampaignExam) pairs for a campaign."""
+        from gws_care.campaign.campaign_exam import CampaignExam
+        from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+        rows = list(
+            CampaignExam.select(CampaignExam, ExamTypeRef)
+            .join(ExamTypeRef)
+            .where(CampaignExam.campaign == campaign_id)
+            .order_by(ExamTypeRef.category, ExamTypeRef.name)
+        )
+        return [(row.exam_type_ref, row) for row in rows]
+
+    @classmethod
     def add_exam_ref(cls, campaign_id: str, exam_ref_id: str) -> None:
         """Link an ExamTypeRef to a campaign."""
         from gws_care.campaign.campaign_exam import CampaignExam
@@ -439,6 +452,29 @@ class CampaignService:
         if link is None:
             raise BadRequestException("Ce type d'examen n'est pas dans cette campagne.")
         link.delete_instance()
+
+    @classmethod
+    def assign_doctor_to_exam_ref(
+        cls, campaign_id: str, exam_ref_id: str, doctor_id: str | None
+    ) -> None:
+        """Assign (or unassign) a MedicalDoctor to an exam type within a campaign."""
+        from gws_care.campaign.campaign_exam import CampaignExam
+        from gws_care.doctor.medical_doctor import MedicalDoctor
+        link = CampaignExam.get_or_none(
+            (CampaignExam.campaign == campaign_id) & (CampaignExam.exam_type_ref == exam_ref_id)
+        )
+        if link is None:
+            raise BadRequestException("Ce type d'examen n'est pas dans cette campagne.")
+        if doctor_id:
+            doc = MedicalDoctor.get_or_none(MedicalDoctor.id == doctor_id)
+            if doc is None:
+                raise BadRequestException("Médecin introuvable.")
+            link.assigned_doctor_id = str(doc.id)
+            link.assigned_doctor_name = doc.get_full_name()
+        else:
+            link.assigned_doctor_id = None
+            link.assigned_doctor_name = None
+        link.save()
 
     # ── ExamType management (legacy ExamTypeModel-based) ─────────────────────
 
@@ -555,4 +591,40 @@ class CampaignService:
         campaign.start_date = date.fromisoformat(dto.start_date)
         campaign.end_date = date.fromisoformat(dto.end_date)
         campaign.notes = dto.notes
+
+    # ── Campaign doctor management ────────────────────────────────────────────
+
+    @classmethod
+    def list_campaign_doctors(cls, campaign_id: str):
+        """Return MedicalDoctor records assigned to this campaign."""
+        from gws_care.campaign.campaign_doctor import CampaignDoctor
+        from gws_care.doctor.medical_doctor import MedicalDoctor
+        links = (
+            CampaignDoctor.select(CampaignDoctor, MedicalDoctor)
+            .join(MedicalDoctor)
+            .where(CampaignDoctor.campaign == campaign_id)
+            .order_by(MedicalDoctor.last_name, MedicalDoctor.first_name)
+        )
+        return [link.doctor for link in links]
+
+    @classmethod
+    def add_doctor_to_campaign(cls, campaign_id: str, doctor_id: str) -> None:
+        from gws_care.campaign.campaign_doctor import CampaignDoctor
+        from gws_care.doctor.medical_doctor import MedicalDoctor
+        doc = MedicalDoctor.get_or_none(MedicalDoctor.id == doctor_id)
+        if doc is None:
+            raise BadRequestException("Médecin introuvable.")
+        existing = CampaignDoctor.get_or_none(
+            (CampaignDoctor.campaign == campaign_id) & (CampaignDoctor.doctor == doctor_id)
+        )
+        if existing:
+            return  # already linked — idempotent
+        CampaignDoctor.create(campaign=campaign_id, doctor=doctor_id)
+
+    @classmethod
+    def remove_doctor_from_campaign(cls, campaign_id: str, doctor_id: str) -> None:
+        from gws_care.campaign.campaign_doctor import CampaignDoctor
+        CampaignDoctor.delete().where(
+            (CampaignDoctor.campaign == campaign_id) & (CampaignDoctor.doctor == doctor_id)
+        ).execute()
 

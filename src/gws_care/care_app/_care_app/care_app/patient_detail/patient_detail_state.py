@@ -642,6 +642,15 @@ class PatientDetailState(ReflexMainState):
     # ── Standalone visit creation ─────────────────────────────────────────────
 
     @rx.event
+    def open_book_appointment_for_patient(self):
+        """Open the appointment booking wizard pre-filled with this patient."""
+        if not self.patient or not self.patient.id:
+            return
+        from ..appointment_list.appointment_form_state import AppointmentFormState
+        label = f"{self.patient.last_name} {self.patient.first_name}"
+        return AppointmentFormState.open_create_dialog(self.patient.id, label)
+
+    @rx.event
     def open_create_visit_dialog(self):
         self.show_create_visit_dialog = True
         self.create_visit_scheduled_at = ""

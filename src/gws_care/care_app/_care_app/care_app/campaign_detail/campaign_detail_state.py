@@ -35,11 +35,19 @@ class PatientRowDTO(BaseModel):
     full_name: str
 
 
+class DoctorOptionDTO(BaseModel):
+    id: str           # MedicalDoctor.id
+    label: str        # "Dr. Prénom NOM — Spécialité"
+    specialty: str = ""
+
+
 class ExamTypeRowDTO(BaseModel):
     id: str          # ExamTypeRef.id (primary key in the referential)
     code: str = ""   # kept for compatibility, unused for new exams
     name: str
     category: str = ""
+    assigned_doctor_id: str = ""
+    assigned_doctor_name: str = ""
 
 
 class VisitRowDTO(BaseModel):
@@ -139,6 +147,27 @@ class CampaignDetailState(PatientPickerState):
     archive_dialog_open: bool = False
     archive_reason_input: str = ""
     is_archiving: bool = False
+
+    # Campaign doctors (multi-doctor association at campaign level)
+    campaign_doctors: list[DoctorOptionDTO] = []
+    add_campaign_doctor_dialog_open: bool = False
+    add_campaign_doctor_search: str = ""
+    add_campaign_doctor_specialty_filter: str = ""
+    _add_campaign_doctor_all_options: list[DoctorOptionDTO] = []
+    add_campaign_doctor_options: list[DoctorOptionDTO] = []
+    add_campaign_doctor_specialty_options: list[str] = []
+    add_campaign_doctor_selected_id: str = ""
+    is_adding_campaign_doctor: bool = False
+
+    # Assign doctor to exam dialog
+    assign_doctor_dialog_open: bool = False
+    assign_doctor_exam_id: str = ""        # ExamTypeRef.id being assigned
+    assign_doctor_exam_name: str = ""
+    assign_doctor_selected_id: str = ""    # MedicalDoctor.id chosen
+    doctor_options_for_assign: list[DoctorOptionDTO] = []
+    specialty_options_for_assign: list[str] = []
+    is_assigning_doctor: bool = False
+    assign_doctor_specialty_filter: str = ""
 
     # ── Tabs ──────────────────────────────────────────────────────────────────
     active_tab: str = "patients"
@@ -688,6 +717,166 @@ class CampaignDetailState(PatientPickerState):
         except Exception as e:
             self.error_message = str(e)
 
+    # ── Campaign doctors (campaign-level multi-doctor association) ────────────
+
+    @rx.event
+    async def open_add_campaign_doctor_dialog(self):
+        if not self.program:
+            return
+        self.add_campaign_doctor_selected_id = ""
+        self.add_campaign_doctor_search = ""
+        self.add_campaign_doctor_specialty_filter = ""
+        self._add_campaign_doctor_all_options = []
+        self.add_campaign_doctor_options = []
+        self.add_campaign_doctor_specialty_options = []
+        try:
+            with await self.authenticate_user():
+                from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+                already_ids = {d.id for d in self.campaign_doctors}
+                docs = MedicalDoctorService.list_for_selection()
+                self.add_campaign_doctor_specialty_options = sorted(
+                    {d.specialization for d in docs if d.specialization}
+                )
+                opts = [
+                    DoctorOptionDTO(
+                        id=d.id,
+                        label=d.full_name + (" — " + d.specialization if d.specialization else ""),
+                        specialty=d.specialization,
+                    )
+                    for d in docs
+                    if d.id not in already_ids
+                ]
+                self._add_campaign_doctor_all_options = opts
+                self.add_campaign_doctor_options = opts
+        except Exception as e:
+            self.error_message = str(e)
+        self.add_campaign_doctor_dialog_open = True
+
+    @rx.event
+    def close_add_campaign_doctor_dialog(self):
+        self.add_campaign_doctor_dialog_open = False
+
+    @rx.event
+    def set_add_campaign_doctor_selected(self, doctor_id: str):
+        self.add_campaign_doctor_selected_id = "" if doctor_id == "_none_" else doctor_id
+
+    @rx.event
+    def set_add_campaign_doctor_search(self, value: str):
+        self.add_campaign_doctor_search = value
+        q = value.strip().lower()
+        base = self._add_campaign_doctor_all_options
+        if self.add_campaign_doctor_specialty_filter:
+            base = [d for d in base if d.specialty == self.add_campaign_doctor_specialty_filter]
+        self.add_campaign_doctor_options = [d for d in base if not q or q in d.label.lower()] if q else base
+
+    @rx.event
+    def set_add_campaign_doctor_specialty_filter(self, value: str):
+        self.add_campaign_doctor_specialty_filter = value if value != "_all_" else ""
+        sf = self.add_campaign_doctor_specialty_filter
+        q = self.add_campaign_doctor_search.strip().lower()
+        base = self._add_campaign_doctor_all_options
+        if sf:
+            base = [d for d in base if d.specialty == sf]
+        self.add_campaign_doctor_options = [d for d in base if not q or q in d.label.lower()] if q else base
+
+    @rx.event
+    async def confirm_add_campaign_doctor(self):
+        if not self.program or not self.add_campaign_doctor_selected_id:
+            return
+        self.is_adding_campaign_doctor = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.add_doctor_to_campaign(
+                    self.program.id, self.add_campaign_doctor_selected_id
+                )
+            self.add_campaign_doctor_dialog_open = False
+            self.add_campaign_doctor_selected_id = ""
+            await self._load_program(preserve_tab=True)
+        except Exception as e:
+            self.error_message = str(e)
+        finally:
+            self.is_adding_campaign_doctor = False
+
+    @rx.event
+    async def remove_campaign_doctor(self, doctor_id: str):
+        if not self.program:
+            return
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.remove_doctor_from_campaign(self.program.id, doctor_id)
+            await self._load_program(preserve_tab=True)
+        except Exception as e:
+            self.error_message = str(e)
+
+    # ── Assign doctor to exam ─────────────────────────────────────────────────
+
+    @rx.event
+    def open_assign_doctor_dialog(self, exam_id: str, exam_name: str,
+                                   current_doctor_id: str):
+        self.assign_doctor_exam_id = exam_id
+        self.assign_doctor_exam_name = exam_name
+        self.assign_doctor_selected_id = current_doctor_id
+        self.assign_doctor_specialty_filter = ""
+        self._load_doctor_options_for_assign(load_specialties=True)
+        self.assign_doctor_dialog_open = True
+
+    @rx.event
+    def close_assign_doctor_dialog(self):
+        self.assign_doctor_dialog_open = False
+
+    @rx.event
+    def set_assign_doctor_selected(self, doctor_id: str):
+        self.assign_doctor_selected_id = "" if doctor_id == "_none_" else doctor_id
+
+    @rx.event
+    def set_assign_doctor_specialty_filter(self, value: str):
+        self.assign_doctor_specialty_filter = value if value != "_all_" else ""
+        self._load_doctor_options_for_assign()
+
+    def _load_doctor_options_for_assign(self, load_specialties: bool = False):
+        """Populate doctor_options_for_assign from MedicalDoctor."""
+        try:
+            from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+            if load_specialties:
+                self.specialty_options_for_assign = MedicalDoctorService.get_specializations()
+            docs = MedicalDoctorService.list_for_selection(
+                specialization=self.assign_doctor_specialty_filter
+            )
+            self.doctor_options_for_assign = [
+                DoctorOptionDTO(
+                    id=d.id,
+                    label=d.full_name + (" — " + d.specialization if d.specialization else ""),
+                    specialty=d.specialization,
+                )
+                for d in docs
+            ]
+        except Exception as e:
+            self.doctor_options_for_assign = []
+            self.specialty_options_for_assign = []
+
+    @rx.event
+    async def confirm_assign_doctor(self):
+        if not self.program:
+            return
+        self.is_assigning_doctor = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.assign_doctor_to_exam_ref(
+                    self.program.id,
+                    self.assign_doctor_exam_id,
+                    self.assign_doctor_selected_id or None,
+                )
+            self.assign_doctor_dialog_open = False
+            self.success_message = "Médecin assigné."
+            await self._load_program(preserve_tab=True)
+        except Exception as e:
+            self.error_message = str(e)
+        finally:
+            self.is_assigning_doctor = False
+
     # ── Internal loader ───────────────────────────────────────────────────────
 
     async def _load_program(self, preserve_tab: bool = False):
@@ -732,15 +921,28 @@ class CampaignDetailState(PatientPickerState):
                     for p in patients
                 ]
 
-                # ExamTypes — loaded from referential (ExamTypeRef)
-                exam_refs = CampaignService.get_exam_refs(page_id)
+                # ExamTypes — loaded from referential (ExamTypeRef) with assigned doctor
+                exam_ref_pairs = CampaignService.get_exam_refs_with_doctor(page_id)
                 self.exam_types = [
                     ExamTypeRowDTO(
                         id=str(ref.id),
                         name=ref.name,
                         category=ref.get_category_label(),
+                        assigned_doctor_id=link.assigned_doctor_id or "",
+                        assigned_doctor_name=link.assigned_doctor_name or "",
                     )
-                    for ref in exam_refs
+                    for ref, link in exam_ref_pairs
+                ]
+
+                # Campaign doctors
+                campaign_docs = CampaignService.list_campaign_doctors(page_id)
+                self.campaign_doctors = [
+                    DoctorOptionDTO(
+                        id=str(d.id),
+                        label=d.get_full_name() + (" — " + d.specialization if d.specialization else ""),
+                        specialty=d.specialization or "",
+                    )
+                    for d in campaign_docs
                 ]
 
                 # Visits

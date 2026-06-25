@@ -25,6 +25,7 @@ from gws_care.doctor.medical_doctor import MedicalDoctor
 
 # Campaign models
 from gws_care.campaign.campaign import Campaign
+from gws_care.campaign.campaign_doctor import CampaignDoctor
 from gws_care.campaign.campaign_exam_type import CampaignExamType
 from gws_care.campaign.campaign_patient import CampaignPatient
 
@@ -122,6 +123,12 @@ from gws_care.core.migration_22 import Migration220
 from gws_care.core.migration_23 import Migration230
 from gws_care.core.migration_24 import Migration240
 from gws_care.core.migration_25 import Migration250
+from gws_care.core.migration_26 import Migration260
+from gws_care.core.migration_27 import Migration270
+from gws_care.core.migration_28 import Migration280
+from gws_care.core.migration_29 import Migration290
+from gws_care.core.migration_30 import Migration300
+from gws_care.core.migration_31 import Migration310
 
 # User sync service — keeps local User table in sync with gws_core
 from gws_care.user.care_user_sync_service import CareUserSyncService

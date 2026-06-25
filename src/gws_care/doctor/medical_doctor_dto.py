@@ -12,6 +12,8 @@ class MedicalDoctorDTO(BaseModel):
     rpps_number: str | None = None
     address: str | None = None
     is_active: bool = True
+    is_archived: bool = False
+    status_reason: str = ""
 
 
 class SaveMedicalDoctorDTO(BaseModel):

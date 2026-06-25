@@ -359,6 +359,96 @@ def _edit_dialog() -> rx.Component:
     )
 
 
+def _assign_doctor_dialog() -> rx.Component:
+    """Dialog for assigning a doctor to an exam type within a campaign."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(
+                rx.hstack(
+                    rx.icon("stethoscope", size=18),
+                    rx.text("Assigner un médecin — "),
+                    rx.text(CampaignDetailState.assign_doctor_exam_name, weight="bold"),
+                    spacing="1", align="center",
+                )
+            ),
+            rx.dialog.description(
+                "Le médecin assigné pourra accéder aux résultats de cet examen et faire des retours.",
+                size="2", color="var(--gray-9)",
+            ),
+            rx.vstack(
+                # Specialty filter (shown only when there are multiple specialties)
+                rx.cond(
+                    CampaignDetailState.specialty_options_for_assign.length() > 0,
+                    rx.vstack(
+                        rx.text("Filtrer par spécialité", size="2", weight="medium"),
+                        rx.select.root(
+                            rx.select.trigger(width="100%", placeholder="Toutes les spécialités"),
+                            rx.select.content(
+                                rx.select.item("Toutes les spécialités", value="_all_"),
+                                rx.foreach(
+                                    CampaignDetailState.specialty_options_for_assign,
+                                    lambda s: rx.select.item(s, value=s),
+                                ),
+                            ),
+                            value=rx.cond(
+                                CampaignDetailState.assign_doctor_specialty_filter != "",
+                                CampaignDetailState.assign_doctor_specialty_filter,
+                                "_all_",
+                            ),
+                            on_change=CampaignDetailState.set_assign_doctor_specialty_filter,
+                            size="2",
+                            width="100%",
+                        ),
+                        spacing="1", width="100%",
+                    ),
+                    rx.fragment(),
+                ),
+                # Doctor select
+                rx.vstack(
+                    rx.text("Médecin *", size="2", weight="medium"),
+                    rx.select.root(
+                        rx.select.trigger(width="100%", placeholder="Sélectionner un médecin…"),
+                        rx.select.content(
+                            rx.select.item("— Aucun (retirer l'assignation) —", value="_none_"),
+                            rx.foreach(
+                                CampaignDetailState.doctor_options_for_assign,
+                                lambda d: rx.select.item(d.label, value=d.id),
+                            ),
+                        ),
+                        value=rx.cond(
+                            CampaignDetailState.assign_doctor_selected_id != "",
+                            CampaignDetailState.assign_doctor_selected_id,
+                            "_none_",
+                        ),
+                        on_change=CampaignDetailState.set_assign_doctor_selected,
+                        size="2",
+                        width="100%",
+                    ),
+                    spacing="1", width="100%",
+                ),
+                spacing="3", width="100%", margin_top="1rem",
+            ),
+            rx.hstack(
+                rx.dialog.close(
+                    rx.button("Annuler", variant="soft", color_scheme="gray",
+                              on_click=CampaignDetailState.close_assign_doctor_dialog)
+                ),
+                rx.button(
+                    rx.icon("check", size=14),
+                    "Confirmer",
+                    on_click=CampaignDetailState.confirm_assign_doctor,
+                    loading=CampaignDetailState.is_assigning_doctor,
+                ),
+                spacing="2", justify="end", margin_top="1rem", width="100%",
+            ),
+            max_width="500px",
+            on_interact_outside=CampaignDetailState.close_assign_doctor_dialog,
+            on_escape_key_down=CampaignDetailState.close_assign_doctor_dialog,
+        ),
+        open=CampaignDetailState.assign_doctor_dialog_open,
+    )
+
+
 def campaign_detail_dialogs() -> rx.Component:
     """Render all campaign detail dialogs in one call (used in campaign_detail_page)."""
     return rx.fragment(
@@ -368,4 +458,5 @@ def campaign_detail_dialogs() -> rx.Component:
         _psc_dialog(),
         _enterprise_dialog(),
         _edit_dialog(),
+        _assign_doctor_dialog(),
     )

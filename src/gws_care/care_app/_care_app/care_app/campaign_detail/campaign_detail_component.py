@@ -8,6 +8,7 @@ from ..common.page_layout import page_layout
 from ..common.patient_picker_component import patient_picker_widget
 from .campaign_detail_state import (
     CampaignDetailState,
+    DoctorOptionDTO,
     ExamTypeOptionDTO,
     ExamTypeRowDTO,
     PatientRowDTO,
@@ -288,16 +289,47 @@ def _exam_type_row(et: ExamTypeRowDTO) -> rx.Component:
         rx.table.cell(rx.text(et.category, size="2", color="var(--gray-8)")),
         rx.table.cell(
             rx.cond(
-                (CampaignDetailState.program.status == "draft")
-                | (CampaignDetailState.program.status == "validated"),
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("x", size=14), variant="ghost", size="1",
-                        color_scheme="red",
-                        on_click=lambda: CampaignDetailState.remove_exam_type(et.id),
-                    ),
-                    content=LanguageState.tr["tooltip_remove_exam_type"],
+                et.assigned_doctor_name != "",
+                rx.hstack(
+                    rx.icon("stethoscope", size=13, color="var(--accent-9)"),
+                    rx.text(et.assigned_doctor_name, size="2", color="var(--accent-11)"),
+                    spacing="1", align="center",
                 ),
+                rx.text("—", size="2", color="var(--gray-6)"),
+            )
+        ),
+        rx.table.cell(
+            rx.hstack(
+                rx.cond(
+                    (CampaignDetailState.is_operator | CampaignDetailState.is_admin)
+                    & (
+                        (CampaignDetailState.program.status == "draft")
+                        | (CampaignDetailState.program.status == "validated")
+                    ),
+                    rx.hstack(
+                        rx.tooltip(
+                            rx.icon_button(
+                                rx.icon("user-round-plus", size=14), variant="soft", size="1",
+                                color_scheme="blue",
+                                on_click=lambda: CampaignDetailState.open_assign_doctor_dialog(
+                                    et.id, et.name, et.assigned_doctor_id
+                                ),
+                            ),
+                            content="Assigner un médecin",
+                        ),
+                        rx.tooltip(
+                            rx.icon_button(
+                                rx.icon("x", size=14), variant="ghost", size="1",
+                                color_scheme="red",
+                                on_click=lambda: CampaignDetailState.remove_exam_type(et.id),
+                            ),
+                            content=LanguageState.tr["tooltip_remove_exam_type"],
+                        ),
+                        spacing="1",
+                    ),
+                    rx.fragment(),
+                ),
+                spacing="1",
             )
         ),
     )
@@ -351,6 +383,9 @@ def _tab_exam_types() -> rx.Component:
                             ),
                             on_click=lambda: CampaignDetailState.sort_exam_types("category"),
                             cursor="pointer",
+                        ),
+                        rx.table.column_header_cell(
+                            rx.text("Médecin assigné", size="2"),
                         ),
                         rx.table.column_header_cell(""),
                     )
@@ -529,7 +564,150 @@ def _tab_visits() -> rx.Component:
     )
 
 
+def _doctor_row_campaign(doc: DoctorOptionDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(
+            rx.vstack(
+                rx.text(doc.label, size="2"),
+                rx.cond(
+                    doc.specialty != "",
+                    rx.badge(doc.specialty, color_scheme="blue", variant="soft", size="1"),
+                    rx.fragment(),
+                ),
+                spacing="1", align_items="start",
+            )
+        ),
+        rx.table.cell(
+            rx.icon_button(
+                rx.icon("trash-2", size=14),
+                variant="ghost",
+                color_scheme="red",
+                size="1",
+                on_click=lambda: CampaignDetailState.remove_campaign_doctor(doc.id),
+            ),
+            text_align="right",
+        ),
+        style={":hover": {"background_color": "var(--gray-2)"}},
+    )
+
+
+def _tab_doctors() -> rx.Component:
+    return rx.vstack(
+        rx.hstack(
+            rx.text(
+                "Médecins assignés à cette campagne",
+                size="2", color="var(--gray-11)",
+            ),
+            rx.spacer(),
+            rx.button(
+                rx.icon("plus", size=14),
+                "Ajouter un médecin",
+                size="2",
+                on_click=CampaignDetailState.open_add_campaign_doctor_dialog,
+            ),
+            width="100%", align="center",
+        ),
+        rx.cond(
+            CampaignDetailState.campaign_doctors.length() > 0,
+            rx.box(
+                rx.table.root(
+                    rx.table.header(
+                        rx.table.row(
+                            rx.table.column_header_cell("Médecin — Spécialité"),
+                            rx.table.column_header_cell(""),
+                        )
+                    ),
+                    rx.table.body(
+                        rx.foreach(CampaignDetailState.campaign_doctors, _doctor_row_campaign),
+                    ),
+                    width="100%", variant="surface",
+                ),
+                overflow_x="auto", width="100%",
+            ),
+            rx.box(
+                rx.text(
+                    "Aucun médecin associé à cette campagne.",
+                    size="2", color="var(--gray-9)",
+                ),
+                padding="2rem",
+                text_align="center",
+                width="100%",
+            ),
+        ),
+        width="100%", spacing="3",
+    )
+
+
 # ── Dialogs ───────────────────────────────────────────────────────────────────
+
+def _add_campaign_doctor_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.vstack(
+                rx.dialog.title("Ajouter un médecin à la campagne"),
+                rx.hstack(
+                    rx.cond(
+                        CampaignDetailState.add_campaign_doctor_specialty_options.length() > 0,
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Toutes spécialités", width="180px"),
+                            rx.select.content(
+                                rx.select.item("Toutes les spécialités", value="_all_"),
+                                rx.foreach(
+                                    CampaignDetailState.add_campaign_doctor_specialty_options,
+                                    lambda s: rx.select.item(s, value=s),
+                                ),
+                            ),
+                            value=CampaignDetailState.add_campaign_doctor_specialty_filter,
+                            on_change=CampaignDetailState.set_add_campaign_doctor_specialty_filter,
+                            size="2",
+                        ),
+                        rx.fragment(),
+                    ),
+                    rx.input(
+                        rx.input.slot(rx.icon("search", size=13)),
+                        placeholder="Rechercher un médecin…",
+                        value=CampaignDetailState.add_campaign_doctor_search,
+                        on_change=CampaignDetailState.set_add_campaign_doctor_search,
+                        size="2", flex="1",
+                    ),
+                    spacing="2", width="100%",
+                ),
+                rx.select.root(
+                    rx.select.trigger(placeholder="Sélectionner un médecin…", width="100%"),
+                    rx.select.content(
+                        rx.foreach(
+                            CampaignDetailState.add_campaign_doctor_options,
+                            lambda d: rx.select.item(d.label, value=d.id),
+                        ),
+                    ),
+                    value=CampaignDetailState.add_campaign_doctor_selected_id,
+                    on_change=CampaignDetailState.set_add_campaign_doctor_selected,
+                    size="2",
+                    width="100%",
+                ),
+                rx.hstack(
+                    rx.spacer(),
+                    rx.button(
+                        "Annuler", variant="outline", color_scheme="gray",
+                        on_click=CampaignDetailState.close_add_campaign_doctor_dialog,
+                    ),
+                    rx.button(
+                        "Ajouter",
+                        loading=CampaignDetailState.is_adding_campaign_doctor,
+                        disabled=CampaignDetailState.add_campaign_doctor_selected_id == "",
+                        on_click=CampaignDetailState.confirm_add_campaign_doctor,
+                    ),
+                    spacing="2", width="100%", padding_top="0.5rem",
+                ),
+                spacing="3", width="100%",
+            ),
+            on_interact_outside=CampaignDetailState.close_add_campaign_doctor_dialog,
+            on_escape_key_down=CampaignDetailState.close_add_campaign_doctor_dialog,
+            max_width="500px",
+        ),
+        open=CampaignDetailState.add_campaign_doctor_dialog_open,
+    )
+
 
 def _add_patient_dialog() -> rx.Component:
     def _patient_row(p) -> rx.Component:
@@ -864,10 +1042,23 @@ def campaign_detail_page() -> rx.Component:
                                     ),
                                     value="visits",
                                 ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
+                                        rx.icon("user-round-check", size=14),
+                                        "Médecins",
+                                        rx.badge(
+                                            CampaignDetailState.campaign_doctors.length().to_string(),
+                                            color_scheme="blue", variant="soft", size="1",
+                                        ),
+                                        spacing="1", align="center",
+                                    ),
+                                    value="doctors",
+                                ),
                             ),
                             rx.tabs.content(_tab_patients(), value="patients", padding_top="1rem"),
                             rx.tabs.content(_tab_exam_types(), value="exam_types", padding_top="1rem"),
                             rx.tabs.content(_tab_visits(), value="visits", padding_top="1rem"),
+                            rx.tabs.content(_tab_doctors(), value="doctors", padding_top="1rem"),
                             value=CampaignDetailState.active_tab,
                             on_change=CampaignDetailState.set_active_tab,
                             width="100%",
@@ -876,6 +1067,7 @@ def campaign_detail_page() -> rx.Component:
                     ),
                 ),
             ),
+            _add_campaign_doctor_dialog(),
             _add_patient_dialog(),
             _add_exam_type_dialog(),
             _archive_dialog(),

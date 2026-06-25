@@ -77,6 +77,8 @@ from .document_upload.document_upload_component import document_upload_page
 from .document_upload.document_upload_state import DocumentUploadState
 from .uploaded_document_detail.uploaded_document_detail_component import uploaded_document_detail_page
 from .uploaded_document_detail.uploaded_document_detail_state import UploadedDocumentDetailState
+from .doctor_assigned_exams.doctor_assigned_exams_component import doctor_assigned_exams_page
+from .doctor_assigned_exams.doctor_assigned_exams_state import DoctorAssignedExamsState
 
 
 app = register_gws_reflex_app()
@@ -303,6 +305,12 @@ def documents_upload():
 def uploaded_document_detail():
     """Uploaded document detail page — view metadata and open the file."""
     return uploaded_document_detail_page()
+
+
+@rx.page(route="/my-assigned-exams", on_load=[DoctorAssignedExamsState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def my_assigned_exams():
+    """Doctor view — exam types assigned to this doctor across all campaigns."""
+    return doctor_assigned_exams_page()
 
 
 @rx.page(route="/no-access", on_load=[LanguageState.on_load])

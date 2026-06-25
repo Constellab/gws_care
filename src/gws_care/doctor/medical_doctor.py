@@ -21,6 +21,8 @@ class MedicalDoctor(ModelWithUser):
     rpps_number: str = CharField(max_length=20, null=True)
     address: str = CharField(max_length=500, null=True)
     is_active: bool = BooleanField(default=True, null=False)
+    is_archived: bool = BooleanField(default=False, null=False)
+    status_reason: str = CharField(max_length=1000, null=True)
     user: User = ForeignKeyField(User, null=True, backref="medical_doctor_profile", on_delete="SET NULL", unique=True)
 
     def get_full_name(self) -> str:

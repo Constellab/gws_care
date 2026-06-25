@@ -6,6 +6,145 @@ from ..common.page_layout import page_layout
 from .doctor_schedule_state import DoctorScheduleState, ScheduleBlockDTO, DoctorOptionDTO, UnavailableDayDTO
 
 
+# ── Doctor filter bar ─────────────────────────────────────────────────────────
+
+def _specialty_pill(specialty: str) -> rx.Component:
+    is_selected = DoctorScheduleState.filter_specialty == specialty
+    return rx.button(
+        specialty,
+        variant=rx.cond(is_selected, "solid", "soft"),
+        color_scheme=rx.cond(is_selected, "blue", "gray"),
+        size="1",
+        border_radius="999px",
+        on_click=lambda: DoctorScheduleState.set_filter_specialty(specialty),
+    )
+
+
+def _doctor_card(doc: DoctorOptionDTO) -> rx.Component:
+    is_selected = DoctorScheduleState.selected_doctor_id == doc.id
+    return rx.box(
+        rx.vstack(
+            rx.hstack(
+                rx.icon(
+                    "circle-user-round", size=22,
+                    color=rx.cond(is_selected, "white", "var(--accent-9)"),
+                    flex_shrink="0",
+                ),
+                rx.vstack(
+                    rx.text(
+                        doc.name, size="2", weight="medium",
+                        color=rx.cond(is_selected, "white", "inherit"),
+                    ),
+                    rx.cond(
+                        doc.specialty != "",
+                        rx.badge(
+                            doc.specialty,
+                            color_scheme=rx.cond(is_selected, "indigo", "blue"),
+                            variant="soft", size="1",
+                        ),
+                        rx.fragment(),
+                    ),
+                    spacing="1", align_items="start",
+                ),
+                spacing="2", align="center",
+            ),
+            spacing="1", align_items="start",
+        ),
+        padding="0.6rem 0.9rem",
+        border_radius="10px",
+        cursor="pointer",
+        min_width="180px",
+        border=rx.cond(
+            is_selected,
+            "2px solid var(--accent-9)",
+            "1px solid var(--gray-4)",
+        ),
+        background=rx.cond(
+            is_selected,
+            "var(--accent-9)",
+            "var(--gray-1)",
+        ),
+        _hover={"border_color": "var(--accent-7)", "background": rx.cond(is_selected, "var(--accent-9)", "var(--accent-2)")},
+        on_click=lambda: DoctorScheduleState.select_doctor(doc.id),
+    )
+
+
+def _filter_bar() -> rx.Component:
+    return rx.vstack(
+        # Row 1: specialty pills + search input
+        rx.hstack(
+            rx.hstack(
+                rx.text("Spécialité :", size="2", color="var(--gray-9)", white_space="nowrap"),
+                rx.button(
+                    "Toutes",
+                    variant=rx.cond(DoctorScheduleState.filter_specialty == "", "solid", "soft"),
+                    color_scheme=rx.cond(DoctorScheduleState.filter_specialty == "", "blue", "gray"),
+                    size="1", border_radius="999px",
+                    on_click=lambda: DoctorScheduleState.set_filter_specialty("_all_"),
+                ),
+                rx.foreach(DoctorScheduleState.available_specialties, _specialty_pill),
+                spacing="2", align="center", wrap="wrap", flex="1",
+            ),
+            rx.input(
+                placeholder="🔍 Rechercher par nom...",
+                value=DoctorScheduleState.search_name,
+                on_change=DoctorScheduleState.set_search_name,
+                size="2",
+                width="220px",
+                flex_shrink="0",
+            ),
+            spacing="3", align="center", width="100%", wrap="wrap",
+        ),
+        # Row 2: doctor cards (horizontal scroll)
+        rx.cond(
+            DoctorScheduleState.filtered_doctors.length() > 0,
+            rx.box(
+                rx.hstack(
+                    rx.foreach(DoctorScheduleState.filtered_doctors, _doctor_card),
+                    spacing="2", align="start",
+                ),
+                width="100%",
+                overflow_x="auto",
+                padding_y="0.25rem",
+            ),
+            rx.callout(
+                "Aucun médecin actif ne correspond à votre recherche.",
+                icon="info",
+                color_scheme="orange",
+                variant="soft",
+                size="1",
+            ),
+        ),
+        # Selection indicator
+        rx.cond(
+            DoctorScheduleState.selected_doctor_id != "ALL",
+            rx.hstack(
+                rx.icon("stethoscope", size=14, color="var(--accent-9)"),
+                rx.text(
+                    "Affichage des créneaux de ",
+                    rx.text.strong(DoctorScheduleState.selected_doctor_name),
+                    rx.cond(
+                        DoctorScheduleState.selected_doctor_specialty != "",
+                        " — " + DoctorScheduleState.selected_doctor_specialty,
+                        "",
+                    ),
+                    size="2", color="var(--accent-11)",
+                ),
+                rx.button(
+                    rx.icon("x", size=12), "Voir tous",
+                    variant="ghost", size="1", color_scheme="gray",
+                    on_click=DoctorScheduleState.clear_doctor_selection,
+                ),
+                spacing="2", align="center",
+            ),
+            rx.fragment(),
+        ),
+        spacing="3", width="100%",
+    )
+
+
+# ── Schedule table ────────────────────────────────────────────────────────────
+
 def _active_badge(block: ScheduleBlockDTO) -> rx.Component:
     return rx.cond(
         block.is_active,
@@ -95,10 +234,7 @@ def _schedule_table() -> rx.Component:
         rx.center(
             rx.vstack(
                 rx.icon("calendar-clock", size=40, color="var(--gray-7)"),
-                rx.text(
-                    "Aucun créneau de disponibilité défini",
-                    size="3", color="var(--gray-9)",
-                ),
+                rx.text("Aucun créneau de disponibilité défini", size="3", color="var(--gray-9)"),
                 rx.text(
                     "Ajoutez les créneaux hebdomadaires de chaque médecin pour gérer l'agenda.",
                     size="2", color="var(--gray-7)", text_align="center",
@@ -110,42 +246,12 @@ def _schedule_table() -> rx.Component:
     )
 
 
+# ── Create block dialog ───────────────────────────────────────────────────────
+
 def _doctor_option(opt: DoctorOptionDTO) -> rx.Component:
     return rx.select.item(
         rx.cond(opt.specialty != "", opt.name + " — " + opt.specialty, opt.name),
         value=opt.id,
-    )
-
-
-_SPECIALTY_CHOICES = [
-    "Généraliste", "Cardiologue", "Pneumologue", "Ophtalmologue", "ORL",
-    "Radiologue", "Rhumatologue", "Neurologue", "Dermatologue", "Gynécologue",
-    "Pédiatre", "Endocrinologue", "Néphrologue", "Gastro-entérologue",
-    "Infectiologue", "Médecin du travail", "Autre",
-]
-
-
-def _doctor_specialty_row(opt: DoctorOptionDTO) -> rx.Component:
-    """One row for a doctor with specialty selector."""
-    return rx.hstack(
-        rx.text(opt.name, size="2", flex="1"),
-        rx.select.root(
-            rx.select.trigger(
-                placeholder="Spécialité...",
-                width="200px",
-            ),
-            rx.select.content(
-                rx.select.item("— Aucune —", value="__none__"),
-                *[rx.select.item(s, value=s) for s in _SPECIALTY_CHOICES],
-            ),
-            value=rx.cond(opt.specialty != "", opt.specialty, "__none__"),
-            on_change=lambda v: DoctorScheduleState.set_doctor_specialty(opt.id, v),
-            size="2",
-        ),
-        spacing="3",
-        align="center",
-        width="100%",
-        padding_y="0.25rem",
     )
 
 
@@ -154,18 +260,16 @@ def _create_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title("Nouveau créneau de disponibilité"),
             rx.vstack(
-                # Doctor
                 rx.text("Médecin *", size="2", weight="medium"),
                 rx.select.root(
                     rx.select.trigger(placeholder="Sélectionner un médecin...", width="100%"),
                     rx.select.content(
-                        rx.foreach(DoctorScheduleState.doctors, _doctor_option),
+                        rx.foreach(DoctorScheduleState.schedulable_doctors, _doctor_option),
                     ),
                     value=DoctorScheduleState.form_doctor_id,
                     on_change=DoctorScheduleState.set_form_doctor,
                     width="100%",
                 ),
-                # Days (multi-select toggle buttons)
                 rx.text("Jours de la semaine *", size="2", weight="medium"),
                 rx.hstack(
                     *[
@@ -184,7 +288,6 @@ def _create_dialog() -> rx.Component:
                     ],
                     spacing="1", width="100%", wrap="wrap",
                 ),
-                # Times
                 rx.grid(
                     rx.vstack(
                         rx.text("Heure début *", size="2", weight="medium"),
@@ -208,7 +311,6 @@ def _create_dialog() -> rx.Component:
                     ),
                     columns="2", spacing="4", width="100%",
                 ),
-                # Slot duration
                 rx.text("Durée d'un créneau (minutes)", size="2", weight="medium"),
                 rx.select.root(
                     rx.select.trigger(placeholder="Durée...", width="100%"),
@@ -224,7 +326,6 @@ def _create_dialog() -> rx.Component:
                     on_change=DoctorScheduleState.set_form_slot,
                     width="100%",
                 ),
-                # Room
                 rx.text("Salle / Cabinet", size="2", weight="medium"),
                 rx.input(
                     placeholder="Ex: Cabinet 1, Salle A...",
@@ -232,7 +333,6 @@ def _create_dialog() -> rx.Component:
                     on_change=DoctorScheduleState.set_form_room,
                     width="100%",
                 ),
-                # Error
                 rx.cond(
                     DoctorScheduleState.error_message != "",
                     rx.callout(
@@ -262,24 +362,23 @@ def _create_dialog() -> rx.Component:
     )
 
 
+# ── Unavailability dialog ─────────────────────────────────────────────────────
+
 def _unavail_dialog() -> rx.Component:
-    """Dialog to add an unavailability period for a doctor (date range + half day)."""
     return rx.dialog.root(
         rx.dialog.content(
             rx.dialog.title("Ajouter une indisponibilité"),
             rx.vstack(
-                # Doctor
                 rx.text("Médecin *", size="2", weight="medium"),
                 rx.select.root(
                     rx.select.trigger(placeholder="Sélectionner un médecin...", width="100%"),
                     rx.select.content(
-                        rx.foreach(DoctorScheduleState.doctors, _doctor_option),
+                        rx.foreach(DoctorScheduleState.schedulable_doctors, _doctor_option),
                     ),
                     value=DoctorScheduleState.unavail_form_doctor_id,
                     on_change=DoctorScheduleState.set_unavail_doctor,
                     width="100%",
                 ),
-                # Date range
                 rx.grid(
                     rx.vstack(
                         rx.text("Date de début *", size="2", weight="medium"),
@@ -303,7 +402,6 @@ def _unavail_dialog() -> rx.Component:
                     ),
                     columns="2", spacing="3", width="100%",
                 ),
-                # Half-day
                 rx.text("Période", size="2", weight="medium"),
                 rx.select.root(
                     rx.select.trigger(width="100%"),
@@ -316,7 +414,6 @@ def _unavail_dialog() -> rx.Component:
                     on_change=DoctorScheduleState.set_unavail_half_day,
                     width="100%",
                 ),
-                # Reason
                 rx.text("Raison (optionnel)", size="2", weight="medium"),
                 rx.input(
                     placeholder="Ex : Congé, Formation, ...",
@@ -353,9 +450,10 @@ def _unavail_dialog() -> rx.Component:
     )
 
 
+# ── Unavailability section ────────────────────────────────────────────────────
 
-
-def _half_day_badge(half_day: str) -> rx.Component:    return rx.match(
+def _half_day_badge(half_day: str) -> rx.Component:
+    return rx.match(
         half_day,
         ("AM", rx.badge("Matin", color_scheme="orange", variant="soft", size="1")),
         ("PM", rx.badge("Après-midi", color_scheme="orange", variant="soft", size="1")),
@@ -365,13 +463,9 @@ def _half_day_badge(half_day: str) -> rx.Component:    return rx.match(
 
 def _unavail_row(u: UnavailableDayDTO) -> rx.Component:
     return rx.hstack(
-        # Date or range
         rx.cond(
             (u.date_end != "") & (u.date_end != u.date),
-            rx.badge(
-                u.date + " → " + u.date_end,
-                color_scheme="red", variant="soft", size="2",
-            ),
+            rx.badge(u.date + " → " + u.date_end, color_scheme="red", variant="soft", size="2"),
             rx.badge(u.date, color_scheme="red", variant="soft", size="2"),
         ),
         _half_day_badge(u.half_day),
@@ -401,31 +495,22 @@ def _unavailable_days_section() -> rx.Component:
             rx.heading("Indisponibilités", size="4"),
             rx.spacer(),
             rx.button(
-                rx.icon("plus", size=14),
-                "Ajouter",
+                rx.icon("plus", size=14), "Ajouter",
                 on_click=DoctorScheduleState.open_unavail_form,
-                size="2",
-                color_scheme="red",
-                variant="soft",
+                size="2", color_scheme="red", variant="soft",
             ),
             align="center", spacing="2", width="100%",
         ),
-        rx.text(
-            "Les patients ne pourront pas réserver sur ces périodes.",
-            size="2", color="var(--gray-9)",
-        ),
-        # ── List of unavailability records ────────────────────────────────
+        rx.text("Les patients ne pourront pas réserver sur ces périodes.", size="2", color="var(--gray-9)"),
         rx.cond(
             DoctorScheduleState.filtered_unavail_days.length() > 0,
             rx.vstack(
                 rx.foreach(DoctorScheduleState.filtered_unavail_days, _unavail_row),
-                spacing="2",
-                width="100%",
+                spacing="2", width="100%",
             ),
             rx.text("Aucune indisponibilité configurée.", size="2", color="var(--gray-7)"),
         ),
-        spacing="3",
-        width="100%",
+        spacing="3", width="100%",
         padding="1.25rem",
         border="1px solid var(--red-4)",
         border_radius="12px",
@@ -433,6 +518,8 @@ def _unavailable_days_section() -> rx.Component:
         margin_top="1.5rem",
     )
 
+
+# ── Page ──────────────────────────────────────────────────────────────────────
 
 def doctor_schedule_page() -> rx.Component:
     return page_layout(
@@ -454,27 +541,14 @@ def doctor_schedule_page() -> rx.Component:
                 content="Voir le planning des rendez-vous",
             ),
             rx.button(
-                rx.icon("plus", size=16),
-                "Ajouter un créneau",
+                rx.icon("plus", size=16), "Ajouter un créneau",
                 on_click=DoctorScheduleState.open_create_dialog,
                 size="2",
             ),
             width="100%", align="center", spacing="3",
         ),
-        # Doctor filter
-        rx.hstack(
-            rx.text("Médecin :", size="2", color="var(--gray-9)"),
-            rx.select.root(
-                rx.select.trigger(placeholder="Tous les médecins", width="220px"),
-                rx.select.content(
-                    rx.select.item("Tous les médecins", value="ALL"),
-                    rx.foreach(DoctorScheduleState.doctors, _doctor_option),
-                ),
-                value=DoctorScheduleState.selected_doctor_id,
-                on_change=DoctorScheduleState.set_doctor_filter,
-            ),
-            spacing="2", align="center",
-        ),
+        # Filter bar: specialties + name search + doctor cards
+        _filter_bar(),
         rx.cond(
             DoctorScheduleState.error_message != "",
             rx.callout(
