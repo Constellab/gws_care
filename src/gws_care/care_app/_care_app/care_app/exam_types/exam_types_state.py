@@ -28,6 +28,7 @@ class ExamParamVM(BaseModel):
     critical_low: str = ""
     critical_high: str = ""
     is_required: bool
+    is_active: bool = True
     display_order: int
 
 
@@ -90,6 +91,17 @@ class ExamTypesState(ReflexMainState):
     param_form: ExamParamFormVM = ExamParamFormVM()
     param_form_error: str = ""
     is_saving_param: bool = False
+
+    # Confirm archivage — paramètre
+    confirm_deactivate_param_open: bool = False
+    confirm_deactivate_param_id: str = ""
+    confirm_deactivate_param_name: str = ""
+    confirm_deactivate_param_comment: str = ""
+
+    # Confirm réactivation — paramètre
+    confirm_reactivate_param_open: bool = False
+    confirm_reactivate_param_id: str = ""
+    confirm_reactivate_param_name: str = ""
 
     # Confirm suppression — paramètre
     confirm_delete_param_open: bool = False
@@ -363,6 +375,71 @@ class ExamTypesState(ReflexMainState):
         except Exception as e:
             self.error = str(e)
 
+    # ── Confirm archivage paramètre ───────────────────────────────────────
+    @rx.event
+    def open_confirm_deactivate_param(self, param_id: str, param_name: str):
+        self.confirm_deactivate_param_id = param_id
+        self.confirm_deactivate_param_name = param_name
+        self.confirm_deactivate_param_comment = ""
+        self.confirm_deactivate_param_open = True
+
+    @rx.event
+    def set_deactivate_param_comment(self, v: str):
+        self.confirm_deactivate_param_comment = v
+
+    @rx.event
+    def dismiss_confirm_deactivate_param(self):
+        self.confirm_deactivate_param_open = False
+        self.confirm_deactivate_param_id = ""
+        self.confirm_deactivate_param_name = ""
+        self.confirm_deactivate_param_comment = ""
+
+    @rx.event
+    async def confirmed_deactivate_param(self):
+        if not self.confirm_deactivate_param_comment.strip():
+            return
+        param_id = self.confirm_deactivate_param_id
+        self.confirm_deactivate_param_open = False
+        self.confirm_deactivate_param_id = ""
+        self.confirm_deactivate_param_name = ""
+        self.confirm_deactivate_param_comment = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
+                ExamTypeRefService.deactivate_parameter(param_id)
+            self.success = "Paramètre archivé."
+            await self._load_parameters(self.selected_type_id)
+        except Exception as e:
+            self.error = str(e)
+
+    # ── Confirm réactivation paramètre ────────────────────────────────────
+    @rx.event
+    def open_confirm_reactivate_param(self, param_id: str, param_name: str):
+        self.confirm_reactivate_param_id = param_id
+        self.confirm_reactivate_param_name = param_name
+        self.confirm_reactivate_param_open = True
+
+    @rx.event
+    def dismiss_confirm_reactivate_param(self):
+        self.confirm_reactivate_param_open = False
+        self.confirm_reactivate_param_id = ""
+        self.confirm_reactivate_param_name = ""
+
+    @rx.event
+    async def confirmed_reactivate_param(self):
+        param_id = self.confirm_reactivate_param_id
+        self.confirm_reactivate_param_open = False
+        self.confirm_reactivate_param_id = ""
+        self.confirm_reactivate_param_name = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
+                ExamTypeRefService.reactivate_parameter(param_id)
+            self.success = "Paramètre réactivé."
+            await self._load_parameters(self.selected_type_id)
+        except Exception as e:
+            self.error = str(e)
+
     # ── Confirm suppression paramètre ─────────────────────────────────────
     @rx.event
     def open_confirm_delete_param(self, param_id: str):
@@ -401,20 +478,29 @@ class ExamTypesState(ReflexMainState):
     def open_confirm_delete_type(self, type_id: str, type_name: str):
         self.confirm_delete_type_id = type_id
         self.confirm_delete_type_name = type_name
+        self.confirm_delete_type_comment = ""
         self.confirm_delete_type_open = True
+
+    @rx.event
+    def set_delete_type_comment(self, v: str):
+        self.confirm_delete_type_comment = v
 
     @rx.event
     def dismiss_confirm_delete_type(self):
         self.confirm_delete_type_open = False
         self.confirm_delete_type_id = ""
         self.confirm_delete_type_name = ""
+        self.confirm_delete_type_comment = ""
 
     @rx.event
     async def confirmed_delete_type(self):
+        if not self.confirm_delete_type_comment.strip():
+            return
         type_id = self.confirm_delete_type_id
         self.confirm_delete_type_open = False
         self.confirm_delete_type_id = ""
         self.confirm_delete_type_name = ""
+        self.confirm_delete_type_comment = ""
         try:
             with await self.authenticate_user():
                 from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
@@ -429,25 +515,35 @@ class ExamTypesState(ReflexMainState):
     def open_confirm_deactivate_type(self, type_id: str, type_name: str):
         self.confirm_deactivate_type_id = type_id
         self.confirm_deactivate_type_name = type_name
+        self.confirm_deactivate_type_comment = ""
         self.confirm_deactivate_type_open = True
+
+    @rx.event
+    def set_deactivate_type_comment(self, v: str):
+        self.confirm_deactivate_type_comment = v
 
     @rx.event
     def dismiss_confirm_deactivate_type(self):
         self.confirm_deactivate_type_open = False
         self.confirm_deactivate_type_id = ""
         self.confirm_deactivate_type_name = ""
+        self.confirm_deactivate_type_comment = ""
 
     @rx.event
     async def confirmed_deactivate_type(self):
+        if not self.confirm_deactivate_type_comment.strip():
+            return
         type_id = self.confirm_deactivate_type_id
+        comment = self.confirm_deactivate_type_comment
         self.confirm_deactivate_type_open = False
         self.confirm_deactivate_type_id = ""
         self.confirm_deactivate_type_name = ""
+        self.confirm_deactivate_type_comment = ""
         try:
             with await self.authenticate_user():
                 from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
-                ExamTypeRefService.deactivate(type_id)
-            self.success = "Type d'examen désactivé."
+                ExamTypeRefService.deactivate(type_id, reason=comment)
+            self.success = "Type d'examen archivé."
             await self._load_types()
         except Exception as e:
             self.error = str(e)
@@ -535,7 +631,8 @@ class ExamTypesState(ReflexMainState):
                         ref_high=str(p.ref_high) if p.ref_high is not None else "",
                         critical_low=str(p.critical_low) if p.critical_low is not None else "",
                         critical_high=str(p.critical_high) if p.critical_high is not None else "",
-                        is_required=p.is_required, display_order=p.display_order,
+                        is_required=p.is_required, is_active=p.is_active,
+                        display_order=p.display_order,
                     )
                     for p in detail.parameters
                 ]

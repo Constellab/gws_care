@@ -178,23 +178,31 @@ def _param_row(p: ExamParamVM) -> rx.Component:
     return rx.table.row(
         rx.table.cell(
             rx.hstack(
-                rx.text(p.name, size="2", weight="medium"),
+                rx.text(p.name, size="2", weight="medium",
+                        color=rx.cond(p.is_active, "inherit", "var(--gray-8)")),
                 rx.cond(
-                    p.is_required,
+                    p.is_required & p.is_active,
                     rx.badge("Obligatoire", color_scheme="red", size="1"),
+                    rx.fragment(),
+                ),
+                rx.cond(
+                    ~p.is_active,
+                    rx.badge("Archivé", color_scheme="gray", size="1", variant="soft"),
                     rx.fragment(),
                 ),
                 spacing="2",
                 align="center",
             )
         ),
-        rx.table.cell(rx.badge(p.value_type, size="1", variant="soft", color_scheme="blue")),
+        rx.table.cell(rx.badge(p.value_type, size="1", variant="soft",
+                               color_scheme=rx.cond(p.is_active, "blue", "gray"))),
         rx.table.cell(
-            rx.cond(p.unit != "", rx.text(p.unit, size="2"), rx.text("—", size="2", color="var(--gray-7)"))
+            rx.cond(p.unit != "", rx.text(p.unit, size="2", color=rx.cond(p.is_active, "inherit", "var(--gray-8)")),
+                    rx.text("—", size="2", color="var(--gray-7)"))
         ),
         rx.table.cell(
             rx.cond(
-                (p.ref_low != "") | (p.ref_high != ""),
+                p.is_active & ((p.ref_low != "") | (p.ref_high != "")),
                 rx.text(rx.cond(p.ref_low != "", p.ref_low, "—"), " → ",
                         rx.cond(p.ref_high != "", p.ref_high, "—"), size="2"),
                 rx.text("—", size="2", color="var(--gray-7)"),
@@ -202,7 +210,7 @@ def _param_row(p: ExamParamVM) -> rx.Component:
         ),
         rx.table.cell(
             rx.cond(
-                (p.critical_low != "") | (p.critical_high != ""),
+                p.is_active & ((p.critical_low != "") | (p.critical_high != "")),
                 rx.hstack(
                     rx.badge(rx.cond(p.critical_low != "", p.critical_low, "—"),
                              color_scheme="red", size="1", variant="soft"),
@@ -215,23 +223,48 @@ def _param_row(p: ExamParamVM) -> rx.Component:
         ),
         rx.table.cell(
             rx.hstack(
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("pen-line", size=14), variant="ghost", size="1", color_scheme="blue",
-                        on_click=ExamTypesState.open_edit_param_dialog(p.id),
+                rx.cond(
+                    p.is_active,
+                    rx.tooltip(
+                        rx.icon_button(
+                            rx.icon("pen-line", size=14), variant="ghost", size="1", color_scheme="blue",
+                            on_click=ExamTypesState.open_edit_param_dialog(p.id),
+                        ),
+                        content="Modifier ce paramètre",
                     ),
-                    content="Modifier ce paramètre",
+                    rx.fragment(),
                 ),
-                rx.tooltip(
-                    rx.icon_button(
-                        rx.icon("trash-2", size=14), variant="ghost", size="1", color_scheme="red",
-                        on_click=ExamTypesState.open_confirm_delete_param(p.id),
+                rx.cond(
+                    p.is_active,
+                    rx.tooltip(
+                        rx.icon_button(
+                            rx.icon("archive", size=14), variant="ghost", size="1", color_scheme="orange",
+                            on_click=ExamTypesState.open_confirm_deactivate_param(p.id, p.name),
+                        ),
+                        content="Archiver ce paramètre",
                     ),
-                    content="Supprimer ce paramètre",
+                    rx.hstack(
+                        rx.tooltip(
+                            rx.icon_button(
+                                rx.icon("rotate-ccw", size=14), variant="ghost", size="1", color_scheme="green",
+                                on_click=ExamTypesState.open_confirm_reactivate_param(p.id, p.name),
+                            ),
+                            content="Réactiver ce paramètre",
+                        ),
+                        rx.tooltip(
+                            rx.icon_button(
+                                rx.icon("trash-2", size=14), variant="ghost", size="1", color_scheme="red",
+                                on_click=ExamTypesState.open_confirm_delete_param(p.id),
+                            ),
+                            content="Supprimer définitivement",
+                        ),
+                        spacing="1",
+                    ),
                 ),
                 spacing="1",
             )
         ),
+        opacity=rx.cond(p.is_active, "1", "0.65"),
     )
 
 
@@ -630,6 +663,84 @@ def exam_types_page() -> rx.Component:
             ),
             _type_dialog(),
             _param_dialog(),
+            # ── Confirm archivage paramètre ─────────────────────────────────
+            rx.dialog.root(
+                rx.dialog.content(
+                    rx.dialog.title(
+                        rx.hstack(rx.icon("archive", size=18, color="var(--orange-9)"),
+                                  rx.text("Archiver ce paramètre ?"), spacing="2"),
+                    ),
+                    rx.dialog.description(
+                        rx.vstack(
+                            rx.text(
+                                "Le paramètre « ",
+                                rx.text.strong(ExamTypesState.confirm_deactivate_param_name),
+                                " » sera archivé et n'apparaîtra plus dans les résultats.",
+                                size="2",
+                            ),
+                            rx.text("Il pourra être réactivé ultérieurement.",
+                                    size="2", color="var(--gray-9)"),
+                            spacing="2",
+                        ),
+                    ),
+                    rx.vstack(
+                        rx.text("Motif d'archivage *", size="2", weight="medium"),
+                        rx.text_area(
+                            placeholder="Indiquez la raison de cet archivage…",
+                            value=ExamTypesState.confirm_deactivate_param_comment,
+                            on_change=ExamTypesState.set_deactivate_param_comment,
+                            width="100%",
+                            rows="3",
+                        ),
+                        spacing="2", width="100%", margin_top="0.75rem",
+                    ),
+                    rx.hstack(
+                        rx.dialog.close(
+                            rx.button("Annuler", variant="soft", color_scheme="gray",
+                                      on_click=ExamTypesState.dismiss_confirm_deactivate_param),
+                        ),
+                        rx.button("Archiver", color_scheme="orange",
+                                  on_click=ExamTypesState.confirmed_deactivate_param,
+                                  disabled=ExamTypesState.confirm_deactivate_param_comment.strip() == ""),
+                        justify="end", spacing="2", margin_top="1rem", width="100%",
+                    ),
+                    max_width="480px",
+                ),
+                open=ExamTypesState.confirm_deactivate_param_open,
+                on_open_change=lambda _: ExamTypesState.dismiss_confirm_deactivate_param(),
+            ),
+            # ── Confirm réactivation paramètre ──────────────────────────────
+            rx.dialog.root(
+                rx.dialog.content(
+                    rx.dialog.title(
+                        rx.hstack(rx.icon("rotate-ccw", size=18, color="var(--green-9)"),
+                                  rx.text("Réactiver ce paramètre ?"), spacing="2"),
+                    ),
+                    rx.dialog.description(
+                        rx.vstack(
+                            rx.text(
+                                "Le paramètre « ",
+                                rx.text.strong(ExamTypesState.confirm_reactivate_param_name),
+                                " » sera réactivé et réapparaîtra dans les résultats.",
+                                size="2",
+                            ),
+                            spacing="2",
+                        ),
+                    ),
+                    rx.hstack(
+                        rx.dialog.close(
+                            rx.button("Annuler", variant="soft", color_scheme="gray",
+                                      on_click=ExamTypesState.dismiss_confirm_reactivate_param),
+                        ),
+                        rx.button("Réactiver", color_scheme="green",
+                                  on_click=ExamTypesState.confirmed_reactivate_param),
+                        justify="end", spacing="2", margin_top="1rem", width="100%",
+                    ),
+                    max_width="440px",
+                ),
+                open=ExamTypesState.confirm_reactivate_param_open,
+                on_open_change=lambda _: ExamTypesState.dismiss_confirm_reactivate_param(),
+            ),
             # ── Confirm suppression paramètre ───────────────────────────────
             rx.dialog.root(
                 rx.dialog.content(
@@ -641,32 +752,44 @@ def exam_types_page() -> rx.Component:
                         "Cette action est irréversible. Le paramètre sera définitivement supprimé.",
                         size="2", color="var(--gray-9)",
                     ),
+                    rx.vstack(
+                        rx.text("Motif de suppression *", size="2", weight="medium"),
+                        rx.text_area(
+                            placeholder="Indiquez la raison de cette suppression…",
+                            value=ExamTypesState.confirm_delete_param_comment,
+                            on_change=ExamTypesState.set_delete_param_comment,
+                            width="100%",
+                            rows="3",
+                        ),
+                        spacing="2", width="100%", margin_top="0.75rem",
+                    ),
                     rx.hstack(
                         rx.dialog.close(
                             rx.button("Annuler", variant="soft", color_scheme="gray",
                                       on_click=ExamTypesState.dismiss_confirm_delete_param),
                         ),
                         rx.button("Supprimer", color_scheme="red",
-                                  on_click=ExamTypesState.confirmed_delete_param),
+                                  on_click=ExamTypesState.confirmed_delete_param,
+                                  disabled=ExamTypesState.confirm_delete_param_comment.strip() == ""),
                         justify="end", spacing="2", margin_top="1rem", width="100%",
                     ),
-                    max_width="400px",
+                    max_width="440px",
                 ),
                 open=ExamTypesState.confirm_delete_param_open,
                 on_open_change=lambda _: ExamTypesState.dismiss_confirm_delete_param(),
             ),
-            # ── Confirm désactivation type d'examen ──────────────────────────
+            # ── Confirm archivage type d'examen ──────────────────
             rx.dialog.root(
                 rx.dialog.content(
                     rx.dialog.title(
-                        rx.hstack(rx.icon("ban", size=18, color="var(--orange-9)"),
-                                  rx.text("Désactiver ce type d'examen ?"), spacing="2"),
+                        rx.hstack(rx.icon("archive", size=18, color="var(--orange-9)"),
+                                  rx.text("Archiver ce type d'examen ?"), spacing="2"),
                     ),
                     rx.dialog.description(
                         rx.vstack(
                             rx.text(
                                 "Le type « ", rx.text.strong(ExamTypesState.confirm_deactivate_type_name),
-                                " » sera désactivé et ne sera plus proposable dans de nouvelles campagnes.",
+                                " » sera archivé et ne sera plus proposable dans de nouvelles campagnes.",
                                 size="2",
                             ),
                             rx.text("Les campagnes existantes ne sont pas affectées.",
@@ -674,16 +797,28 @@ def exam_types_page() -> rx.Component:
                             spacing="2",
                         ),
                     ),
+                    rx.vstack(
+                        rx.text("Motif d'archivage *", size="2", weight="medium"),
+                        rx.text_area(
+                            placeholder="Indiquez la raison de cet archivage…",
+                            value=ExamTypesState.confirm_deactivate_type_comment,
+                            on_change=ExamTypesState.set_deactivate_type_comment,
+                            width="100%",
+                            rows="3",
+                        ),
+                        spacing="2", width="100%", margin_top="0.75rem",
+                    ),
                     rx.hstack(
                         rx.dialog.close(
                             rx.button("Annuler", variant="soft", color_scheme="gray",
                                       on_click=ExamTypesState.dismiss_confirm_deactivate_type),
                         ),
-                        rx.button("Désactiver", color_scheme="orange",
-                                  on_click=ExamTypesState.confirmed_deactivate_type),
+                        rx.button("Archiver", color_scheme="orange",
+                                  on_click=ExamTypesState.confirmed_deactivate_type,
+                                  disabled=ExamTypesState.confirm_deactivate_type_comment.strip() == ""),
                         justify="end", spacing="2", margin_top="1rem", width="100%",
                     ),
-                    max_width="440px",
+                    max_width="480px",
                 ),
                 open=ExamTypesState.confirm_deactivate_type_open,
                 on_open_change=lambda _: ExamTypesState.dismiss_confirm_deactivate_type(),
@@ -741,16 +876,28 @@ def exam_types_page() -> rx.Component:
                             spacing="2",
                         ),
                     ),
+                    rx.vstack(
+                        rx.text("Motif de suppression *", size="2", weight="medium"),
+                        rx.text_area(
+                            placeholder="Indiquez la raison de cette suppression définitive…",
+                            value=ExamTypesState.confirm_delete_type_comment,
+                            on_change=ExamTypesState.set_delete_type_comment,
+                            width="100%",
+                            rows="3",
+                        ),
+                        spacing="2", width="100%", margin_top="0.75rem",
+                    ),
                     rx.hstack(
                         rx.dialog.close(
                             rx.button("Annuler", variant="soft", color_scheme="gray",
                                       on_click=ExamTypesState.dismiss_confirm_delete_type),
                         ),
                         rx.button("Supprimer définitivement", color_scheme="red",
-                                  on_click=ExamTypesState.confirmed_delete_type),
+                                  on_click=ExamTypesState.confirmed_delete_type,
+                                  disabled=ExamTypesState.confirm_delete_type_comment.strip() == ""),
                         justify="end", spacing="2", margin_top="1rem", width="100%",
                     ),
-                    max_width="460px",
+                    max_width="480px",
                 ),
                 open=ExamTypesState.confirm_delete_type_open,
                 on_open_change=lambda _: ExamTypesState.dismiss_confirm_delete_type(),

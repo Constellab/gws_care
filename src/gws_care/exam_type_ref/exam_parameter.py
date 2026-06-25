@@ -39,6 +39,7 @@ class ExamParameter(Model):
     critical_low: float = DoubleField(null=True)
     critical_high: float = DoubleField(null=True)
     is_required: bool = BooleanField(default=False, null=False)
+    is_active: bool = BooleanField(default=True, null=False)
     display_order: int = IntegerField(default=0, null=False)
 
     class Meta:

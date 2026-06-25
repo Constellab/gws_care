@@ -14,6 +14,7 @@ class ExamParameterDTO(BaseModel):
     critical_low: float | None = None
     critical_high: float | None = None
     is_required: bool = False
+    is_active: bool = True
     display_order: int = 0
 
 

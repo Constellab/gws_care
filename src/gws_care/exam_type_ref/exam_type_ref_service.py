@@ -124,6 +124,20 @@ class ExamTypeRefService:
         ref.delete_instance()
 
     @classmethod
+    def deactivate_parameter(cls, parameter_id: str) -> None:
+        """Archive (soft-delete) a parameter."""
+        p = ExamParameter.get_by_id_and_check(parameter_id)
+        p.is_active = False
+        p.save()
+
+    @classmethod
+    def reactivate_parameter(cls, parameter_id: str) -> None:
+        """Restore a previously archived parameter."""
+        p = ExamParameter.get_by_id_and_check(parameter_id)
+        p.is_active = True
+        p.save()
+
+    @classmethod
     def delete_parameter(cls, parameter_id: str) -> None:
         p = ExamParameter.get_by_id_and_check(parameter_id)
         p.delete_instance()
@@ -156,5 +170,6 @@ class ExamTypeRefService:
             critical_low=p.critical_low,
             critical_high=p.critical_high,
             is_required=p.is_required,
+            is_active=p.is_active,
             display_order=p.display_order,
         )
