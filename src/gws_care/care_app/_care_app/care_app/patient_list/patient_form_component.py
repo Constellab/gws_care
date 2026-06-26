@@ -90,16 +90,65 @@ def _account_picker_section() -> rx.Component:
             ),
             rx.cond(
                 PatientFormState.form_account_id != "",
-                rx.hstack(
-                    rx.icon("check-circle", size=16, color="var(--green-9)"),
-                    rx.text(PatientFormState.selected_account_label, size="2", color="var(--green-11)", weight="medium"),
-                    spacing="2",
-                    align="center",
-                    padding="0.4rem 0.75rem",
+                rx.vstack(
+                    rx.hstack(
+                        rx.icon("check-circle", size=16, color="var(--green-9)"),
+                        rx.text(PatientFormState.selected_account_label, size="2", color="var(--green-11)", weight="medium"),
+                        spacing="2",
+                        align="center",
+                    ),
+                    rx.cond(
+                        PatientFormState.selected_account_contact_last_name != "",
+                        rx.hstack(
+                            rx.icon("user", size=13, color="var(--green-9)"),
+                            rx.text(
+                                PatientFormState.selected_account_contact_last_name,
+                                " ",
+                                PatientFormState.selected_account_contact_first_name,
+                                size="2", color="var(--green-11)",
+                            ),
+                            spacing="1", align="center",
+                        ),
+                    ),
+                    rx.cond(
+                        PatientFormState.selected_account_address != "",
+                        rx.hstack(
+                            rx.icon("map-pin", size=13, color="var(--green-9)"),
+                            rx.text(
+                                PatientFormState.selected_account_address,
+                                rx.cond(
+                                    PatientFormState.selected_account_postal_code != "",
+                                    " — " + PatientFormState.selected_account_postal_code + " " + PatientFormState.selected_account_city,
+                                    rx.cond(PatientFormState.selected_account_city != "", " — " + PatientFormState.selected_account_city, ""),
+                                ),
+                                size="2", color="var(--green-11)",
+                            ),
+                            spacing="1", align="center",
+                        ),
+                    ),
+                    rx.cond(
+                        PatientFormState.selected_account_phone != "",
+                        rx.hstack(
+                            rx.icon("phone", size=13, color="var(--green-9)"),
+                            rx.text(PatientFormState.selected_account_phone, size="2", color="var(--green-11)"),
+                            spacing="1", align="center",
+                        ),
+                    ),
+                    rx.cond(
+                        PatientFormState.selected_account_email != "",
+                        rx.hstack(
+                            rx.icon("mail", size=13, color="var(--green-9)"),
+                            rx.text(PatientFormState.selected_account_email, size="2", color="var(--green-11)"),
+                            spacing="1", align="center",
+                        ),
+                    ),
+                    padding="0.5rem 0.75rem",
                     border="1px solid var(--green-6)",
                     border_radius="var(--radius-2)",
                     background="var(--green-2)",
                     width="100%",
+                    spacing="1",
+                    align_items="start",
                 ),
             ),
             rx.cond(

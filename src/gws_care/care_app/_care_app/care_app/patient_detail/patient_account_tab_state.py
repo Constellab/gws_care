@@ -76,6 +76,8 @@ class PatientAccountTabState(rx.State):
                 from gws_care.patient.patient_service import PatientService
                 PatientService.add_account(self._patient_id, account_id)
             await self._load_linked()
+            from ..patient_list.patient_list_state import PatientListState
+            yield PatientListState.on_load()
         except Exception as e:
             self.error_message = str(e)
 
@@ -100,6 +102,8 @@ class PatientAccountTabState(rx.State):
                 from gws_care.patient.patient_service import PatientService
                 PatientService.remove_account(self._patient_id, account_id)
             await self._load_linked()
+            from ..patient_list.patient_list_state import PatientListState
+            yield PatientListState.on_load()
         except Exception as e:
             self.error_message = str(e)
 

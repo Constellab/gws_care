@@ -110,6 +110,14 @@ class PatientFormState(FormDialogState, rx.State):
     # ── Account linking (creation and draft-edit) ─────────────────────────────
     form_account_id: str = ""
     selected_account_label: str = ""
+    selected_account_type: str = ""
+    selected_account_contact_last_name: str = ""
+    selected_account_contact_first_name: str = ""
+    selected_account_address: str = ""
+    selected_account_postal_code: str = ""
+    selected_account_city: str = ""
+    selected_account_phone: str = ""
+    selected_account_email: str = ""
     account_options: list[AccountOption] = []
     account_filter: str = ""
     is_loading_accounts: bool = False
@@ -382,11 +390,27 @@ class PatientFormState(FormDialogState, rx.State):
         self.form_account_id = account_id
         self.selected_account_label = name
         self.show_account_picker = False
+        self.selected_account_type = ""
+        self.selected_account_contact_last_name = ""
+        self.selected_account_contact_first_name = ""
+        self.selected_account_address = ""
+        self.selected_account_postal_code = ""
+        self.selected_account_city = ""
+        self.selected_account_phone = ""
+        self.selected_account_email = ""
         if not account_id:
             return
         try:
             from gws_care.account.account_service import AccountService
             account = AccountService.get_account(account_id)
+            self.selected_account_type = account.account_type or ""
+            self.selected_account_contact_last_name = account.contact_last_name or ""
+            self.selected_account_contact_first_name = account.contact_first_name or ""
+            self.selected_account_address = account.address or ""
+            self.selected_account_postal_code = account.postal_code or ""
+            self.selected_account_city = account.city or ""
+            self.selected_account_phone = account.phone or ""
+            self.selected_account_email = account.email or ""
             if account.account_type == "INDIVIDUAL":
                 if account.contact_last_name and not self.form_last_name.strip():
                     self.form_last_name = account.contact_last_name.strip().upper()
@@ -409,6 +433,14 @@ class PatientFormState(FormDialogState, rx.State):
     def clear_account_selection(self):
         self.form_account_id = ""
         self.selected_account_label = ""
+        self.selected_account_type = ""
+        self.selected_account_contact_last_name = ""
+        self.selected_account_contact_first_name = ""
+        self.selected_account_address = ""
+        self.selected_account_postal_code = ""
+        self.selected_account_city = ""
+        self.selected_account_phone = ""
+        self.selected_account_email = ""
         self.account_filter = ""
         self.account_options = []
 
@@ -635,6 +667,14 @@ class PatientFormState(FormDialogState, rx.State):
         self.form_notif_whatsapp = False
         self.form_account_id = ""
         self.selected_account_label = ""
+        self.selected_account_type = ""
+        self.selected_account_contact_last_name = ""
+        self.selected_account_contact_first_name = ""
+        self.selected_account_address = ""
+        self.selected_account_postal_code = ""
+        self.selected_account_city = ""
+        self.selected_account_phone = ""
+        self.selected_account_email = ""
         self.account_options = []
         self.account_filter = ""
         self.show_account_picker = False
@@ -693,19 +733,18 @@ class PatientFormState(FormDialogState, rx.State):
 
         async with self:
             _main = await self.get_state(ReflexMainState)
+            _link_to_account = self._link_to_account_id
+            link_account = _link_to_account or self.form_account_id
+        dto.account_id = link_account or None
         with await _main.authenticate_user():
             patient = PatientService.create_patient(dto)
-            link_account = self._link_to_account_id or self.form_account_id
-            if link_account:
-                PatientService.add_account(str(patient.id), link_account)
 
         yield rx.toast.success(f"Patient {patient.patient_number} créé")
-        if self._link_to_account_id:
+        from ..patient_list.patient_list_state import PatientListState
+        if _link_to_account:
             from ..account_detail.account_detail_state import AccountDetailState
             yield AccountDetailState.on_load()
-        else:
-            from ..patient_list.patient_list_state import PatientListState
-            yield PatientListState.on_load()
+        yield PatientListState.on_load()
 
     async def _update(self, form_data: dict) -> AsyncGenerator:
         from datetime import date as date_type
@@ -753,11 +792,10 @@ class PatientFormState(FormDialogState, rx.State):
             },
         )
 
-        account_to_link = self.form_account_id
-        patient_id = self._editing_patient_id
-
         async with self:
             _main = await self.get_state(ReflexMainState)
+            account_to_link = self.form_account_id
+            patient_id = self._editing_patient_id
         with await _main.authenticate_user():
             PatientService.update_patient(patient_id, dto)
             if account_to_link:
@@ -810,18 +848,17 @@ class PatientFormState(FormDialogState, rx.State):
             )
             async with self:
                 _main = await self.get_state(ReflexMainState)
+                _link_to_account = self._link_to_account_id
+                link_account = _link_to_account or self.form_account_id
+            dto.account_id = link_account or None
             with await _main.authenticate_user():
                 patient = PatientService.create_patient(dto)
-                link_account = self._link_to_account_id or self.form_account_id
-                if link_account:
-                    PatientService.add_account(str(patient.id), link_account)
             yield rx.toast.success(f"Brouillon sauvegardé ({patient.patient_number}) — à compléter ultérieurement")
-            if self._link_to_account_id:
+            from ..patient_list.patient_list_state import PatientListState
+            if _link_to_account:
                 from ..account_detail.account_detail_state import AccountDetailState
                 yield AccountDetailState.on_load()
-            else:
-                from ..patient_list.patient_list_state import PatientListState
-                yield PatientListState.on_load()
+            yield PatientListState.on_load()
         except Exception as e:
             traceback.print_exc()
             async with self:

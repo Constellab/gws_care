@@ -681,3 +681,6 @@ class AccountFormState(FormDialogState, rx.State):
             yield AccountDetailState.on_load()
         except Exception:
             pass
+        if patient_to_link:
+            from ..patient_list.patient_list_state import PatientListState
+            yield PatientListState.on_load()
