@@ -140,6 +140,7 @@ class ConsultationService:
         visit.appointment_mode = mode
         visit.appointment_address = dto.appointment_address or None
         visit.patient_notes = dto.patient_notes or None
+        visit.billing_account_id = dto.billing_account_id or None
         visit.save()
         return visit
 
@@ -172,11 +173,18 @@ class ConsultationService:
         return visit
 
     @classmethod
-    def cancel(cls, visit_id: str) -> Visit:
+    def cancel(cls, visit_id: str, reason: str | None = None) -> Visit:
         """Cancel a consultation."""
         visit = cls.get_consultation(visit_id)
         if visit.consultation_visit_status == ConsultationVisitStatus.DONE:
             raise BadRequestException("Cannot cancel a completed consultation.")
         visit.consultation_visit_status = ConsultationVisitStatus.CANCELLED
+        visit.cancellation_reason = reason or None
         visit.save()
+        import logging
+        logger = logging.getLogger("gws_care")
+        logger.info(
+            "[ConsultationService.cancel] visit=%s patient=%s reason=%r",
+            visit_id, str(visit.patient_id), reason
+        )
         return visit

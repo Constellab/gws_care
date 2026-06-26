@@ -494,12 +494,17 @@ def id_card_dialog() -> rx.Component:
 def _visit_status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
+        # Campaign visit statuses
         ("pending", rx.badge(LanguageState.tr["status_pending"], color_scheme="gray", variant="soft", size="1")),
         ("visit_done", rx.badge(LanguageState.tr["status_visit_done"], color_scheme="amber", variant="soft", size="1")),
         ("lab_done", rx.badge(LanguageState.tr["status_lab_done"], color_scheme="blue", variant="soft", size="1")),
         ("doctor_clinic_validated", rx.badge(LanguageState.tr["status_doctor_clinic_validated"], color_scheme="purple", variant="soft", size="1")),
         ("doctor_company_validated", rx.badge(LanguageState.tr["status_doctor_company_validated"], color_scheme="green", variant="soft", size="1")),
         ("cancelled", rx.badge(LanguageState.tr["status_cancelled"], color_scheme="red", variant="soft", size="1")),
+        # Consultation visit statuses
+        ("scheduled", rx.badge("Planifié", color_scheme="blue", variant="soft", size="1")),
+        ("in_progress", rx.badge("En cours", color_scheme="amber", variant="soft", size="1")),
+        ("done", rx.badge("Terminé", color_scheme="green", variant="soft", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -521,14 +526,18 @@ def _patient_visit_row(visit: PatientVisitRowDTO) -> rx.Component:
         rx.table.cell(rx.text(visit.visit_number, size="2")),
         rx.table.cell(
             rx.cond(
-                visit.campaign_name,
-                rx.link(
+                visit.visit_type == "consultation",
+                rx.badge("Consultation (RDV)", color_scheme="teal", variant="soft", size="1"),
+                rx.cond(
                     visit.campaign_name,
-                    on_click=lambda: PatientDetailState.go_to_campaign(visit.campaign_id),
-                    cursor="pointer",
-                    size="2",
+                    rx.link(
+                        visit.campaign_name,
+                        on_click=lambda: PatientDetailState.go_to_campaign(visit.campaign_id),
+                        cursor="pointer",
+                        size="2",
+                    ),
+                    rx.text("—", size="2", color="var(--gray-7)"),
                 ),
-                rx.text("—", size="2", color="var(--gray-7)"),
             )
         ),
         rx.table.cell(
@@ -554,14 +563,26 @@ def _patient_visit_row(visit: PatientVisitRowDTO) -> rx.Component:
         ),
         rx.table.cell(_visit_status_badge(visit.campaign_visit_status)),
         rx.table.cell(
-            rx.tooltip(
-                rx.icon_button(
-                    rx.icon("external-link", size=14),
-                    variant="ghost",
-                    size="1",
-                    on_click=lambda: PatientDetailState.go_to_visit(visit.id),
+            rx.cond(
+                visit.visit_type == "consultation",
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("external-link", size=14),
+                        variant="ghost",
+                        size="1",
+                        on_click=lambda: PatientDetailState.go_to_consultation_visit(visit.id),
+                    ),
+                    content="Voir la consultation",
                 ),
-                content=LanguageState.tr["tooltip_view_visit"],
+                rx.tooltip(
+                    rx.icon_button(
+                        rx.icon("external-link", size=14),
+                        variant="ghost",
+                        size="1",
+                        on_click=lambda: PatientDetailState.go_to_visit(visit.id),
+                    ),
+                    content=LanguageState.tr["tooltip_view_visit"],
+                ),
             ),
         ),
         _hover={"background": "var(--gray-2)"},

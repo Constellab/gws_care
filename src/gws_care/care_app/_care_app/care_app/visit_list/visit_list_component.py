@@ -26,6 +26,10 @@ def _status_badge(status: str) -> rx.Component:
         ("doctor_clinic_validated", rx.badge(LanguageState.tr["status_doctor_clinic_validated"], color_scheme="purple", variant="soft", size="1")),
         ("doctor_company_validated", rx.badge(LanguageState.tr["status_doctor_company_validated"], color_scheme="green", variant="soft", size="1")),
         ("cancelled", rx.badge(LanguageState.tr["status_cancelled"], color_scheme="red", variant="soft", size="1")),
+        # Consultation visit statuses
+        ("scheduled", rx.badge("Planifié", color_scheme="blue", variant="soft", size="1")),
+        ("in_progress", rx.badge("En cours", color_scheme="amber", variant="soft", size="1")),
+        ("done", rx.badge("Terminé", color_scheme="green", variant="soft", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 

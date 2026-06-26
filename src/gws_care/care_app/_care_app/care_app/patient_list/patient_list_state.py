@@ -16,6 +16,7 @@ class PatientRowDTO(BaseModel):
     date_of_birth: str
     gender: str
     city: str | None = None
+    country: str | None = None
     phone: str | None = None
     account_name: str | None = None
     is_draft: bool = False
@@ -252,6 +253,7 @@ class PatientListState(AccountPickerState):
                         date_of_birth=p.date_of_birth.isoformat(),
                         gender=p.gender,
                         city=p.city,
+                        country=p.country,
                         phone=p.phone,
                         account_name=", ".join(account_names_by_patient.get(str(p.id), [])) or None,
                         is_draft=bool(getattr(p, "is_draft", False)),

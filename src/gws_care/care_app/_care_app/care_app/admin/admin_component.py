@@ -318,6 +318,14 @@ def _import_tab() -> rx.Component:
                         size="2",
                     ),
                     rx.button(
+                        rx.icon("user", size=14),
+                        "Comptes particuliers",
+                        on_click=lambda: ImportState.open_import_dialog("accounts_individual"),
+                        variant="outline",
+                        color_scheme="blue",
+                        size="2",
+                    ),
+                    rx.button(
                         rx.icon("stethoscope", size=14),
                         LanguageState.tr["import_doctors_btn"],
                         on_click=lambda: ImportState.open_import_dialog("doctors"),

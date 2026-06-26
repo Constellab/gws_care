@@ -411,6 +411,19 @@ def _booking_step3() -> rx.Component:
             ),
             spacing="2", align="center", width="100%",
         ),
+        # Available days hint
+        rx.cond(
+            PatientAppointmentsState.booking_doctor_days_str != "",
+            rx.hstack(
+                rx.icon("calendar-check", size=13, color="var(--green-9)"),
+                rx.text(
+                    "Disponible : " + PatientAppointmentsState.booking_doctor_days_str,
+                    size="1", color="var(--green-11)",
+                ),
+                spacing="1", align="center",
+            ),
+            rx.fragment(),
+        ),
         rx.separator(width="100%"),
         # Date
         rx.vstack(
@@ -433,14 +446,29 @@ def _booking_step3() -> rx.Component:
                     spacing="2", align="center",
                 ),
                 rx.cond(
-                    PatientAppointmentsState.booking_available_slots.length() > 0,
-                    rx.flex(
-                        rx.foreach(PatientAppointmentsState.booking_available_slots, _booking_slot_btn),
-                        wrap="wrap", gap="0.4rem",
-                    ),
+                    PatientAppointmentsState.booking_slots_error != "",
                     rx.callout(
-                        "Aucun créneau disponible pour cette date. Essayez une autre date.",
-                        icon="calendar-x", color_scheme="orange", variant="soft", size="1",
+                        PatientAppointmentsState.booking_slots_error,
+                        icon="triangle-alert", color_scheme="red", variant="soft", size="1",
+                    ),
+                    rx.cond(
+                        PatientAppointmentsState.booking_available_slots.length() > 0,
+                        rx.flex(
+                            rx.foreach(PatientAppointmentsState.booking_available_slots, _booking_slot_btn),
+                            wrap="wrap", gap="0.4rem",
+                        ),
+                        rx.cond(
+                            PatientAppointmentsState.booking_doctor_days_str != "",
+                            rx.callout(
+                                "Aucun créneau disponible pour cette date. Ce médecin est disponible les : "
+                                + PatientAppointmentsState.booking_doctor_days_str,
+                                icon="calendar-x", color_scheme="orange", variant="soft", size="1",
+                            ),
+                            rx.callout(
+                                "Aucun créneau disponible. Ce médecin n'a pas encore déclaré de disponibilités.",
+                                icon="calendar-x", color_scheme="red", variant="soft", size="1",
+                            ),
+                        ),
                     ),
                 ),
                 rx.cond(
@@ -460,6 +488,34 @@ def _booking_step3() -> rx.Component:
                 spacing="2", width="100%",
             ),
             rx.fragment(),
+        ),
+        # Mode selector (visio / hôpital only for personal bookings)
+        rx.vstack(
+            rx.text("Mode de consultation *", size="2", weight="medium"),
+            rx.radio_group.root(
+                rx.hstack(
+                    rx.radio_group.item(value="visio"),
+                    rx.hstack(
+                        rx.icon("video", size=13, color="var(--purple-9)"),
+                        rx.text("Visio", size="2"),
+                        spacing="1", align="center",
+                    ),
+                    spacing="2", align="center",
+                ),
+                rx.hstack(
+                    rx.radio_group.item(value="hospital"),
+                    rx.hstack(
+                        rx.icon("building-2", size=13, color="var(--teal-9)"),
+                        rx.text("Hôpital", size="2"),
+                        spacing="1", align="center",
+                    ),
+                    spacing="2", align="center",
+                ),
+                value=PatientAppointmentsState.booking_mode,
+                on_change=PatientAppointmentsState.set_booking_mode,
+                orientation="horizontal",
+            ),
+            spacing="1", width="100%",
         ),
         # Notes
         rx.vstack(

@@ -20,9 +20,10 @@ from .consultation_detail_state import (
 def _status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
-        ("pending", rx.badge("En attente", color_scheme="gray", variant="soft", size="1")),
+        ("scheduled", rx.badge("Planifiée", color_scheme="blue", variant="soft", size="1")),
+        ("in_progress", rx.badge("En cours", color_scheme="amber", variant="soft", size="1")),
+        ("done", rx.badge("Terminée", color_scheme="green", variant="soft", size="1")),
         ("cancelled", rx.badge("Annulée", color_scheme="red", variant="soft", size="1")),
-        ("visit_done", rx.badge("Clôturée", color_scheme="green", variant="soft", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -51,12 +52,26 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                     spacing="1",
                 ),
                 rx.spacer(),
-                # Close / cancel buttons (only for staff, only when PENDING status)
+                # Action buttons (only for staff/doctor, not patient)
                 rx.cond(
                     ~ConsultationDetailState.is_patient_user,
-                    rx.cond(
-                        c.status == "pending",
-                        rx.hstack(
+                    rx.hstack(
+                        # "Start" button — only when SCHEDULED
+                        rx.cond(
+                            c.status == "scheduled",
+                            rx.button(
+                                rx.icon("play", size=14),
+                                "Démarrer",
+                                on_click=ConsultationDetailState.start_consultation,
+                                loading=ConsultationDetailState.is_starting,
+                                size="2",
+                                color_scheme="teal",
+                            ),
+                            rx.fragment(),
+                        ),
+                        # "Close" button — when SCHEDULED or IN_PROGRESS
+                        rx.cond(
+                            (c.status == "scheduled") | (c.status == "in_progress"),
                             rx.button(
                                 rx.icon("check", size=14),
                                 "Clôturer",
@@ -65,22 +80,49 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                                 color_scheme="green",
                                 variant="soft",
                             ),
+                            rx.fragment(),
+                        ),
+                        # "Cancel" button — when SCHEDULED or IN_PROGRESS
+                        rx.cond(
+                            (c.status == "scheduled") | (c.status == "in_progress"),
                             rx.button(
                                 rx.icon("x", size=14),
                                 "Annuler",
-                                on_click=ConsultationDetailState.cancel_consultation,
+                                on_click=ConsultationDetailState.open_cancel_dialog,
                                 size="2",
                                 color_scheme="red",
                                 variant="soft",
                             ),
-                            spacing="2",
+                            rx.fragment(),
                         ),
+                        spacing="2",
                     ),
                 ),
                 width="100%",
                 align="start",
             ),
             rx.separator(width="100%"),
+            # Cancellation reason banner — shown only when cancelled
+            rx.cond(
+                c.status == "cancelled",
+                rx.callout.root(
+                    rx.callout.icon(rx.icon("ban", size=16)),
+                    rx.callout.text(
+                        rx.vstack(
+                            rx.text("Rendez-vous annulé", weight="bold", size="2"),
+                            rx.cond(
+                                c.cancellation_reason != "",
+                                rx.text("Motif : " + c.cancellation_reason, size="2"),
+                                rx.fragment(),
+                            ),
+                            spacing="0",
+                        )
+                    ),
+                    color_scheme="red",
+                    width="100%",
+                ),
+                rx.fragment(),
+            ),
             rx.grid(
                 _info_card(
                     "Patient",
@@ -190,7 +232,8 @@ def _exams_section() -> rx.Component:
             rx.heading("Examens", size="4"),
             rx.spacer(),
             rx.cond(
-                ~ConsultationDetailState.is_patient_user,
+                (~ConsultationDetailState.is_patient_user)
+                & (ConsultationDetailState.consultation.status != "cancelled"),
                 rx.button(
                     rx.icon("plus", size=14),
                     "Ajouter",
@@ -234,7 +277,8 @@ def _prescriptions_section() -> rx.Component:
             rx.heading("Ordonnances", size="4"),
             rx.spacer(),
             rx.cond(
-                ~ConsultationDetailState.is_patient_user,
+                (~ConsultationDetailState.is_patient_user)
+                & (ConsultationDetailState.consultation.status != "cancelled"),
                 rx.button(
                     rx.icon("plus", size=14),
                     "Ajouter",
@@ -278,7 +322,8 @@ def _certificates_section() -> rx.Component:
             rx.heading("Certificats médicaux", size="4"),
             rx.spacer(),
             rx.cond(
-                ~ConsultationDetailState.is_patient_user,
+                (~ConsultationDetailState.is_patient_user)
+                & (ConsultationDetailState.consultation.status != "cancelled"),
                 rx.button(
                     rx.icon("plus", size=14),
                     "Émettre",
@@ -312,6 +357,60 @@ def _certificates_section() -> rx.Component:
         ),
         spacing="3",
         width="100%",
+    )
+
+
+def _cancel_consultation_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Annuler le rendez-vous"),
+            rx.vstack(
+                rx.text(
+                    "Veuillez indiquer le motif d'annulation. Cette action est irréversible.",
+                    size="2", color="var(--gray-11)",
+                ),
+                rx.vstack(
+                    rx.text("Motif d'annulation *", size="2", weight="medium"),
+                    rx.text_area(
+                        placeholder="Ex : Patient absent, demande du patient, problème médical…",
+                        value=ConsultationDetailState.cancel_reason,
+                        on_change=ConsultationDetailState.set_cancel_reason,
+                        rows="3",
+                        width="100%",
+                    ),
+                    spacing="1", width="100%",
+                ),
+                rx.cond(
+                    ConsultationDetailState.cancel_reason_error != "",
+                    rx.callout(
+                        ConsultationDetailState.cancel_reason_error,
+                        icon="triangle-alert", color_scheme="red", size="1",
+                    ),
+                    rx.fragment(),
+                ),
+                rx.hstack(
+                    rx.spacer(),
+                    rx.button(
+                        "Retour",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=ConsultationDetailState.close_cancel_dialog,
+                    ),
+                    rx.button(
+                        "Confirmer l'annulation",
+                        color_scheme="red",
+                        on_click=ConsultationDetailState.confirm_cancel_consultation,
+                        loading=ConsultationDetailState.is_cancelling,
+                    ),
+                    spacing="2", width="100%",
+                ),
+                spacing="4", width="100%", padding_top="0.5rem",
+            ),
+            on_interact_outside=ConsultationDetailState.close_cancel_dialog,
+            on_escape_key_down=ConsultationDetailState.close_cancel_dialog,
+            max_width="480px",
+        ),
+        open=ConsultationDetailState.show_cancel_dialog,
     )
 
 
@@ -794,6 +893,7 @@ def consultation_detail_page() -> rx.Component:
                         _prescriptions_section(),
                         _certificates_section(),
                         # Dialogs
+                        _cancel_consultation_dialog(),
                         _close_consultation_dialog(),
                         _new_exam_dialog(),
                         _new_prescription_dialog(),

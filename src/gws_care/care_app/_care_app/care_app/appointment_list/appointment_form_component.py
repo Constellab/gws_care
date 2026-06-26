@@ -254,6 +254,19 @@ def _step_slot() -> rx.Component:
             ),
             spacing="2", align="center", width="100%",
         ),
+        # Available days hint
+        rx.cond(
+            AppointmentFormState.form_doctor_days_str != "",
+            rx.hstack(
+                rx.icon("calendar-check", size=13, color="var(--green-9)"),
+                rx.text(
+                    "Disponible : " + AppointmentFormState.form_doctor_days_str,
+                    size="1", color="var(--green-11)",
+                ),
+                spacing="1", align="center",
+            ),
+            rx.fragment(),
+        ),
         rx.separator(width="100%"),
         # Date picker
         _field(
@@ -280,14 +293,29 @@ def _step_slot() -> rx.Component:
                     spacing="2", align="center",
                 ),
                 rx.cond(
-                    AppointmentFormState.form_available_slots.length() > 0,
-                    rx.flex(
-                        rx.foreach(AppointmentFormState.form_available_slots, _slot_button),
-                        wrap="wrap", gap="0.4rem",
-                    ),
+                    AppointmentFormState.form_slots_error != "",
                     rx.callout(
-                        "Aucun créneau disponible pour cette date. Essayez une autre date.",
-                        icon="calendar-x", color_scheme="orange", variant="soft", size="1",
+                        AppointmentFormState.form_slots_error,
+                        icon="triangle-alert", color_scheme="red", variant="soft", size="1",
+                    ),
+                    rx.cond(
+                        AppointmentFormState.form_available_slots.length() > 0,
+                        rx.flex(
+                            rx.foreach(AppointmentFormState.form_available_slots, _slot_button),
+                            wrap="wrap", gap="0.4rem",
+                        ),
+                        rx.cond(
+                            AppointmentFormState.form_doctor_days_str != "",
+                            rx.callout(
+                                "Aucun créneau disponible pour cette date. Ce médecin est disponible les : "
+                                + AppointmentFormState.form_doctor_days_str,
+                                icon="calendar-x", color_scheme="orange", variant="soft", size="1",
+                            ),
+                            rx.callout(
+                                "Aucun créneau disponible. Ce médecin n'a pas encore déclaré de disponibilités.",
+                                icon="calendar-x", color_scheme="red", variant="soft", size="1",
+                            ),
+                        ),
                     ),
                 ),
                 rx.cond(
@@ -307,6 +335,43 @@ def _step_slot() -> rx.Component:
                 spacing="2", width="100%",
             ),
             rx.fragment(),
+        ),
+        # Mode selector (visio / hôpital / au travail)
+        rx.vstack(
+            rx.text("Mode de consultation *", size="2", weight="medium"),
+            rx.radio_group.root(
+                rx.hstack(
+                    rx.radio_group.item(value="visio"),
+                    rx.hstack(
+                        rx.icon("video", size=13, color="var(--purple-9)"),
+                        rx.text("Visio", size="2"),
+                        spacing="1", align="center",
+                    ),
+                    spacing="2", align="center",
+                ),
+                rx.hstack(
+                    rx.radio_group.item(value="hospital"),
+                    rx.hstack(
+                        rx.icon("building-2", size=13, color="var(--teal-9)"),
+                        rx.text("Hôpital", size="2"),
+                        spacing="1", align="center",
+                    ),
+                    spacing="2", align="center",
+                ),
+                rx.hstack(
+                    rx.radio_group.item(value="at_work"),
+                    rx.hstack(
+                        rx.icon("briefcase", size=13, color="var(--blue-9)"),
+                        rx.text("Au travail", size="2"),
+                        spacing="1", align="center",
+                    ),
+                    spacing="2", align="center",
+                ),
+                value=AppointmentFormState.form_appointment_mode,
+                on_change=AppointmentFormState.set_form_appointment_mode,
+                orientation="horizontal",
+            ),
+            spacing="1", width="100%",
         ),
         # Notes + room (hidden for patient users)
         rx.cond(

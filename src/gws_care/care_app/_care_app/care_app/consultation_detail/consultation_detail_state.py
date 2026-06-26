@@ -32,6 +32,7 @@ class ConsultationDTO(BaseModel):
     scheduled_at: str = ""
     status: str
     status_label: str
+    cancellation_reason: str = ""
 
 
 class ExamRowDTO(BaseModel):
@@ -83,6 +84,15 @@ class ConsultationDetailState(RoleState):
     # Close dialog
     show_close_dialog: bool = False
     is_closing: bool = False
+
+    # Cancel dialog
+    show_cancel_dialog: bool = False
+    cancel_reason: str = ""
+    cancel_reason_error: str = ""
+    is_cancelling: bool = False
+
+    # Start consultation
+    is_starting: bool = False
 
     # ── New Exam dialog ───────────────────────────────────────────────────────
     show_new_exam_dialog: bool = False
@@ -138,6 +148,24 @@ class ConsultationDetailState(RoleState):
         self.show_close_dialog = False
 
     @rx.event
+    async def start_consultation(self):
+        """Mark the consultation as IN_PROGRESS (doctor starts the session)."""
+        if not self.consultation:
+            return
+        self.is_starting = True
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.visit.consultation_service import ConsultationService
+                ConsultationService.mark_in_progress(visit_id=self.consultation.id)
+            self.success_message = "Consultation démarrée."
+            await self._load_consultation()
+        except Exception as e:
+            self.error_message = str(e)
+        finally:
+            self.is_starting = False
+
+    @rx.event
     async def confirm_close_consultation(self):
         if not self.consultation:
             return
@@ -161,20 +189,44 @@ class ConsultationDetailState(RoleState):
             self.is_closing = False
 
     @rx.event
-    async def cancel_consultation(self):
+    def open_cancel_dialog(self):
+        self.show_cancel_dialog = True
+        self.cancel_reason = ""
+        self.cancel_reason_error = ""
+
+    @rx.event
+    def close_cancel_dialog(self):
+        self.show_cancel_dialog = False
+
+    @rx.event
+    def set_cancel_reason(self, value: str):
+        self.cancel_reason = value
+
+    @rx.event
+    async def confirm_cancel_consultation(self):
         if not self.consultation:
             return
+        reason = self.cancel_reason.strip()
+        if not reason:
+            self.cancel_reason_error = "Le motif d'annulation est obligatoire."
+            return
+        self.cancel_reason_error = ""
+        self.is_cancelling = True
         self.error_message = ""
         try:
             with await self.authenticate_user():
                 from gws_care.visit.consultation_service import ConsultationService
-
-                ConsultationService.cancel(visit_id=self.consultation.id)
-
+                ConsultationService.cancel(
+                    visit_id=self.consultation.id,
+                    reason=reason,
+                )
+            self.show_cancel_dialog = False
             self.success_message = "Consultation annulée."
             await self._load_consultation()
         except Exception as e:
             self.error_message = str(e)
+        finally:
+            self.is_cancelling = False
 
     # ── Exam creation events ──────────────────────────────────────────────────
 
@@ -525,6 +577,7 @@ class ConsultationDetailState(RoleState):
                     scheduled_at=visit.scheduled_at.isoformat() if visit.scheduled_at else "",
                     status=visit.consultation_visit_status.value if visit.consultation_visit_status else "",
                     status_label=visit.consultation_visit_status.get_label() if visit.consultation_visit_status else "",
+                    cancellation_reason=getattr(visit, "cancellation_reason", None) or "",
                 )
 
                 # Linked exams

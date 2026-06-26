@@ -566,6 +566,13 @@ class VisitListState(CombinedPickerState):
                             campaign_name = v.campaign.name
                         except Exception:
                             campaign_name = ""
+                    from gws_care.visit.visit_type import VisitType as _VT
+                    if v.visit_type == _VT.CONSULTATION and v.consultation_visit_status:
+                        row_status = v.consultation_visit_status.value
+                        row_label = v.consultation_visit_status.get_label()
+                    else:
+                        row_status = v.campaign_visit_status.value
+                        row_label = v.campaign_visit_status.get_label()
                     visit_rows.append(VisitRowDTO(
                         id=str(v.id),
                         patient_id=str(v.patient_id),
@@ -573,8 +580,8 @@ class VisitListState(CombinedPickerState):
                         account_name=v.billing_account.name if v.billing_account_id else None,
                         campaign_name=campaign_name,
                         scheduled_at=v.scheduled_at.isoformat() if v.scheduled_at else "",
-                        campaign_visit_status=v.campaign_visit_status.value,
-                        status_label=v.campaign_visit_status.get_label(),
+                        campaign_visit_status=row_status,
+                        status_label=row_label,
                         visit_number=v.visit_number or "",
                         visit_type=v.visit_type.value if v.visit_type else "",
                     ))

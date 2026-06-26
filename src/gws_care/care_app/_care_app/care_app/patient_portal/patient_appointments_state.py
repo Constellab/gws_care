@@ -69,7 +69,7 @@ class PatientAppointmentsState(RoleState):
     booking_date: str = ""             # chosen date "YYYY-MM-DD"
     booking_available_slots: list[str] = []
     booking_slots_loading: bool = False
-    booking_mode: str = "at_home"
+    booking_mode: str = "visio"
     booking_address: str = ""
     booking_notes: str = ""
     booking_error: str = ""
@@ -80,6 +80,8 @@ class PatientAppointmentsState(RoleState):
     booking_available_specialties: list[str] = []
     filtered_booking_doctors: list[DoctorOptionDTO] = []
     booking_specialty_search: str = ""  # search input for specialty step
+    booking_doctor_days_str: str = ""   # human-readable available days: "Lundi, Mercredi"
+    booking_slots_error: str = ""       # visible error from slot loading
 
     # ── Page guard ────────────────────────────────────────────────────────────
 
@@ -204,11 +206,13 @@ class PatientAppointmentsState(RoleState):
         self.booking_date = ""
         self.booking_available_slots = []
         self.booking_slots_loading = False
-        self.booking_mode = "at_home"
+        self.booking_mode = "visio"
         self.booking_address = ""
         self.booking_notes = ""
         self.booking_error = ""
         self.booking_is_saving = False
+        self.booking_doctor_days_str = ""
+        self.booking_slots_error = ""
         self.filtered_booking_doctors = list(self.doctor_options)
         self.show_booking_dialog = True
 
@@ -236,15 +240,40 @@ class PatientAppointmentsState(RoleState):
 
     @rx.event
     async def select_patient_booking_doctor(self, doctor_id: str, doctor_name: str):
-        """Step 2 → 3: patient clicked a doctor card; pre-load today's slots."""
+        """Step 2 → 3: find next available date for this doctor, then load its slots."""
         self.booking_doctor_id = doctor_id
         self.booking_doctor_name = doctor_name
         self.booking_scheduled_at = ""
         self.booking_available_slots = []
-        from datetime import date
-        self.booking_date = date.today().strftime("%Y-%m-%d")
+        self.booking_doctor_days_str = ""
+        self.booking_slots_error = ""
         self.booking_step = 3
-        # Load slots for today immediately
+        # Find which days of the week this doctor has declared availability,
+        # then pre-select the nearest upcoming date that falls on one of those days.
+        try:
+            with await self.authenticate_user():
+                from datetime import date, timedelta
+                from gws_care.scheduling.doctor_schedule import DoctorScheduleService
+                _DAY_NAMES = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+                blocks = DoctorScheduleService.list_for_doctor(doctor_id)
+                available_weekdays = sorted({b.day_of_week for b in blocks})
+                self.booking_doctor_days_str = (
+                    ", ".join(_DAY_NAMES[d] for d in available_weekdays)
+                    if available_weekdays else ""
+                )
+                today = date.today()
+                next_date = today
+                if available_weekdays:
+                    for offset in range(14):
+                        candidate = today + timedelta(days=offset)
+                        if candidate.weekday() in available_weekdays:
+                            next_date = candidate
+                            break
+                self.booking_date = next_date.strftime("%Y-%m-%d")
+        except Exception as exc:
+            from datetime import date
+            self.booking_date = date.today().strftime("%Y-%m-%d")
+            print(f"[select_patient_booking_doctor] schedule lookup error: {exc}")
         await self._load_slots_for_date(self.booking_date)
 
     async def _load_slots_for_date(self, date_str: str):
@@ -252,6 +281,7 @@ class PatientAppointmentsState(RoleState):
         if not self.booking_doctor_id or not date_str:
             return
         self.booking_slots_loading = True
+        self.booking_slots_error = ""
         try:
             with await self.authenticate_user():
                 from datetime import date as date_type
@@ -262,6 +292,7 @@ class PatientAppointmentsState(RoleState):
                 if self.booking_available_slots:
                     self.booking_scheduled_at = self.booking_available_slots[0]
         except Exception as exc:
+            self.booking_slots_error = f"Erreur lors du chargement des créneaux : {exc}"
             print(f"[patient_appointments] Failed to load slots: {exc}")
         finally:
             self.booking_slots_loading = False
@@ -277,9 +308,11 @@ class PatientAppointmentsState(RoleState):
         if step <= 2:
             self.booking_doctor_id = ""
             self.booking_doctor_name = ""
+            self.booking_doctor_days_str = ""
         self.booking_scheduled_at = ""
         self.booking_available_slots = []
         self.booking_date = ""
+        self.booking_slots_error = ""
 
     @rx.event
     async def set_booking_date_and_load_slots(self, value: str):
@@ -327,6 +360,7 @@ class PatientAppointmentsState(RoleState):
             return
         self.booking_error = ""
         self.booking_is_saving = True
+        booking_succeeded = False
         try:
             with await self.authenticate_user():
                 from gws_care.visit.consultation_service import ConsultationService
@@ -339,12 +373,21 @@ class PatientAppointmentsState(RoleState):
                     patient_notes=self.booking_notes or None,
                 )
                 ConsultationService.create_from_patient_booking(dto, patient_id)
-            self.show_booking_dialog = False
-            await self._load_appointments()
+            booking_succeeded = True
         except Exception as e:
-            self.booking_error = str(e)
+            import traceback
+            print(f"[submit_booking] Booking failed:\n{traceback.format_exc()}")
+            msg = str(e).strip()
+            self.booking_error = msg if msg else "Une erreur inattendue s'est produite. Veuillez réessayer."
         finally:
             self.booking_is_saving = False
+
+        if booking_succeeded:
+            self.show_booking_dialog = False
+            try:
+                await self._load_appointments()
+            except Exception:
+                pass
 
     # ── Data loaders ─────────────────────────────────────────────────────────
 

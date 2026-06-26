@@ -45,7 +45,15 @@ def _patient_row(patient: PatientRowDTO) -> rx.Component:
             rx.cond(patient.account_name, rx.text(patient.account_name, size="2"), rx.text("—", color="var(--gray-8)", size="2"))
         ),
         rx.table.cell(
-            rx.cond(patient.city, rx.text(patient.city, size="2"), rx.text("—", color="var(--gray-8)", size="2"))
+            rx.cond(
+                patient.city | patient.country,
+                rx.text(
+                    rx.cond(patient.city, patient.city + rx.cond(patient.country, ", ", ""), ""),
+                    rx.cond(patient.country, patient.country, ""),
+                    size="2",
+                ),
+                rx.text("—", color="var(--gray-8)", size="2"),
+            )
         ),
         rx.table.cell(
             rx.cond(patient.phone, rx.text(patient.phone, size="2"), rx.text("—", color="var(--gray-8)", size="2"))
@@ -216,7 +224,7 @@ def patient_list_page() -> rx.Component:
                                     _sortable_header(LanguageState.tr["col_dob"], "date_of_birth"),
                                     _sortable_header(LanguageState.tr["col_gender"], "gender"),
                                     _sortable_header(LanguageState.tr["col_account"], "account_name"),
-                                    _sortable_header(LanguageState.tr["col_city"], "city"),
+                                    _sortable_header(LanguageState.tr["col_city_country"], "city"),
                                     _sortable_header(LanguageState.tr["col_phone"], "phone"),
                                     rx.table.column_header_cell(""),
                                 )

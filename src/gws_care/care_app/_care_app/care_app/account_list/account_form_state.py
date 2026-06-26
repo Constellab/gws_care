@@ -661,8 +661,16 @@ class AccountFormState(FormDialogState, rx.State):
 
         async with self:
             _main = await self.get_state(ReflexMainState)
+            patient_to_link = self.selected_patient_fill
+            account_id = self._editing_account_id
         with await _main.authenticate_user():
-            AccountService.update_account(self._editing_account_id, dto)
+            AccountService.update_account(account_id, dto)
+            if patient_to_link:
+                from gws_care.patient.patient_service import PatientService
+                try:
+                    PatientService.add_account(patient_to_link, account_id)
+                except Exception:
+                    pass
 
         yield rx.toast.success("Account updated successfully")
 

@@ -34,6 +34,7 @@ class AppointmentFormState(FormDialogState, rx.State):
     form_doctor_id: str = ""       # assigned_doctor_id
     form_duration: str = "20"      # minutes
     form_room: str = ""            # room/cabinet
+    form_appointment_mode: str = "visio"   # AppointmentMode value
     form_error: str = ""
 
     # Slot picker (secretary booking flow)
@@ -56,6 +57,8 @@ class AppointmentFormState(FormDialogState, rx.State):
     # Step wizard: 1=specialty, 2=doctor, 3=date+slot
     booking_step: int = 1
     selected_doctor_name: str = ""  # display name of picked doctor
+    form_doctor_days_str: str = ""  # human-readable available days
+    form_slots_error: str = ""      # visible error from slot loading
 
     # Set when editing an existing appointment
     _editing_appointment_id: str = ""
@@ -122,14 +125,41 @@ class AppointmentFormState(FormDialogState, rx.State):
 
     @rx.event
     async def select_booking_doctor_card(self, doctor_id: str, doctor_name: str):
-        """Step 2 → 3: user clicked a doctor card; pre-load today's slots."""
+        """Step 2 → 3: find next available date for this doctor, then load its slots."""
         self.form_doctor_id = doctor_id
         self.selected_doctor_name = doctor_name
         self.form_scheduled_at = ""
         self.form_available_slots = []
-        from datetime import date
-        self.form_booking_date = date.today().strftime("%Y-%m-%d")
+        self.form_doctor_days_str = ""
+        self.form_slots_error = ""
         self.booking_step = 3
+        # Find which days of the week this doctor declared availability, then
+        # pre-select the nearest upcoming date that falls on one of those days.
+        try:
+            _main = await self.get_state(ReflexMainState)
+            with await _main.authenticate_user():
+                from datetime import date, timedelta
+                from gws_care.scheduling.doctor_schedule import DoctorScheduleService
+                _DAY_NAMES = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+                blocks = DoctorScheduleService.list_for_doctor(doctor_id)
+                available_weekdays = sorted({b.day_of_week for b in blocks})
+                self.form_doctor_days_str = (
+                    ", ".join(_DAY_NAMES[d] for d in available_weekdays)
+                    if available_weekdays else ""
+                )
+                today = date.today()
+                next_date = today
+                if available_weekdays:
+                    for offset in range(14):
+                        candidate = today + timedelta(days=offset)
+                        if candidate.weekday() in available_weekdays:
+                            next_date = candidate
+                            break
+                self.form_booking_date = next_date.strftime("%Y-%m-%d")
+        except Exception as exc:
+            from datetime import date
+            self.form_booking_date = date.today().strftime("%Y-%m-%d")
+            print(f"[select_booking_doctor_card] schedule lookup error: {exc}")
         await self._load_available_slots()
 
     @rx.event
@@ -144,9 +174,11 @@ class AppointmentFormState(FormDialogState, rx.State):
         if step <= 2:
             self.form_doctor_id = ""
             self.selected_doctor_name = ""
+            self.form_doctor_days_str = ""
         self.form_scheduled_at = ""
         self.form_available_slots = []
         self.form_booking_date = ""
+        self.form_slots_error = ""
 
     @rx.event
     def set_form_doctor_id(self, value: str):
@@ -180,6 +212,7 @@ class AppointmentFormState(FormDialogState, rx.State):
             self.form_available_slots = []
             return
         self.form_slots_loading = True
+        self.form_slots_error = ""
         try:
             _main = await self.get_state(ReflexMainState)
             with await _main.authenticate_user():
@@ -192,6 +225,7 @@ class AppointmentFormState(FormDialogState, rx.State):
                 if self.form_available_slots and not self.form_scheduled_at:
                     self.form_scheduled_at = self.form_available_slots[0]
         except Exception as exc:
+            self.form_slots_error = f"Erreur chargement créneaux : {exc}"
             print(f"[appointment_form] Failed to load slots: {exc}")
             self.form_available_slots = []
         finally:
@@ -204,6 +238,10 @@ class AppointmentFormState(FormDialogState, rx.State):
     @rx.event
     def set_form_room(self, value: str):
         self.form_room = value
+
+    @rx.event
+    def set_form_appointment_mode(self, value: str):
+        self.form_appointment_mode = value
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -263,17 +301,18 @@ class AppointmentFormState(FormDialogState, rx.State):
     # ── Open ──────────────────────────────────────────────────────────────────
 
     @rx.event
-    def open_create_dialog(self, patient_id: str, patient_label: str = ""):
+    def open_create_dialog(self, patient_id: str, patient_label: str = "", account_id: str = ""):
         """Open the dialog pre-filled with a patient."""
         self.form_patient_id = patient_id
         self.form_patient_label = patient_label
-        self.form_account_id = ""
+        self.form_account_id = account_id
         self.form_scheduled_at = ""
         self.form_exam_type = ""
         self.form_notes = ""
         self.form_doctor_id = ""
         self.form_duration = "20"
         self.form_room = ""
+        self.form_appointment_mode = "visio"
         self.form_booking_date = ""
         self.form_available_slots = []
         self.form_slots_loading = False
@@ -299,6 +338,7 @@ class AppointmentFormState(FormDialogState, rx.State):
         self.form_doctor_id = ""
         self.form_duration = "20"
         self.form_room = ""
+        self.form_appointment_mode = "visio"
         self.form_booking_date = ""
         self.form_available_slots = []
         self.form_slots_loading = False
@@ -387,12 +427,15 @@ class AppointmentFormState(FormDialogState, rx.State):
         self.specialty_options = []
         self.booking_step = 1
         self.selected_doctor_name = ""
+        self.form_doctor_days_str = ""
+        self.form_slots_error = ""
         self._editing_appointment_id = ""
         self.is_update_mode = False
+        self.form_appointment_mode = "visio"
         self.form_error = ""
 
     async def _create(self, form_data: dict) -> AsyncGenerator:
-        """Create a new appointment."""
+        """Create a new consultation visit from the admin booking wizard."""
         async with self:
             self.form_error = ""
         scheduled_at = self.form_scheduled_at
@@ -410,27 +453,27 @@ class AppointmentFormState(FormDialogState, rx.State):
             return
 
         async with self:
+            patient_id = self.form_patient_id
+            doctor_id = self.form_doctor_id
+            notes = self.form_notes
+            account_id = self.form_account_id
+            appt_mode = self.form_appointment_mode
             _main = await self.get_state(ReflexMainState)
         with await _main.authenticate_user():
-            from gws_care.appointment.appointment_dto import SaveAppointmentDTO
-            from gws_care.appointment.appointment_service import AppointmentService
-
-            dto = SaveAppointmentDTO(
-                patient_id=self.form_patient_id,
-                account_id=self.form_account_id or None,
+            from gws_care.visit.consultation_service import ConsultationService
+            from gws_care.visit.visit_dto import BookAppointmentDTO
+            dto = BookAppointmentDTO(
                 scheduled_at=scheduled_at,
-                exam_type_ref_id=self.form_exam_type or None,
-                notes=self.form_notes or None,
-                assigned_doctor_id=self.form_doctor_id or None,
-                duration_minutes=int(self.form_duration or 20),
-                room=self.form_room or None,
+                doctor_id=doctor_id or None,
+                appointment_mode=appt_mode or "visio",
+                appointment_address=None,
+                patient_notes=notes or None,
+                billing_account_id=account_id or None,
             )
-            AppointmentService.create_appointment(dto)
+            ConsultationService.create_from_patient_booking(dto, patient_id)
 
-        yield rx.toast.success("Appointment created")
-        from .appointment_list_state import AppointmentListState
+        yield rx.toast.success("Rendez-vous créé")
         from ..patient_detail.patient_detail_state import PatientDetailState
-        yield AppointmentListState.on_load()
         yield PatientDetailState.on_load()
 
     async def _update(self, form_data: dict) -> AsyncGenerator:

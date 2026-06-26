@@ -12,9 +12,9 @@ class AppointmentMode(str, Enum):
 
     def get_label(self) -> str:
         return {
-            AppointmentMode.AT_WORK: "At work",
-            AppointmentMode.AT_HOME: "At home",
-            AppointmentMode.ADDRESS: "Address",
+            AppointmentMode.AT_WORK: "Au travail",
+            AppointmentMode.AT_HOME: "À domicile",
+            AppointmentMode.ADDRESS: "Adresse",
             AppointmentMode.VISIO: "Visio",
-            AppointmentMode.HOSPITAL: "Hospital",
+            AppointmentMode.HOSPITAL: "Hôpital",
         }[self]

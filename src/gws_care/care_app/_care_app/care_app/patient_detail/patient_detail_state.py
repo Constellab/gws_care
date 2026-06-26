@@ -59,10 +59,11 @@ class PatientVisitRowDTO(BaseModel):
 
     id: str
     visit_number: str
+    visit_type: str = "campaign"    # "campaign" or "consultation"
     campaign_name: str = ""
     campaign_id: str = ""
     scheduled_at: str = ""
-    campaign_visit_status: str = ""
+    campaign_visit_status: str = ""  # kept for backward compat; also used as generic status
     status_label: str = ""
     appointment_mode: str = ""
     doctor_name: str = ""
@@ -630,6 +631,11 @@ class PatientDetailState(ReflexMainState):
         return rx.redirect(f"/visit/{visit_id}")
 
     @rx.event
+    def go_to_consultation_visit(self, visit_id: str):
+        """Navigate to the consultation detail page."""
+        return rx.redirect(f"/consultation/{visit_id}")
+
+    @rx.event
     def go_to_campaign(self, campaign_id: str):
         """Navigate to the campaign detail page."""
         return rx.redirect(f"/campaign/{campaign_id}")
@@ -648,7 +654,9 @@ class PatientDetailState(ReflexMainState):
             return
         from ..appointment_list.appointment_form_state import AppointmentFormState
         label = f"{self.patient.last_name} {self.patient.first_name}"
-        return AppointmentFormState.open_create_dialog(self.patient.id, label)
+        return AppointmentFormState.open_create_dialog(
+            self.patient.id, label, self.patient.account_id or ""
+        )
 
     @rx.event
     def open_create_visit_dialog(self):
@@ -804,11 +812,13 @@ class PatientDetailState(ReflexMainState):
                         seen.add(lbl)
                         options.append(lbl)
                 self.exam_type_options = sorted(options)
+                from gws_care.visit.visit_type import VisitType
                 visits = CampaignVisitService.list_for_patient(patient_id)
-                self.patient_visits = [
+                campaign_rows = [
                     PatientVisitRowDTO(
                         id=str(v.id),
                         visit_number=v.visit_number,
+                        visit_type="campaign",
                         campaign_name=v.campaign.name if v.campaign_id else "",
                         campaign_id=str(v.campaign_id) if v.campaign_id else "",
                         scheduled_at=v.scheduled_at.isoformat() if v.scheduled_at else "",
@@ -818,10 +828,31 @@ class PatientDetailState(ReflexMainState):
                         doctor_name=v.doctor.get_full_name() if v.doctor_id else "",
                     )
                     for v in visits
+                    if v.visit_type == VisitType.CAMPAIGN
                 ]
+                from gws_care.visit.consultation_service import ConsultationService
+                consultations = ConsultationService.list_for_patient(patient_id)
+                consultation_rows = []
+                for cv in consultations:
+                    cvs = cv.consultation_visit_status
+                    consultation_rows.append(PatientVisitRowDTO(
+                        id=str(cv.id),
+                        visit_number=cv.visit_number,
+                        visit_type="consultation",
+                        campaign_name="",
+                        campaign_id="",
+                        scheduled_at=cv.scheduled_at.isoformat() if cv.scheduled_at else "",
+                        campaign_visit_status=cvs.value if cvs else "",
+                        status_label=cvs.get_label() if cvs else "",
+                        appointment_mode=cv.appointment_mode.value if cv.appointment_mode else "",
+                        doctor_name=cv.doctor.get_full_name() if cv.doctor_id else "",
+                    ))
+                all_rows = campaign_rows + consultation_rows
+                all_rows.sort(key=lambda r: r.scheduled_at or "", reverse=True)
+                self.patient_visits = all_rows
                 seen_doctors: set[str] = set()
                 doctor_options: list[str] = []
-                for v in visits:
+                for v in list(visits) + list(consultations):
                     name = v.doctor.get_full_name() if v.doctor_id else ""
                     if name and name not in seen_doctors:
                         seen_doctors.add(name)
@@ -877,11 +908,14 @@ class PatientDetailState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.consultation_service import ConsultationService
+                from gws_care.visit.visit_type import VisitType
                 visits = CampaignVisitService.list_for_patient(patient_id)
-                self.patient_visits = [
+                campaign_rows = [
                     PatientVisitRowDTO(
                         id=str(v.id),
                         visit_number=v.visit_number,
+                        visit_type="campaign",
                         campaign_name=v.campaign.name if v.campaign_id else "",
                         campaign_id=str(v.campaign_id) if v.campaign_id else "",
                         scheduled_at=v.scheduled_at.isoformat() if v.scheduled_at else "",
@@ -891,10 +925,30 @@ class PatientDetailState(ReflexMainState):
                         doctor_name=v.doctor.get_full_name() if v.doctor_id else "",
                     )
                     for v in visits
+                    if v.visit_type == VisitType.CAMPAIGN
                 ]
+                consultations = ConsultationService.list_for_patient(patient_id)
+                consultation_rows = []
+                for cv in consultations:
+                    cvs = cv.consultation_visit_status
+                    consultation_rows.append(PatientVisitRowDTO(
+                        id=str(cv.id),
+                        visit_number=cv.visit_number,
+                        visit_type="consultation",
+                        campaign_name="",
+                        campaign_id="",
+                        scheduled_at=cv.scheduled_at.isoformat() if cv.scheduled_at else "",
+                        campaign_visit_status=cvs.value if cvs else "",
+                        status_label=cvs.get_label() if cvs else "",
+                        appointment_mode=cv.appointment_mode.value if cv.appointment_mode else "",
+                        doctor_name=cv.doctor.get_full_name() if cv.doctor_id else "",
+                    ))
+                all_rows = campaign_rows + consultation_rows
+                all_rows.sort(key=lambda r: r.scheduled_at or "", reverse=True)
+                self.patient_visits = all_rows
                 seen_doctors: set[str] = set()
                 doctor_options: list[str] = []
-                for v in visits:
+                for v in list(visits) + list(consultations):
                     name = v.doctor.get_full_name() if v.doctor_id else ""
                     if name and name not in seen_doctors:
                         seen_doctors.add(name)

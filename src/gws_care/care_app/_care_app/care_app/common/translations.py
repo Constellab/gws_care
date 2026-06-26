@@ -103,6 +103,7 @@ _EN: dict[str, str] = {
     "col_gender": "Gender",
     "col_dob": "Date of Birth",
     "col_city": "City",
+    "col_city_country": "City / Country",
     "col_phone": "Phone",
     "col_email": "Email",
     "col_account": "Account",
@@ -151,6 +152,7 @@ _EN: dict[str, str] = {
     "col_specialization": "Specialization",
     "col_type": "Type",
     "col_city": "City",
+    "col_city_country": "City / Country",
     "tab_prescriptions": "Prescriptions",
     # ── Prescriptions ──────────────────────────────────────────────────────────
     "new_prescription_btn": "New Prescription",
@@ -482,8 +484,8 @@ _EN: dict[str, str] = {
     "info_address_complement": "Address Complement",
     "info_country": "Country",
     "field_contact_name": "Contact Name",
-    "field_contact_first_name": "Contact First Name",
-    "field_contact_last_name": "Contact Last Name",
+    "field_contact_first_name": "First Name",
+    "field_contact_last_name": "Last Name",
     "create_account_btn": "Create Account",
     # ── Account detail ────────────────────────────────────────────────────────
     "back_to_accounts": "Back to accounts",
@@ -1069,6 +1071,7 @@ _FR: dict[str, str] = {
     "col_gender": "Sexe",
     "col_dob": "Date de naissance",
     "col_city": "Ville",
+    "col_city_country": "Ville / Pays",
     "col_phone": "Téléphone",
     "col_email": "Email",
     "col_account": "Compte",
@@ -1117,6 +1120,7 @@ _FR: dict[str, str] = {
     "col_specialization": "Spécialisation",
     "col_type": "Type",
     "col_city": "Ville",
+    "col_city_country": "Ville / Pays",
     "tab_prescriptions": "Ordonnances",
     # ── Prescriptions ──────────────────────────────────────────────────────────
     "new_prescription_btn": "Nouvelle ordonnance",
@@ -1448,8 +1452,8 @@ _FR: dict[str, str] = {
     "info_address_complement": "Complément d'adresse",
     "info_country": "Pays",
     "field_contact_name": "Nom du contact",
-    "field_contact_first_name": "Prénom du contact",
-    "field_contact_last_name": "Nom de famille du contact",
+    "field_contact_first_name": "Prénom",
+    "field_contact_last_name": "Nom",
     "create_account_btn": "Créer le compte",
     # ── Account detail ────────────────────────────────────────────────────────
     "back_to_accounts": "Retour aux comptes",

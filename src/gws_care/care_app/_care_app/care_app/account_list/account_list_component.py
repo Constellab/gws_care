@@ -51,9 +51,6 @@ def _account_row(account: AccountRowDTO) -> rx.Component:
             rx.cond(account.city, rx.text(account.city, size="2"), rx.text("—", size="2", color="var(--gray-8)"))
         ),
         rx.table.cell(
-            rx.cond(account.contact_name, rx.text(account.contact_name, size="2"), rx.text("—", size="2", color="var(--gray-8)"))
-        ),
-        rx.table.cell(
             rx.cond(account.phone, rx.text(account.phone, size="2"), rx.text("—", size="2", color="var(--gray-8)"))
         ),
         rx.table.cell(
@@ -178,7 +175,6 @@ def account_list_page() -> rx.Component:
                                 rx.table.row(
                                     _sortable_header(LanguageState.tr["col_account_name"], "name"),
                                     _sortable_header(LanguageState.tr["col_city"], "city"),
-                                    _sortable_header(LanguageState.tr["col_contact"], "contact_name"),
                                     _sortable_header(LanguageState.tr["col_phone"], "phone"),
                                     _sortable_header(LanguageState.tr["col_email"], "email"),
                                     _sortable_header(LanguageState.tr["col_status"], "is_active"),

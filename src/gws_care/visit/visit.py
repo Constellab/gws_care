@@ -63,6 +63,9 @@ class Visit(ModelWithUser):
     doctor_company_interpretation: str = TextField(null=True)
     doctor_company_message: str = TextField(null=True)
 
+    # Cancellation
+    cancellation_reason: str = TextField(null=True)
+
     # Classical / Exam visit closing audit
     closed_by: User = ForeignKeyField(User, null=True, backref="+", on_delete="SET NULL")
     closed_at: datetime = DateTimeField(null=True)

@@ -6,155 +6,75 @@ from pydantic import BaseModel
 
 _PATIENT_TEMPLATE = (
     "last_name,first_name,birth_name,date_of_birth,gender,"
-    "address,postal_code,city,phone,email,"
-    "primary_physician_name,primary_physician_phone,"
-    "account_name,social_security_number,weight,height\n"
-    # ── SGBCI (28 patients) ──────────────────────────────────────────────────
-    "KONÉ,Aminata,,1990-04-12,F,12 Rue des Jardins,,Abidjan,+2250701000001,aminata.kone@email.ci,Dr. Bamba,+2250720000001,SGBCI,1900412CI001,62.5,165\n"
-    "COULIBALY,Ibrahim,,1985-07-23,M,Cocody Ambassades,,Abidjan,+2250701000002,ibrahim.coulibaly@email.ci,,,SGBCI,1850723CI002,,178\n"
-    "DIALLO,Fatou,,1993-11-05,F,Plateau Immeuble Nour,,Abidjan,+2250701000003,fatou.diallo@email.ci,,,SGBCI,1931105CI003,58,162\n"
-    "YAO,Kouassi,,1978-02-14,M,Yopougon Selmer,,Abidjan,+2250701000004,kouassi.yao@email.ci,,,SGBCI,1780214CI004,,172\n"
-    "BAMBA,Mariam,,1996-09-30,F,Abobo Nord,,Abidjan,+2250701000005,mariam.bamba@email.ci,Dr. Koné,+2250721000001,SGBCI,1960930CI005,70.2,168\n"
-    "TRAORÉ,Moussa,,1988-06-18,M,Treichville Rue 12,,Abidjan,+2250701000006,moussa.traore@email.ci,,,SGBCI,1880618CI006,,176\n"
-    "OUÉDRAOGO,Salimata,,1991-03-25,F,Riviera Palmeraie,,Abidjan,+2250701000007,salimata.ouedraogo@email.ci,,,SGBCI,1910325CI007,55,160\n"
-    "SANOGO,Drissa,,1974-08-12,M,Marcory Zone 4,,Abidjan,+2250701000008,drissa.sanogo@email.ci,,,SGBCI,1740812CI008,,175\n"
-    "FOFANA,Karidiatou,,1999-01-07,F,Adjamé Liberty,,Abidjan,+2250701000009,karidiatou.fofana@email.ci,,,SGBCI,1990107CI009,59,163\n"
-    "TOURÉ,Adama,,1983-05-19,M,Deux Plateaux,,Abidjan,+2250701000010,adama.toure@email.ci,,,SGBCI,1830519CI010,,173\n"
-    "N'DRI,Evelyne,,1992-10-28,F,Cocody II Plateaux,,Abidjan,+2250701000011,evelyne.ndri@email.ci,,,SGBCI,1921028CI011,64,167\n"
-    "AKISSI,Bernadette,,1970-12-03,F,Yopougon Niangon Sud,,Abidjan,+2250701000012,bernadette.akissi@email.ci,Dr. Diallo,+2250721000002,SGBCI,1701203CI012,72,170\n"
-    "GUEI,Martin,,1986-04-17,M,Port-Bouët Aéroport,,Abidjan,+2250701000013,martin.guei@email.ci,,,SGBCI,1860417CI013,,177\n"
-    "ASSI,Rosalie,,1994-07-31,F,Plateau Centre,,Abidjan,+2250701000014,rosalie.assi@email.ci,,,SGBCI,1940731CI014,57,161\n"
-    "YAPI,Serge,,1980-11-22,M,Koumassi Remblais,,Abidjan,+2250701000015,serge.yapi@email.ci,,,SGBCI,1801122CI015,,174\n"
-    "AKA,Ghislaine,,1997-06-14,F,Treichville Avr. 14,,Abidjan,+2250701000016,ghislaine.aka@email.ci,,,SGBCI,1970614CI016,61,164\n"
-    "MÉITÉ,Lamine,,1975-09-08,M,Abobo Dokui,,Abidjan,+2250701000017,lamine.meite@email.ci,,,SGBCI,1750908CI017,,171\n"
-    "DOUMBIA,Nathalie,,1989-02-26,F,Riviera 3,,Abidjan,+2250701000018,nathalie.doumbia@email.ci,,,SGBCI,1890226CI018,66,166\n"
-    "KOFFI,Raymond,,1967-05-30,M,Cocody Bergerville,,Abidjan,+2250701000019,raymond.koffi@email.ci,,,SGBCI,1670530CI019,,180\n"
-    "N'GUESSAN,Esther,,1998-08-15,F,Yopougon Selmer,,Abidjan,+2250701000020,esther.nguessan@email.ci,,,SGBCI,1980815CI020,53,158\n"
-    "KPAN,Barthélemy,,1971-11-04,M,Vridi Résidentiel,,Abidjan,+2250701000021,barthelemy.kpan@email.ci,,,SGBCI,1711104CI021,,168\n"
-    "KOUAKOU,Chantal,,1985-03-11,F,Marcory Biétry,,Abidjan,+2250701000022,chantal.kouakou@email.ci,Dr. Touré,+2250721000003,SGBCI,1850311CI022,68,169\n"
-    "SILUÉ,Tidiane,,1979-07-25,M,Abobo Baoulé,,Abidjan,+2250701000023,tidiane.silue@email.ci,,,SGBCI,1790725CI023,,179\n"
-    "KABORÉ,Aminata,,1995-12-09,F,Cocody Angré,,Abidjan,+2250701000024,aminata.kabore@email.ci,,,SGBCI,1951209CI024,60,162\n"
-    "TAPÉ,Honoré,,1963-04-20,M,Adjamé Washington,,Abidjan,+2250701000025,honore.tape@email.ci,,,SGBCI,1630420CI025,,176\n"
-    "EHUI,Patricia,,1988-09-03,F,Plateau Avenues,,Abidjan,+2250701000026,patricia.ehui@email.ci,,,SGBCI,1880903CI026,63,165\n"
-    "AHOURÉ,Sébastien,,1992-01-16,M,Riviera Faya,,Abidjan,+2250701000027,sebastien.ahoure@email.ci,,,SGBCI,1920116CI027,,182\n"
-    "BOGUI,Valérie,,1976-06-22,F,Yopougon Mossikro,,Abidjan,+2250701000028,valerie.bogui@email.ci,,,SGBCI,1760622CI028,71,172\n"
-    # ── BNPPARIBAS (10 patients) ─────────────────────────────────────────────
-    "DUBOIS,Claire,,1991-03-07,F,Tour BIAO Plateau,,Abidjan,+2250701000029,claire.dubois@email.ci,,,BNPPARIBAS,1910307FR001,54,160\n"
-    "MARTIN,Théodore,,1983-08-25,M,Cocody Danga,,Abidjan,+2250701000030,theodore.martin@email.ci,,,BNPPARIBAS,1830825FR002,,180\n"
-    "BERNARD,Sophie,LEROY,1987-12-19,F,Riviera 2,,Abidjan,+2250701000031,sophie.bernard@email.ci,Dr. Laurent,+2250721000004,BNPPARIBAS,1871219FR003,66,170\n"
-    "NGUYEN,Patrick,,1979-05-03,M,Deux Plateaux Roses,,Abidjan,+2250701000032,patrick.nguyen@email.ci,,,BNPPARIBAS,1790503FR004,,174\n"
-    "LAURENT,Isabelle,,1994-10-11,F,Zone Industrielle,,Abidjan,+2250701000033,isabelle.laurent@email.ci,,,BNPPARIBAS,1941011FR005,60,163\n"
-    "MOREAU,Julien,,1982-02-14,M,Marcory Sicogi,,Abidjan,+2250701000034,julien.moreau@email.ci,,,BNPPARIBAS,1820214FR006,,181\n"
-    "PETIT,Aurélie,,1996-07-22,F,Plateau Immeuble Alliance,,Abidjan,+2250701000035,aurelie.petit@email.ci,,,BNPPARIBAS,1960722FR007,58,162\n"
-    "LEROY,Christophe,,1977-11-08,M,Cocody Danga Faya,,Abidjan,+2250701000036,christophe.leroy@email.ci,,,BNPPARIBAS,1771108FR008,,178\n"
-    "CHEVALIER,Marie,,1990-04-30,F,Riviera Golf,,Abidjan,+2250701000037,marie.chevalier@email.ci,,,BNPPARIBAS,1900430FR009,65,168\n"
-    "BONNET,Éric,,1985-09-17,M,Treichville Zone 3,,Abidjan,+2250701000038,eric.bonnet@email.ci,,,BNPPARIBAS,1850917FR010,,176\n"
-    # ── Total Energies CI (7 patients) ───────────────────────────────────────
-    "ADJOUMANI,Serge,,1981-01-28,M,Port-Bouët Koumassi,,Abidjan,+2250701000039,serge.adjoumani@email.ci,,,Total Energies CI,1810128CI029,,171\n"
-    "SORO,Dramane,,1976-09-02,M,Vridi Raffinerie,,Abidjan,+2250701000040,dramane.soro@email.ci,Dr. Diomandé,+2250721000005,Total Energies CI,1760902CI030,,169\n"
-    "OUATTARA,Rachelle,,1989-04-22,F,Vridi Cité Pétrolière,,Abidjan,+2250701000041,rachelle.ouattara@email.ci,,,Total Energies CI,1890422CI031,72,167\n"
-    "DEMBÉLÉ,Cheick,,1982-11-17,M,Vridi Zone Industrielle,,Abidjan,+2250701000042,cheick.dembele@email.ci,,,Total Energies CI,1821117CI032,,175\n"
-    "KONAN,Adèle,,1993-08-05,F,Port-Bouët Résidentiel,,Abidjan,+2250701000043,adele.konan@email.ci,,,Total Energies CI,1930805CI033,61,165\n"
-    "KADER,Moustapha,,1969-12-31,M,Treichville Avr. 7,,Abidjan,+2250701000044,moustapha.kader@email.ci,,,Total Energies CI,1691231CI034,,174\n"
-    "N'GORAN,Estelle,,1995-03-18,F,Koumassi Campement,,Abidjan,+2250701000045,estelle.ngoran@email.ci,,,Total Energies CI,1950318CI035,57,161\n"
-    # ── Petroci (8 patients) ─────────────────────────────────────────────────
-    "DIGBEU,Casimir,,1974-03-14,M,Vridi Raffinerie Résid.,,Abidjan,+2250701000046,casimir.digbeu@email.ci,,,Petroci,1740314CI036,,170\n"
-    "KOUAMÉ,Virginie,,1990-07-28,F,Plateau Immeuble Petroci,,Abidjan,+2250701000047,virginie.kouame@email.ci,,,Petroci,1900728CI037,64,166\n"
-    "ASSOA,Hilaire,,1978-10-05,M,Zone Industrielle Vridi,,Abidjan,+2250701000048,hilaire.assoa@email.ci,,,Petroci,1781005CI038,,173\n"
-    "BODJO,Albertine,,1986-01-19,F,Port-Bouët Aéroport Sud,,Abidjan,+2250701000049,albertine.bodjo@email.ci,Dr. Yao,+2250721000006,Petroci,1860119CI039,67,168\n"
-    "AGBOU,Théophile,,1962-05-07,M,Koumassi Remblais,,Abidjan,+2250701000050,theophile.agbou@email.ci,,,Petroci,1620507CI040,,169\n"
-    "KOHOU,Delphine,,1997-09-23,F,Vridi Canal,,Abidjan,+2250701000051,delphine.kohou@email.ci,,,Petroci,1970923CI041,55,159\n"
-    "AMON,Léon,,1983-12-11,M,Zone Industrielle CI,,Abidjan,+2250701000052,leon.amon@email.ci,,,Petroci,1831211CI042,,176\n"
-    "ABOA,Christine,,1991-04-16,F,Treichville Résid.,,Abidjan,+2250701000053,christine.aboa@email.ci,,,Petroci,1910416CI043,62,164\n"
-    # ── AXA Côte d'Ivoire (5 patients) ───────────────────────────────────────
-    "DURAND,Maxime,,1997-08-08,M,Cocody II Plateaux,,Abidjan,+2250701000054,maxime.durand@email.ci,,,AXA Côte d'Ivoire,1970808FR011,,183\n"
-    "KONATÉ,Aïcha,,1992-02-26,F,Adjamé Liberty,,Abidjan,+2250701000055,aicha.konate@email.ci,,,AXA Côte d'Ivoire,1920226CI044,63,164\n"
-    "LEPAGE,François,,1975-07-31,M,Marcory Résidentiel,,Abidjan,+2250701000056,francois.lepage@email.ci,,,AXA Côte d'Ivoire,1750731FR012,,177\n"
-    "RENARD,Lucie,,1988-11-14,F,Riviera 3 Villa,,Abidjan,+2250701000057,lucie.renard@email.ci,,,AXA Côte d'Ivoire,1881114FR013,59,162\n"
-    "BRETON,Pascal,,1971-03-27,M,Plateau Centre,,Abidjan,+2250701000058,pascal.breton@email.ci,,,AXA Côte d'Ivoire,1710327FR014,,179\n"
-    # ── Sofitel Hôtel Ivoire (3 patients) ────────────────────────────────────
-    "GIRARD,Hélène,,1985-05-06,F,Cocody Ambassades,,Abidjan,+2250701000059,helene.girard@email.ci,,,Sofitel Hôtel Ivoire,1850506FR015,65,167\n"
-    "MARCHAND,Rémi,,1993-09-20,M,Riviera Palmeraie,,Abidjan,+2250701000060,remi.marchand@email.ci,,,Sofitel Hôtel Ivoire,1930920FR016,,181\n"
-    "FABRE,Nathalie,,1979-01-13,F,Cocody Danga,,Abidjan,+2250701000061,nathalie.fabre@email.ci,,,Sofitel Hôtel Ivoire,1790113FR017,70,171\n"
-    # ── Orange CI (2 patients) ───────────────────────────────────────────────
-    "TANOH,Alphonse,,1987-06-09,M,Abobo Baoulé,,Abidjan,+2250701000062,alphonse.tanoh@email.ci,,,Orange CI,1870609CI045,,172\n"
-    "GOHI,Estelle,,1994-02-17,F,Yopougon Mossikro,,Abidjan,+2250701000063,estelle.gohi@email.ci,,,Orange CI,1940217CI046,57,160\n"
-    # ── MTN CI (2 patients) ──────────────────────────────────────────────────
-    "KOUADIO,Denis,,1969-10-25,M,Marcory Zone 4,,Abidjan,+2250701000064,denis.kouadio@email.ci,,,MTN CI,1691025CI047,,168\n"
-    "AKPA,Sandrine,,1998-05-04,F,Adjamé 220 Logts,,Abidjan,+2250701000065,sandrine.akpa@email.ci,,,MTN CI,1980504CI048,56,159\n"
-    # ── No account (5 patients) ──────────────────────────────────────────────
-    "CISSÉ,Karidjatou,,1986-08-21,F,Cocody Angré Star,,Abidjan,+2250701000066,karidjatou.cisse@email.ci,,,,1860821CI049,64,165\n"
-    "DIABATÉ,Moussa,,1972-11-15,M,Abobo Dokui,,Abidjan,+2250701000067,moussa.diabate@email.ci,,,,1721115CI050,,176\n"
-    "THOMAS,Nathalie,,1994-04-08,F,Marcory Biétry,,Abidjan,+2250701000068,nathalie.thomas@email.ci,,,,1940408FR018,61,163\n"
-    "LAMBERT,Henri,,1980-07-19,M,Plateau Clozel,,Abidjan,+2250701000069,henri.lambert@email.ci,,,,1800719FR019,,180\n"
-    "SÉKA,Patricia,,1991-12-03,F,Riviera 2 Rue Jardins,,Abidjan,+2250701000070,patricia.seka@email.ci,,,,1911203CI051,58,161\n"
-    # ── Renault Trucks - Lyon (2 patients) ───────────────────────────────────
-    "RENAUD,Pierre,,1981-04-15,M,12 Rue de la Paix,69001,Lyon,+33612345671,pierre.renaud@email.fr,,,Renault Trucks,1810415FR020,,178\n"
-    "FAURE,Isabelle,,1989-07-22,F,5 Place Bellecour,69002,Lyon,+33612345672,isabelle.faure@email.fr,,,Renault Trucks,1890722FR021,62,165\n"
-    # ── bioMérieux - Lyon (2 patients) ───────────────────────────────────────
-    "GARNIER,Marc,,1976-11-08,M,18 Rue de la République,69002,Lyon,+33612345673,marc.garnier@email.fr,,,bioMérieux,1761108FR022,,175\n"
-    "LECLERC,Chloé,,1994-03-30,F,7 Cours Lafayette,69003,Lyon,+33612345674,chloe.leclerc@email.fr,,,bioMérieux,1940330FR023,58,162\n"
-    # ── GL Events - Lyon (2 patients) ────────────────────────────────────────
-    "ROUSSEAU,Éric,,1983-09-14,M,25 Avenue Foch,69006,Lyon,+33612345675,eric.rousseau@email.fr,,,GL Events,1830914FR024,,182\n"
-    "BLANC,Nathalie,,1991-06-28,F,3 Rue Mercière,69002,Lyon,+33612345676,nathalie.blanc@email.fr,,,GL Events,1910628FR025,65,168\n"
-    # ── Caisse d'Épargne Rhône Alpes - Lyon (2 patients) ─────────────────────
-    "CHEVALLIER,Sophie,,1986-01-19,F,15 Quai Saint-Antoine,69002,Lyon,+33612345677,sophie.chevallier@email.fr,Dr. Dupont,+33472100001,Caisse d'Épargne Rhône Alpes,1860119FR026,68,170\n"
-    "PERRIN,Olivier,,1978-10-05,M,42 Rue Garibaldi,69003,Lyon,+33612345678,olivier.perrin@email.fr,,,Caisse d'Épargne Rhône Alpes,1781005FR027,,180\n"
-    # ── Sanofi Lyon (2 patients) ──────────────────────────────────────────────
-    "VASSEUR,Anne,,1995-05-12,F,8 Rue Herriot,69001,Lyon,+33612345679,anne.vasseur@email.fr,,,Sanofi Lyon,1950512FR028,57,161\n"
-    "BERTRAND,Julien,,1972-02-27,M,33 Avenue Berthelot,69007,Lyon,+33612345680,julien.bertrand@email.fr,,,Sanofi Lyon,1720227FR029,,177\n"
+    "address,address_complement,postal_code,city,country,"
+    "phone,email,social_security_number\n"
+    # ── Exemples (numéro sécu FR : genre(1) + AA(2) + MM(2) + dép(2) + commune(3) + ordre(3) + clé(2)) ──
+    "DUPONT,Marie,,1985-03-15,F,12 Rue de la Paix,,75001,Paris,France,"
+    "+33612345678,marie.dupont@email.fr,2850375108234 56\n"
+    "MARTIN,Jean,,1978-07-22,M,5 Avenue Victor Hugo,,69002,Lyon,France,"
+    "+33698765432,jean.martin@email.fr,1780769123456 89\n"
+    "BERNARD,Sophie,LEROY,1992-11-03,F,8 Rue Nationale,,13001,Marseille,France,"
+    "+33791234567,sophie.bernard@email.fr,2921113123456 78\n"
+    "LEFEVRE,Thomas,,1987-06-18,M,23 Boulevard Haussmann,Apt 4B,75009,Paris,France,"
+    "+33614567890,thomas.lefevre@email.fr,1870675012345 67\n"
+    "MOREAU,Claire,SIMON,1995-02-27,F,14 Rue du Général de Gaulle,,67000,Strasbourg,France,"
+    "+33756789012,claire.moreau@email.fr,2950267034567 12\n"
+    "NDOYE,Ibrahima,,1983-09-10,M,45 Rue de la République,,93100,Montreuil,France,"
+    "+33678901234,ibrahima.ndoye@email.fr,\n"
+    "PETIT,Laura,,2000-05-14,F,3 Impasse des Lilas,,31000,Toulouse,France,"
+    "+33698012345,laura.petit@email.fr,2000531012345 34\n"
+    "GARCIA,Carlos,,1975-12-01,M,7 Avenue Jean Jaurès,,44000,Nantes,France,"
+    "+33623456789,carlos.garcia@email.fr,1751244056789 45\n"
+    "KONÉ,Aminata,,1990-04-12,F,Rue des Jardins,,BP 01,Abidjan,Côte d'Ivoire,"
+    "+2250701000001,aminata.kone@email.ci,\n"
+    "TRAORÉ,Moussa,,1988-08-25,M,Cocody Riviera 3,,, Abidjan,Côte d'Ivoire,"
+    "+2250505678901,moussa.traore@email.ci,\n"
+    "OUEDRAOGO,Fatou,,1993-01-19,F,Secteur 15 Gounghin,,, Ouagadougou,Burkina Faso,"
+    "+22670123456,fatou.ouedraogo@email.bf,\n"
+    "DIALLO,Mamadou,,1980-07-30,M,HLM Grand Yoff,,, Dakar,Sénégal,"
+    "+221771234567,mamadou.diallo@email.sn,\n"
+    "LAMBERT,Émilie,GIRARD,1997-04-08,F,56 Rue Victor Hugo,Résidence Les Pins,06000,Nice,France,"
+    "+33745678901,emilie.lambert@email.fr,2970406034561 23\n"
+    "ROUSSEAU,Pierre,,1969-10-22,M,2 Chemin du Moulin,,59000,Lille,France,"
+    "+33667890123,pierre.rousseau@email.fr,1691059089012 56\n"
 )
 
-_ACCOUNT_TEMPLATE = (
-    "name,registration_number,address,postal_code,city,phone,email,contact_name\n"
-    "SGBCI,CI-ABJ-2001-B-1234,Avenue Terrasson de Fougères,BP 1355,Abidjan,+2252021234567,contact@sgbci.ci,M. Koné\n"
-    "BNPPARIBAS,CI-ABJ-2003-B-5678,Immeuble Alliance Plateau,BP 4001,Abidjan,+2252025678901,ci@bnpparibas.com,Mme. Dupont\n"
-    "Total Energies CI,CI-ABJ-1999-B-2222,Zone Industrielle de Vridi,BP 1234,Abidjan,+2252022222222,totalenergies.ci@te.com,M. Coulibaly\n"
-    "Petroci,CI-ABJ-1975-B-0001,Plateau Immeuble Petroci,BP 695,Abidjan,+2252020000001,info@petroci.ci,M. Yao\n"
-    "AXA Côte d'Ivoire,CI-ABJ-2005-B-3344,Immeuble CRRAE-UMOA Plateau,BP 4400,Abidjan,+2252024440033,axa.ci@axa.com,M. Diallo\n"
-    "Sofitel Hôtel Ivoire,CI-ABJ-1963-B-0088,Boulevard de la Corniche,BP 1088,Abidjan,+2252023338800,hi@sofitel-ivoire.ci,Mme. Martin\n"
-    "Orange CI,CI-ABJ-2002-B-4455,Immeuble Orange 5e étage,BP 4100,Abidjan,+2252027000000,contact@orange.ci,Mme. N'Guessan\n"
-    "MTN CI,CI-ABJ-2001-B-5566,Immeuble MTN Zone 4,BP 1600,Abidjan,+2252020100100,mtn.ci@mtn.com,M. Sanogo\n"
-    "BICICI,CI-ABJ-1962-B-0002,Plateau Avenue Botreau Roussel,BP 1298,Abidjan,+2252022090090,contact@bicici.ci,M. Assoa\n"
-    "Ecobank CI,CI-ABJ-1988-B-2233,Immeuble Ecobank Plateau,BP 4107,Abidjan,+2252022100100,ecobank.ci@ecobank.com,Mme. Touré\n"
-    "Unilever CI,CI-ABJ-1965-B-0003,Zone Industrielle Yopougon,BP 179,Abidjan,+2252023600000,unilever.ci@unilever.com,M. Traoré\n"
-    "Air Côte d'Ivoire,CI-ABJ-2012-B-7788,Aéroport Félix Houphouët-Boigny,BP 12500,Abidjan,+2252027020200,contact@aircotedivoire.ci,M. Kader\n"
-    "CIE,CI-ABJ-1991-B-3300,18 Avenue Christiani,BP 1345,Abidjan,+2252024440044,cie@cie.ci,M. Koffi\n"
-    "SODECI,CI-ABJ-1960-B-0004,1 Avenue Christiani,BP 1843,Abidjan,+2252024430000,sodeci@sodeci.ci,Mme. Akissi\n"
-    "CFAO Côte d'Ivoire,CI-ABJ-1950-B-0005,Zone Industrielle Vridi,BP 101,Abidjan,+2252023750000,cfao.ci@cfao.com,M. Guei\n"
-    "Nestlé CI,CI-ABJ-1959-B-0006,Zone Industrielle Yopougon Ext.,BP 1025,Abidjan,+2252023730000,nestle.ci@nestle.com,Mme. Bogui\n"
-    "SODEFOR,CI-ABJ-1966-B-0007,Riviera 3 Cité SIR,BP 3770,Abidjan,+2252022490000,sodefor@sodefor.ci,M. Tapé\n"
-    "STIE,CI-ABJ-1974-B-0008,Zone Industrielle de Yopougon,BP 8050,Abidjan,+2252023690000,stie@stie.ci,M. Digbeu\n"
-    "SIFCA,CI-ABJ-1964-B-0009,Immeuble SIFCA Plateau,BP 1289,Abidjan,+2252022240000,sifca@sifca.ci,Mme. Ehui\n"
-    "Versus Bank,CI-ABJ-2001-B-9900,Immeuble VERSUS Avenue Houdaille,BP 1315,Abidjan,+2252022250000,versus@versusbank.ci,M. Silué\n"
-    "Bridge Bank CI,CI-ABJ-2011-B-8811,Plateau Rue du Commerce,BP 4050,Abidjan,+2252022260000,bridge@bridgebank.ci,Mme. Aboa\n"
-    "SITAB,CI-ABJ-1954-B-0010,Zone Industrielle Adjamé,BP 1832,Abidjan,+2252024790000,sitab@sitab.ci,M. Amon\n"
-    "Pharmacie Centrale CI,CI-ABJ-1960-B-0011,Plateau Rue Lepic,BP 2095,Abidjan,+2252022270000,pharmaCI@pharmacie.ci,Mme. Doumbia\n"
-    "CHU de Cocody,CI-ABJ-1970-B-0012,Boulevard de la Corniche Cocody,BP 23,Abidjan,+2252022444000,chu.cocody@sante.ci,M. Yapi\n"
-    "SIC CACAO,CI-ABJ-1978-B-1313,Zone Industrielle de Vridi Nord,BP 1393,Abidjan,+2252023460000,contact@siccacao.ci,M. Méité\n"
-    # ── Lyon accounts ─────────────────────────────────────────────────────────
-    "Renault Trucks,FR-69-2001-T-001,99 Route de Lyon,69150,Décines-Charpieu,+33472147000,contact@renaulttrucks.com,M. Renaud\n"
-    "bioMérieux,FR-69-1964-B-002,376 Chemin de l'Orme,69280,Marcy-l'Étoile,+33478874000,contact@biomerieux.com,Mme. Garnier\n"
-    "GL Events,FR-69-1978-G-003,59 Quai Rambaud,69002,Lyon,+33478149000,contact@gl-events.com,M. Rousseau\n"
-    "Caisse d'Épargne Rhône Alpes,FR-69-1950-C-004,42 Boulevard Eugène Deruelle,69432,Lyon,+33826468460,contact@cera.fr,Mme. Chevallier\n"
-    "Sanofi Lyon,FR-69-1976-S-005,14 Avenue Jean Monnet,69800,Saint-Priest,+33472223000,contact.lyon@sanofi.com,M. Vasseur\n"
+_ACCOUNT_COMPANY_TEMPLATE = (
+    "name,registration_number,address,postal_code,city,"
+    "contact_first_name,contact_last_name,phone,email\n"
+    # ── Exemples ──────────────────────────────────────────────────────────────
+    "Subway France,FR-75-2023-B-001,123 Rue de Rivoli,75001,Paris,"
+    "Sophie,Martin,+33145678901,contact@subway.fr\n"
+    "Total Energies SE,FR-92-2022-B-002,2 Place Jean Millier,92078,Paris La Défense,"
+    "Pierre,Dubois,+33147448046,contact@totalenergies.com\n"
+    "KFC France,FR-75-2020-B-003,44 Avenue George V,75008,Paris,"
+    "Marie,Leclerc,+33145678903,contact@kfc.fr\n"
+    "McDonald's France,FR-75-2019-B-004,1 Rue du Débarcadère,75017,Paris,"
+    "Jean,Dupont,+33145678904,contact@mcdonalds.fr\n"
+)
+
+_ACCOUNT_INDIVIDUAL_TEMPLATE = (
+    "contact_last_name,contact_first_name,address,postal_code,city,phone,email\n"
+    # ── Exemples (les mêmes personnes que dans le template patients) ──────────
+    "DUPONT,Marie,12 Rue de la Paix,75001,Paris,+33612345678,marie.dupont@email.fr\n"
+    "MARTIN,Jean,5 Avenue Victor Hugo,69002,Lyon,+33698765432,jean.martin@email.fr\n"
+    "KONÉ,Aminata,12 Rue des Jardins,,,+2250701000001,aminata.kone@email.ci\n"
 )
 
 
 _DOCTOR_TEMPLATE = (
-    "last_name,first_name,specialization,phone,email,rpps_number,address\n"
-    # ── Abidjan doctors (5) ───────────────────────────────────────────────────
-    "KONÉ,Aminata,Médecine du travail,+2250701100001,aminata.kone@medecin.ci,,Centre Médical Plateau Abidjan\n"
-    "BAMBA,Souleymane,Médecine du travail,+2250701100002,souleymane.bamba@medecin.ci,,Cabinet Médical Cocody Abidjan\n"
-    "OUATTARA,Fatoumata,Médecine générale,+2250701100003,fatoumata.ouattara@medecin.ci,,Polyclinique Yopougon Abidjan\n"
-    "DIALLO,Abdoulaye,Médecine du travail,+2250701100004,abdoulaye.diallo@medecin.ci,,Clinique Marcory Abidjan\n"
-    "N'GUESSAN,Marie-Claire,Cardiologie,+2250701100005,marieclaire.nguessan@medecin.ci,,Cabinet Spécialisé Riviera Abidjan\n"
-    # ── Lyon doctors (5) ─────────────────────────────────────────────────────
-    "DUPONT,Marie,Médecine du travail,+33472100001,marie.dupont@medecin.fr,10234567890,12 Rue de la Part-Dieu 69003 Lyon\n"
-    "MARTIN,Thomas,Médecine du travail,+33472100002,thomas.martin@medecin.fr,10234567891,5 Place des Terreaux 69001 Lyon\n"
-    "LAMBERT,Pierre,Médecine du travail,+33472100003,pierre.lambert@medecin.fr,10234567892,25 Avenue de Saxe 69007 Lyon\n"
-    "ROUSSEAU,Isabelle,Médecine générale,+33472100004,isabelle.rousseau@medecin.fr,10234567893,8 Boulevard des Belges 69006 Lyon\n"
-    "BOYER,Sandrine,Cardiologie,+33472100005,sandrine.boyer@medecin.fr,10234567894,17 Rue Garibaldi 69003 Lyon\n"
+    "last_name,first_name,specialization,phone,email,rpps_number\n"
+    # ── 1 cardiologue ─────────────────────────────────────────────────────────
+    "FONTAINE,Henri,Cardiologie,+33145670001,henri.fontaine@medecin.fr,10345678901\n"
+    # ── 3 médecins du travail ─────────────────────────────────────────────────
+    "CHEVALIER,Isabelle,Médecine du travail,+33472110001,isabelle.chevalier@medecin.fr,10345678902\n"
+    "RENARD,Philippe,Médecine du travail,+33467110002,philippe.renard@medecin.fr,10345678903\n"
+    "DIOP,Oumar,Médecine du travail,+221775110001,oumar.diop@medecin.sn,\n"
+    # ── 1 diabétologue ────────────────────────────────────────────────────────
+    "BONNET,Laurent,Diabétologie,+33156770001,laurent.bonnet@medecin.fr,10345678904\n"
+    # ── 2 médecins généralistes ───────────────────────────────────────────────
+    "GARNIER,Nathalie,Médecine générale,+33467880001,nathalie.garnier@medecin.fr,10345678905\n"
+    "COULIBALY,Seydou,Médecine générale,+2250707110001,seydou.coulibaly@medecin.ci,\n"
 )
 
 
@@ -233,9 +153,14 @@ class ImportState(ReflexMainState):
                 data=_DOCTOR_TEMPLATE.encode("utf-8"),
                 filename="doctors_import_template.csv",
             )
+        if self.import_type == "accounts_individual":
+            return rx.download(
+                data=_ACCOUNT_INDIVIDUAL_TEMPLATE.encode("utf-8"),
+                filename="accounts_individual_import_template.csv",
+            )
         return rx.download(
-            data=_ACCOUNT_TEMPLATE.encode("utf-8"),
-            filename="accounts_import_template.csv",
+            data=_ACCOUNT_COMPANY_TEMPLATE.encode("utf-8"),
+            filename="accounts_company_import_template.csv",
         )
 
     @rx.event
@@ -261,6 +186,8 @@ class ImportState(ReflexMainState):
                 parse_result = BulkImportService.parse_patients_csv(content)
             elif self.import_type == "doctors":
                 parse_result = BulkImportService.parse_doctors_csv(content)
+            elif self.import_type == "accounts_individual":
+                parse_result = BulkImportService.parse_accounts_individual_csv(content)
             else:
                 parse_result = BulkImportService.parse_accounts_csv(content)
 
@@ -270,11 +197,13 @@ class ImportState(ReflexMainState):
 
             self._raw_rows = [r.row_data for r in parse_result.rows]
             if self.import_type == "patients":
-                self.preview_headers = ["#", "Last Name", "First Name", "Date of Birth", "Gender", "Status"]
+                self.preview_headers = ["#", "Nom", "Prénom", "Date naissance", "Genre", "Statut"]
             elif self.import_type == "doctors":
-                self.preview_headers = ["#", "Last Name", "First Name", "Specialization", "Status"]
+                self.preview_headers = ["#", "Nom", "Prénom", "Spécialisation", "Statut"]
+            elif self.import_type == "accounts_individual":
+                self.preview_headers = ["#", "Nom", "Prénom", "Ville", "Téléphone", "Statut"]
             else:
-                self.preview_headers = ["#", "Name", "City", "Phone", "Status"]
+                self.preview_headers = ["#", "Nom entreprise", "Contact", "Ville", "Téléphone", "Statut"]
             self.preview_rows = self._build_preview_rows(parse_result)
         except Exception as e:
             self.parse_error = f"Erreur de lecture : {e}"
@@ -318,6 +247,8 @@ class ImportState(ReflexMainState):
                             BulkImportService.import_patient_row(row_data)
                         elif self.import_type == "doctors":
                             BulkImportService.import_doctor_row(row_data)
+                        elif self.import_type == "accounts_individual":
+                            BulkImportService.import_individual_account_row(row_data)
                         else:
                             BulkImportService.import_account_row(row_data)
 
@@ -386,10 +317,23 @@ class ImportState(ReflexMainState):
                     r.row_data.get("specialization", ""),
                     status_text,
                 ]
+            elif self.import_type == "accounts_individual":
+                cells = [
+                    str(r.row_num),
+                    r.row_data.get("contact_last_name", ""),
+                    r.row_data.get("contact_first_name", ""),
+                    r.row_data.get("city", ""),
+                    r.row_data.get("phone", ""),
+                    status_text,
+                ]
             else:
+                first = r.row_data.get("contact_first_name", "").strip()
+                last = r.row_data.get("contact_last_name", "").strip()
+                contact = f"{first} {last}".strip() or "—"
                 cells = [
                     str(r.row_num),
                     r.row_data.get("name", ""),
+                    contact,
                     r.row_data.get("city", ""),
                     r.row_data.get("phone", ""),
                     status_text,
