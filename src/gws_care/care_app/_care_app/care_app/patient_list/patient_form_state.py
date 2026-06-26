@@ -544,6 +544,8 @@ class PatientFormState(FormDialogState, rx.State):
                 self.is_loading = False
         async with self:
             await self.close_dialog()
+        from ..patient_list.patient_list_state import PatientListState
+        yield PatientListState.on_load()
 
     @rx.event
     async def open_create_dialog(self):
@@ -869,6 +871,8 @@ class PatientFormState(FormDialogState, rx.State):
                 self.is_loading = False
         async with self:
             await self.close_dialog()
+        from ..patient_list.patient_list_state import PatientListState
+        yield PatientListState.on_load()
 
     # ── NIR validation ─────────────────────────────────────────────────────────
 

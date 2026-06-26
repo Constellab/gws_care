@@ -1,7 +1,7 @@
 """Patient create / edit form dialog component."""
 
 import reflex as rx
-from gws_reflex_base import form_dialog_component
+from gws_reflex_base import dialog_header
 
 from ..common.language_state import LanguageState
 from ..common.shared_address_phone_components import address_section, phone_input_field
@@ -335,19 +335,62 @@ def _form_fields() -> rx.Component:
 
 
 def patient_form_dialog() -> rx.Component:
-    """The patient create / edit dialog."""
-    return form_dialog_component(
-        state=PatientFormState,
-        title=rx.cond(
-            PatientFormState.is_create_mode,
-            LanguageState.tr["new_patient_title"],
-            LanguageState.tr["edit_patient_title"],
+    """The patient create / edit dialog.
+
+    Uses a manual rx.dialog.root instead of form_dialog_component to intentionally
+    omit on_interact_outside. When the account creation dialog opens on top of this
+    form, Radix UI would fire 'interact outside' on this dialog and silently close it,
+    losing all form data and preventing the patient from being saved.
+    """
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.vstack(
+                dialog_header(
+                    rx.cond(
+                        PatientFormState.is_create_mode,
+                        LanguageState.tr["new_patient_title"],
+                        LanguageState.tr["edit_patient_title"],
+                    ),
+                    close=PatientFormState.close_dialog,
+                ),
+                rx.dialog.description(
+                    rx.cond(
+                        PatientFormState.is_create_mode,
+                        LanguageState.tr["new_patient_desc"],
+                        LanguageState.tr["edit_patient_desc"],
+                    ),
+                    size="2",
+                    margin_bottom="1rem",
+                ),
+                rx.form(
+                    _form_fields(),
+                    rx.hstack(
+                        rx.button(
+                            "Annuler",
+                            type="button",
+                            variant="soft",
+                            color_scheme="gray",
+                            on_click=PatientFormState.close_dialog,
+                            disabled=PatientFormState.is_loading,
+                        ),
+                        rx.button(
+                            rx.spinner(loading=PatientFormState.is_loading),
+                            rx.cond(
+                                PatientFormState.is_create_mode,
+                                "Créer",
+                                "Sauvegarder",
+                            ),
+                            type="submit",
+                            disabled=PatientFormState.is_loading,
+                        ),
+                        margin_top="1em",
+                    ),
+                    on_submit=PatientFormState.submit_form,
+                ),
+                width="100%",
+            ),
+            max_width="720px",
+            on_escape_key_down=PatientFormState.close_dialog,
         ),
-        description=rx.cond(
-            PatientFormState.is_create_mode,
-            LanguageState.tr["new_patient_desc"],
-            LanguageState.tr["edit_patient_desc"],
-        ),
-        form_content=_form_fields(),
-        max_width="720px",
+        open=PatientFormState.dialog_opened,
     )
