@@ -173,6 +173,52 @@ _SEED: list[tuple[SaveExamTypeRefDTO, list[SaveExamParameterDTO]]] = [
             SaveExamParameterDTO(name="DFG (CKD-EPI)",    unit="mL/min/1.73m²", value_type="NUMERIC", ref_low=60.0, critical_low=15.0, is_required=True, display_order=4),
         ],
     ),
+
+    # ── Bilan ophtalmologique ─────────────────────────────────────────────
+    # Exemple avec paramètres de type TEXT : acuité exprimée en fraction (ex : "10/10")
+    (
+        SaveExamTypeRefDTO(
+            name="Bilan ophtalmologique",
+            category="CLINICAL",
+            department="Ophtalmologie",
+            description="Examen de la vision : acuité, champ visuel, vision des couleurs.",
+            allows_attachment=True,
+            requires_attachment=False,
+        ),
+        [
+            SaveExamParameterDTO(name="Acuité visuelle OD (sans correction)", unit=None, value_type="TEXT", is_required=True,  display_order=1),
+            SaveExamParameterDTO(name="Acuité visuelle OG (sans correction)", unit=None, value_type="TEXT", is_required=True,  display_order=2),
+            SaveExamParameterDTO(name="Acuité visuelle OD (avec correction)", unit=None, value_type="TEXT", is_required=False, display_order=3),
+            SaveExamParameterDTO(name="Acuité visuelle OG (avec correction)", unit=None, value_type="TEXT", is_required=False, display_order=4),
+            SaveExamParameterDTO(name="Vision des couleurs",                   unit=None, value_type="TEXT", is_required=False, display_order=5),
+            SaveExamParameterDTO(name="Champ visuel",                          unit=None, value_type="TEXT", is_required=False, display_order=6),
+            SaveExamParameterDTO(name="Tension oculaire OD",                   unit="mmHg", value_type="NUMERIC", ref_low=10.0, ref_high=21.0, critical_high=30.0, is_required=False, display_order=7),
+            SaveExamParameterDTO(name="Tension oculaire OG",                   unit="mmHg", value_type="NUMERIC", ref_low=10.0, ref_high=21.0, critical_high=30.0, is_required=False, display_order=8),
+        ],
+    ),
+
+    # ── Sérologies infectieuses ───────────────────────────────────────────
+    # Exemple avec paramètres de type BOOLEAN (Positif / Négatif)
+    (
+        SaveExamTypeRefDTO(
+            name="Sérologies infectieuses",
+            category="BIOLOGY",
+            department="Biologie",
+            description="Dépistage sérologique : hépatites B et C, VIH, syphilis.",
+            allows_attachment=True,
+            requires_attachment=False,
+            required_sample_type="Sang total (EDTA)",
+        ),
+        [
+            SaveExamParameterDTO(name="AgHBs (Hépatite B — antigène surface)", unit=None, value_type="BOOLEAN", is_required=True,  display_order=1),
+            SaveExamParameterDTO(name="Ac anti-HBs (Hépatite B — anticorps)",  unit=None, value_type="BOOLEAN", is_required=True,  display_order=2),
+            SaveExamParameterDTO(name="Ac anti-HBc (Hépatite B — core)",       unit=None, value_type="BOOLEAN", is_required=False, display_order=3),
+            SaveExamParameterDTO(name="Ac anti-VHC (Hépatite C)",              unit=None, value_type="BOOLEAN", is_required=True,  display_order=4),
+            SaveExamParameterDTO(name="Sérologie VIH (Ag/Ac combinés)",        unit=None, value_type="BOOLEAN", is_required=False, display_order=5),
+            SaveExamParameterDTO(name="TPHA (Syphilis)",                        unit=None, value_type="BOOLEAN", is_required=False, display_order=6),
+            SaveExamParameterDTO(name="VDRL (Syphilis — activité)",             unit=None, value_type="BOOLEAN", is_required=False, display_order=7),
+        ],
+    ),
 ]
 
 

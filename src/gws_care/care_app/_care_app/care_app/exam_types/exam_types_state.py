@@ -30,6 +30,18 @@ class ExamParamVM(BaseModel):
     is_required: bool
     is_active: bool = True
     display_order: int
+    code: str = ""
+    is_computed: bool = False
+    formula: str = ""
+    target_gender: str = "ALL"
+    ref_low_m: str = ""
+    ref_high_m: str = ""
+    critical_low_m: str = ""
+    critical_high_m: str = ""
+    ref_low_f: str = ""
+    ref_high_f: str = ""
+    critical_low_f: str = ""
+    critical_high_f: str = ""
 
 
 class ExamTypeFormVM(BaseModel):
@@ -53,6 +65,18 @@ class ExamParamFormVM(BaseModel):
     critical_high: str = ""
     is_required: bool = False
     display_order: int = 0
+    code: str = ""
+    is_computed: bool = False
+    formula: str = ""
+    target_gender: str = "ALL"
+    ref_low_m: str = ""
+    ref_high_m: str = ""
+    critical_low_m: str = ""
+    critical_high_m: str = ""
+    ref_low_f: str = ""
+    ref_high_f: str = ""
+    critical_low_f: str = ""
+    critical_high_f: str = ""
 
 
 class ExamTypesState(ReflexMainState):
@@ -60,6 +84,7 @@ class ExamTypesState(ReflexMainState):
     selected_type_id: str = ""
     selected_type_name: str = ""
     selected_type_category: str = ""
+    selected_type_department: str = ""
     selected_type_description: str = ""
     selected_type_active: bool = True
     selected_type_allows_attachment: bool = False
@@ -91,6 +116,7 @@ class ExamTypesState(ReflexMainState):
     param_form: ExamParamFormVM = ExamParamFormVM()
     param_form_error: str = ""
     is_saving_param: bool = False
+    available_param_codes: list[str] = []  # codes of sibling params (for formula references)
 
     # Confirm archivage — paramètre
     confirm_deactivate_param_open: bool = False
@@ -139,6 +165,7 @@ class ExamTypesState(ReflexMainState):
             self.selected_type_id = found.id
             self.selected_type_name = found.name
             self.selected_type_category = found.category_label
+            self.selected_type_department = found.department
             self.selected_type_description = ""
             self.selected_type_active = found.is_active
             self.selected_type_allows_attachment = found.allows_attachment
@@ -153,6 +180,8 @@ class ExamTypesState(ReflexMainState):
         self.view = "list"
         self.selected_type_id = ""
         self.selected_type_name = ""
+        self.selected_type_department = ""
+        self.selected_type_category = ""
         self.parameters = []
         self.error = ""
         self.success = ""
@@ -257,6 +286,7 @@ class ExamTypesState(ReflexMainState):
         self.is_editing_param = False
         self.edit_param_id = ""
         self.param_form_error = ""
+        self.available_param_codes = [p.code for p in self.parameters if p.code and p.is_active]
         self.param_dialog_open = True
 
     @rx.event
@@ -278,10 +308,27 @@ class ExamTypesState(ReflexMainState):
             critical_high=found.critical_high,
             is_required=found.is_required,
             display_order=found.display_order,
+            code=found.code,
+            is_computed=found.is_computed,
+            formula=found.formula,
+            target_gender=found.target_gender,
+            ref_low_m=found.ref_low_m,
+            ref_high_m=found.ref_high_m,
+            critical_low_m=found.critical_low_m,
+            critical_high_m=found.critical_high_m,
+            ref_low_f=found.ref_low_f,
+            ref_high_f=found.ref_high_f,
+            critical_low_f=found.critical_low_f,
+            critical_high_f=found.critical_high_f,
         )
         self.is_editing_param = True
         self.edit_param_id = param_id
         self.param_form_error = ""
+        # Exclude the param being edited from available codes (it can't reference itself)
+        self.available_param_codes = [
+            p.code for p in self.parameters
+            if p.code and p.is_active and p.id != param_id
+        ]
         self.param_dialog_open = True
 
     @rx.event
@@ -317,6 +364,70 @@ class ExamTypesState(ReflexMainState):
         self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "is_required": v})
 
     @rx.event
+    def set_param_code(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "code": v.strip().lower()})
+
+    @rx.event
+    def set_param_is_computed(self, v: bool):
+        updates = {"is_computed": v}
+        if v:
+            updates["value_type"] = "NUMERIC"
+        else:
+            updates["formula"] = ""
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), **updates})
+
+    @rx.event
+    def set_param_target_gender(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "target_gender": v})
+
+    @rx.event
+    def set_param_ref_low_m(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "ref_low_m": v})
+
+    @rx.event
+    def set_param_ref_high_m(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "ref_high_m": v})
+
+    @rx.event
+    def set_param_critical_low_m(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "critical_low_m": v})
+
+    @rx.event
+    def set_param_critical_high_m(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "critical_high_m": v})
+
+    @rx.event
+    def set_param_ref_low_f(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "ref_low_f": v})
+
+    @rx.event
+    def set_param_ref_high_f(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "ref_high_f": v})
+
+    @rx.event
+    def set_param_critical_low_f(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "critical_low_f": v})
+
+    @rx.event
+    def set_param_critical_high_f(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "critical_high_f": v})
+
+    @rx.event
+    def set_param_formula(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "formula": v})
+
+    @rx.event
+    def append_code_to_formula(self, code: str):
+        current = self.param_form.formula
+        if not current.strip():
+            new_formula = code
+        elif current.rstrip()[-1] in ("+", "-", "*", "/", "("):
+            new_formula = current.rstrip() + " " + code
+        else:
+            new_formula = current.rstrip() + " " + code
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "formula": new_formula})
+
+    @rx.event
     async def save_param(self):
         if not self.param_form.name.strip():
             self.param_form_error = "Le nom est obligatoire."
@@ -327,6 +438,20 @@ class ExamTypesState(ReflexMainState):
         if not self.selected_type_id:
             self.param_form_error = "Aucun type d'examen sélectionné."
             return
+        if self.param_form.is_computed and self.param_form.value_type != "NUMERIC":
+            self.param_form_error = "Un paramètre calculé doit être de type Numérique."
+            return
+        if self.param_form.is_computed:
+            if not self.param_form.formula.strip():
+                self.param_form_error = "La formule est obligatoire pour un paramètre calculé."
+                return
+            from gws_care.exam_type_ref.exam_formula_engine import ExamFormulaEngine
+            err = ExamFormulaEngine.validate(
+                self.param_form.formula, self.available_param_codes
+            )
+            if err:
+                self.param_form_error = err
+                return
         self.is_saving_param = True
         self.param_form_error = ""
         try:
@@ -350,6 +475,18 @@ class ExamTypesState(ReflexMainState):
                     critical_high=_parse_float(self.param_form.critical_high),
                     is_required=self.param_form.is_required,
                     display_order=self.param_form.display_order,
+                    code=self.param_form.code.strip().lower() or None,
+                    is_computed=self.param_form.is_computed,
+                    formula=self.param_form.formula.strip() or None,
+                    target_gender=self.param_form.target_gender or "ALL",
+                    ref_low_m=_parse_float(self.param_form.ref_low_m),
+                    ref_high_m=_parse_float(self.param_form.ref_high_m),
+                    critical_low_m=_parse_float(self.param_form.critical_low_m),
+                    critical_high_m=_parse_float(self.param_form.critical_high_m),
+                    ref_low_f=_parse_float(self.param_form.ref_low_f),
+                    ref_high_f=_parse_float(self.param_form.ref_high_f),
+                    critical_low_f=_parse_float(self.param_form.critical_low_f),
+                    critical_high_f=_parse_float(self.param_form.critical_high_f),
                 )
                 if self.is_editing_param:
                     ExamTypeRefService.update_parameter(self.edit_param_id, dto)
@@ -601,11 +738,11 @@ class ExamTypesState(ReflexMainState):
                     )
                     for r in rows
                 ]
-                # Catégories uniques déjà définies (pour l'autocomplete)
+                # Catégories uniques déjà définies (pour l'autocomplete) — valeur brute
                 seen = []
                 for r in rows:
-                    if r.category_label and r.category_label not in seen:
-                        seen.append(r.category_label)
+                    if r.category and r.category not in seen:
+                        seen.append(r.category)
                 self.existing_categories = seen
                 # Départements uniques (pour l'autocomplete)
                 seen_depts = []
@@ -623,16 +760,31 @@ class ExamTypesState(ReflexMainState):
             with await self.authenticate_user():
                 from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
                 detail = ExamTypeRefService.get(type_id)
+                def _f(v):
+                    return str(v) if v is not None else ""
+
                 self.parameters = [
                     ExamParamVM(
                         id=p.id, name=p.name, value_type=p.value_type,
                         unit=p.unit or "",
-                        ref_low=str(p.ref_low) if p.ref_low is not None else "",
-                        ref_high=str(p.ref_high) if p.ref_high is not None else "",
-                        critical_low=str(p.critical_low) if p.critical_low is not None else "",
-                        critical_high=str(p.critical_high) if p.critical_high is not None else "",
+                        ref_low=_f(p.ref_low),
+                        ref_high=_f(p.ref_high),
+                        critical_low=_f(p.critical_low),
+                        critical_high=_f(p.critical_high),
                         is_required=p.is_required, is_active=p.is_active,
                         display_order=p.display_order,
+                        code=p.code or "",
+                        is_computed=p.is_computed,
+                        formula=p.formula or "",
+                        target_gender=p.target_gender or "ALL",
+                        ref_low_m=_f(p.ref_low_m),
+                        ref_high_m=_f(p.ref_high_m),
+                        critical_low_m=_f(p.critical_low_m),
+                        critical_high_m=_f(p.critical_high_m),
+                        ref_low_f=_f(p.ref_low_f),
+                        ref_high_f=_f(p.ref_high_f),
+                        critical_low_f=_f(p.critical_low_f),
+                        critical_high_f=_f(p.critical_high_f),
                     )
                     for p in detail.parameters
                 ]

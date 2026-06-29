@@ -2,7 +2,7 @@
 
 from enum import Enum
 
-from peewee import BooleanField, CharField, DoubleField, ForeignKeyField, IntegerField
+from peewee import BooleanField, CharField, DoubleField, ForeignKeyField, IntegerField, TextField
 
 from gws_care.core.care_db_manager import CareDbManager
 from gws_core import Model
@@ -41,6 +41,21 @@ class ExamParameter(Model):
     is_required: bool = BooleanField(default=False, null=False)
     is_active: bool = BooleanField(default=True, null=False)
     display_order: int = IntegerField(default=0, null=False)
+    # Computed parameter support
+    code: str = CharField(max_length=50, null=True)
+    is_computed: bool = BooleanField(default=False, null=False)
+    formula: str = TextField(null=True)
+    # Gender applicability: 'ALL' | 'M' | 'F'
+    target_gender: str = CharField(max_length=5, default="ALL", null=False)
+    # Gender-specific reference thresholds (override common when patient gender matches)
+    ref_low_m: float = DoubleField(null=True)
+    ref_high_m: float = DoubleField(null=True)
+    critical_low_m: float = DoubleField(null=True)
+    critical_high_m: float = DoubleField(null=True)
+    ref_low_f: float = DoubleField(null=True)
+    ref_high_f: float = DoubleField(null=True)
+    critical_low_f: float = DoubleField(null=True)
+    critical_high_f: float = DoubleField(null=True)
 
     class Meta:
         table_name = "gws_care_exam_parameter"

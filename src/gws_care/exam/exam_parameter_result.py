@@ -102,10 +102,11 @@ class ExamParameterResultService:
         value_text: str | None = None,
         value_boolean: bool | None = None,
         comment: str | None = None,
+        patient_gender: str | None = None,
     ) -> ExamParameterResult:
         """Create or update a result row and auto-compute its status."""
         param = ExamParameter.get_by_id(parameter_id)
-        status = cls._compute_status(param, value_numeric, value_text, value_boolean)
+        status = cls._compute_status(param, value_numeric, value_text, value_boolean, patient_gender)
         result, _ = ExamParameterResult.get_or_create(
             exam_id=exam_id,
             parameter_id=parameter_id,
@@ -119,7 +120,7 @@ class ExamParameterResultService:
         return result
 
     @classmethod
-    def bulk_upsert(cls, exam_id: str, entries: list[dict]) -> None:
+    def bulk_upsert(cls, exam_id: str, entries: list[dict], patient_gender: str | None = None) -> None:
         """Upsert multiple results at once.
 
         Each entry dict: {parameter_id, value_numeric?, value_text?, value_boolean?, comment?}
@@ -132,7 +133,65 @@ class ExamParameterResultService:
                 value_text=entry.get("value_text"),
                 value_boolean=entry.get("value_boolean"),
                 comment=entry.get("comment"),
+                patient_gender=patient_gender,
             )
+
+    @classmethod
+    def bulk_upsert_with_computed(
+        cls, exam_id: str, exam_type_ref_id: str, entries: list[dict],
+        patient_gender: str | None = None,
+    ) -> None:
+        """Upsert manual entries then evaluate and save computed parameters.
+
+        After saving manual values, any parameter with is_computed=True and a
+        formula is auto-evaluated using the manual values as the variable context.
+        Chaining is supported: computed params are evaluated in display_order so
+        a computed param can reference another computed param defined earlier.
+
+        entries: list of {parameter_id, value_numeric?, value_text?, value_boolean?, comment?}
+        """
+        from gws_care.exam_type_ref.exam_formula_engine import ExamFormulaEngine, FormulaEvaluationError
+
+        # 1. Save all manual (non-computed) entries
+        manual_only = [
+            e for e in entries
+            if not ExamParameter.get_by_id(e["parameter_id"]).is_computed
+        ]
+        cls.bulk_upsert(exam_id, manual_only, patient_gender=patient_gender)
+
+        # 2. Build code → value context from manual results
+        all_params = list(
+            ExamParameter.select()
+            .where(
+                (ExamParameter.exam_type_ref == exam_type_ref_id)
+                & (ExamParameter.is_active == True)
+            )
+            .order_by(ExamParameter.display_order)
+        )
+
+        # Seed context with manual values (by code)
+        context: dict[str, float] = {}
+        entry_by_id = {e["parameter_id"]: e for e in entries}
+        for param in all_params:
+            if param.code and not param.is_computed:
+                entry = entry_by_id.get(str(param.id))
+                val = entry.get("value_numeric") if entry else None
+                if val is not None:
+                    context[param.code] = float(val)
+
+        # 3. Evaluate computed parameters in display_order (supports chaining)
+        for param in all_params:
+            if not param.is_computed or not param.formula:
+                continue
+            try:
+                value = ExamFormulaEngine.evaluate(param.formula, context)
+                cls.upsert(exam_id=exam_id, parameter_id=str(param.id), value_numeric=value,
+                           patient_gender=patient_gender)
+                if param.code:
+                    context[param.code] = value
+            except FormulaEvaluationError:
+                # Missing dependencies — leave this param as PENDING
+                pass
 
     @classmethod
     def list_for_exam(cls, exam_id: str) -> list[ExamParameterResult]:
@@ -186,17 +245,38 @@ class ExamParameterResultService:
         value_numeric: float | None,
         value_text: str | None,
         value_boolean: bool | None,
+        patient_gender: str | None = None,
     ) -> ResultStatus:
         if value_boolean is not None:
             return ResultStatus.POSITIVE if value_boolean else ResultStatus.NEGATIVE
         if value_numeric is not None:
-            if param.critical_low is not None and value_numeric <= param.critical_low:
+            target = getattr(param, "target_gender", "ALL") or "ALL"
+            # Parameter not applicable to this patient's gender
+            if target != "ALL" and patient_gender and patient_gender != target:
+                return ResultStatus.PENDING
+            # Pick gender-specific thresholds when available, else fall back to common
+            if patient_gender == "M" and (param.ref_low_m is not None or param.ref_high_m is not None):
+                ref_low = param.ref_low_m
+                ref_high = param.ref_high_m
+                crit_low = param.critical_low_m
+                crit_high = param.critical_high_m
+            elif patient_gender == "F" and (param.ref_low_f is not None or param.ref_high_f is not None):
+                ref_low = param.ref_low_f
+                ref_high = param.ref_high_f
+                crit_low = param.critical_low_f
+                crit_high = param.critical_high_f
+            else:
+                ref_low = param.ref_low
+                ref_high = param.ref_high
+                crit_low = param.critical_low
+                crit_high = param.critical_high
+            if crit_low is not None and value_numeric <= crit_low:
                 return ResultStatus.CRITICAL_LOW
-            if param.critical_high is not None and value_numeric >= param.critical_high:
+            if crit_high is not None and value_numeric >= crit_high:
                 return ResultStatus.CRITICAL_HIGH
-            if param.ref_low is not None and value_numeric < param.ref_low:
+            if ref_low is not None and value_numeric < ref_low:
                 return ResultStatus.ABNORMAL_LOW
-            if param.ref_high is not None and value_numeric > param.ref_high:
+            if ref_high is not None and value_numeric > ref_high:
                 return ResultStatus.ABNORMAL_HIGH
             return ResultStatus.NORMAL
         if value_text is not None:

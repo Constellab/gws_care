@@ -87,6 +87,7 @@ class ExamTypeRefService:
     @classmethod
     def add_parameter(cls, exam_type_ref_id: str, dto: SaveExamParameterDTO) -> ExamParameterDTO:
         ref = ExamTypeRef.get_by_id_and_check(exam_type_ref_id)
+        cls._validate_code_unique(exam_type_ref_id, dto.code, exclude_id=None)
         p = ExamParameter()
         p.exam_type_ref = ref
         p.name = dto.name
@@ -98,12 +99,25 @@ class ExamTypeRefService:
         p.critical_high = dto.critical_high
         p.is_required = dto.is_required
         p.display_order = dto.display_order
+        p.code = dto.code or None
+        p.is_computed = dto.is_computed
+        p.formula = dto.formula or None
+        p.target_gender = dto.target_gender or "ALL"
+        p.ref_low_m = dto.ref_low_m
+        p.ref_high_m = dto.ref_high_m
+        p.critical_low_m = dto.critical_low_m
+        p.critical_high_m = dto.critical_high_m
+        p.ref_low_f = dto.ref_low_f
+        p.ref_high_f = dto.ref_high_f
+        p.critical_low_f = dto.critical_low_f
+        p.critical_high_f = dto.critical_high_f
         p.save()
         return cls._param_to_dto(p)
 
     @classmethod
     def update_parameter(cls, parameter_id: str, dto: SaveExamParameterDTO) -> ExamParameterDTO:
         p = ExamParameter.get_by_id_and_check(parameter_id)
+        cls._validate_code_unique(str(p.exam_type_ref_id), dto.code, exclude_id=parameter_id)
         p.name = dto.name
         p.value_type = dto.value_type
         p.unit = dto.unit
@@ -113,6 +127,18 @@ class ExamTypeRefService:
         p.critical_high = dto.critical_high
         p.is_required = dto.is_required
         p.display_order = dto.display_order
+        p.code = dto.code or None
+        p.is_computed = dto.is_computed
+        p.formula = dto.formula or None
+        p.target_gender = dto.target_gender or "ALL"
+        p.ref_low_m = dto.ref_low_m
+        p.ref_high_m = dto.ref_high_m
+        p.critical_low_m = dto.critical_low_m
+        p.critical_high_m = dto.critical_high_m
+        p.ref_low_f = dto.ref_low_f
+        p.ref_high_f = dto.ref_high_f
+        p.critical_low_f = dto.critical_low_f
+        p.critical_high_f = dto.critical_high_f
         p.save()
         return cls._param_to_dto(p)
 
@@ -172,4 +198,37 @@ class ExamTypeRefService:
             is_required=p.is_required,
             is_active=p.is_active,
             display_order=p.display_order,
+            code=p.code or None,
+            is_computed=bool(p.is_computed),
+            formula=p.formula or None,
+            target_gender=p.target_gender or "ALL",
+            ref_low_m=p.ref_low_m,
+            ref_high_m=p.ref_high_m,
+            critical_low_m=p.critical_low_m,
+            critical_high_m=p.critical_high_m,
+            ref_low_f=p.ref_low_f,
+            ref_high_f=p.ref_high_f,
+            critical_low_f=p.critical_low_f,
+            critical_high_f=p.critical_high_f,
         )
+
+    @classmethod
+    def _validate_code_unique(
+        cls, exam_type_ref_id: str, code: str | None, exclude_id: str | None
+    ) -> None:
+        """Raise ValueError if code is already used by another parameter in the same exam type."""
+        if not code:
+            return
+        query = (
+            ExamParameter.select()
+            .where(
+                (ExamParameter.exam_type_ref == exam_type_ref_id)
+                & (ExamParameter.code == code)
+            )
+        )
+        if exclude_id:
+            query = query.where(ExamParameter.id != exclude_id)
+        if query.exists():
+            raise ValueError(
+                f"Le code '{code}' est déjà utilisé par un autre paramètre de cet examen."
+            )

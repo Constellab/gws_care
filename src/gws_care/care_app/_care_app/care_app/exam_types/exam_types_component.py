@@ -181,7 +181,23 @@ def _param_row(p: ExamParamVM) -> rx.Component:
                 rx.text(p.name, size="2", weight="medium",
                         color=rx.cond(p.is_active, "inherit", "var(--gray-8)")),
                 rx.cond(
-                    p.is_required & p.is_active,
+                    p.is_computed & p.is_active,
+                    rx.tooltip(
+                        rx.badge("Calculé", color_scheme="yellow", size="1", variant="soft"),
+                        content=rx.cond(p.formula != "", "Formule : " + p.formula, "Paramètre calculé"),
+                    ),
+                    rx.fragment(),
+                ),
+                rx.cond(
+                    (p.target_gender != "ALL") & p.is_active,
+                    rx.badge(
+                        rx.cond(p.target_gender == "M", "Homme", "Femme"),
+                        color_scheme="pink", size="1", variant="soft",
+                    ),
+                    rx.fragment(),
+                ),
+                rx.cond(
+                    p.is_required & p.is_active & ~p.is_computed,
                     rx.badge("Obligatoire", color_scheme="red", size="1"),
                     rx.fragment(),
                 ),
@@ -302,6 +318,11 @@ def _detail_view() -> rx.Component:
                     rx.heading(ExamTypesState.selected_type_name, size="5"),
                     rx.hstack(
                         rx.badge(ExamTypesState.selected_type_category, color_scheme="blue", variant="soft", size="1"),
+                        rx.cond(
+                            ExamTypesState.selected_type_department != "",
+                            rx.badge(ExamTypesState.selected_type_department, color_scheme="purple", variant="soft", size="1"),
+                            rx.fragment(),
+                        ),
                         rx.cond(
                             ExamTypesState.selected_type_active,
                             rx.badge("Actif", color_scheme="green", size="1", variant="soft"),
@@ -543,6 +564,19 @@ def _type_dialog() -> rx.Component:
     )
 
 
+def _formula_hint(code: str) -> rx.Component:
+    return rx.badge(
+        rx.icon("plus", size=10),
+        code,
+        color_scheme="blue",
+        variant="outline",
+        size="1",
+        cursor="pointer",
+        on_click=lambda: ExamTypesState.append_code_to_formula(code),
+        _hover={"background": "var(--blue-3)", "border_color": "var(--blue-9)"},
+    )
+
+
 def _param_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
@@ -574,11 +608,104 @@ def _param_dialog() -> rx.Component:
                             ),
                             value=ExamTypesState.param_form.value_type,
                             on_change=ExamTypesState.set_param_value_type,
+                            disabled=ExamTypesState.param_form.is_computed,
                         ),
                         spacing="1",
                     ),
                     columns="2", spacing="4", width="100%",
                 ),
+                # ── Code d'identification ────────────────────────────────────
+                rx.vstack(
+                    rx.hstack(
+                        rx.text("Code d'identification", size="2", weight="medium"),
+                        rx.tooltip(
+                            rx.icon("info", size=14, color="var(--gray-9)"),
+                            content="Identifiant court (lettres, chiffres, _) utilisé dans les formules pour référencer ce paramètre.",
+                        ),
+                        spacing="1", align="center",
+                    ),
+                    rx.input(
+                        placeholder="ex: hematocrite, globules_rouges, vgm…",
+                        value=ExamTypesState.param_form.code,
+                        on_change=ExamTypesState.set_param_code,
+                        width="100%",
+                    ),
+                    spacing="1", width="100%",
+                ),
+                # ── Paramètre calculé ────────────────────────────────────────
+                rx.hstack(
+                    rx.vstack(
+                        rx.text("Paramètre calculé", size="2", weight="medium"),
+                        rx.text(
+                            "La valeur est dérivée d'une formule basée sur d'autres paramètres.",
+                            size="1", color="var(--gray-9)",
+                        ),
+                        spacing="0",
+                    ),
+                    rx.spacer(),
+                    rx.switch(
+                        checked=ExamTypesState.param_form.is_computed,
+                        on_change=ExamTypesState.set_param_is_computed,
+                    ),
+                    width="100%", align="center",
+                    padding="0.5rem 0.75rem",
+                    border="1px solid var(--gray-4)",
+                    border_radius="var(--radius-2)",
+                    background=rx.cond(
+                        ExamTypesState.param_form.is_computed,
+                        "var(--yellow-2)",
+                        "var(--gray-1)",
+                    ),
+                ),
+                # ── Formule (visible si is_computed) ─────────────────────────
+                rx.cond(
+                    ExamTypesState.param_form.is_computed,
+                    rx.vstack(
+                        rx.hstack(
+                            rx.text("Formule *", size="2", weight="medium"),
+                            rx.badge("Calculé", color_scheme="yellow", size="1", variant="soft"),
+                            spacing="2", align="center",
+                        ),
+                        rx.text(
+                            "Utilisez les codes des autres paramètres. Opérateurs : + - * / **",
+                            size="1", color="var(--gray-9)",
+                        ),
+                        rx.text_area(
+                            placeholder="ex: hematocrite * 10 / globules_rouges",
+                            value=ExamTypesState.param_form.formula,
+                            on_change=ExamTypesState.set_param_formula,
+                            width="100%",
+                            rows="2",
+                            font_family="monospace",
+                        ),
+                        rx.cond(
+                            ExamTypesState.available_param_codes.length() > 0,
+                            rx.vstack(
+                                rx.text(
+                                    "Cliquez sur un code pour l'insérer dans la formule :",
+                                    size="1", color="var(--gray-9)",
+                                ),
+                                rx.flex(
+                                    rx.foreach(ExamTypesState.available_param_codes, _formula_hint),
+                                    flex_wrap="wrap",
+                                    gap="0.3rem",
+                                ),
+                                spacing="1", width="100%",
+                            ),
+                            rx.text(
+                                "Aucun autre paramètre avec un code défini.",
+                                size="1", color="var(--gray-8)",
+                            ),
+                        ),
+                        spacing="2", width="100%",
+                        padding="0.75rem",
+                        border="1px solid var(--yellow-6)",
+                        border_radius="var(--radius-2)",
+                        background="var(--yellow-2)",
+                    ),
+                    rx.fragment(),
+                ),
+                # ── Unité ────────────────────────────────────────────────────
                 rx.vstack(
                     rx.text("Unité", size="2", weight="medium"),
                     rx.input(
@@ -589,43 +716,179 @@ def _param_dialog() -> rx.Component:
                     ),
                     spacing="1", width="100%",
                 ),
-                rx.text("Valeurs de référence", size="2", weight="medium", color="var(--gray-11)"),
-                rx.grid(
-                    rx.vstack(
-                        rx.text("Ref. basse", size="1", color="var(--gray-9)"),
-                        rx.input(placeholder="ex: 4.0", type="number",
-                                 value=ExamTypesState.param_form.ref_low,
-                                 on_change=ExamTypesState.set_param_ref_low, width="100%"),
-                        spacing="1",
+                # ── Applicabilité + seuils par sexe ──────────────────────────
+                rx.vstack(
+                    rx.hstack(
+                        rx.text("Valeurs de référence", size="2", weight="medium", color="var(--gray-11)"),
+                        rx.spacer(),
+                        rx.text("Applicable à :", size="1", color="var(--gray-9)"),
+                        rx.select.root(
+                            rx.select.trigger(width="160px"),
+                            rx.select.content(
+                                rx.select.item("Indifférent (tous)", value="ALL"),
+                                rx.select.item("Homme uniquement", value="M"),
+                                rx.select.item("Femme uniquement", value="F"),
+                            ),
+                            value=ExamTypesState.param_form.target_gender,
+                            on_change=ExamTypesState.set_param_target_gender,
+                            size="1",
+                        ),
+                        width="100%", align="center",
                     ),
+                    # Section seuils communs / par défaut
                     rx.vstack(
-                        rx.text("Ref. haute", size="1", color="var(--gray-9)"),
-                        rx.input(placeholder="ex: 10.0", type="number",
-                                 value=ExamTypesState.param_form.ref_high,
-                                 on_change=ExamTypesState.set_param_ref_high, width="100%"),
-                        spacing="1",
+                        rx.text(
+                            rx.cond(
+                                ExamTypesState.param_form.target_gender == "ALL",
+                                "Commun (par défaut)",
+                                rx.cond(
+                                    ExamTypesState.param_form.target_gender == "M",
+                                    "Seuils Homme",
+                                    "Seuils Femme",
+                                ),
+                            ),
+                            size="1", weight="medium", color="var(--gray-9)",
+                        ),
+                        rx.grid(
+                            rx.vstack(
+                                rx.text("Ref. basse", size="1", color="var(--gray-9)"),
+                                rx.input(placeholder="ex: 4.0", type="number",
+                                         value=ExamTypesState.param_form.ref_low,
+                                         on_change=ExamTypesState.set_param_ref_low, width="100%"),
+                                spacing="1",
+                            ),
+                            rx.vstack(
+                                rx.text("Ref. haute", size="1", color="var(--gray-9)"),
+                                rx.input(placeholder="ex: 10.0", type="number",
+                                         value=ExamTypesState.param_form.ref_high,
+                                         on_change=ExamTypesState.set_param_ref_high, width="100%"),
+                                spacing="1",
+                            ),
+                            rx.vstack(
+                                rx.text("Critique bas", size="1", color="var(--gray-9)"),
+                                rx.input(placeholder="ex: 2.0", type="number",
+                                         value=ExamTypesState.param_form.critical_low,
+                                         on_change=ExamTypesState.set_param_critical_low, width="100%"),
+                                spacing="1",
+                            ),
+                            rx.vstack(
+                                rx.text("Critique haut", size="1", color="var(--gray-9)"),
+                                rx.input(placeholder="ex: 15.0", type="number",
+                                         value=ExamTypesState.param_form.critical_high,
+                                         on_change=ExamTypesState.set_param_critical_high, width="100%"),
+                                spacing="1",
+                            ),
+                            columns="4", spacing="2", width="100%",
+                        ),
+                        spacing="1", width="100%",
                     ),
-                    rx.vstack(
-                        rx.text("Seuil critique bas", size="1", color="var(--gray-9)"),
-                        rx.input(placeholder="ex: 2.0", type="number",
-                                 value=ExamTypesState.param_form.critical_low,
-                                 on_change=ExamTypesState.set_param_critical_low, width="100%"),
-                        spacing="1",
+                    # Section seuils Homme — visible seulement si ALL
+                    rx.cond(
+                        ExamTypesState.param_form.target_gender == "ALL",
+                        rx.vstack(
+                            rx.hstack(
+                                rx.icon("male", size=13, color="var(--blue-9)"),
+                                rx.text("Homme (si différent)", size="1", weight="medium", color="var(--blue-9)"),
+                                spacing="1", align="center",
+                            ),
+                            rx.grid(
+                                rx.vstack(
+                                    rx.text("Ref. basse", size="1", color="var(--gray-9)"),
+                                    rx.input(placeholder="—", type="number",
+                                             value=ExamTypesState.param_form.ref_low_m,
+                                             on_change=ExamTypesState.set_param_ref_low_m, width="100%"),
+                                    spacing="1",
+                                ),
+                                rx.vstack(
+                                    rx.text("Ref. haute", size="1", color="var(--gray-9)"),
+                                    rx.input(placeholder="—", type="number",
+                                             value=ExamTypesState.param_form.ref_high_m,
+                                             on_change=ExamTypesState.set_param_ref_high_m, width="100%"),
+                                    spacing="1",
+                                ),
+                                rx.vstack(
+                                    rx.text("Critique bas", size="1", color="var(--gray-9)"),
+                                    rx.input(placeholder="—", type="number",
+                                             value=ExamTypesState.param_form.critical_low_m,
+                                             on_change=ExamTypesState.set_param_critical_low_m, width="100%"),
+                                    spacing="1",
+                                ),
+                                rx.vstack(
+                                    rx.text("Critique haut", size="1", color="var(--gray-9)"),
+                                    rx.input(placeholder="—", type="number",
+                                             value=ExamTypesState.param_form.critical_high_m,
+                                             on_change=ExamTypesState.set_param_critical_high_m, width="100%"),
+                                    spacing="1",
+                                ),
+                                columns="4", spacing="2", width="100%",
+                            ),
+                            spacing="1", width="100%",
+                            padding="0.5rem 0.75rem",
+                            border="1px solid var(--blue-4)",
+                            border_radius="var(--radius-2)",
+                            background="var(--blue-1)",
+                        ),
+                        rx.fragment(),
                     ),
-                    rx.vstack(
-                        rx.text("Seuil critique haut", size="1", color="var(--gray-9)"),
-                        rx.input(placeholder="ex: 15.0", type="number",
-                                 value=ExamTypesState.param_form.critical_high,
-                                 on_change=ExamTypesState.set_param_critical_high, width="100%"),
-                        spacing="1",
+                    # Section seuils Femme — visible seulement si ALL
+                    rx.cond(
+                        ExamTypesState.param_form.target_gender == "ALL",
+                        rx.vstack(
+                            rx.hstack(
+                                rx.icon("female", size=13, color="var(--pink-9)"),
+                                rx.text("Femme (si différent)", size="1", weight="medium", color="var(--pink-9)"),
+                                spacing="1", align="center",
+                            ),
+                            rx.grid(
+                                rx.vstack(
+                                    rx.text("Ref. basse", size="1", color="var(--gray-9)"),
+                                    rx.input(placeholder="—", type="number",
+                                             value=ExamTypesState.param_form.ref_low_f,
+                                             on_change=ExamTypesState.set_param_ref_low_f, width="100%"),
+                                    spacing="1",
+                                ),
+                                rx.vstack(
+                                    rx.text("Ref. haute", size="1", color="var(--gray-9)"),
+                                    rx.input(placeholder="—", type="number",
+                                             value=ExamTypesState.param_form.ref_high_f,
+                                             on_change=ExamTypesState.set_param_ref_high_f, width="100%"),
+                                    spacing="1",
+                                ),
+                                rx.vstack(
+                                    rx.text("Critique bas", size="1", color="var(--gray-9)"),
+                                    rx.input(placeholder="—", type="number",
+                                             value=ExamTypesState.param_form.critical_low_f,
+                                             on_change=ExamTypesState.set_param_critical_low_f, width="100%"),
+                                    spacing="1",
+                                ),
+                                rx.vstack(
+                                    rx.text("Critique haut", size="1", color="var(--gray-9)"),
+                                    rx.input(placeholder="—", type="number",
+                                             value=ExamTypesState.param_form.critical_high_f,
+                                             on_change=ExamTypesState.set_param_critical_high_f, width="100%"),
+                                    spacing="1",
+                                ),
+                                columns="4", spacing="2", width="100%",
+                            ),
+                            spacing="1", width="100%",
+                            padding="0.5rem 0.75rem",
+                            border="1px solid var(--pink-4)",
+                            border_radius="var(--radius-2)",
+                            background="var(--pink-1)",
+                        ),
+                        rx.fragment(),
                     ),
-                    columns="2", spacing="3", width="100%",
+                    spacing="2", width="100%",
                 ),
-                rx.hstack(
-                    rx.text("Paramètre obligatoire", size="2"),
-                    rx.switch(checked=ExamTypesState.param_form.is_required,
-                              on_change=ExamTypesState.set_param_required),
-                    spacing="2", align="center",
+                rx.cond(
+                    ~ExamTypesState.param_form.is_computed,
+                    rx.hstack(
+                        rx.text("Paramètre obligatoire", size="2"),
+                        rx.switch(checked=ExamTypesState.param_form.is_required,
+                                  on_change=ExamTypesState.set_param_required),
+                        spacing="2", align="center",
+                    ),
+                    rx.fragment(),
                 ),
                 rx.cond(
                     ExamTypesState.param_form_error != "",
@@ -644,7 +907,7 @@ def _param_dialog() -> rx.Component:
                 ),
                 spacing="2", justify="end", margin_top="1rem", width="100%",
             ),
-            max_width="520px",
+            max_width="560px",
         ),
         open=ExamTypesState.param_dialog_open,
         on_open_change=lambda _: ExamTypesState.close_param_dialog(),

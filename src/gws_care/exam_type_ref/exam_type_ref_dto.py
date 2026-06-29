@@ -16,6 +16,18 @@ class ExamParameterDTO(BaseModel):
     is_required: bool = False
     is_active: bool = True
     display_order: int = 0
+    code: str | None = None
+    is_computed: bool = False
+    formula: str | None = None
+    target_gender: str = "ALL"
+    ref_low_m: float | None = None
+    ref_high_m: float | None = None
+    critical_low_m: float | None = None
+    critical_high_m: float | None = None
+    ref_low_f: float | None = None
+    ref_high_f: float | None = None
+    critical_low_f: float | None = None
+    critical_high_f: float | None = None
 
 
 class SaveExamParameterDTO(BaseModel):
@@ -28,6 +40,18 @@ class SaveExamParameterDTO(BaseModel):
     critical_high: float | None = None
     is_required: bool = False
     display_order: int = 0
+    code: str | None = None
+    is_computed: bool = False
+    formula: str | None = None
+    target_gender: str = "ALL"
+    ref_low_m: float | None = None
+    ref_high_m: float | None = None
+    critical_low_m: float | None = None
+    critical_high_m: float | None = None
+    ref_low_f: float | None = None
+    ref_high_f: float | None = None
+    critical_low_f: float | None = None
+    critical_high_f: float | None = None
 
 
 class ExamTypeRefDTO(BaseModel):
