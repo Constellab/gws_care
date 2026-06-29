@@ -3,11 +3,11 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..appointment_list.appointment_form_component import appointment_form_dialog
+from ..appointment_list.appointment_form_state import AppointmentFormState
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
-from ..common.patient_picker_component import patient_picker_widget
 from .appointments_list_state import (
-    AppointmentPatientAccount,
     AppointmentRowDTO,
     AppointmentsListState,
     CalendarDayDTO,
@@ -100,10 +100,6 @@ def _appointment_row(appt: AppointmentRowDTO) -> rx.Component:
         _hover={"background": "var(--gray-2)", "cursor": "pointer"},
         on_click=lambda: AppointmentsListState.go_to_appointment(appt.id),
     )
-
-
-def _patient_account_option(option: AppointmentPatientAccount) -> rx.Component:
-    return rx.select.item(option.name, value=option.id)
 
 
 # ── Calendar view ─────────────────────────────────────────────────────────────
@@ -231,156 +227,18 @@ def _calendar_view() -> rx.Component:
     )
 
 
-# ── New appointment dialog ────────────────────────────────────────────────────
-
-def _new_appt_dialog() -> rx.Component:
-    return rx.dialog.root(
-        rx.dialog.content(
-            rx.dialog.title(LanguageState.tr["new_appointment_form_title"]),
-            rx.vstack(
-                rx.vstack(
-                    rx.text(LanguageState.tr["field_patient_required"], size="2", weight="medium"),
-                    patient_picker_widget(AppointmentsListState),
-                    spacing="1",
-                    width="100%",
-                ),
-                rx.vstack(
-                    rx.text(LanguageState.tr["field_datetime"], size="2", weight="medium"),
-                    rx.input(
-                        type="datetime-local",
-                        value=AppointmentsListState.new_appt_scheduled_at,
-                        on_change=AppointmentsListState.set_new_appt_scheduled_at,
-                        size="2",
-                        width="100%",
-                    ),
-                    spacing="1",
-                    width="100%",
-                ),
-                rx.vstack(
-                    rx.text(LanguageState.tr["place_of_appointment_label"], size="2", weight="medium"),
-                    rx.select.root(
-                        rx.select.trigger(placeholder=LanguageState.tr["place_of_appointment_label"]),
-                        rx.select.content(
-                            rx.select.item(LanguageState.tr["appt_mode_at_home"], value="at_home"),
-                            rx.select.item(LanguageState.tr["appt_mode_address"], value="address"),
-                            rx.select.item(LanguageState.tr["appt_mode_visio"], value="visio"),
-                            rx.select.item(LanguageState.tr["appt_mode_hospital"], value="hospital"),
-                        ),
-                        value=AppointmentsListState.new_appt_mode,
-                        on_change=AppointmentsListState.set_new_appt_mode,
-                        size="2",
-                        width="100%",
-                    ),
-                    spacing="1",
-                    width="100%",
-                ),
-                rx.cond(
-                    AppointmentsListState.new_appt_mode == "address",
-                    rx.vstack(
-                        rx.text(LanguageState.tr["appt_address_label"], size="2", weight="medium"),
-                        rx.hstack(
-                            rx.input(
-                                placeholder=LanguageState.tr["appt_address_placeholder"],
-                                value=AppointmentsListState.new_appt_address,
-                                on_change=AppointmentsListState.set_new_appt_address,
-                                size="2",
-                                flex="1",
-                            ),
-                            rx.button(
-                                rx.icon("map-pin", size=14),
-                                LanguageState.tr["open_in_google_maps_btn"],
-                                on_click=AppointmentsListState.open_new_appt_address_in_google_maps,
-                                variant="soft",
-                                size="2",
-                            ),
-                            spacing="2",
-                            width="100%",
-                            align="center",
-                        ),
-                        spacing="1",
-                        width="100%",
-                    ),
-                ),
-                rx.cond(
-                    AppointmentsListState.picker_selected_id != "",
-                    rx.vstack(
-                        rx.text(LanguageState.tr["col_account_name"], size="2", weight="medium"),
-                        rx.cond(
-                            AppointmentsListState.new_appt_patient_accounts.length() > 0,
-                            rx.select.root(
-                                rx.select.trigger(
-                                    placeholder=LanguageState.tr["select_account_placeholder"]
-                                ),
-                                rx.select.content(
-                                    rx.foreach(
-                                        AppointmentsListState.new_appt_patient_accounts,
-                                        _patient_account_option,
-                                    )
-                                ),
-                                value=AppointmentsListState.new_appt_account_id,
-                                on_change=AppointmentsListState.set_new_appt_account_id,
-                                size="2",
-                                width="100%",
-                            ),
-                            rx.callout(
-                                LanguageState.tr["no_account_alert_desc"],
-                                icon="triangle-alert",
-                                color_scheme="orange",
-                                size="1",
-                            ),
-                        ),
-                        spacing="1",
-                        width="100%",
-                    ),
-                ),
-                rx.cond(
-                    AppointmentsListState.new_appt_error != "",
-                    rx.callout(
-                        AppointmentsListState.new_appt_error,
-                        icon="triangle-alert",
-                        color_scheme="red",
-                        size="1",
-                    ),
-                ),
-                rx.hstack(
-                    rx.spacer(),
-                    rx.button(
-                        LanguageState.tr["cancel_btn"],
-                        variant="outline",
-                        on_click=AppointmentsListState.close_new_appt_dialog,
-                    ),
-                    rx.button(
-                        LanguageState.tr["create_visit_btn"],
-                        on_click=AppointmentsListState.save_new_appt,
-                        loading=AppointmentsListState.new_appt_is_saving,
-                        disabled=AppointmentsListState.picker_selected_id == "",
-                    ),
-                    spacing="2",
-                    width="100%",
-                ),
-                spacing="4",
-                width="100%",
-                padding_top="1rem",
-            ),
-            on_interact_outside=AppointmentsListState.close_new_appt_dialog,
-            on_escape_key_down=AppointmentsListState.close_new_appt_dialog,
-            max_width="700px",
-        ),
-        open=AppointmentsListState.show_new_appt_dialog,
-    )
-
-
 def appointments_list_page() -> rx.Component:
     """Appointments scheduling page — consultation visits with scheduling focus."""
     return main_component(
         page_layout(
+            appointment_form_dialog(),
             rx.hstack(
                 rx.heading(LanguageState.tr["appointments_page_title"], size="6"),
                 rx.spacer(),
                 rx.button(
                     rx.icon("plus", size=16),
                     LanguageState.tr["new_appointment_page_btn"],
-                    on_click=AppointmentsListState.open_new_appt_dialog,
+                    on_click=AppointmentFormState.open_create_dialog_standalone,
                     size="2",
                 ),
                 rx.segmented_control.root(
@@ -394,7 +252,6 @@ def appointments_list_page() -> rx.Component:
                 align="center",
                 spacing="3",
             ),
-            _new_appt_dialog(),
             # Filter bar
             rx.vstack(
                 rx.hstack(

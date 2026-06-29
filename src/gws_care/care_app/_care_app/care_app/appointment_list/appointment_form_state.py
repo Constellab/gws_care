@@ -474,7 +474,9 @@ class AppointmentFormState(FormDialogState, rx.State):
 
         yield rx.toast.success("Rendez-vous créé")
         from ..patient_detail.patient_detail_state import PatientDetailState
+        from ..appointments_list.appointments_list_state import AppointmentsListState
         yield PatientDetailState.on_load()
+        yield AppointmentsListState.on_load()
 
     async def _update(self, form_data: dict) -> AsyncGenerator:
         """Update an existing appointment."""
@@ -509,8 +511,10 @@ class AppointmentFormState(FormDialogState, rx.State):
             )
             AppointmentService.update_appointment(self._editing_appointment_id, dto)
 
-        yield rx.toast.success("Appointment updated")
+        yield rx.toast.success("Rendez-vous mis à jour")
         from .appointment_list_state import AppointmentListState
         from ..patient_detail.patient_detail_state import PatientDetailState
+        from ..appointments_list.appointments_list_state import AppointmentsListState
         yield AppointmentListState.on_load()
         yield PatientDetailState.on_load()
+        yield AppointmentsListState.on_load()

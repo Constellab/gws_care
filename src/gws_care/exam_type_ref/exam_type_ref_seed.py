@@ -14,6 +14,34 @@ from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
 # Each entry: (SaveExamTypeRefDTO, list[SaveExamParameterDTO with name, ...])
 _SEED: list[tuple[SaveExamTypeRefDTO, list[SaveExamParameterDTO]]] = [
 
+    # ── Constantes vitales ────────────────────────────────────────────────
+    # Taille + Poids → IMC calculé automatiquement ; FC, TA, Temp, SpO2
+    (
+        SaveExamTypeRefDTO(
+            name="Constantes vitales",
+            category="CLINICAL",
+            department="Médecine du travail",
+            description="Mesures anthropométriques et signes vitaux de base.",
+            allows_attachment=False,
+            requires_attachment=False,
+        ),
+        [
+            SaveExamParameterDTO(name="Taille",               code="taille", unit="cm",     value_type="NUMERIC", is_required=True,  display_order=1),
+            SaveExamParameterDTO(name="Poids",                code="poids",  unit="kg",     value_type="NUMERIC", is_required=True,  display_order=2),
+            SaveExamParameterDTO(
+                name="IMC", code="imc", unit="kg/m²", value_type="NUMERIC",
+                is_computed=True, formula="poids / (taille / 100) ** 2",
+                ref_low=18.5, ref_high=25.0, critical_low=13.0, critical_high=40.0,
+                is_required=False, display_order=3,
+            ),
+            SaveExamParameterDTO(name="Fréquence cardiaque",  code="fc",     unit="bpm",   value_type="NUMERIC", ref_low=50.0,  ref_high=100.0, critical_low=30.0,  critical_high=150.0, is_required=True,  display_order=4),
+            SaveExamParameterDTO(name="Tension systolique",   code="pas",    unit="mmHg",  value_type="NUMERIC", ref_low=90.0,  ref_high=140.0, critical_low=70.0,  critical_high=180.0, is_required=True,  display_order=5),
+            SaveExamParameterDTO(name="Tension diastolique",  code="pad",    unit="mmHg",  value_type="NUMERIC", ref_low=60.0,  ref_high=90.0,  critical_low=40.0,  critical_high=120.0, is_required=True,  display_order=6),
+            SaveExamParameterDTO(name="Température",          code="temp",   unit="°C",    value_type="NUMERIC", ref_low=36.1,  ref_high=37.5,  critical_low=34.0,  critical_high=40.0,  is_required=False, display_order=7),
+            SaveExamParameterDTO(name="SpO2",                 code="spo2",   unit="%",     value_type="NUMERIC", ref_low=95.0,  ref_high=100.0, critical_low=88.0,                       is_required=False, display_order=8),
+        ],
+    ),
+
     # ── Bilan hépatique ────────────────────────────────────────────────────
     (
         SaveExamTypeRefDTO(
