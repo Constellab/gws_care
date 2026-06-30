@@ -1298,7 +1298,7 @@ def _linked_doctor_row(doc: LinkedDoctorRowDTO) -> rx.Component:
                 rx.text(doc.full_name, size="2", weight="medium"),
                 rx.cond(
                     doc.from_appointment,
-                    rx.badge("Vu en rendez-vous", size="1", variant="soft", color_scheme="gray"),
+                    rx.badge(doc.appointment_role_label, size="1", variant="soft", color_scheme="gray"),
                     rx.fragment(),
                 ),
                 spacing="2", align="center",

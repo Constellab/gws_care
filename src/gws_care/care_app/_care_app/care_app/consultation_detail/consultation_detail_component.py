@@ -205,6 +205,48 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                 spacing="4",
                 width="100%",
             ),
+            # Doctor assignment — campaign visits only ("particulier" has no
+            # médecin du travail concept)
+            rx.cond(
+                c.is_campaign,
+                rx.hstack(
+                    _info_card(
+                        "Médecin clinique",
+                        rx.hstack(
+                            rx.cond(
+                                c.clinic_doctor_name != "",
+                                rx.text(c.clinic_doctor_name, size="2"),
+                                rx.text("—", size="2", color="var(--gray-7)"),
+                            ),
+                            rx.icon_button(
+                                rx.icon("pencil", size=12),
+                                size="1", variant="ghost",
+                                on_click=ConsultationDetailState.open_clinic_doctor_dialog,
+                            ),
+                            spacing="2", align="center",
+                        ),
+                    ),
+                    _info_card(
+                        "Médecin du travail",
+                        rx.hstack(
+                            rx.cond(
+                                c.work_doctor_name != "",
+                                rx.text(c.work_doctor_name, size="2"),
+                                rx.text("—", size="2", color="var(--gray-7)"),
+                            ),
+                            rx.icon_button(
+                                rx.icon("pencil", size=12),
+                                size="1", variant="ghost",
+                                on_click=ConsultationDetailState.open_work_doctor_dialog,
+                            ),
+                            spacing="2", align="center",
+                        ),
+                    ),
+                    spacing="4",
+                    width="100%",
+                ),
+                rx.fragment(),
+            ),
             spacing="3",
         ),
         width="100%",
@@ -870,118 +912,111 @@ def _tab_exam_params() -> rx.Component:
                         overflow_x="auto",
                         width="100%",
                     ),
-                    # Save + transmit row (lab view)
+                    # Action dropdown — choose what happens, then validate.
+                    # Options are filtered by role/status and by whether this
+                    # visit belongs to a campaign (see exam_action_options).
                     rx.cond(
                         can_edit,
-                        rx.hstack(
+                        rx.vstack(
+                            rx.hstack(
+                                rx.text(
+                                    "* paramètre requis",
+                                    size="1",
+                                    color="var(--gray-8)",
+                                    style={"font_style": "italic"},
+                                ),
+                                rx.spacer(),
+                                rx.select.root(
+                                    rx.select.trigger(placeholder="Choisir une action…", width="260px"),
+                                    rx.select.content(
+                                        rx.foreach(
+                                            ConsultationDetailState.exam_action_options,
+                                            lambda o: rx.select.item(o.label, value=o.value),
+                                        ),
+                                    ),
+                                    value=ConsultationDetailState.exam_action,
+                                    on_change=ConsultationDetailState.set_exam_action,
+                                    size="2",
+                                ),
+                                rx.button(
+                                    rx.cond(
+                                        ConsultationDetailState.is_saving_params
+                                        | ConsultationDetailState.is_transmitting,
+                                        rx.spinner(size="2"),
+                                        rx.icon("check", size=14),
+                                    ),
+                                    "Valider",
+                                    on_click=ConsultationDetailState.confirm_exam_action,
+                                    loading=(
+                                        ConsultationDetailState.is_saving_params
+                                        | ConsultationDetailState.is_transmitting
+                                    ),
+                                    size="2",
+                                ),
+                                width="100%",
+                                align="center",
+                                spacing="2",
+                            ),
                             rx.text(
-                                "* paramètre requis",
+                                "« Enregistrer » sauvegarde sans transmettre — vous pourrez transmettre plus tard. "
+                                "Les autres actions enregistrent et envoient en une seule fois.",
                                 size="1",
                                 color="var(--gray-8)",
                                 style={"font_style": "italic"},
                             ),
-                            rx.spacer(),
-                            rx.button(
-                                rx.cond(
-                                    ConsultationDetailState.is_saving_params,
-                                    rx.spinner(size="2"),
-                                    rx.icon("save", size=14),
-                                ),
-                                "Enregistrer",
-                                on_click=ConsultationDetailState.save_exam_params,
-                                loading=ConsultationDetailState.is_saving_params,
-                                size="2",
-                                variant="soft",
-                            ),
-                            rx.cond(
-                                ConsultationDetailState.active_exam_status == "in_progress_results",
-                                rx.button(
-                                    rx.cond(
-                                        ConsultationDetailState.is_transmitting,
-                                        rx.spinner(size="2"),
-                                        rx.icon("send", size=14),
-                                    ),
-                                    "Transmettre au médecin",
-                                    on_click=ConsultationDetailState.transmit_to_doctor,
-                                    loading=ConsultationDetailState.is_transmitting,
-                                    size="2",
-                                    color_scheme="blue",
-                                ),
-                                rx.fragment(),
-                            ),
-                            # Doctor: delegate result entry to the lab instead of
-                            # filling the values themselves
-                            rx.cond(
-                                ConsultationDetailState.is_doctor
-                                & (ConsultationDetailState.active_exam_status == "todo"),
-                                rx.button(
-                                    rx.cond(
-                                        ConsultationDetailState.is_transmitting,
-                                        rx.spinner(size="2"),
-                                        rx.icon("flask-conical", size=14),
-                                    ),
-                                    "Transmettre au labo",
-                                    on_click=ConsultationDetailState.transmit_to_lab,
-                                    loading=ConsultationDetailState.is_transmitting,
-                                    size="2",
-                                    variant="soft",
-                                    color_scheme="purple",
-                                ),
-                                rx.fragment(),
-                            ),
                             width="100%",
-                            align="center",
                             spacing="2",
                         ),
                     ),
-                    # Interpretation section (clinic doctor view)
+                    # Interpretation section (doctor view) — available as soon as
+                    # results exist, whether the doctor filled them directly or
+                    # the lab transmitted them. Campaign visits send the
+                    # interpretation to the médecin du travail; standalone
+                    # ("particulier") consultations close the exam directly,
+                    # since there is no work doctor to transmit to.
                     rx.cond(
-                        ConsultationDetailState.active_exam_status == "in_progress_interpretation",
-                        rx.cond(
-                            ConsultationDetailState.is_doctor,
-                            rx.vstack(
-                                rx.separator(width="100%"),
-                                rx.hstack(
-                                    rx.icon("stethoscope", size=16, color="var(--accent-9)"),
-                                    rx.heading("Interprétation médicale", size="4"),
-                                    spacing="2",
-                                    align="center",
-                                ),
-                                rx.text_area(
-                                    value=ConsultationDetailState.active_exam_interpretation,
-                                    on_change=ConsultationDetailState.set_active_exam_interpretation,
-                                    placeholder="Rédigez votre interprétation clinique…",
-                                    size="2",
-                                    width="100%",
-                                    rows="4",
-                                ),
-                                rx.hstack(
-                                    rx.spacer(),
-                                    rx.button(
-                                        rx.cond(
-                                            ConsultationDetailState.is_transmitting,
-                                            rx.spinner(size="2"),
-                                            rx.icon("send", size=14),
-                                        ),
-                                        "Transmettre au médecin du travail",
-                                        on_click=ConsultationDetailState.transmit_to_work_doctor,
-                                        loading=ConsultationDetailState.is_transmitting,
-                                        size="2",
-                                        color_scheme="green",
-                                        disabled=(ConsultationDetailState.active_exam_interpretation == ""),
-                                    ),
-                                    width="100%",
-                                ),
+                        ConsultationDetailState.is_doctor
+                        & (
+                            (ConsultationDetailState.active_exam_status == "in_progress_results")
+                            | (ConsultationDetailState.active_exam_status == "in_progress_interpretation")
+                        ),
+                        rx.vstack(
+                            rx.separator(width="100%"),
+                            rx.hstack(
+                                rx.icon("stethoscope", size=16, color="var(--accent-9)"),
+                                rx.heading("Interprétation médicale", size="4"),
+                                spacing="2",
+                                align="center",
+                            ),
+                            rx.text_area(
+                                value=ConsultationDetailState.active_exam_interpretation,
+                                on_change=ConsultationDetailState.set_active_exam_interpretation,
+                                placeholder="Rédigez votre interprétation clinique…",
+                                size="2",
                                 width="100%",
-                                spacing="3",
+                                rows="4",
                             ),
-                            # Non-doctor: show read-only waiting message
-                            rx.callout(
-                                "Résultats transmis — en attente d'interprétation par le médecin.",
-                                icon="clock",
-                                color_scheme="blue",
+                            rx.text(
+                                "Choisissez « Transmettre au médecin du travail » et/ou « Terminer » "
+                                "dans le menu d'action ci-dessus pour valider.",
                                 size="1",
+                                color="var(--gray-8)",
+                                style={"font_style": "italic"},
                             ),
+                            width="100%",
+                            spacing="3",
+                        ),
+                        rx.fragment(),
+                    ),
+                    # Lab / non-doctor: read-only waiting message once transmitted
+                    rx.cond(
+                        (ConsultationDetailState.active_exam_status == "in_progress_interpretation")
+                        & ~ConsultationDetailState.is_doctor,
+                        rx.callout(
+                            "Résultats transmis — en attente d'interprétation par le médecin.",
+                            icon="clock",
+                            color_scheme="blue",
+                            size="1",
                         ),
                         rx.fragment(),
                     ),
@@ -1046,6 +1081,99 @@ def _tab_exam_params() -> rx.Component:
 # ══════════════════════════════════════════════════════════════════════════════
 # Dialogs
 # ══════════════════════════════════════════════════════════════════════════════
+
+def _clinic_doctor_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Médecin clinique (PS Consulting)"),
+            rx.dialog.description(
+                "Choisissez le médecin clinique responsable de cette visite.",
+                size="2", color="var(--gray-11)",
+            ),
+            rx.vstack(
+                rx.select.root(
+                    rx.select.trigger(placeholder="Sélectionner un médecin…", width="100%"),
+                    rx.select.content(
+                        rx.select.item("— Aucun —", value="__none__"),
+                        rx.foreach(
+                            ConsultationDetailState.clinic_doctor_options,
+                            lambda d: rx.select.item(d.label, value=d.id),
+                        ),
+                    ),
+                    value=ConsultationDetailState.selected_clinic_doctor_id,
+                    on_change=ConsultationDetailState.set_selected_clinic_doctor,
+                    size="2", width="100%",
+                ),
+                rx.hstack(
+                    rx.spacer(),
+                    rx.button("Annuler", variant="outline",
+                              on_click=ConsultationDetailState.close_clinic_doctor_dialog),
+                    rx.button(
+                        "Valider",
+                        on_click=ConsultationDetailState.save_clinic_doctor,
+                        loading=ConsultationDetailState.is_saving_clinic_doctor,
+                    ),
+                    spacing="2", width="100%",
+                ),
+                spacing="4", width="100%", padding_top="1rem",
+            ),
+            on_interact_outside=ConsultationDetailState.close_clinic_doctor_dialog,
+            on_escape_key_down=ConsultationDetailState.close_clinic_doctor_dialog,
+            max_width="420px",
+        ),
+        open=ConsultationDetailState.show_clinic_doctor_dialog,
+    )
+
+
+def _work_doctor_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Médecin du travail"),
+            rx.dialog.description(
+                "Choisissez le médecin du travail à notifier pour cette visite.",
+                size="2", color="var(--gray-11)",
+            ),
+            rx.vstack(
+                rx.cond(
+                    ConsultationDetailState.work_doctor_options.length() > 0,
+                    rx.select.root(
+                        rx.select.trigger(placeholder="Sélectionner un médecin…", width="100%"),
+                        rx.select.content(
+                            rx.select.item("— Aucun —", value="__none__"),
+                            rx.foreach(
+                                ConsultationDetailState.work_doctor_options,
+                                lambda d: rx.select.item(d.label, value=d.id),
+                            ),
+                        ),
+                        value=ConsultationDetailState.selected_work_doctor_id,
+                        on_change=ConsultationDetailState.set_selected_work_doctor,
+                        size="2", width="100%",
+                    ),
+                    rx.callout(
+                        "Aucun utilisateur avec le rôle « Médecin entreprise » trouvé.",
+                        icon="info", color_scheme="orange", size="1",
+                    ),
+                ),
+                rx.hstack(
+                    rx.spacer(),
+                    rx.button("Annuler", variant="outline",
+                              on_click=ConsultationDetailState.close_work_doctor_dialog),
+                    rx.button(
+                        "Valider",
+                        on_click=ConsultationDetailState.save_work_doctor,
+                        loading=ConsultationDetailState.is_saving_work_doctor,
+                    ),
+                    spacing="2", width="100%",
+                ),
+                spacing="4", width="100%", padding_top="1rem",
+            ),
+            on_interact_outside=ConsultationDetailState.close_work_doctor_dialog,
+            on_escape_key_down=ConsultationDetailState.close_work_doctor_dialog,
+            max_width="420px",
+        ),
+        open=ConsultationDetailState.show_work_doctor_dialog,
+    )
+
 
 def _cancel_consultation_dialog() -> rx.Component:
     return rx.dialog.root(
@@ -1751,6 +1879,8 @@ def consultation_detail_page() -> rx.Component:
                             _tab_exam_params(),
                         ),
                         # Dialogs
+                        _clinic_doctor_dialog(),
+                        _work_doctor_dialog(),
                         _cancel_consultation_dialog(),
                         _close_consultation_dialog(),
                         _new_exam_dialog(),

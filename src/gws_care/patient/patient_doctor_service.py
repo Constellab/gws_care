@@ -51,6 +51,22 @@ class PatientDoctorService:
         return list(MedicalDoctor.select().where(MedicalDoctor.id.in_(doctor_ids)))
 
     @classmethod
+    def get_work_doctors_from_visits(cls, patient_id: str):
+        """Médecins du travail (User, role MEDECIN_ENTREPRISE) assigned to one
+        of this patient's campaign visits via Visit.work_doctor."""
+        from gws_care.user.user import User
+        from gws_care.visit.visit import Visit
+        user_ids = {
+            str(v.work_doctor_id)
+            for v in Visit.select(Visit.work_doctor).where(
+                (Visit.patient == patient_id) & (Visit.work_doctor.is_null(False))
+            ).distinct()
+        }
+        if not user_ids:
+            return []
+        return list(User.select().where(User.id.in_(user_ids)))
+
+    @classmethod
     def get_referent(cls, patient_id: str) -> MedicalDoctor | None:
         row = PatientDoctor.get_or_none(
             (PatientDoctor.patient == patient_id) & (PatientDoctor.is_referent == True)

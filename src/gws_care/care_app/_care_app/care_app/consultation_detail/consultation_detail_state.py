@@ -41,6 +41,20 @@ class ConsultationDTO(BaseModel):
     cancellation_reason: str = ""
     reason_for_visit: str = ""
     medical_history: str = ""
+    # True when this visit belongs to an occupational health campaign — in that
+    # case results get transmitted to the "médecin du travail". False for a
+    # standalone ("particulier") consultation, which has no work doctor.
+    is_campaign: bool = False
+    # Doctors assigned to this campaign visit (empty for "particulier")
+    clinic_doctor_id: str = ""
+    clinic_doctor_name: str = ""
+    work_doctor_id: str = ""
+    work_doctor_name: str = ""
+
+
+class DoctorPickerOption(BaseModel):
+    id: str
+    label: str
 
 
 class ExamRowDTO(BaseModel):
@@ -57,6 +71,12 @@ class ExamTabHeaderVM(BaseModel):
     exam_id: str
     exam_type_label: str
     status: str
+
+
+class ExamActionOption(BaseModel):
+    """One entry in the exam action dropdown (save / transmit to X)."""
+    value: str
+    label: str
 
 
 class ExamParamRowVM(BaseModel):
@@ -152,6 +172,8 @@ class ConsultationDetailState(RoleState):
     modified_param_ids: list[str] = []
     is_loading_params: bool = False
     is_saving_params: bool = False
+    # Action dropdown — what happens when "Valider" is clicked
+    exam_action: str = "save"
     # Action history (add/remove a test, modify a value…) — kept separate from interpretation
     active_exam_audit_log: list[ExamAuditEntryVM] = []
     # Transmission workflow
@@ -174,6 +196,17 @@ class ConsultationDetailState(RoleState):
 
     # Start consultation
     is_starting: bool = False
+
+    # ── Doctor assignment dialogs (campaign visits only) ─────────────────────
+    show_clinic_doctor_dialog: bool = False
+    clinic_doctor_options: list[DoctorPickerOption] = []
+    selected_clinic_doctor_id: str = ""
+    is_saving_clinic_doctor: bool = False
+
+    show_work_doctor_dialog: bool = False
+    work_doctor_options: list[DoctorPickerOption] = []
+    selected_work_doctor_id: str = ""
+    is_saving_work_doctor: bool = False
 
     # ── New Exam dialog ───────────────────────────────────────────────────────
     show_new_exam_dialog: bool = False
@@ -339,6 +372,57 @@ class ConsultationDetailState(RoleState):
         if param_id not in self.modified_param_ids:
             self.modified_param_ids = self.modified_param_ids + [param_id]
 
+    @rx.var
+    def exam_action_options(self) -> list[ExamActionOption]:
+        """Available actions for the exam-action dropdown, filtered only by role
+        and by whether this visit belongs to a campaign (médecin du travail) or
+        is a standalone ("particulier") consultation. Not gated by exam status —
+        each action validates its own preconditions (e.g. "Terminer" requires an
+        interpretation) and reports a clear error if used too early.
+        """
+        options = [ExamActionOption(value="save", label="Enregistrer (sans transmettre)")]
+        if self.is_doctor:
+            options.append(ExamActionOption(value="transmit_lab", label="Transmettre au labo"))
+        # Always available — the lab transmits results to the doctor for
+        # interpretation, but the doctor may also want to re-route to another
+        # doctor, so this isn't exclusive with "Transmettre au labo".
+        options.append(ExamActionOption(value="transmit_doctor", label="Transmettre au médecin"))
+        if self.is_doctor:
+            # Campaign visits get BOTH options — transmitting to the médecin du
+            # travail and simply closing the exam are two distinct, independent
+            # choices, not one-or-the-other. "Particulier" only has "Terminer"
+            # since there is no médecin du travail to notify.
+            if self.consultation and self.consultation.is_campaign:
+                options.append(ExamActionOption(
+                    value="transmit_work_doctor", label="Transmettre au médecin du travail",
+                ))
+            options.append(ExamActionOption(value="finish_local", label="Terminer"))
+        return options
+
+    @rx.event
+    def set_exam_action(self, value: str):
+        self.exam_action = value
+
+    @rx.event
+    async def confirm_exam_action(self):
+        """Dispatch the selected exam-action dropdown entry to its handler."""
+        action = self.exam_action
+        if action == "transmit_lab":
+            async for ev in self.transmit_to_lab():
+                yield ev
+        elif action == "transmit_doctor":
+            async for ev in self.transmit_to_doctor():
+                yield ev
+        elif action == "transmit_work_doctor":
+            async for ev in self.transmit_to_work_doctor():
+                yield ev
+        elif action == "finish_local":
+            async for ev in self.finish_exam_locally():
+                yield ev
+        else:
+            async for ev in self.save_exam_params():
+                yield ev
+
     @rx.event
     async def save_exam_params(self):
         """Save param values — opens reason dialog only when an already-saved result has changed."""
@@ -460,6 +544,8 @@ class ConsultationDetailState(RoleState):
         exam_id = self.active_exam_id
         if not exam_id:
             return
+        if self.modified_param_ids:
+            await self._do_save_exam_params(reason=None)
         self.is_transmitting = True
         self.error_message = ""
         try:
@@ -486,7 +572,7 @@ class ConsultationDetailState(RoleState):
                 )
 
             await self._refresh_exam_headers()
-            yield rx.toast.success("Examen transmis au laboratoire.")
+            yield rx.toast.success("Résultats enregistrés et examen transmis au laboratoire.")
         except Exception as e:
             self.error_message = f"Erreur transmission : {e}"
         finally:
@@ -498,6 +584,8 @@ class ConsultationDetailState(RoleState):
         exam_id = self.active_exam_id
         if not exam_id:
             return
+        if self.modified_param_ids:
+            await self._do_save_exam_params(reason=None)
         self.is_transmitting = True
         self.error_message = ""
         try:
@@ -531,7 +619,7 @@ class ConsultationDetailState(RoleState):
 
             self.active_exam_status = "in_progress_interpretation"
             await self._refresh_exam_headers()
-            yield rx.toast.success("Résultats transmis au médecin.")
+            yield rx.toast.success("Résultats enregistrés et transmis au médecin.")
         except Exception as e:
             self.error_message = f"Erreur transmission : {e}"
         finally:
@@ -546,6 +634,8 @@ class ConsultationDetailState(RoleState):
         if not self.active_exam_interpretation.strip():
             self.error_message = "Veuillez renseigner l'interprétation avant de transmettre."
             return
+        if self.modified_param_ids:
+            await self._do_save_exam_params(reason=None)
         self.is_transmitting = True
         self.error_message = ""
         try:
@@ -563,24 +653,64 @@ class ConsultationDetailState(RoleState):
                 exam.interpreted_by = User.get_by_id(str(auth_user.id))
                 exam.save()
 
-                # Bell notification to company doctors (médecins du travail)
+                # Bell notification — to the specifically assigned médecin du
+                # travail if one was set on this visit, else broadcast to every
+                # user holding that role
                 exam_label = exam.exam_type.get_label()
                 patient_name = self.consultation.patient_name if self.consultation else "le patient"
                 message = (
                     f"Résultats interprétés disponibles pour {patient_name} — {exam_label}."
                 )
-                work_doctor_roles = list(
-                    UserCareRole.select()
-                    .where(UserCareRole.role == CareRole.MEDECIN_ENTREPRISE)
-                )
-                for role_entry in work_doctor_roles:
-                    NotificationService.create_bell(str(role_entry.user_id), message)
+                if self.consultation and self.consultation.work_doctor_id:
+                    NotificationService.create_bell(self.consultation.work_doctor_id, message)
+                else:
+                    work_doctor_roles = list(
+                        UserCareRole.select()
+                        .where(UserCareRole.role == CareRole.MEDECIN_ENTREPRISE)
+                    )
+                    for role_entry in work_doctor_roles:
+                        NotificationService.create_bell(str(role_entry.user_id), message)
 
             self.active_exam_status = "done"
             await self._refresh_exam_headers()
-            yield rx.toast.success("Résultats transmis au médecin du travail.")
+            yield rx.toast.success("Résultats enregistrés et transmis au médecin du travail.")
         except Exception as e:
             self.error_message = f"Erreur transmission : {e}"
+        finally:
+            self.is_transmitting = False
+
+    @rx.event
+    async def finish_exam_locally(self):
+        """Standalone (non-campaign) consultation: close the exam with the
+        doctor's interpretation directly — there is no médecin du travail to
+        transmit results to."""
+        exam_id = self.active_exam_id
+        if not exam_id:
+            return
+        if not self.active_exam_interpretation.strip():
+            self.error_message = "Veuillez renseigner l'interprétation avant de terminer."
+            return
+        if self.modified_param_ids:
+            await self._do_save_exam_params(reason=None)
+        self.is_transmitting = True
+        self.error_message = ""
+        try:
+            with await self.authenticate_user() as auth_user:
+                from gws_care.exam.exam import Exam
+                from gws_care.exam.exam_type import ExamStatus
+                from gws_care.user.user import User
+
+                exam = Exam.get_by_id(exam_id)
+                exam.status = ExamStatus.DONE
+                exam.interpretation = self.active_exam_interpretation
+                exam.interpreted_by = User.get_by_id(str(auth_user.id))
+                exam.save()
+
+            self.active_exam_status = "done"
+            await self._refresh_exam_headers()
+            yield rx.toast.success("Résultats enregistrés. Examen terminé.")
+        except Exception as e:
+            self.error_message = f"Erreur : {e}"
         finally:
             self.is_transmitting = False
 
@@ -668,6 +798,132 @@ class ConsultationDetailState(RoleState):
             self.error_message = str(e)
         finally:
             self.is_cancelling = False
+
+    # ── Doctor assignment (campaign visits) ───────────────────────────────────
+
+    @rx.event
+    async def open_clinic_doctor_dialog(self):
+        """Pick the PSC clinic doctor for this campaign visit."""
+        if not self.consultation:
+            return
+        self.selected_clinic_doctor_id = self.consultation.clinic_doctor_id
+        self.show_clinic_doctor_dialog = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.doctor.medical_doctor import MedicalDoctor
+                doctors = list(
+                    MedicalDoctor.select()
+                    .where(MedicalDoctor.is_active == True)
+                    .order_by(MedicalDoctor.last_name, MedicalDoctor.first_name)
+                )
+                self.clinic_doctor_options = [
+                    DoctorPickerOption(id=str(d.id), label=d.get_full_name())
+                    for d in doctors
+                ]
+        except Exception as e:
+            self.error_message = str(e)
+
+    @rx.event
+    def close_clinic_doctor_dialog(self):
+        self.show_clinic_doctor_dialog = False
+
+    @rx.event
+    def set_selected_clinic_doctor(self, value: str):
+        self.selected_clinic_doctor_id = "" if value == "__none__" else value
+
+    @rx.event
+    async def save_clinic_doctor(self):
+        if not self.consultation:
+            return
+        self.is_saving_clinic_doctor = True
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.doctor.medical_doctor import MedicalDoctor
+                from gws_care.visit.visit import Visit
+                visit = Visit.get_by_id(self.consultation.id)
+                visit.doctor_id = self.selected_clinic_doctor_id or None
+                visit.save()
+                doctor_name = ""
+                if self.selected_clinic_doctor_id:
+                    d = MedicalDoctor.get_by_id(self.selected_clinic_doctor_id)
+                    doctor_name = d.get_full_name()
+            self.consultation = ConsultationDTO(**{
+                **self.consultation.dict(),
+                "clinic_doctor_id": self.selected_clinic_doctor_id,
+                "clinic_doctor_name": doctor_name,
+            })
+            self.show_clinic_doctor_dialog = False
+            yield rx.toast.success("Médecin clinique assigné.")
+        except Exception as e:
+            self.error_message = str(e)
+        finally:
+            self.is_saving_clinic_doctor = False
+
+    @rx.event
+    async def open_work_doctor_dialog(self):
+        """Pick the médecin du travail (company doctor) for this campaign visit."""
+        if not self.consultation:
+            return
+        self.selected_work_doctor_id = self.consultation.work_doctor_id
+        self.show_work_doctor_dialog = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.role.care_role import CareRole
+                from gws_care.role.user_care_role import UserCareRole
+                rows = list(
+                    UserCareRole.select(UserCareRole)
+                    .where(UserCareRole.role == CareRole.MEDECIN_ENTREPRISE)
+                )
+                seen: set[str] = set()
+                options: list[DoctorPickerOption] = []
+                for r in rows:
+                    uid = str(r.user_id)
+                    if uid in seen:
+                        continue
+                    seen.add(uid)
+                    u = r.user
+                    options.append(DoctorPickerOption(id=uid, label=f"{u.first_name} {u.last_name}".strip()))
+                self.work_doctor_options = options
+        except Exception as e:
+            self.error_message = str(e)
+
+    @rx.event
+    def close_work_doctor_dialog(self):
+        self.show_work_doctor_dialog = False
+
+    @rx.event
+    def set_selected_work_doctor(self, value: str):
+        self.selected_work_doctor_id = "" if value == "__none__" else value
+
+    @rx.event
+    async def save_work_doctor(self):
+        if not self.consultation:
+            return
+        self.is_saving_work_doctor = True
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.user.user import User
+                from gws_care.visit.visit import Visit
+                visit = Visit.get_by_id(self.consultation.id)
+                visit.work_doctor_id = self.selected_work_doctor_id or None
+                visit.save()
+                doctor_name = ""
+                if self.selected_work_doctor_id:
+                    u = User.get_by_id(self.selected_work_doctor_id)
+                    doctor_name = f"{u.first_name} {u.last_name}".strip()
+            self.consultation = ConsultationDTO(**{
+                **self.consultation.dict(),
+                "work_doctor_id": self.selected_work_doctor_id,
+                "work_doctor_name": doctor_name,
+            })
+            self.show_work_doctor_dialog = False
+            yield rx.toast.success("Médecin du travail assigné.")
+        except Exception as e:
+            self.error_message = str(e)
+        finally:
+            self.is_saving_work_doctor = False
 
     # ── Exam creation ─────────────────────────────────────────────────────────
 
@@ -1246,12 +1502,34 @@ class ConsultationDetailState(RoleState):
                         account_name = visit.billing_account.name
                     except Exception:
                         pass
+                elif visit.patient_id:
+                    # Fall back to the patient's own default billing account
+                    # when none was set specifically on this visit
+                    try:
+                        if visit.patient.billing_account_id:
+                            account_name = visit.patient.billing_account.name
+                    except Exception:
+                        pass
 
                 patient_gender = ""
                 try:
                     patient_gender = getattr(visit.patient, "gender", "") or ""
                 except Exception:
                     pass
+
+                clinic_doctor_name = ""
+                if visit.doctor_id:
+                    try:
+                        clinic_doctor_name = visit.doctor.get_full_name()
+                    except Exception:
+                        pass
+                work_doctor_name = ""
+                if visit.work_doctor_id:
+                    try:
+                        wd = visit.work_doctor
+                        work_doctor_name = f"{wd.first_name} {wd.last_name}".strip()
+                    except Exception:
+                        pass
 
                 self.consultation = ConsultationDTO(
                     id=str(visit.id),
@@ -1267,6 +1545,11 @@ class ConsultationDetailState(RoleState):
                     cancellation_reason=getattr(visit, "cancellation_reason", None) or "",
                     reason_for_visit=getattr(visit, "reason_for_visit", None) or "",
                     medical_history=getattr(visit, "medical_history", None) or "",
+                    is_campaign=bool(visit.campaign_id),
+                    clinic_doctor_id=str(visit.doctor_id) if visit.doctor_id else "",
+                    clinic_doctor_name=clinic_doctor_name,
+                    work_doctor_id=str(visit.work_doctor_id) if visit.work_doctor_id else "",
+                    work_doctor_name=work_doctor_name,
                 )
 
                 # Populate motif/history form fields
@@ -1412,6 +1695,7 @@ class ConsultationDetailState(RoleState):
         self.active_exam_params = []
         self.active_exam_audit_log = []
         self.modified_param_ids = []
+        self.exam_action = "save"
         self.active_exam_id = exam_id
         try:
             with await self.authenticate_user():

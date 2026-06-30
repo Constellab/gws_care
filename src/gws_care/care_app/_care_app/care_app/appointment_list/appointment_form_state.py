@@ -436,26 +436,31 @@ class AppointmentFormState(FormDialogState, rx.State):
         """Create a new consultation visit from the admin booking wizard."""
         async with self:
             self.form_error = ""
-        scheduled_at = self.form_scheduled_at
-        if not scheduled_at:
-            async with self:
-                self.form_error = "Veuillez sélectionner un créneau disponible."
-            return
-        if not self.form_patient_id:
-            async with self:
-                self.form_error = "Veuillez sélectionner un patient."
-            return
-        if not self.form_doctor_id:
-            async with self:
-                self.form_error = "Veuillez sélectionner un médecin."
-            return
-
-        async with self:
+            # Snapshot every field under the lock — reading self.xxx outside
+            # async with self: in a background event can return a stale value
+            # from before the user's last edit (e.g. an earlier auto-selected
+            # slot instead of the date/time they actually picked).
+            scheduled_at = self.form_scheduled_at
             patient_id = self.form_patient_id
             doctor_id = self.form_doctor_id
             notes = self.form_notes
             account_id = self.form_account_id
             appt_mode = self.form_appointment_mode
+
+        if not scheduled_at:
+            async with self:
+                self.form_error = "Veuillez sélectionner un créneau disponible."
+            return
+        if not patient_id:
+            async with self:
+                self.form_error = "Veuillez sélectionner un patient."
+            return
+        if not doctor_id:
+            async with self:
+                self.form_error = "Veuillez sélectionner un médecin."
+            return
+
+        async with self:
             _main = await self.get_state(ReflexMainState)
         with await _main.authenticate_user():
             from gws_care.visit.consultation_service import ConsultationService
@@ -480,8 +485,17 @@ class AppointmentFormState(FormDialogState, rx.State):
         """Update an existing appointment."""
         async with self:
             self.form_error = ""
-        scheduled_at = self.form_scheduled_at
-        exam_type = self.form_exam_type
+            # Snapshot every field under the lock — see _create() for why.
+            scheduled_at = self.form_scheduled_at
+            exam_type = self.form_exam_type
+            patient_id = self.form_patient_id
+            account_id = self.form_account_id
+            notes = self.form_notes
+            doctor_id = self.form_doctor_id
+            duration = self.form_duration
+            room = self.form_room
+            editing_appointment_id = self._editing_appointment_id
+
         if not scheduled_at:
             async with self:
                 self.form_error = "Scheduled date/time is required."
@@ -498,16 +512,16 @@ class AppointmentFormState(FormDialogState, rx.State):
             from gws_care.appointment.appointment_service import AppointmentService
 
             dto = SaveAppointmentDTO(
-                patient_id=self.form_patient_id,
-                account_id=self.form_account_id or None,
+                patient_id=patient_id,
+                account_id=account_id or None,
                 scheduled_at=scheduled_at,
-                exam_type_ref_id=self.form_exam_type or None,
-                notes=self.form_notes or None,
-                assigned_doctor_id=self.form_doctor_id or None,
-                duration_minutes=int(self.form_duration or 20),
-                room=self.form_room or None,
+                exam_type_ref_id=exam_type or None,
+                notes=notes or None,
+                assigned_doctor_id=doctor_id or None,
+                duration_minutes=int(duration or 20),
+                room=room or None,
             )
-            AppointmentService.update_appointment(self._editing_appointment_id, dto)
+            AppointmentService.update_appointment(editing_appointment_id, dto)
 
         yield rx.toast.success("Rendez-vous mis à jour")
         from .appointment_list_state import AppointmentListState

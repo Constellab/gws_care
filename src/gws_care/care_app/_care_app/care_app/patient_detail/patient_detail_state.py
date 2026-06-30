@@ -984,10 +984,6 @@ class PatientDetailState(ReflexMainState):
                         ))
                     prescription_count = presc_counts.get(vid, 0)
                     certificate_count = cert_counts.get(vid, 0)
-                    # Skip empty visits — created (e.g. via "+ Nouvel examen") but
-                    # abandoned before any exam/prescription/certificate was added
-                    if not exam_items and not prescription_count and not certificate_count:
-                        continue
                     cvs = cv.consultation_visit_status
                     history_items.append(ConsultationHistoryDTO(
                         id=vid,

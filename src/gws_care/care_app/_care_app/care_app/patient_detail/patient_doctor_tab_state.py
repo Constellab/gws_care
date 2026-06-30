@@ -15,6 +15,8 @@ class LinkedDoctorRowDTO(BaseModel):
     # True when this doctor was only found via an appointment's doctor_id —
     # not an explicit PatientDoctor link, so no referent/unlink actions apply
     from_appointment: bool = False
+    # "Médecin clinique" or "Médecin du travail" — only set when from_appointment
+    appointment_role_label: str = ""
 
 
 class DoctorPickerRowDTO(BaseModel):
@@ -180,11 +182,25 @@ class PatientDoctorTabState(rx.State):
                         email=d.email or "",
                         is_referent=False,
                         from_appointment=True,
+                        appointment_role_label="Médecin clinique",
                     )
                     for d in appt_doctors
                     if str(d.id) not in linked_ids
                 ]
-                self.linked_doctors = linked + from_appointments
+                seen_ids = linked_ids | {d.doctor_id for d in from_appointments}
+                work_doctors = PatientDoctorService.get_work_doctors_from_visits(self._patient_id)
+                from_work_doctors = [
+                    LinkedDoctorRowDTO(
+                        doctor_id=str(u.id),
+                        full_name=f"{u.first_name} {u.last_name}".strip(),
+                        is_referent=False,
+                        from_appointment=True,
+                        appointment_role_label="Médecin du travail",
+                    )
+                    for u in work_doctors
+                    if str(u.id) not in seen_ids
+                ]
+                self.linked_doctors = linked + from_appointments + from_work_doctors
         except Exception as e:
             self.error_message = str(e)
         finally:
