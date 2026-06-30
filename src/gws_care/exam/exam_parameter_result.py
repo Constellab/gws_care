@@ -29,6 +29,8 @@ class ResultStatus(str, Enum):
     POSITIVE = "POSITIVE"
     NEGATIVE = "NEGATIVE"
     PENDING = "PENDING"
+    # No reference thresholds configured on the parameter — nothing to evaluate against
+    NOT_EVALUATED = "NOT_EVALUATED"
 
     def get_label(self) -> str:
         return {
@@ -40,6 +42,7 @@ class ResultStatus(str, Enum):
             "POSITIVE": "Positif",
             "NEGATIVE": "Négatif",
             "PENDING": "En attente",
+            "NOT_EVALUATED": "",
         }[self.value]
 
     def get_color(self) -> str:
@@ -52,6 +55,7 @@ class ResultStatus(str, Enum):
             "POSITIVE": "red",
             "NEGATIVE": "green",
             "PENDING": "gray",
+            "NOT_EVALUATED": "gray",
         }[self.value]
 
     def is_alert(self) -> bool:
@@ -232,6 +236,7 @@ class ExamParameterResultService:
                     ResultStatus.NORMAL.value,
                     ResultStatus.NEGATIVE.value,
                     ResultStatus.PENDING.value,
+                    ResultStatus.NOT_EVALUATED.value,
                 ])
             )
             .order_by(ExamParameterResult.id.desc())
@@ -278,7 +283,11 @@ class ExamParameterResultService:
                 return ResultStatus.ABNORMAL_LOW
             if ref_high is not None and value_numeric > ref_high:
                 return ResultStatus.ABNORMAL_HIGH
+            # No threshold defined at all — nothing to evaluate the value against
+            if ref_low is None and ref_high is None and crit_low is None and crit_high is None:
+                return ResultStatus.NOT_EVALUATED
             return ResultStatus.NORMAL
         if value_text is not None:
-            return ResultStatus.NORMAL
+            # Free text has no reference thresholds — never qualify it as "normal"
+            return ResultStatus.NOT_EVALUATED
         return ResultStatus.PENDING

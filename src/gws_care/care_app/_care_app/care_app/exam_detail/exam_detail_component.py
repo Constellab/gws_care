@@ -220,71 +220,12 @@ def _text_field_view(value, empty_label="—") -> rx.Component:
     )
 
 
-def _num_field_edit(label, value, on_change, placeholder) -> rx.Component:
-    return rx.vstack(
-        rx.text(label, size="2", weight="medium"),
-        rx.input(value=value, on_change=on_change, placeholder=placeholder, type="number", size="2", width="100%"),
-        width="100%", spacing="1",
-    )
-
-
-def _str_field_edit(label, value, on_change, placeholder) -> rx.Component:
-    return rx.vstack(
-        rx.text(label, size="2", weight="medium"),
-        rx.input(value=value, on_change=on_change, placeholder=placeholder, size="2", width="100%"),
-        width="100%", spacing="1",
-    )
-
-
-def _num_field_view(label, value, unit="") -> rx.Component:
-    return rx.vstack(
-        rx.text(label, size="1", color="var(--gray-9)", weight="medium"),
-        rx.cond(
-            value,
-            rx.text(rx.cond(unit != "", value.to_string() + " " + unit, value.to_string()), size="2"),
-            rx.text("—", size="2", color="var(--gray-6)"),
-        ),
-        spacing="1", align_items="start",
-    )
-
-
-def _str_field_view(label, value) -> rx.Component:
-    return rx.vstack(
-        rx.text(label, size="1", color="var(--gray-9)", weight="medium"),
-        rx.cond(value, rx.text(value, size="2"), rx.text("—", size="2", color="var(--gray-6)")),
-        spacing="1", align_items="start",
-    )
-
-
-
-# ── BMI indicator ─────────────────────────────────────────────────────────────
-
-def _bmi_badge() -> rx.Component:
-    return rx.match(
-        ExamDetailState.bmi_category,
-        ("underweight", rx.badge(
-            LanguageState.tr["bmi_label"] + ": " + ExamDetailState.computed_bmi.to_string() + " — " + LanguageState.tr["bmi_underweight"],
-            color_scheme="blue", variant="soft", size="2")),
-        ("normal", rx.badge(
-            LanguageState.tr["bmi_label"] + ": " + ExamDetailState.computed_bmi.to_string() + " — " + LanguageState.tr["bmi_normal"],
-            color_scheme="green", variant="soft", size="2")),
-        ("overweight", rx.badge(
-            LanguageState.tr["bmi_label"] + ": " + ExamDetailState.computed_bmi.to_string() + " — " + LanguageState.tr["bmi_overweight"],
-            color_scheme="orange", variant="soft", size="2")),
-        ("obese", rx.badge(
-            LanguageState.tr["bmi_label"] + ": " + ExamDetailState.computed_bmi.to_string() + " — " + LanguageState.tr["bmi_obese"],
-            color_scheme="red", variant="solid", size="2")),
-        rx.fragment(),
-    )
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — Details
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _tab_details() -> rx.Component:
     return rx.vstack(
-        # Reason for visit + Medical history
         _section_card(
             LanguageState.tr["exam_section_reason"],
             rx.cond(
@@ -313,75 +254,13 @@ def _tab_details() -> rx.Component:
                 _text_field_view(ExamDetailState.exam.medical_history),
             ),
         ),
-        # Physical examination
-        _section_card(
-            LanguageState.tr["exam_section_physical"],
-            rx.cond(
-                ExamDetailState.is_sections_editable,
-                rx.vstack(
-                    rx.grid(
-                        _num_field_edit(LanguageState.tr["field_weight"], ExamDetailState.form_weight, ExamDetailState.set_form_weight, "e.g. 70"),
-                        _num_field_edit(LanguageState.tr["field_height"], ExamDetailState.form_height, ExamDetailState.set_form_height, "e.g. 175"),
-                        # BMI: show auto-calculated if available, else manual input
-                        rx.vstack(
-                            rx.text(LanguageState.tr["bmi_label"], size="2", weight="medium"),
-                            rx.cond(
-                                ExamDetailState.computed_bmi,
-                                rx.hstack(
-                                    rx.text(ExamDetailState.computed_bmi.to_string(), size="2", weight="medium"),
-                                    rx.badge(LanguageState.tr["bmi_auto"], color_scheme="blue", size="1"),
-                                    spacing="2", align="center",
-                                ),
-                                rx.input(
-                                    value=ExamDetailState.form_bmi,
-                                    on_change=ExamDetailState.set_form_bmi,
-                                    placeholder="e.g. 22.9",
-                                    type="number",
-                                    size="2",
-                                    width="100%",
-                                ),
-                            ),
-                            width="100%", spacing="1",
-                        ),
-                        _str_field_edit("Blood pressure", ExamDetailState.form_blood_pressure, ExamDetailState.set_form_blood_pressure, "e.g. 120/80"),
-                        _num_field_edit("Heart rate (bpm)", ExamDetailState.form_heart_rate, ExamDetailState.set_form_heart_rate, "e.g. 72"),
-                        _num_field_edit("Temperature (°C)", ExamDetailState.form_temperature, ExamDetailState.set_form_temperature, "e.g. 37.0"),
-                        columns="3", spacing="3", width="100%",
-                    ),
-                    # BMI threshold callout when weight+height are present
-                    rx.cond(
-                        ExamDetailState.computed_bmi,
-                        rx.vstack(
-                            _bmi_badge(),
-                            rx.text(LanguageState.tr["bmi_alert_desc"], size="1", color="var(--gray-8)"),
-                            spacing="1",
-                        ),
-                    ),
-                    width="100%", spacing="3",
-                ),
-                # View mode
-                rx.vstack(
-                    rx.grid(
-                        _num_field_view(LanguageState.tr["field_weight"], ExamDetailState.exam.weight, "kg"),
-                        _num_field_view(LanguageState.tr["field_height"], ExamDetailState.exam.height, "cm"),
-                        _num_field_view(LanguageState.tr["bmi_label"], ExamDetailState.exam.bmi),
-                        _str_field_view("Blood pressure", ExamDetailState.exam.blood_pressure),
-                        _num_field_view("Heart rate", ExamDetailState.exam.heart_rate, "bpm"),
-                        _num_field_view("Temperature", ExamDetailState.exam.temperature, "°C"),
-                        columns="3", spacing="4", width="100%",
-                    ),
-                    width="100%",
-                ),
-            ),
-        ),
-        # Save informations button (edit mode only)
         rx.cond(
             ExamDetailState.is_sections_editable,
             rx.hstack(
                 rx.spacer(),
                 rx.button(
                     rx.cond(
-                        ExamDetailState.is_saving_reason | ExamDetailState.is_saving_physical,
+                        ExamDetailState.is_saving_reason,
                         rx.spinner(size="2"),
                         rx.icon("check", size=15),
                     ),

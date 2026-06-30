@@ -14,6 +14,8 @@ from .exam_form_component import exam_form_dialog
 from .exam_form_state import ExamFormState
 from .patient_detail_state import (
     CertificateRowDTO,
+    ConsultationHistoryDTO,
+    ExamHistoryItemDTO,
     ExamRowDTO,
     PatientDetailDTO,
     PatientDetailState,
@@ -819,7 +821,7 @@ def _exam_row(exam: ExamRowDTO) -> rx.Component:
                 LanguageState.tr["view_btn"],
                 variant="ghost",
                 size="1",
-                on_click=lambda: PatientDetailState.go_to_exam(exam.id),
+                on_click=lambda: PatientDetailState.go_to_exam_or_consultation(exam.id, exam.visit_id),
             ),
         ),
         _hover={"background": "var(--gray-2)"},
@@ -1583,6 +1585,191 @@ def _campaign_row(c: PatientCampaignRowDTO) -> rx.Component:
     )
 
 
+def _exam_history_pill(exam: ExamHistoryItemDTO) -> rx.Component:
+    """Small pill badge for one exam in the history card."""
+    return rx.match(
+        exam.status,
+        ("done", rx.cond(
+            exam.has_abnormal,
+            rx.badge(exam.exam_type_label, color_scheme="orange", variant="soft", size="1"),
+            rx.badge(exam.exam_type_label, color_scheme="green", variant="soft", size="1"),
+        )),
+        ("in_progress_interpretation", rx.badge(exam.exam_type_label, color_scheme="blue", variant="soft", size="1")),
+        ("in_progress_results", rx.badge(exam.exam_type_label, color_scheme="amber", variant="soft", size="1")),
+        rx.badge(exam.exam_type_label, color_scheme="gray", variant="surface", size="1"),
+    )
+
+
+def _consultation_history_card(c: ConsultationHistoryDTO) -> rx.Component:
+    return rx.card(
+        rx.vstack(
+            # ── Card header ────────────────────────────────────────────────────
+            rx.hstack(
+                rx.vstack(
+                    rx.hstack(
+                        rx.text(c.visit_number, size="2", weight="bold"),
+                        rx.cond(
+                            c.has_abnormal_results,
+                            rx.badge("Résultat(s) anormal/aux", color_scheme="orange", variant="solid", size="1"),
+                            rx.fragment(),
+                        ),
+                        spacing="2",
+                        align="center",
+                    ),
+                    rx.cond(
+                        c.scheduled_at != "",
+                        rx.text(c.scheduled_at[:10], size="1", color="var(--gray-9)"),
+                        rx.fragment(),
+                    ),
+                    spacing="0",
+                ),
+                rx.spacer(),
+                rx.match(
+                    c.status,
+                    ("scheduled", rx.badge("Planifiée", color_scheme="blue", variant="soft", size="1")),
+                    ("in_progress", rx.badge("En cours", color_scheme="amber", variant="soft", size="1")),
+                    ("done", rx.badge("Terminée", color_scheme="green", variant="soft", size="1")),
+                    ("cancelled", rx.badge("Annulée", color_scheme="red", variant="soft", size="1")),
+                    rx.badge(c.status, color_scheme="gray", variant="soft", size="1"),
+                ),
+                rx.button(
+                    rx.icon("arrow-right", size=14),
+                    "Voir",
+                    variant="ghost",
+                    size="1",
+                    on_click=lambda: PatientDetailState.go_to_consultation_visit(c.id),
+                ),
+                width="100%",
+                align="center",
+                spacing="2",
+            ),
+            rx.separator(width="100%"),
+            # ── Motif ──────────────────────────────────────────────────────────
+            rx.cond(
+                c.reason_for_visit != "",
+                rx.vstack(
+                    rx.text("Motif", size="1", weight="medium", color="var(--gray-9)"),
+                    rx.text(c.reason_for_visit, size="2"),
+                    spacing="0",
+                ),
+                rx.fragment(),
+            ),
+            # ── Antécédents snippet ────────────────────────────────────────────
+            rx.cond(
+                c.medical_history != "",
+                rx.vstack(
+                    rx.text("Antécédents", size="1", weight="medium", color="var(--gray-9)"),
+                    rx.text(
+                        c.medical_history,
+                        size="2",
+                        color="var(--gray-11)",
+                        style={"display": "-webkit-box", "WebkitLineClamp": "2", "WebkitBoxOrient": "vertical", "overflow": "hidden"},
+                    ),
+                    spacing="0",
+                ),
+                rx.fragment(),
+            ),
+            # ── Exam pills ─────────────────────────────────────────────────────
+            rx.cond(
+                c.exams.length() > 0,
+                rx.vstack(
+                    rx.text("Examens", size="1", weight="medium", color="var(--gray-9)"),
+                    rx.flex(
+                        rx.foreach(c.exams, _exam_history_pill),
+                        wrap="wrap",
+                        gap="1",
+                    ),
+                    spacing="1",
+                ),
+                rx.fragment(),
+            ),
+            # ── Footer counts ──────────────────────────────────────────────────
+            rx.hstack(
+                rx.cond(
+                    c.prescription_count > 0,
+                    rx.hstack(
+                        rx.icon("pill", size=12, color="var(--gray-9)"),
+                        rx.text(c.prescription_count.to(str), " ordonnance(s)", size="1", color="var(--gray-9)"),
+                        spacing="1",
+                        align="center",
+                    ),
+                    rx.fragment(),
+                ),
+                rx.cond(
+                    c.certificate_count > 0,
+                    rx.hstack(
+                        rx.icon("file-check", size=12, color="var(--gray-9)"),
+                        rx.text(c.certificate_count.to(str), " certificat(s)", size="1", color="var(--gray-9)"),
+                        spacing="1",
+                        align="center",
+                    ),
+                    rx.fragment(),
+                ),
+                spacing="3",
+                width="100%",
+            ),
+            spacing="3",
+            width="100%",
+        ),
+        width="100%",
+        style={"border_left": rx.cond(
+            c.has_abnormal_results,
+            "3px solid var(--orange-8)",
+            "3px solid var(--gray-4)",
+        )},
+    )
+
+
+def _history_tab() -> rx.Component:
+    return rx.vstack(
+        # Antécédents banner — always visible at top of history tab
+        rx.cond(
+            PatientDetailState.latest_medical_history != "",
+            rx.callout(
+                rx.vstack(
+                    rx.text("Antécédents médicaux (dernière mise à jour)", size="2", weight="bold"),
+                    rx.text(PatientDetailState.latest_medical_history, size="2"),
+                    spacing="1",
+                ),
+                icon="history",
+                color_scheme="blue",
+                width="100%",
+            ),
+            rx.callout(
+                "Aucun antécédent médicaux enregistré pour ce patient.",
+                icon="info",
+                color_scheme="gray",
+                size="1",
+                width="100%",
+            ),
+        ),
+        rx.separator(width="100%"),
+        # Consultation cards
+        rx.cond(
+            PatientDetailState.consultation_history.length() == 0,
+            rx.center(
+                rx.vstack(
+                    rx.icon("calendar-x", size=32, color="var(--gray-5)"),
+                    rx.text("Aucune consultation enregistrée.", size="2", color="var(--gray-7)"),
+                    align="center",
+                    spacing="2",
+                ),
+                padding="3rem",
+                border="1px dashed var(--gray-5)",
+                border_radius="8px",
+                width="100%",
+            ),
+            rx.vstack(
+                rx.foreach(PatientDetailState.consultation_history, _consultation_history_card),
+                spacing="3",
+                width="100%",
+            ),
+        ),
+        spacing="4",
+        width="100%",
+    )
+
+
 def _campaigns_tab() -> rx.Component:
     return rx.vstack(
         rx.cond(
@@ -1817,6 +2004,15 @@ def patient_detail_page() -> rx.Component:
                             rx.tabs.list(
                                 rx.tabs.trigger(
                                     rx.hstack(
+                                        rx.icon("clock-3", size=15),
+                                        rx.text("Historique"),
+                                        spacing="1",
+                                        align="center",
+                                    ),
+                                    value="history",
+                                ),
+                                rx.tabs.trigger(
+                                    rx.hstack(
                                         rx.icon("calendar-clock", size=15),
                                         rx.text(LanguageState.tr["appointments_section_title"]),
                                         spacing="1",
@@ -1879,6 +2075,7 @@ def patient_detail_page() -> rx.Component:
                                     value="campaigns",
                                 ),
                             ),
+                            rx.tabs.content(_history_tab(), value="history", padding_top="1rem"),
                             rx.tabs.content(_visits_section(), value="visits", padding_top="1rem"),
                             rx.tabs.content(_exams_section(), value="exams", padding_top="1rem"),
                             rx.tabs.content(_prescriptions_tab(), value="prescriptions", padding_top="1rem"),
@@ -1886,7 +2083,7 @@ def patient_detail_page() -> rx.Component:
                             rx.tabs.content(_doctors_tab(), value="doctors", padding_top="1rem"),
                             rx.tabs.content(_accounts_tab(), value="accounts", padding_top="1rem"),
                             rx.tabs.content(_campaigns_tab(), value="campaigns", padding_top="1rem"),
-                            default_value="visits",
+                            default_value="history",
                             width="100%",
                         ),
                         width="100%",

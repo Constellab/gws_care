@@ -211,6 +211,12 @@ def consultation_detail():
     return consultation_detail_page()
 
 
+@rx.page(route="/consultation/[visit_id_param]/exam/[exam_id_param]", on_load=[ConsultationDetailState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
+def consultation_detail_exam():
+    """Medical consultation detail page — deep-linked to a specific exam tab."""
+    return consultation_detail_page()
+
+
 @rx.page(route="/on-site/[program_id_param]", on_load=[TerrainState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme])
 def terrain():
     """Terrain page — mobile-optimised for Opérateur Terrain."""

@@ -52,6 +52,7 @@ class ExamRowDTO(BaseModel):
     exam_date: str
     exam_type_label: str
     status: str
+    visit_id: str = ""
 
 
 class PatientVisitRowDTO(BaseModel):
@@ -112,6 +113,27 @@ class CertificateRowDTO(BaseModel):
     is_archived: bool = False
 
 
+class ExamHistoryItemDTO(BaseModel):
+    """One exam line inside a consultation history card."""
+    exam_type_label: str
+    status: str
+    has_abnormal: bool = False
+
+
+class ConsultationHistoryDTO(BaseModel):
+    """One consultation card in the patient history timeline."""
+    id: str
+    visit_number: str
+    scheduled_at: str
+    status: str
+    reason_for_visit: str = ""
+    medical_history: str = ""
+    exams: list[ExamHistoryItemDTO] = []
+    prescription_count: int = 0
+    certificate_count: int = 0
+    has_abnormal_results: bool = False
+
+
 class PatientDetailState(ReflexMainState):
     """State for the patient detail page."""
 
@@ -119,6 +141,8 @@ class PatientDetailState(ReflexMainState):
     exams: list[ExamRowDTO] = []
     exam_type_options: list[str] = []
     patient_visits: list[PatientVisitRowDTO] = []
+    consultation_history: list[ConsultationHistoryDTO] = []
+    latest_medical_history: str = ""
     is_loading: bool = False
     error_message: str = ""
     show_id_card: bool = False
@@ -616,6 +640,15 @@ class PatientDetailState(ReflexMainState):
         return rx.redirect(f"/exam/{exam_id}")
 
     @rx.event
+    def go_to_exam_or_consultation(self, exam_id: str, visit_id: str):
+        """Navigate directly to the exam tab inside the consultation page."""
+        if visit_id and exam_id:
+            return rx.redirect(f"/consultation/{visit_id}/exam/{exam_id}")
+        if visit_id:
+            return rx.redirect(f"/consultation/{visit_id}")
+        return rx.redirect(f"/exam/{exam_id}")
+
+    @rx.event
     def go_to_prescription(self, prescription_id: str):
         """Navigate to the prescription detail page."""
         return rx.redirect(f"/prescription/{prescription_id}")
@@ -794,12 +827,30 @@ class PatientDetailState(ReflexMainState):
                     archived_at=getattr(p, "archived_at", None) or None,
                 )
                 exams = ExamService.list_exams_for_patient(patient_id)
+
+                # Resolve exam type ref labels in one pass
+                _ref_label_cache: dict[str, str] = {}
+                def _exam_label(e) -> str:
+                    ref_id = str(getattr(e, "exam_type_ref_id", None) or "")
+                    if ref_id:
+                        if ref_id not in _ref_label_cache:
+                            try:
+                                from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+                                ref = ExamTypeRef.get_or_none(ExamTypeRef.id == ref_id)
+                                _ref_label_cache[ref_id] = ref.name if ref else ""
+                            except Exception:
+                                _ref_label_cache[ref_id] = ""
+                        if _ref_label_cache[ref_id]:
+                            return _ref_label_cache[ref_id]
+                    return e.exam_type.get_label()
+
                 self.exams = [
                     ExamRowDTO(
                         id=str(e.id),
                         exam_date=e.exam_date.isoformat(),
-                        exam_type_label=e.exam_type.get_label(),
+                        exam_type_label=_exam_label(e),
                         status=e.status.value,
+                        visit_id=str(e.visit_id) if getattr(e, "visit_id", None) else "",
                     )
                     for e in exams
                 ]
@@ -858,6 +909,93 @@ class PatientDetailState(ReflexMainState):
                         seen_doctors.add(name)
                         doctor_options.append(name)
                 self.visit_doctor_options = sorted(doctor_options)
+
+                # ── Consultation history timeline ─────────────────────────────
+                # Group already-loaded exams by visit_id
+                exams_by_visit: dict[str, list] = {}
+                for e in exams:
+                    vid = str(e.visit_id) if getattr(e, "visit_id", None) else ""
+                    if vid:
+                        exams_by_visit.setdefault(vid, []).append(e)
+
+                # Batch: find exam IDs with at least one abnormal parameter result
+                abnormal_exam_ids: set[str] = set()
+                try:
+                    from gws_care.exam.exam_parameter_result import ExamParameterResult
+                    for r in ExamParameterResult.select(ExamParameterResult.exam).where(
+                        ExamParameterResult.status << [
+                            "HIGH", "LOW", "CRITICAL_HIGH", "CRITICAL_LOW", "POSITIVE"
+                        ]
+                    ).distinct():
+                        abnormal_exam_ids.add(str(r.exam_id))
+                except Exception:
+                    pass
+
+                # Prescription and certificate counts per visit
+                presc_counts: dict[str, int] = {}
+                cert_counts: dict[str, int] = {}
+                try:
+                    from gws_care.certificate.medical_certificate import MedicalCertificate
+                    from gws_care.prescription.prescription import Prescription
+                    for p in Prescription.select(Prescription.id, Prescription.visit).where(
+                        Prescription.patient == patient_id
+                    ):
+                        if p.visit_id:
+                            vid = str(p.visit_id)
+                            presc_counts[vid] = presc_counts.get(vid, 0) + 1
+                    for c in MedicalCertificate.select(MedicalCertificate.id, MedicalCertificate.visit).where(
+                        MedicalCertificate.patient == patient_id
+                    ):
+                        if c.visit_id:
+                            vid = str(c.visit_id)
+                            cert_counts[vid] = cert_counts.get(vid, 0) + 1
+                except Exception:
+                    pass
+
+                history_items: list[ConsultationHistoryDTO] = []
+                for cv in sorted(list(consultations), key=lambda v: v.scheduled_at or "", reverse=True):
+                    vid = str(cv.id)
+                    cv_exams = exams_by_visit.get(vid, [])
+                    exam_items = []
+                    has_abnormal = False
+                    for e in cv_exams:
+                        e_abnormal = str(e.id) in abnormal_exam_ids
+                        if e_abnormal:
+                            has_abnormal = True
+                        # Try to get label from exam_type_ref
+                        label = e.exam_type.get_label()
+                        if getattr(e, "exam_type_ref_id", None):
+                            try:
+                                from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+                                ref = ExamTypeRef.get_or_none(ExamTypeRef.id == e.exam_type_ref_id)
+                                if ref:
+                                    label = ref.name
+                            except Exception:
+                                pass
+                        exam_items.append(ExamHistoryItemDTO(
+                            exam_type_label=label,
+                            status=e.status.value,
+                            has_abnormal=e_abnormal,
+                        ))
+                    cvs = cv.consultation_visit_status
+                    history_items.append(ConsultationHistoryDTO(
+                        id=vid,
+                        visit_number=cv.visit_number,
+                        scheduled_at=cv.scheduled_at.isoformat() if cv.scheduled_at else "",
+                        status=cvs.value if cvs else "",
+                        reason_for_visit=getattr(cv, "reason_for_visit", None) or "",
+                        medical_history=getattr(cv, "medical_history", None) or "",
+                        exams=exam_items,
+                        prescription_count=presc_counts.get(vid, 0),
+                        certificate_count=cert_counts.get(vid, 0),
+                        has_abnormal_results=has_abnormal,
+                    ))
+                self.consultation_history = history_items
+                # Store the most recent non-empty medical history for quick reference
+                self.latest_medical_history = next(
+                    (h.medical_history for h in history_items if h.medical_history), ""
+                )
+
                 from gws_care.patient.patient_account import PatientAccount
                 links = list(PatientAccount.select().where(PatientAccount.patient == patient_id))
                 self.patient_accounts = [

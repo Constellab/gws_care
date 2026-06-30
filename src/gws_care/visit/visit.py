@@ -63,6 +63,10 @@ class Visit(ModelWithUser):
     doctor_company_interpretation: str = TextField(null=True)
     doctor_company_message: str = TextField(null=True)
 
+    # Consultation-level clinical info (shared by all exams in the consultation)
+    reason_for_visit: str = TextField(null=True)
+    medical_history: str = TextField(null=True)
+
     # Cancellation
     cancellation_reason: str = TextField(null=True)
 
