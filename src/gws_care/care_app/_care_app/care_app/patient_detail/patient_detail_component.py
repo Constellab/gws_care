@@ -10,8 +10,6 @@ from ..appointment_list.appointment_form_component import appointment_form_dialo
 from ..patient_list.patient_form_component import patient_form_dialog
 from ..patient_list.patient_form_state import PatientFormState
 from .certificate_form_component import certificate_form_dialog
-from .exam_form_component import exam_form_dialog
-from .exam_form_state import ExamFormState
 from .patient_detail_state import (
     CertificateRowDTO,
     ConsultationHistoryDTO,
@@ -833,13 +831,6 @@ def _exams_section() -> rx.Component:
     return rx.vstack(
         rx.hstack(
             rx.heading(LanguageState.tr["exams_section_title"], size="4"),
-            rx.spacer(),
-            rx.button(
-                rx.icon("plus", size=15),
-                LanguageState.tr["new_exam_btn"],
-                on_click=lambda: ExamFormState.open_create_dialog(PatientDetailState.patient.id),
-                size="2",
-            ),
             width="100%",
             align="center",
         ),
@@ -1305,32 +1296,41 @@ def _linked_doctor_row(doc: LinkedDoctorRowDTO) -> rx.Component:
                     rx.fragment(),
                 ),
                 rx.text(doc.full_name, size="2", weight="medium"),
+                rx.cond(
+                    doc.from_appointment,
+                    rx.badge("Vu en rendez-vous", size="1", variant="soft", color_scheme="gray"),
+                    rx.fragment(),
+                ),
                 spacing="2", align="center",
             )
         ),
         rx.table.cell(rx.cond(doc.specialization != "", rx.text(doc.specialization, size="2"), rx.text("—", size="2", color="var(--gray-8)"))),
         rx.table.cell(rx.cond(doc.phone != "", rx.text(doc.phone, size="2"), rx.text("—", size="2", color="var(--gray-8)"))),
         rx.table.cell(
-            rx.hstack(
-                rx.cond(
-                    doc.is_referent,
-                    rx.tooltip(
-                        rx.icon_button(rx.icon("star-off", size=13), variant="ghost", color_scheme="amber", size="1",
-                                       on_click=lambda: PatientDoctorTabState.open_confirm_clear_referent(doc.doctor_id, doc.full_name)),
-                        content=LanguageState.tr["doctor_remove_referent_tooltip"],
+            rx.cond(
+                doc.from_appointment,
+                rx.fragment(),
+                rx.hstack(
+                    rx.cond(
+                        doc.is_referent,
+                        rx.tooltip(
+                            rx.icon_button(rx.icon("star-off", size=13), variant="ghost", color_scheme="amber", size="1",
+                                           on_click=lambda: PatientDoctorTabState.open_confirm_clear_referent(doc.doctor_id, doc.full_name)),
+                            content=LanguageState.tr["doctor_remove_referent_tooltip"],
+                        ),
+                        rx.tooltip(
+                            rx.icon_button(rx.icon("star", size=13), variant="ghost", color_scheme="gray", size="1",
+                                           on_click=lambda: PatientDoctorTabState.set_referent(doc.doctor_id)),
+                            content=LanguageState.tr["doctor_set_referent_tooltip"],
+                        ),
                     ),
                     rx.tooltip(
-                        rx.icon_button(rx.icon("star", size=13), variant="ghost", color_scheme="gray", size="1",
-                                       on_click=lambda: PatientDoctorTabState.set_referent(doc.doctor_id)),
-                        content=LanguageState.tr["doctor_set_referent_tooltip"],
+                        rx.icon_button(rx.icon("unlink", size=13), variant="ghost", color_scheme="red", size="1",
+                                       on_click=lambda: PatientDoctorTabState.open_confirm_unlink(doc.doctor_id, doc.full_name)),
+                        content=LanguageState.tr["doctor_unlink_tooltip"],
                     ),
+                    spacing="1",
                 ),
-                rx.tooltip(
-                    rx.icon_button(rx.icon("unlink", size=13), variant="ghost", color_scheme="red", size="1",
-                                   on_click=lambda: PatientDoctorTabState.open_confirm_unlink(doc.doctor_id, doc.full_name)),
-                    content=LanguageState.tr["doctor_unlink_tooltip"],
-                ),
-                spacing="1",
             )
         ),
     )
@@ -1411,16 +1411,6 @@ def _doctors_tab() -> rx.Component:
         _doctor_picker_dialog(),
         _doctor_confirm_unlink_dialog(),
         _doctor_confirm_clear_referent_dialog(),
-        rx.hstack(
-            rx.spacer(),
-            rx.button(
-                rx.icon("plus", size=14),
-                LanguageState.tr["doctor_link_btn"],
-                on_click=PatientDoctorTabState.open_picker,
-                variant="outline", size="2",
-            ),
-            width="100%",
-        ),
         rx.cond(
             PatientDoctorTabState.error_message != "",
             rx.callout(PatientDoctorTabState.error_message, icon="alert-circle", color_scheme="red", size="1"),
@@ -1809,16 +1799,6 @@ def _accounts_tab() -> rx.Component:
     return rx.vstack(
         _account_picker_dialog_tab(),
         _account_confirm_unlink_dialog(),
-        rx.hstack(
-            rx.spacer(),
-            rx.button(
-                rx.icon("plus", size=14),
-                LanguageState.tr["account_link_btn"],
-                on_click=PatientAccountTabState.open_picker,
-                variant="outline", size="2",
-            ),
-            width="100%",
-        ),
         rx.cond(
             PatientAccountTabState.error_message != "",
             rx.callout(PatientAccountTabState.error_message, icon="alert-circle", color_scheme="red", size="1"),
@@ -1973,7 +1953,6 @@ def patient_detail_page() -> rx.Component:
             account_form_dialog(),
             appointment_form_dialog(),
             patient_form_dialog(),
-            exam_form_dialog(),
             prescription_form_dialog(),
             certificate_form_dialog(),
             id_card_dialog(),

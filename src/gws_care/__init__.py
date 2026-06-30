@@ -72,9 +72,10 @@ from gws_care.tube_qr.tube_qr import TubeQR
 # Messaging
 from gws_care.messaging.patient_message import PatientMessage
 
-# Exam file / parameter results
+# Exam file / parameter results / audit trail
 from gws_care.exam.exam_file import ExamFile
 from gws_care.exam.exam_parameter_result import ExamParameterResult
+from gws_care.exam.exam_audit_entry import ExamAuditEntry
 
 # Exam type referential (configurable exam types + parameters)
 from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
@@ -135,6 +136,10 @@ from gws_care.core.migration_34 import Migration340
 from gws_care.core.migration_35 import Migration350
 from gws_care.core.migration_36 import Migration360
 from gws_care.core.migration_37 import Migration370
+from gws_care.core.migration_38 import Migration380
+from gws_care.core.migration_39 import Migration390
+from gws_care.core.migration_40 import Migration400
+from gws_care.core.migration_41 import Migration410
 
 # User sync service — keeps local User table in sync with gws_core
 from gws_care.user.care_user_sync_service import CareUserSyncService

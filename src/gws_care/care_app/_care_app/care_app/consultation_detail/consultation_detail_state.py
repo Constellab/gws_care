@@ -78,6 +78,14 @@ class ExamParamRowVM(BaseModel):
     ref_range_label: str = ""
 
 
+class ExamAuditEntryVM(BaseModel):
+    """One entry of the exam's action history (add/remove a test, modify a value…)."""
+    action_label: str
+    details: str = ""
+    user_name: str = ""
+    created_at: str = ""
+
+
 class PrescriptionRowDTO(BaseModel):
     id: str
     prescription_date: str
@@ -144,6 +152,8 @@ class ConsultationDetailState(RoleState):
     modified_param_ids: list[str] = []
     is_loading_params: bool = False
     is_saving_params: bool = False
+    # Action history (add/remove a test, modify a value…) — kept separate from interpretation
+    active_exam_audit_log: list[ExamAuditEntryVM] = []
     # Transmission workflow
     active_exam_interpretation: str = ""
     is_transmitting: bool = False
@@ -189,6 +199,8 @@ class ConsultationDetailState(RoleState):
     show_delete_param_dialog: bool = False
     delete_param_id: str = ""
     delete_param_name: str = ""
+    delete_param_reason: str = ""
+    delete_param_reason_error: str = ""
     is_deleting_param: bool = False
 
     # ── Add missed params dialog ──────────────────────────────────────────────
@@ -196,6 +208,8 @@ class ConsultationDetailState(RoleState):
     add_param_options: list[ExamParamOption] = []
     is_saving_add_params: bool = False
     add_param_error: str = ""
+    add_param_reason: str = ""
+    add_param_reason_error: str = ""
 
     @rx.var
     def add_param_selected_count(self) -> int:
@@ -411,14 +425,17 @@ class ConsultationDetailState(RoleState):
                 if exam.status == ExamStatus.TODO:
                     exam.status = ExamStatus.IN_PROGRESS_RESULTS
                     exam.save()
-                # Log modification reason (append to interpretation)
+                # Log modification reason — only logged when re-saving already-recorded
+                # results (reason is None for a brand-new value's first save)
                 if reason:
-                    from datetime import date
-                    note = f"[Modifié le {date.today().isoformat()}] {reason}"
-                    exam = Exam.get_by_id(exam_id)
-                    existing = exam.interpretation or ""
-                    exam.interpretation = f"{existing}\n{note}".strip() if existing else note
-                    exam.save()
+                    from gws_care.exam.exam_audit_entry import ExamAuditAction
+                    modified_ids = set(self.modified_param_ids)
+                    modified_names = [
+                        p.param_name for p in self.active_exam_params
+                        if p.param_id in modified_ids
+                    ]
+                    body = f"{', '.join(modified_names)} : {reason}" if modified_names else reason
+                    self._log_exam_audit(exam, ExamAuditAction.MODIFY_VALUE.value, body)
 
             await self._load_exam_params(exam_id)
             await self._refresh_exam_headers()
@@ -432,6 +449,48 @@ class ConsultationDetailState(RoleState):
     @rx.event
     def set_active_exam_interpretation(self, value: str):
         self.active_exam_interpretation = value
+
+    @rx.event
+    async def transmit_to_lab(self):
+        """Doctor: delegate result entry to the lab and notify lab operators.
+
+        Used when the doctor defines an exam that needs lab intervention instead
+        of entering the results themselves.
+        """
+        exam_id = self.active_exam_id
+        if not exam_id:
+            return
+        self.is_transmitting = True
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam.exam import Exam
+                from gws_care.exam.exam_audit_entry import ExamAuditAction
+                from gws_care.notification.notification_service import NotificationService
+                from gws_care.role.care_role import CareRole
+                from gws_care.role.user_care_role import UserCareRole
+
+                exam = Exam.get_by_id(exam_id)
+                exam_label = exam.exam_type.get_label()
+                patient_name = self.consultation.patient_name if self.consultation else "le patient"
+                message = f"Nouvel examen à réaliser pour {patient_name} — {exam_label}."
+                lab_roles = list(
+                    UserCareRole.select().where(UserCareRole.role == CareRole.OPERATEUR_LABO)
+                )
+                for role_entry in lab_roles:
+                    NotificationService.create_bell(str(role_entry.user_id), message)
+
+                self._log_exam_audit(
+                    exam, ExamAuditAction.TRANSMIT_TO_LAB.value,
+                    "Examen transmis au laboratoire pour saisie des résultats.",
+                )
+
+            await self._refresh_exam_headers()
+            yield rx.toast.success("Examen transmis au laboratoire.")
+        except Exception as e:
+            self.error_message = f"Erreur transmission : {e}"
+        finally:
+            self.is_transmitting = False
 
     @rx.event
     async def transmit_to_doctor(self):
@@ -781,6 +840,18 @@ class ConsultationDetailState(RoleState):
         finally:
             self.is_deleting_exam = False
 
+    # ── Audit trail helpers ───────────────────────────────────────────────────
+    # Unusual actions (add/remove a test, modify a value, transmit to lab) are
+    # logged to the dedicated ExamAuditEntry table — kept separate from
+    # Exam.interpretation, which stays reserved for the doctor's free-text
+    # medical interpretation. created_by/created_at are auto-filled from the
+    # authenticated user context (see ModelWithUser).
+
+    @staticmethod
+    def _log_exam_audit(exam, action: str, details: str) -> None:
+        from gws_care.exam.exam_audit_entry import ExamAuditEntry
+        ExamAuditEntry(exam=exam, action=action, details=details).save()
+
     # ── Add missed params to existing exam ────────────────────────────────────
 
     @staticmethod
@@ -812,6 +883,8 @@ class ConsultationDetailState(RoleState):
             return
         self.add_param_options = []
         self.add_param_error = ""
+        self.add_param_reason = ""
+        self.add_param_reason_error = ""
         self.show_add_param_dialog = True
         try:
             with await self.authenticate_user():
@@ -857,24 +930,42 @@ class ConsultationDetailState(RoleState):
         ]
 
     @rx.event
+    def set_add_param_reason(self, value: str):
+        self.add_param_reason = value
+
+    @rx.event
     async def save_add_params(self):
-        """Append selected params to exam.requested_param_ids then reload."""
+        """Append selected params to exam.requested_param_ids then reload.
+
+        A reason is mandatory — adding a test after exam creation is an unusual
+        action (forgotten test, or a parameter needed to compute a constant) and
+        must be traceable in the medical interpretation.
+        """
         exam_id = self.active_exam_id
         if not exam_id:
             return
-        selected = [p.id for p in self.add_param_options if p.is_selected]
-        if not selected:
+        selected_options = [p for p in self.add_param_options if p.is_selected]
+        if not selected_options:
             self.add_param_error = "Sélectionnez au moins un test."
             return
+        reason = self.add_param_reason.strip()
+        if not reason:
+            self.add_param_reason_error = "Le motif d'ajout est obligatoire."
+            return
+        self.add_param_reason_error = ""
         self.is_saving_add_params = True
         self.add_param_error = ""
         try:
             with await self.authenticate_user():
                 from gws_care.exam.exam import Exam
+                from gws_care.exam.exam_audit_entry import ExamAuditAction
                 exam = Exam.get_by_id(exam_id)
                 current = self._resolve_requested_param_ids(exam)
-                exam.requested_param_ids = current + selected
+                selected_ids = [p.id for p in selected_options]
+                exam.requested_param_ids = current + selected_ids
                 exam.save()
+                names = ", ".join(p.name for p in selected_options)
+                self._log_exam_audit(exam, ExamAuditAction.ADD_TEST.value, f"{names} : {reason}")
             self.show_add_param_dialog = False
             await self._load_exam_params(exam_id)
             yield rx.toast.success("Tests ajoutés.")
@@ -889,6 +980,8 @@ class ConsultationDetailState(RoleState):
     def open_delete_param_dialog(self, param_id: str, param_name: str):
         self.delete_param_id = param_id
         self.delete_param_name = param_name
+        self.delete_param_reason = ""
+        self.delete_param_reason_error = ""
         self.is_deleting_param = False
         self.show_delete_param_dialog = True
 
@@ -897,28 +990,38 @@ class ConsultationDetailState(RoleState):
         self.show_delete_param_dialog = False
 
     @rx.event
+    def set_delete_param_reason(self, value: str):
+        self.delete_param_reason = value
+
+    @rx.event
     async def confirm_delete_param(self):
-        """Remove a single test (param) from the exam and delete its result if any."""
+        """Remove a single test (param) from the exam and delete its result if any.
+
+        A reason is mandatory — removing a test is an unusual action and must be
+        traceable in the medical interpretation.
+        """
         exam_id = self.active_exam_id
         param_id = self.delete_param_id
         param_name = self.delete_param_name
         if not exam_id or not param_id:
             return
+        reason = self.delete_param_reason.strip()
+        if not reason:
+            self.delete_param_reason_error = "Le motif de suppression est obligatoire."
+            return
+        self.delete_param_reason_error = ""
         self.is_deleting_param = True
         try:
             with await self.authenticate_user():
-                from datetime import date
                 from gws_care.exam.exam import Exam
+                from gws_care.exam.exam_audit_entry import ExamAuditAction
                 from gws_care.exam.exam_parameter_result import ExamParameterResult
 
                 exam = Exam.get_by_id(exam_id)
                 current = self._resolve_requested_param_ids(exam)
                 exam.requested_param_ids = [i for i in current if str(i) != param_id]
-                # Audit trail in interpretation
-                note = f"[Test supprimé le {date.today().isoformat()}] {param_name}"
-                existing_interp = exam.interpretation or ""
-                exam.interpretation = f"{existing_interp}\n{note}".strip() if existing_interp else note
                 exam.save()
+                self._log_exam_audit(exam, ExamAuditAction.REMOVE_TEST.value, f"{param_name} : {reason}")
                 # Delete the saved result if it exists
                 ExamParameterResult.delete().where(
                     (ExamParameterResult.exam == exam_id)
@@ -1307,6 +1410,7 @@ class ConsultationDetailState(RoleState):
             return
         self.is_loading_params = True
         self.active_exam_params = []
+        self.active_exam_audit_log = []
         self.modified_param_ids = []
         self.active_exam_id = exam_id
         try:
@@ -1404,6 +1508,27 @@ class ConsultationDetailState(RoleState):
                     ))
 
                 self.active_exam_params = rows
+
+                # Action history (add/remove a test, modify a value…)
+                from gws_care.exam.exam_audit_entry import ExamAuditAction, ExamAuditEntry
+                audit_rows = list(
+                    ExamAuditEntry.select()
+                    .where(ExamAuditEntry.exam == exam_id)
+                    .order_by(ExamAuditEntry.created_at.desc())
+                )
+                audit_log = []
+                for entry in audit_rows:
+                    try:
+                        user_name = f"{entry.created_by.first_name} {entry.created_by.last_name}".strip()
+                    except Exception:
+                        user_name = ""
+                    audit_log.append(ExamAuditEntryVM(
+                        action_label=ExamAuditAction(entry.action).get_label(),
+                        details=entry.details or "",
+                        user_name=user_name or "Utilisateur",
+                        created_at=entry.created_at.strftime("%d/%m/%Y %H:%M"),
+                    ))
+                self.active_exam_audit_log = audit_log
 
         except Exception as e:
             self.error_message = f"Erreur chargement paramètres : {e}"

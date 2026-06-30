@@ -20,6 +20,7 @@ from .consultation_detail_state import (
     ConsultationDetailState,
     ConsultationDTO,
     DrugLineDTO,
+    ExamAuditEntryVM,
     ExamParamOption,
     ExamParamRowVM,
     ExamRowDTO,
@@ -754,6 +755,51 @@ def _param_row(p: ExamParamRowVM) -> rx.Component:
     )
 
 
+def _audit_entry_row(e: ExamAuditEntryVM) -> rx.Component:
+    return rx.box(
+        rx.hstack(
+            rx.badge(e.action_label, size="1", variant="soft", color_scheme="gray"),
+            rx.text(e.user_name, size="1", weight="medium"),
+            rx.text("•", size="1", color="var(--gray-7)"),
+            rx.text(e.created_at, size="1", color="var(--gray-9)"),
+            spacing="2", align="center", wrap="wrap",
+        ),
+        rx.cond(
+            e.details != "",
+            rx.text(e.details, size="2", color="var(--gray-11)", margin_top="0.15rem"),
+            rx.fragment(),
+        ),
+        width="100%",
+        padding="0.6rem 0",
+        border_bottom="1px solid var(--gray-4)",
+    )
+
+
+def _exam_audit_section() -> rx.Component:
+    """Action history (add/remove a test, modify a value…) — kept separate from
+    the doctor's free-text medical interpretation above."""
+    return rx.cond(
+        ConsultationDetailState.active_exam_audit_log.length() > 0,
+        rx.vstack(
+            rx.separator(width="100%"),
+            rx.hstack(
+                rx.icon("list", size=16, color="var(--gray-9)"),
+                rx.heading("Historique des modifications", size="4"),
+                spacing="2",
+                align="center",
+            ),
+            rx.vstack(
+                rx.foreach(ConsultationDetailState.active_exam_audit_log, _audit_entry_row),
+                width="100%",
+                spacing="0",
+            ),
+            width="100%",
+            spacing="3",
+        ),
+        rx.fragment(),
+    )
+
+
 def _tab_exam_params() -> rx.Component:
     can_edit = (
         ~ConsultationDetailState.is_patient_user
@@ -863,6 +909,26 @@ def _tab_exam_params() -> rx.Component:
                                 ),
                                 rx.fragment(),
                             ),
+                            # Doctor: delegate result entry to the lab instead of
+                            # filling the values themselves
+                            rx.cond(
+                                ConsultationDetailState.is_doctor
+                                & (ConsultationDetailState.active_exam_status == "todo"),
+                                rx.button(
+                                    rx.cond(
+                                        ConsultationDetailState.is_transmitting,
+                                        rx.spinner(size="2"),
+                                        rx.icon("flask-conical", size=14),
+                                    ),
+                                    "Transmettre au labo",
+                                    on_click=ConsultationDetailState.transmit_to_lab,
+                                    loading=ConsultationDetailState.is_transmitting,
+                                    size="2",
+                                    variant="soft",
+                                    color_scheme="purple",
+                                ),
+                                rx.fragment(),
+                            ),
                             width="100%",
                             align="center",
                             spacing="2",
@@ -948,6 +1014,8 @@ def _tab_exam_params() -> rx.Component:
                         ),
                         rx.fragment(),
                     ),
+                    # Action history — separate from the interpretation above
+                    _exam_audit_section(),
                     width="100%",
                     spacing="3",
                 ),
@@ -1533,6 +1601,30 @@ def _add_param_dialog() -> rx.Component:
                         rx.fragment(),
                     ),
                 ),
+                rx.cond(
+                    ConsultationDetailState.add_param_options.length() > 0,
+                    rx.vstack(
+                        rx.text("Motif de l'ajout *", size="2", weight="medium"),
+                        rx.text_area(
+                            value=ConsultationDetailState.add_param_reason,
+                            on_change=ConsultationDetailState.set_add_param_reason,
+                            placeholder="Pourquoi ajoutez-vous ce(s) test(s) ? (oubli, paramètre nécessaire au calcul d'une constante…)",
+                            size="2",
+                            width="100%",
+                            rows="3",
+                        ),
+                        rx.cond(
+                            ConsultationDetailState.add_param_reason_error != "",
+                            rx.text(
+                                ConsultationDetailState.add_param_reason_error,
+                                size="1", color="var(--red-9)",
+                            ),
+                            rx.fragment(),
+                        ),
+                        spacing="1", width="100%",
+                    ),
+                    rx.fragment(),
+                ),
                 rx.hstack(
                     rx.spacer(),
                     rx.button("Annuler", variant="outline",
@@ -1570,6 +1662,26 @@ def _delete_param_dialog() -> rx.Component:
                     spacing="1", wrap="wrap",
                 ),
                 size="2",
+            ),
+            rx.vstack(
+                rx.text("Motif de la suppression *", size="2", weight="medium"),
+                rx.text_area(
+                    value=ConsultationDetailState.delete_param_reason,
+                    on_change=ConsultationDetailState.set_delete_param_reason,
+                    placeholder="Pourquoi ce test est-il retiré de l'examen ?",
+                    size="2",
+                    width="100%",
+                    rows="3",
+                ),
+                rx.cond(
+                    ConsultationDetailState.delete_param_reason_error != "",
+                    rx.text(
+                        ConsultationDetailState.delete_param_reason_error,
+                        size="1", color="var(--red-9)",
+                    ),
+                    rx.fragment(),
+                ),
+                spacing="1", width="100%", padding_top="0.75rem",
             ),
             rx.hstack(
                 rx.spacer(),

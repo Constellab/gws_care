@@ -953,7 +953,12 @@ class PatientDetailState(ReflexMainState):
                     pass
 
                 history_items: list[ConsultationHistoryDTO] = []
-                for cv in sorted(list(consultations), key=lambda v: v.scheduled_at or "", reverse=True):
+                from datetime import datetime as _datetime
+                for cv in sorted(
+                    list(consultations),
+                    key=lambda v: v.scheduled_at or _datetime.min,
+                    reverse=True,
+                ):
                     vid = str(cv.id)
                     cv_exams = exams_by_visit.get(vid, [])
                     exam_items = []
@@ -977,6 +982,12 @@ class PatientDetailState(ReflexMainState):
                             status=e.status.value,
                             has_abnormal=e_abnormal,
                         ))
+                    prescription_count = presc_counts.get(vid, 0)
+                    certificate_count = cert_counts.get(vid, 0)
+                    # Skip empty visits — created (e.g. via "+ Nouvel examen") but
+                    # abandoned before any exam/prescription/certificate was added
+                    if not exam_items and not prescription_count and not certificate_count:
+                        continue
                     cvs = cv.consultation_visit_status
                     history_items.append(ConsultationHistoryDTO(
                         id=vid,
@@ -986,8 +997,8 @@ class PatientDetailState(ReflexMainState):
                         reason_for_visit=getattr(cv, "reason_for_visit", None) or "",
                         medical_history=getattr(cv, "medical_history", None) or "",
                         exams=exam_items,
-                        prescription_count=presc_counts.get(vid, 0),
-                        certificate_count=cert_counts.get(vid, 0),
+                        prescription_count=prescription_count,
+                        certificate_count=certificate_count,
                         has_abnormal_results=has_abnormal,
                     ))
                 self.consultation_history = history_items

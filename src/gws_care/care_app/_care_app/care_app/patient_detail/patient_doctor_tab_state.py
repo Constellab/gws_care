@@ -12,6 +12,9 @@ class LinkedDoctorRowDTO(BaseModel):
     phone: str = ""
     email: str = ""
     is_referent: bool = False
+    # True when this doctor was only found via an appointment's doctor_id —
+    # not an explicit PatientDoctor link, so no referent/unlink actions apply
+    from_appointment: bool = False
 
 
 class DoctorPickerRowDTO(BaseModel):
@@ -155,7 +158,7 @@ class PatientDoctorTabState(rx.State):
             with await _main.authenticate_user():
                 from gws_care.patient.patient_doctor_service import PatientDoctorService
                 rows = PatientDoctorService.get_linked_doctors(self._patient_id)
-                self.linked_doctors = [
+                linked = [
                     LinkedDoctorRowDTO(
                         doctor_id=str(r.doctor_id),
                         full_name=r.doctor.get_full_name(),
@@ -166,6 +169,22 @@ class PatientDoctorTabState(rx.State):
                     )
                     for r in rows
                 ]
+                linked_ids = {d.doctor_id for d in linked}
+                appt_doctors = PatientDoctorService.get_doctors_from_visits(self._patient_id)
+                from_appointments = [
+                    LinkedDoctorRowDTO(
+                        doctor_id=str(d.id),
+                        full_name=d.get_full_name(),
+                        specialization=d.specialization or "",
+                        phone=d.phone or "",
+                        email=d.email or "",
+                        is_referent=False,
+                        from_appointment=True,
+                    )
+                    for d in appt_doctors
+                    if str(d.id) not in linked_ids
+                ]
+                self.linked_doctors = linked + from_appointments
         except Exception as e:
             self.error_message = str(e)
         finally:

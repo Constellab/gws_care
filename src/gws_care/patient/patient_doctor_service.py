@@ -33,6 +33,24 @@ class PatientDoctorService:
         )
 
     @classmethod
+    def get_doctors_from_visits(cls, patient_id: str) -> list[MedicalDoctor]:
+        """Doctors assigned to one of this patient's visits at booking time.
+
+        Distinct from explicit PatientDoctor links — surfaces doctors who saw
+        the patient via an appointment even if never manually linked.
+        """
+        from gws_care.visit.visit import Visit
+        doctor_ids = {
+            str(v.doctor_id)
+            for v in Visit.select(Visit.doctor).where(
+                (Visit.patient == patient_id) & (Visit.doctor.is_null(False))
+            ).distinct()
+        }
+        if not doctor_ids:
+            return []
+        return list(MedicalDoctor.select().where(MedicalDoctor.id.in_(doctor_ids)))
+
+    @classmethod
     def get_referent(cls, patient_id: str) -> MedicalDoctor | None:
         row = PatientDoctor.get_or_none(
             (PatientDoctor.patient == patient_id) & (PatientDoctor.is_referent == True)

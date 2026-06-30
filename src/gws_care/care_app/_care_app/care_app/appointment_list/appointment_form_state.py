@@ -258,8 +258,6 @@ class AppointmentFormState(FormDialogState, rx.State):
                 ExamTypeOption(id=str(r.id), name=r.name, category_label=r.get_category_label())
                 for r in refs
             ]
-            if self.exam_type_options and not self.form_exam_type:
-                self.form_exam_type = self.exam_type_options[0].id
         except Exception as exc:
             print(f"[appointment_form] Failed to load exam type options: {exc}")
             self.exam_type_options = []
