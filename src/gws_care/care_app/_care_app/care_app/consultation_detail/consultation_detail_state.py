@@ -1476,6 +1476,23 @@ class ConsultationDetailState(RoleState):
             return
         self.is_loading = True
         self.error_message = ""
+        # Reset all exam-related state immediately so navigating from one
+        # consultation to another never leaks a previous patient's data while
+        # the new visit is loading from the DB.
+        self.active_tab = "informations"
+        self.exam_tab_headers = []
+        self.exams = []
+        self.prescriptions = []
+        self.certificates = []
+        self.active_exam_id = ""
+        self.active_exam_type_ref_id = ""
+        self.active_exam_status = ""
+        self.active_exam_date = ""
+        self.active_exam_params = []
+        self.active_exam_audit_log = []
+        self.active_exam_interpretation = ""
+        self.modified_param_ids = []
+        self.exam_action = "save"
         try:
             visit_id = self.router.page.params.get("visit_id_param", "")
             if not visit_id:
