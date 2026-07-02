@@ -509,6 +509,20 @@ class CampaignService:
         return result
 
     @classmethod
+    def set_exam_location_mode(cls, campaign_id: str, exam_ref_id: str, mode: str | None) -> None:
+        """Set (or clear) the location/mode for an exam type in a campaign."""
+        from gws_care.campaign.campaign_exam import CampaignExam
+        from gws_care.visit.appointment_mode import AppointmentMode
+
+        link = CampaignExam.get_or_none(
+            (CampaignExam.campaign == campaign_id) & (CampaignExam.exam_type_ref == exam_ref_id)
+        )
+        if link is None:
+            raise BadRequestException("Ce type d'examen n'est pas dans cette campagne.")
+        link.location_mode = AppointmentMode(mode) if mode else None
+        link.save()
+
+    @classmethod
     def assign_doctors_to_exam_ref(
         cls, campaign_id: str, exam_ref_id: str, doctor_ids: list
     ) -> None:

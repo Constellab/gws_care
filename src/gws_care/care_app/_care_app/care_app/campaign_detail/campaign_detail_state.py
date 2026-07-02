@@ -47,6 +47,7 @@ class ExamTypeRowDTO(BaseModel):
     name: str
     category: str = ""
     assigned_doctors: list[DoctorOptionDTO] = []
+    location_mode: str = ""   # AppointmentMode value, empty = not set
 
 
 class VisitRowDTO(BaseModel):
@@ -873,6 +874,25 @@ class CampaignDetailState(PatientPickerState):
         self.assign_doctor_dialog_open = False
 
     @rx.event
+    async def set_exam_location_mode(self, exam_ref_id: str, mode: str):
+        """Inline update of the location mode for an exam type in the campaign."""
+        if not self.program:
+            return
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_service import CampaignService
+                CampaignService.set_exam_location_mode(
+                    self.program.id, exam_ref_id, mode if mode not in ("", "_none_") else None
+                )
+            stored = "" if mode in ("", "_none_") else mode
+            self.exam_types = [
+                et.model_copy(update={"location_mode": stored}) if et.id == exam_ref_id else et
+                for et in self.exam_types
+            ]
+        except Exception as e:
+            self.error_message = str(e)
+
+    @rx.event
     def toggle_assign_doctor_selection(self, doctor_id: str):
         if doctor_id in self.assign_doctor_selected_ids:
             self.assign_doctor_selected_ids = [
@@ -982,6 +1002,7 @@ class CampaignDetailState(PatientPickerState):
                             )
                             for d in doctors_map.get(str(ref.id), [])
                         ],
+                        location_mode=link.location_mode.value if link.location_mode else "",
                     )
                     for ref, link in exam_ref_pairs
                 ]

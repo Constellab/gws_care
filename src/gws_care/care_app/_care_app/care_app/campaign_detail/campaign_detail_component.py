@@ -17,6 +17,46 @@ from .campaign_detail_state import (
 )
 
 
+_LOCATION_OPTIONS = [
+    ("", "— Non défini —", "circle-dashed"),
+    ("at_work", "Sur site (entreprise)", "building-2"),
+    ("hospital", "Hôpital / Clinique", "hospital"),
+    ("at_home", "À domicile", "house"),
+    ("visio", "Visioconférence", "video"),
+    ("address", "Autre adresse", "map-pin"),
+]
+
+_LOCATION_ICON: dict[str, str] = {v: icon for v, _, icon in _LOCATION_OPTIONS if v}
+_LOCATION_LABEL: dict[str, str] = {v: label for v, label, _ in _LOCATION_OPTIONS if v}
+
+
+def _location_badge(mode: str) -> rx.Component:
+    """Small read-only badge showing the location mode with its icon."""
+    icon_name = rx.match(
+        mode,
+        ("at_work", "building-2"),
+        ("hospital", "hospital"),
+        ("at_home", "house"),
+        ("visio", "video"),
+        ("address", "map-pin"),
+        "circle-dashed",
+    )
+    label = rx.match(
+        mode,
+        ("at_work", "Sur site"),
+        ("hospital", "Hôpital"),
+        ("at_home", "Domicile"),
+        ("visio", "Visio"),
+        ("address", "Adresse"),
+        "—",
+    )
+    return rx.hstack(
+        rx.icon(icon_name, size=13, color="var(--gray-9)"),
+        rx.text(label, size="2", color="var(--gray-11)"),
+        spacing="1", align="center",
+    )
+
+
 def _exam_type_option_item(opt: ExamTypeOptionDTO) -> rx.Component:
     return rx.select.item(opt.label, value=opt.id)
 
@@ -306,6 +346,34 @@ def _exam_type_row(et: ExamTypeRowDTO) -> rx.Component:
             )
         ),
         rx.table.cell(
+            rx.cond(
+                (CampaignDetailState.is_operator | CampaignDetailState.is_admin)
+                & (
+                    (CampaignDetailState.program.status == "draft")
+                    | (CampaignDetailState.program.status == "validated")
+                ),
+                rx.select.root(
+                    rx.select.trigger(
+                        placeholder="Non défini",
+                        width="160px",
+                    ),
+                    rx.select.content(
+                        rx.select.item("— Non défini —", value="_none_"),
+                        rx.select.separator(),
+                        rx.select.item("Sur site (entreprise)", value="at_work"),
+                        rx.select.item("Hôpital / Clinique", value="hospital"),
+                        rx.select.item("À domicile", value="at_home"),
+                        rx.select.item("Visioconférence", value="visio"),
+                        rx.select.item("Autre adresse", value="address"),
+                    ),
+                    value=rx.cond(et.location_mode != "", et.location_mode, "_none_"),
+                    on_change=lambda mode: CampaignDetailState.set_exam_location_mode(et.id, mode),
+                    size="1",
+                ),
+                _location_badge(et.location_mode),
+            )
+        ),
+        rx.table.cell(
             rx.hstack(
                 rx.cond(
                     (CampaignDetailState.is_operator | CampaignDetailState.is_admin)
@@ -393,6 +461,9 @@ def _tab_exam_types() -> rx.Component:
                         ),
                         rx.table.column_header_cell(
                             rx.text("Médecin assigné", size="2"),
+                        ),
+                        rx.table.column_header_cell(
+                            rx.text("Lieu / Mode", size="2"),
                         ),
                         rx.table.column_header_cell(""),
                     )
