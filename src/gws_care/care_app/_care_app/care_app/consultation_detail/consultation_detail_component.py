@@ -218,10 +218,14 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                                 rx.text(c.clinic_doctor_name, size="2"),
                                 rx.text("—", size="2", color="var(--gray-7)"),
                             ),
-                            rx.icon_button(
-                                rx.icon("pencil", size=12),
-                                size="1", variant="ghost",
-                                on_click=ConsultationDetailState.open_clinic_doctor_dialog,
+                            rx.cond(
+                                c.status == "in_progress",
+                                rx.icon_button(
+                                    rx.icon("pencil", size=12),
+                                    size="1", variant="ghost",
+                                    on_click=ConsultationDetailState.open_clinic_doctor_dialog,
+                                ),
+                                rx.fragment(),
                             ),
                             spacing="2", align="center",
                         ),
@@ -234,10 +238,14 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                                 rx.text(c.work_doctor_name, size="2"),
                                 rx.text("—", size="2", color="var(--gray-7)"),
                             ),
-                            rx.icon_button(
-                                rx.icon("pencil", size=12),
-                                size="1", variant="ghost",
-                                on_click=ConsultationDetailState.open_work_doctor_dialog,
+                            rx.cond(
+                                c.status == "in_progress",
+                                rx.icon_button(
+                                    rx.icon("pencil", size=12),
+                                    size="1", variant="ghost",
+                                    on_click=ConsultationDetailState.open_work_doctor_dialog,
+                                ),
+                                rx.fragment(),
                             ),
                             spacing="2", align="center",
                         ),
@@ -314,7 +322,7 @@ def _tab_bar() -> rx.Component:
             rx.foreach(ConsultationDetailState.exam_tab_headers, _exam_tab_btn),
             rx.cond(
                 ~ConsultationDetailState.is_patient_user
-                & (ConsultationDetailState.consultation.status != "cancelled"),
+                & (ConsultationDetailState.consultation.status == "in_progress"),
                 rx.box(
                     rx.hstack(
                         rx.icon("plus", size=13, color="var(--gray-9)"),
@@ -422,8 +430,7 @@ def _certificate_row(c: CertificateRowDTO) -> rx.Component:
 def _tab_informations() -> rx.Component:
     can_edit = (
         ~ConsultationDetailState.is_patient_user
-        & (ConsultationDetailState.consultation.status != "cancelled")
-        & (ConsultationDetailState.consultation.status != "done")
+        & (ConsultationDetailState.consultation.status == "in_progress")
     )
     return rx.vstack(
         # ── Motif ─────────────────────────────────────────────────────────────
@@ -523,7 +530,7 @@ def _tab_informations() -> rx.Component:
                 rx.spacer(),
                 rx.cond(
                     (~ConsultationDetailState.is_patient_user)
-                    & (ConsultationDetailState.consultation.status != "cancelled"),
+                    & (ConsultationDetailState.consultation.status == "in_progress"),
                     rx.button(
                         rx.icon("plus", size=14),
                         "Ajouter",
@@ -567,7 +574,7 @@ def _tab_informations() -> rx.Component:
                 rx.spacer(),
                 rx.cond(
                     (~ConsultationDetailState.is_patient_user)
-                    & (ConsultationDetailState.consultation.status != "cancelled"),
+                    & (ConsultationDetailState.consultation.status == "in_progress"),
                     rx.button(
                         rx.icon("plus", size=14),
                         "Ajouter",
@@ -610,7 +617,7 @@ def _tab_informations() -> rx.Component:
                 rx.spacer(),
                 rx.cond(
                     (~ConsultationDetailState.is_patient_user)
-                    & (ConsultationDetailState.consultation.status != "cancelled"),
+                    & (ConsultationDetailState.consultation.status == "in_progress"),
                     rx.button(
                         rx.icon("plus", size=14),
                         "Émettre",
@@ -728,6 +735,7 @@ def _param_input_cell(p: ExamParamRowVM) -> rx.Component:
 def _param_row(p: ExamParamRowVM) -> rx.Component:
     can_delete_row = (
         ~ConsultationDetailState.is_patient_user
+        & (ConsultationDetailState.consultation.status == "in_progress")
         & (ConsultationDetailState.active_exam_status != "done")
         & (ConsultationDetailState.active_exam_status != "in_progress_interpretation")
         & ~p.is_computed
@@ -843,10 +851,22 @@ def _exam_audit_section() -> rx.Component:
 
 
 def _tab_exam_params() -> rx.Component:
-    can_edit = (
+    # can_edit_params: controls param inputs + "Ajouter un test" button
+    # Locked once results are transmitted (in_progress_interpretation → lab results
+    # are frozen; the doctor interprets but cannot change what the lab entered).
+    can_edit_params = (
         ~ConsultationDetailState.is_patient_user
+        & (ConsultationDetailState.consultation.status == "in_progress")
         & (ConsultationDetailState.active_exam_status != "done")
         & (ConsultationDetailState.active_exam_status != "in_progress_interpretation")
+    )
+    # show_action_bar: controls the action dropdown + Valider button.
+    # Stays visible in in_progress_interpretation so the doctor can select
+    # "Terminer" or "Transmettre au médecin du travail" after reviewing results.
+    show_action_bar = (
+        ~ConsultationDetailState.is_patient_user
+        & (ConsultationDetailState.consultation.status == "in_progress")
+        & (ConsultationDetailState.active_exam_status != "done")
     )
     return rx.vstack(
         # ── Exam action bar ────────────────────────────────────────────────────
@@ -855,7 +875,7 @@ def _tab_exam_params() -> rx.Component:
             rx.hstack(
                 # Add missed param button — only when exam is editable and has a type ref
                 rx.cond(
-                    can_edit & (ConsultationDetailState.active_exam_type_ref_id != ""),
+                    can_edit_params & (ConsultationDetailState.active_exam_type_ref_id != ""),
                     rx.button(
                         rx.icon("plus-circle", size=14),
                         "Ajouter un test",
@@ -916,7 +936,7 @@ def _tab_exam_params() -> rx.Component:
                     # Options are filtered by role/status and by whether this
                     # visit belongs to a campaign (see exam_action_options).
                     rx.cond(
-                        can_edit,
+                        show_action_bar,
                         rx.vstack(
                             rx.hstack(
                                 rx.text(
@@ -968,18 +988,12 @@ def _tab_exam_params() -> rx.Component:
                             spacing="2",
                         ),
                     ),
-                    # Interpretation section (doctor view) — available as soon as
-                    # results exist, whether the doctor filled them directly or
-                    # the lab transmitted them. Campaign visits send the
-                    # interpretation to the médecin du travail; standalone
-                    # ("particulier") consultations close the exam directly,
-                    # since there is no work doctor to transmit to.
+                    # ── Interprétation médicale (médecin PSC) ─────────────────
+                    # Always editable for the doctor, regardless of exam status —
+                    # "Terminer" only closes param-result editing, not interpretation.
                     rx.cond(
                         ConsultationDetailState.is_doctor
-                        & (
-                            (ConsultationDetailState.active_exam_status == "in_progress_results")
-                            | (ConsultationDetailState.active_exam_status == "in_progress_interpretation")
-                        ),
+                        & (ConsultationDetailState.consultation.status == "in_progress"),
                         rx.vstack(
                             rx.separator(width="100%"),
                             rx.hstack(
@@ -996,53 +1010,138 @@ def _tab_exam_params() -> rx.Component:
                                 width="100%",
                                 rows="4",
                             ),
-                            rx.text(
-                                "Choisissez « Transmettre au médecin du travail » et/ou « Terminer » "
-                                "dans le menu d'action ci-dessus pour valider.",
-                                size="1",
-                                color="var(--gray-8)",
-                                style={"font_style": "italic"},
+                            rx.hstack(
+                                rx.spacer(),
+                                rx.button(
+                                    rx.icon("save", size=14),
+                                    "Enregistrer",
+                                    on_click=ConsultationDetailState.save_interpretation,
+                                    loading=ConsultationDetailState.is_saving_interpretation,
+                                    size="2",
+                                    variant="soft",
+                                ),
+                                rx.cond(
+                                    ConsultationDetailState.consultation.is_campaign,
+                                    rx.button(
+                                        rx.icon("send", size=14),
+                                        "Transmettre au médecin du travail",
+                                        on_click=ConsultationDetailState.transmit_to_work_doctor,
+                                        loading=ConsultationDetailState.is_transmitting,
+                                        size="2",
+                                        color_scheme="teal",
+                                    ),
+                                    rx.fragment(),
+                                ),
+                                spacing="2",
+                                width="100%",
+                                align="center",
                             ),
                             width="100%",
                             spacing="3",
                         ),
                         rx.fragment(),
                     ),
-                    # Lab / non-doctor: read-only waiting message once transmitted
+                    # Non-doctor: read-only view of the doctor's interpretation
                     rx.cond(
-                        (ConsultationDetailState.active_exam_status == "in_progress_interpretation")
-                        & ~ConsultationDetailState.is_doctor,
-                        rx.callout(
-                            "Résultats transmis — en attente d'interprétation par le médecin.",
-                            icon="clock",
-                            color_scheme="blue",
-                            size="1",
+                        ~ConsultationDetailState.is_doctor,
+                        rx.cond(
+                            ConsultationDetailState.active_exam_interpretation != "",
+                            rx.vstack(
+                                rx.separator(width="100%"),
+                                rx.hstack(
+                                    rx.icon("stethoscope", size=16, color="var(--accent-9)"),
+                                    rx.heading("Interprétation médicale", size="4"),
+                                    spacing="2",
+                                    align="center",
+                                ),
+                                rx.box(
+                                    rx.text(
+                                        ConsultationDetailState.active_exam_interpretation,
+                                        size="2",
+                                    ),
+                                    padding="0.75rem 1rem",
+                                    background="var(--gray-2)",
+                                    border_radius="8px",
+                                    width="100%",
+                                ),
+                                width="100%",
+                                spacing="3",
+                            ),
+                            rx.cond(
+                                ConsultationDetailState.active_exam_status == "in_progress_interpretation",
+                                rx.callout(
+                                    "Résultats transmis — en attente d'interprétation par le médecin.",
+                                    icon="clock",
+                                    color_scheme="blue",
+                                    size="1",
+                                ),
+                                rx.fragment(),
+                            ),
                         ),
                         rx.fragment(),
                     ),
-                    # Interpretation read-only (done)
+                    # ── Interprétation médecin du travail (campaign only) ──────
+                    # Editable by the work doctor; visible to all when filled in.
                     rx.cond(
-                        (ConsultationDetailState.active_exam_status == "done")
-                        & (ConsultationDetailState.active_exam_interpretation != ""),
+                        ConsultationDetailState.consultation.is_campaign,
                         rx.vstack(
                             rx.separator(width="100%"),
                             rx.hstack(
-                                rx.icon("stethoscope", size=16, color="var(--green-9)"),
-                                rx.heading("Interprétation médicale", size="4"),
-                                rx.badge("Terminé", color_scheme="green", variant="soft", size="1"),
+                                rx.icon("building-2", size=16, color="var(--purple-9)"),
+                                rx.heading("Interprétation médecin du travail", size="4"),
                                 spacing="2",
                                 align="center",
                             ),
-                            rx.box(
-                                rx.text(
-                                    ConsultationDetailState.active_exam_interpretation,
-                                    size="2",
+                            rx.cond(
+                                ConsultationDetailState.is_work_doctor,
+                                # Editable for the work doctor
+                                rx.vstack(
+                                    rx.text_area(
+                                        value=ConsultationDetailState.active_exam_work_doctor_interpretation,
+                                        on_change=ConsultationDetailState.set_active_exam_work_doctor_interpretation,
+                                        placeholder="Rédigez votre interprétation en tant que médecin du travail…",
+                                        size="2",
+                                        width="100%",
+                                        rows="4",
+                                    ),
+                                    rx.hstack(
+                                        rx.spacer(),
+                                        rx.button(
+                                            rx.icon("save", size=14),
+                                            "Enregistrer",
+                                            on_click=ConsultationDetailState.save_work_doctor_interpretation,
+                                            loading=ConsultationDetailState.is_saving_interpretation,
+                                            size="2",
+                                            variant="soft",
+                                            color_scheme="purple",
+                                        ),
+                                        width="100%",
+                                        align="center",
+                                    ),
+                                    width="100%",
+                                    spacing="3",
                                 ),
-                                padding="0.75rem 1rem",
-                                background="var(--green-2)",
-                                border="1px solid var(--green-5)",
-                                border_radius="8px",
-                                width="100%",
+                                # Read-only for others
+                                rx.cond(
+                                    ConsultationDetailState.active_exam_work_doctor_interpretation != "",
+                                    rx.box(
+                                        rx.text(
+                                            ConsultationDetailState.active_exam_work_doctor_interpretation,
+                                            size="2",
+                                        ),
+                                        padding="0.75rem 1rem",
+                                        background="var(--purple-2)",
+                                        border="1px solid var(--purple-5)",
+                                        border_radius="8px",
+                                        width="100%",
+                                    ),
+                                    rx.text(
+                                        "En attente de l'interprétation du médecin du travail.",
+                                        size="2",
+                                        color="var(--gray-8)",
+                                        style={"font_style": "italic"},
+                                    ),
+                                ),
                             ),
                             width="100%",
                             spacing="3",

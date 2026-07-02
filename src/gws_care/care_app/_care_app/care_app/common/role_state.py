@@ -69,6 +69,13 @@ class RoleState(ReflexMainState):
         return self.is_account_admin
 
     @rx.var
+    def is_work_doctor(self) -> bool:
+        """True for Médecin Entreprise (MEDECIN_ENTREPRISE role) or ADMIN."""
+        if self._active_role_override:
+            return self._active_role_override in ("ADMIN", "MEDECIN_ENTREPRISE")
+        return self.is_admin or "MEDECIN_ENTREPRISE" in self._care_roles
+
+    @rx.var
     def is_patient_user(self) -> bool:
         """True when the user is a linked patient (PATIENT role).
 

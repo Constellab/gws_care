@@ -387,12 +387,17 @@ class AppointmentFormState(FormDialogState, rx.State):
                 async for event in self._create({}):
                     yield event
         except Exception as exc:
-            yield rx.toast.error(str(exc))
+            async with self:
+                self.form_error = str(exc)
         finally:
             async with self:
                 self.is_loading = False
+        # Only close the dialog when the booking actually succeeded —
+        # if form_error is set (validation failed or service error), keep
+        # the dialog open so the user can see and fix the problem.
         async with self:
-            await self.close_dialog()
+            if not self.form_error:
+                await self.close_dialog()
 
     @rx.event
     def open_edit_dialog(self, appointment_id: str):

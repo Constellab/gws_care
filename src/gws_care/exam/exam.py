@@ -47,6 +47,7 @@ class Exam(ModelWithUser):
     is_follow_up: bool = BooleanField(default=False, null=False)
     interpretation: str = TextField(null=True)
     interpreted_by: User = ForeignKeyField(User, null=True, backref="+")
+    work_doctor_interpretation: str = TextField(null=True)
     tube_qr_code: str = CharField(max_length=100, null=True, index=True)
     is_done_on_site: bool = BooleanField(default=False, null=False)
     visit: Visit = ForeignKeyField(Visit, null=True, backref="exams", on_delete="SET NULL")

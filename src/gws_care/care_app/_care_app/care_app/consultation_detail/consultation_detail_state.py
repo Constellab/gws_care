@@ -178,6 +178,8 @@ class ConsultationDetailState(RoleState):
     active_exam_audit_log: list[ExamAuditEntryVM] = []
     # Transmission workflow
     active_exam_interpretation: str = ""
+    active_exam_work_doctor_interpretation: str = ""
+    is_saving_interpretation: bool = False
     is_transmitting: bool = False
     # Edit reason dialog (for re-saving already-recorded results)
     show_edit_reason_dialog: bool = False
@@ -535,6 +537,57 @@ class ConsultationDetailState(RoleState):
         self.active_exam_interpretation = value
 
     @rx.event
+    def set_active_exam_work_doctor_interpretation(self, value: str):
+        self.active_exam_work_doctor_interpretation = value
+
+    @rx.event
+    async def save_interpretation(self):
+        """Save the doctor's interpretation text without changing the exam status.
+
+        Used when the doctor wants to save a draft interpretation and come back
+        later, rather than transmitting or closing the exam immediately.
+        """
+        exam_id = self.active_exam_id
+        if not exam_id:
+            return
+        self.is_saving_interpretation = True
+        self.error_message = ""
+        try:
+            with await self.authenticate_user() as auth_user:
+                from gws_care.exam.exam import Exam
+                from gws_care.user.user import User
+                exam = Exam.get_by_id(exam_id)
+                exam.interpretation = self.active_exam_interpretation or None
+                if self.active_exam_interpretation.strip():
+                    exam.interpreted_by = User.get_by_id(str(auth_user.id))
+                exam.save()
+            yield rx.toast.success("Interprétation enregistrée.")
+        except Exception as e:
+            self.error_message = f"Erreur : {e}"
+        finally:
+            self.is_saving_interpretation = False
+
+    @rx.event
+    async def save_work_doctor_interpretation(self):
+        """Save the médecin du travail's interpretation on the exam."""
+        exam_id = self.active_exam_id
+        if not exam_id:
+            return
+        self.is_saving_interpretation = True
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam.exam import Exam
+                exam = Exam.get_by_id(exam_id)
+                exam.work_doctor_interpretation = self.active_exam_work_doctor_interpretation or None
+                exam.save()
+            yield rx.toast.success("Interprétation médecin du travail enregistrée.")
+        except Exception as e:
+            self.error_message = f"Erreur : {e}"
+        finally:
+            self.is_saving_interpretation = False
+
+    @rx.event
     async def transmit_to_lab(self):
         """Doctor: delegate result entry to the lab and notify lab operators.
 
@@ -681,14 +734,15 @@ class ConsultationDetailState(RoleState):
 
     @rx.event
     async def finish_exam_locally(self):
-        """Standalone (non-campaign) consultation: close the exam with the
-        doctor's interpretation directly — there is no médecin du travail to
-        transmit results to."""
+        """Mark the exam as DONE with the doctor's interpretation (if any).
+
+        Used for standalone ("particulier") consultations — there is no
+        médecin du travail to transmit to, so the doctor closes the exam
+        directly. Interpretation is optional: the exam is finalised even
+        if the textarea is left blank.
+        """
         exam_id = self.active_exam_id
         if not exam_id:
-            return
-        if not self.active_exam_interpretation.strip():
-            self.error_message = "Veuillez renseigner l'interprétation avant de terminer."
             return
         if self.modified_param_ids:
             await self._do_save_exam_params(reason=None)
@@ -1491,6 +1545,7 @@ class ConsultationDetailState(RoleState):
         self.active_exam_params = []
         self.active_exam_audit_log = []
         self.active_exam_interpretation = ""
+        self.active_exam_work_doctor_interpretation = ""
         self.modified_param_ids = []
         self.exam_action = "save"
         try:
@@ -1724,6 +1779,7 @@ class ConsultationDetailState(RoleState):
                 exam = Exam.get_by_id(exam_id)
                 self.active_exam_date = exam.exam_date.isoformat()
                 self.active_exam_interpretation = exam.interpretation or ""
+                self.active_exam_work_doctor_interpretation = getattr(exam, "work_doctor_interpretation", None) or ""
                 exam_type_ref_id = str(exam.exam_type_ref_id) if exam.exam_type_ref_id else ""
                 self.active_exam_type_ref_id = exam_type_ref_id
 
