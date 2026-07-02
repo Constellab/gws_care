@@ -353,11 +353,23 @@ class CampaignService:
         # Skip account check when the campaign has no account (individual campaign)
         if campaign.account_id:
             from gws_care.patient.patient_account import PatientAccount
-            has_link = PatientAccount.get_or_none(
+            # Accept the patient if they are linked via PatientAccount (billing account)
+            # OR if their company_id matches the company behind the campaign's account.
+            has_account_link = PatientAccount.get_or_none(
                 (PatientAccount.patient_id == patient_id)
                 & (PatientAccount.account_id == str(campaign.account_id))
             ) is not None
-            if not has_link:
+            has_company_link = False
+            if not has_account_link and campaign.account_id:
+                acc = campaign.account
+                if (
+                    acc
+                    and acc.company_id
+                    and patient.company_id
+                    and str(patient.company_id) == str(acc.company_id)
+                ):
+                    has_company_link = True
+            if not has_account_link and not has_company_link:
                 raise BadRequestException(
                     "Ce patient n'est pas rattaché au compte de facturation de cette campagne."
                 )
@@ -475,6 +487,54 @@ class CampaignService:
             link.assigned_doctor_id = None
             link.assigned_doctor_name = None
         link.save()
+
+    @classmethod
+    def get_campaign_exam_doctors_map(cls, campaign_id: str) -> dict:
+        """Return {exam_type_ref_id: [MedicalDoctor, ...]} for all exams in the campaign."""
+        from gws_care.campaign.campaign_exam import CampaignExam
+        from gws_care.campaign.campaign_exam_doctor import CampaignExamDoctor
+        from gws_care.doctor.medical_doctor import MedicalDoctor
+
+        rows = (
+            CampaignExamDoctor.select(CampaignExamDoctor, MedicalDoctor, CampaignExam)
+            .join(MedicalDoctor)
+            .switch(CampaignExamDoctor)
+            .join(CampaignExam)
+            .where(CampaignExam.campaign == campaign_id)
+        )
+        result: dict = {}
+        for row in rows:
+            ref_id = str(row.campaign_exam.exam_type_ref_id)
+            result.setdefault(ref_id, []).append(row.doctor)
+        return result
+
+    @classmethod
+    def assign_doctors_to_exam_ref(
+        cls, campaign_id: str, exam_ref_id: str, doctor_ids: list
+    ) -> None:
+        """Assign multiple doctors to an exam type in a campaign.
+
+        Replaces any previous assignment. Each doctor is also automatically
+        added to the campaign's Médecins tab (CampaignDoctor).
+        """
+        from gws_care.campaign.campaign_exam import CampaignExam
+        from gws_care.campaign.campaign_exam_doctor import CampaignExamDoctor
+        from gws_care.doctor.medical_doctor import MedicalDoctor
+
+        link = CampaignExam.get_or_none(
+            (CampaignExam.campaign == campaign_id) & (CampaignExam.exam_type_ref == exam_ref_id)
+        )
+        if link is None:
+            raise BadRequestException("Ce type d'examen n'est pas dans cette campagne.")
+
+        CampaignExamDoctor.delete().where(CampaignExamDoctor.campaign_exam == link.id).execute()
+
+        for doctor_id in doctor_ids:
+            doc = MedicalDoctor.get_or_none(MedicalDoctor.id == doctor_id)
+            if doc is None:
+                continue
+            CampaignExamDoctor.create(campaign_exam=link, doctor=doc)
+            cls.add_doctor_to_campaign(campaign_id, str(doc.id))
 
     # ── ExamType management (legacy ExamTypeModel-based) ─────────────────────
 

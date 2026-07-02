@@ -360,23 +360,45 @@ def _edit_dialog() -> rx.Component:
 
 
 def _assign_doctor_dialog() -> rx.Component:
-    """Dialog for assigning a doctor to an exam type within a campaign."""
+    """Dialog for assigning one or more doctors to an exam type within a campaign."""
+
+    def _doctor_row(d) -> rx.Component:
+        is_selected = CampaignDetailState.assign_doctor_selected_ids.contains(d.id)
+        return rx.hstack(
+            rx.checkbox(
+                checked=is_selected,
+                on_change=lambda _: CampaignDetailState.toggle_assign_doctor_selection(d.id),
+                size="2",
+            ),
+            rx.text(d.label, size="2"),
+            spacing="2",
+            align="center",
+            width="100%",
+            padding="0.3rem 0.5rem",
+            border_radius="var(--radius-1)",
+            background=rx.cond(is_selected, "var(--accent-3)", "transparent"),
+            _hover={"background": rx.cond(is_selected, "var(--accent-4)", "var(--gray-2)")},
+            cursor="pointer",
+            on_click=CampaignDetailState.toggle_assign_doctor_selection(d.id),
+        )
+
     return rx.dialog.root(
         rx.dialog.content(
             rx.dialog.title(
                 rx.hstack(
                     rx.icon("stethoscope", size=18),
-                    rx.text("Assigner un médecin — "),
+                    rx.text("Assigner des médecins — "),
                     rx.text(CampaignDetailState.assign_doctor_exam_name, weight="bold"),
                     spacing="1", align="center",
                 )
             ),
             rx.dialog.description(
-                "Le médecin assigné pourra accéder aux résultats de cet examen et faire des retours.",
+                "Les médecins assignés pourront accéder aux résultats de cet examen. "
+                "Ils seront également ajoutés à l'onglet Médecins de la campagne.",
                 size="2", color="var(--gray-9)",
             ),
             rx.vstack(
-                # Specialty filter (shown only when there are multiple specialties)
+                # Specialty filter
                 rx.cond(
                     CampaignDetailState.specialty_options_for_assign.length() > 0,
                     rx.vstack(
@@ -403,28 +425,36 @@ def _assign_doctor_dialog() -> rx.Component:
                     ),
                     rx.fragment(),
                 ),
-                # Doctor select
+                # Doctor checklist
                 rx.vstack(
-                    rx.text("Médecin *", size="2", weight="medium"),
-                    rx.select.root(
-                        rx.select.trigger(width="100%", placeholder="Sélectionner un médecin…"),
-                        rx.select.content(
-                            rx.select.item("— Aucun (retirer l'assignation) —", value="_none_"),
-                            rx.foreach(
-                                CampaignDetailState.doctor_options_for_assign,
-                                lambda d: rx.select.item(d.label, value=d.id),
+                    rx.hstack(
+                        rx.text("Médecins", size="2", weight="medium"),
+                        rx.cond(
+                            CampaignDetailState.assign_doctor_selected_ids.length() > 0,
+                            rx.badge(
+                                CampaignDetailState.assign_doctor_selected_ids.length().to_string(),
+                                color_scheme="blue", size="1",
                             ),
+                            rx.fragment(),
                         ),
-                        value=rx.cond(
-                            CampaignDetailState.assign_doctor_selected_id != "",
-                            CampaignDetailState.assign_doctor_selected_id,
-                            "_none_",
-                        ),
-                        on_change=CampaignDetailState.set_assign_doctor_selected,
-                        size="2",
-                        width="100%",
+                        spacing="2", align="center",
                     ),
-                    spacing="1", width="100%",
+                    rx.cond(
+                        CampaignDetailState.doctor_options_for_assign.length() == 0,
+                        rx.text("Chargement…", size="2", color="var(--gray-9)"),
+                        rx.scroll_area(
+                            rx.vstack(
+                                rx.foreach(
+                                    CampaignDetailState.doctor_options_for_assign,
+                                    _doctor_row,
+                                ),
+                                spacing="1", width="100%",
+                            ),
+                            max_height="280px",
+                            width="100%",
+                        ),
+                    ),
+                    spacing="2", width="100%",
                 ),
                 spacing="3", width="100%", margin_top="1rem",
             ),

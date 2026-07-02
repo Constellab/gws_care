@@ -46,8 +46,7 @@ class ExamTypeRowDTO(BaseModel):
     code: str = ""   # kept for compatibility, unused for new exams
     name: str
     category: str = ""
-    assigned_doctor_id: str = ""
-    assigned_doctor_name: str = ""
+    assigned_doctors: list[DoctorOptionDTO] = []
 
 
 class VisitRowDTO(BaseModel):
@@ -159,11 +158,11 @@ class CampaignDetailState(PatientPickerState):
     add_campaign_doctor_selected_id: str = ""
     is_adding_campaign_doctor: bool = False
 
-    # Assign doctor to exam dialog
+    # Assign doctors to exam dialog (multi-select)
     assign_doctor_dialog_open: bool = False
     assign_doctor_exam_id: str = ""        # ExamTypeRef.id being assigned
     assign_doctor_exam_name: str = ""
-    assign_doctor_selected_id: str = ""    # MedicalDoctor.id chosen
+    assign_doctor_selected_ids: list[str] = []   # MedicalDoctor ids chosen
     doctor_options_for_assign: list[DoctorOptionDTO] = []
     specialty_options_for_assign: list[str] = []
     is_assigning_doctor: bool = False
@@ -578,16 +577,46 @@ class CampaignDetailState(PatientPickerState):
         self._all_patient_options = []
         try:
             with await self.authenticate_user():
-                from gws_care.patient.patient_service import PatientService
+                from gws_care.account.account import Account
                 from gws_care.campaign.campaign_patient import CampaignPatient
+                from gws_care.patient.patient_service import PatientService
                 already_ids = {
                     str(cp.patient_id)
-                    for cp in CampaignPatient.select().where(CampaignPatient.program == self.program.id)
+                    for cp in CampaignPatient.select().where(CampaignPatient.campaign == self.program.id)
                 }
-                patients = PatientService.search_patients(
-                    account_id=self.program.account_id or None,
-                    limit=200,
+                account_id = self.program.account_id or None
+
+                # Determine the company linked to this campaign's billing account so
+                # we can also find patients affiliated via patient.company_id (not only
+                # via the PatientAccount M2M table).
+                account_company_id = None
+                if account_id:
+                    acc = Account.get_or_none(Account.id == account_id)
+                    if acc and acc.company_id:
+                        account_company_id = str(acc.company_id)
+
+                # 1) Patients explicitly linked to the billing account
+                by_account = PatientService.search_patients(
+                    account_id=account_id,
+                    limit=500,
                 )
+                # 2) Patients whose employer company matches (patient.company_id)
+                by_company: list = []
+                if account_company_id:
+                    by_company = PatientService.search_patients(
+                        company_id=account_company_id,
+                        limit=500,
+                    )
+
+                # Merge and deduplicate (account link takes precedence in ordering)
+                seen: set[str] = set()
+                patients = []
+                for p in by_account + by_company:
+                    pid = str(p.id)
+                    if pid not in seen:
+                        seen.add(pid)
+                        patients.append(p)
+
                 opts = [
                     PatientOptionDTO(
                         id=str(p.id),
@@ -813,48 +842,64 @@ class CampaignDetailState(PatientPickerState):
     # ── Assign doctor to exam ─────────────────────────────────────────────────
 
     @rx.event
-    def open_assign_doctor_dialog(self, exam_id: str, exam_name: str,
-                                   current_doctor_id: str):
+    async def open_assign_doctor_dialog(self, exam_id: str):
+        """Open the assign-doctor dialog for the given exam type ref id."""
+        exam = next((e for e in self.exam_types if e.id == exam_id), None)
         self.assign_doctor_exam_id = exam_id
-        self.assign_doctor_exam_name = exam_name
-        self.assign_doctor_selected_id = current_doctor_id
+        self.assign_doctor_exam_name = exam.name if exam else ""
+        self.assign_doctor_selected_ids = [d.id for d in exam.assigned_doctors] if exam else []
         self.assign_doctor_specialty_filter = ""
-        self._load_doctor_options_for_assign(load_specialties=True)
+        self.doctor_options_for_assign = []
+        self.specialty_options_for_assign = []
         self.assign_doctor_dialog_open = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+                self.specialty_options_for_assign = MedicalDoctorService.get_specializations()
+                docs = MedicalDoctorService.list_for_selection()
+                self.doctor_options_for_assign = [
+                    DoctorOptionDTO(
+                        id=d.id,
+                        label=d.full_name + (" — " + d.specialization if d.specialization else ""),
+                        specialty=d.specialization,
+                    )
+                    for d in docs
+                ]
+        except Exception as e:
+            self.error_message = str(e)
 
     @rx.event
     def close_assign_doctor_dialog(self):
         self.assign_doctor_dialog_open = False
 
     @rx.event
-    def set_assign_doctor_selected(self, doctor_id: str):
-        self.assign_doctor_selected_id = "" if doctor_id == "_none_" else doctor_id
+    def toggle_assign_doctor_selection(self, doctor_id: str):
+        if doctor_id in self.assign_doctor_selected_ids:
+            self.assign_doctor_selected_ids = [
+                d for d in self.assign_doctor_selected_ids if d != doctor_id
+            ]
+        else:
+            self.assign_doctor_selected_ids = self.assign_doctor_selected_ids + [doctor_id]
 
     @rx.event
-    def set_assign_doctor_specialty_filter(self, value: str):
+    async def set_assign_doctor_specialty_filter(self, value: str):
         self.assign_doctor_specialty_filter = value if value != "_all_" else ""
-        self._load_doctor_options_for_assign()
-
-    def _load_doctor_options_for_assign(self, load_specialties: bool = False):
-        """Populate doctor_options_for_assign from MedicalDoctor."""
         try:
-            from gws_care.doctor.medical_doctor_service import MedicalDoctorService
-            if load_specialties:
-                self.specialty_options_for_assign = MedicalDoctorService.get_specializations()
-            docs = MedicalDoctorService.list_for_selection(
-                specialization=self.assign_doctor_specialty_filter
-            )
-            self.doctor_options_for_assign = [
-                DoctorOptionDTO(
-                    id=d.id,
-                    label=d.full_name + (" — " + d.specialization if d.specialization else ""),
-                    specialty=d.specialization,
+            with await self.authenticate_user():
+                from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+                docs = MedicalDoctorService.list_for_selection(
+                    specialization=self.assign_doctor_specialty_filter
                 )
-                for d in docs
-            ]
+                self.doctor_options_for_assign = [
+                    DoctorOptionDTO(
+                        id=d.id,
+                        label=d.full_name + (" — " + d.specialization if d.specialization else ""),
+                        specialty=d.specialization,
+                    )
+                    for d in docs
+                ]
         except Exception as e:
-            self.doctor_options_for_assign = []
-            self.specialty_options_for_assign = []
+            self.error_message = str(e)
 
     @rx.event
     async def confirm_assign_doctor(self):
@@ -864,13 +909,13 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
-                CampaignService.assign_doctor_to_exam_ref(
+                CampaignService.assign_doctors_to_exam_ref(
                     self.program.id,
                     self.assign_doctor_exam_id,
-                    self.assign_doctor_selected_id or None,
+                    self.assign_doctor_selected_ids,
                 )
             self.assign_doctor_dialog_open = False
-            self.success_message = "Médecin assigné."
+            self.success_message = "Médecins assignés."
             await self._load_program(preserve_tab=True)
         except Exception as e:
             self.error_message = str(e)
@@ -921,15 +966,22 @@ class CampaignDetailState(PatientPickerState):
                     for p in patients
                 ]
 
-                # ExamTypes — loaded from referential (ExamTypeRef) with assigned doctor
+                # ExamTypes — loaded from referential (ExamTypeRef) with assigned doctors
                 exam_ref_pairs = CampaignService.get_exam_refs_with_doctor(page_id)
+                doctors_map = CampaignService.get_campaign_exam_doctors_map(page_id)
                 self.exam_types = [
                     ExamTypeRowDTO(
                         id=str(ref.id),
                         name=ref.name,
                         category=ref.get_category_label(),
-                        assigned_doctor_id=link.assigned_doctor_id or "",
-                        assigned_doctor_name=link.assigned_doctor_name or "",
+                        assigned_doctors=[
+                            DoctorOptionDTO(
+                                id=str(d.id),
+                                label=d.get_full_name() + (" — " + d.specialization if d.specialization else ""),
+                                specialty=d.specialization or "",
+                            )
+                            for d in doctors_map.get(str(ref.id), [])
+                        ],
                     )
                     for ref, link in exam_ref_pairs
                 ]

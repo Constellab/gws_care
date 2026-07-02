@@ -38,6 +38,7 @@ class PatientService:
         patient_number_prefix: str | None = None,
         phone: str | None = None,
         account_id: str | None = None,
+        company_id: str | None = None,
         dob_from: str | None = None,
         dob_to: str | None = None,
         limit: int | None = None,
@@ -63,6 +64,8 @@ class PatientService:
                 .join(PatientAccount, JOIN.INNER, on=(PatientAccount.patient_id == Patient.id))
                 .where(PatientAccount.account_id == account_id)
             )
+        elif company_id:
+            query = query.where(Patient.company_id == company_id)
         if dob_from:
             from datetime import date as date_type
             query = query.where(Patient.date_of_birth >= date_type.fromisoformat(dob_from))

@@ -6,6 +6,7 @@ from gws_reflex_main import main_component
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..common.patient_picker_component import patient_picker_widget
+from .campaign_detail_dialogs_component import _assign_doctor_dialog
 from .campaign_detail_state import (
     CampaignDetailState,
     DoctorOptionDTO,
@@ -289,11 +290,17 @@ def _exam_type_row(et: ExamTypeRowDTO) -> rx.Component:
         rx.table.cell(rx.text(et.category, size="2", color="var(--gray-8)")),
         rx.table.cell(
             rx.cond(
-                et.assigned_doctor_name != "",
-                rx.hstack(
-                    rx.icon("stethoscope", size=13, color="var(--accent-9)"),
-                    rx.text(et.assigned_doctor_name, size="2", color="var(--accent-11)"),
-                    spacing="1", align="center",
+                et.assigned_doctors.length() > 0,
+                rx.vstack(
+                    rx.foreach(
+                        et.assigned_doctors,
+                        lambda d: rx.hstack(
+                            rx.icon("stethoscope", size=13, color="var(--accent-9)"),
+                            rx.text(d.label, size="2", color="var(--accent-11)"),
+                            spacing="1", align="center",
+                        ),
+                    ),
+                    spacing="1",
                 ),
                 rx.text("—", size="2", color="var(--gray-6)"),
             )
@@ -312,7 +319,7 @@ def _exam_type_row(et: ExamTypeRowDTO) -> rx.Component:
                                 rx.icon("user-round-plus", size=14), variant="soft", size="1",
                                 color_scheme="blue",
                                 on_click=lambda: CampaignDetailState.open_assign_doctor_dialog(
-                                    et.id, et.name, et.assigned_doctor_id
+                                    et.id
                                 ),
                             ),
                             content="Assigner un médecin",
@@ -1068,6 +1075,7 @@ def campaign_detail_page() -> rx.Component:
                 ),
             ),
             _add_campaign_doctor_dialog(),
+            _assign_doctor_dialog(),
             _add_patient_dialog(),
             _add_exam_type_dialog(),
             _archive_dialog(),
