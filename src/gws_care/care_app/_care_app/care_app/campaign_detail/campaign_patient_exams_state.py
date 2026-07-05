@@ -22,10 +22,10 @@ class ExamParamEntry(BaseModel):
     param_id: str
     name: str
     unit: str
-    ref_range: str       # "4.0 – 10.0" or "" if not defined
+    ref_range: str  # "4.0 – 10.0" or "" if not defined
     critical_range: str  # "2.0 / 15.0" or "" if not defined
     is_required: bool
-    value_type: str      # NUMERIC | TEXT | BOOLEAN
+    value_type: str  # NUMERIC | TEXT | BOOLEAN
     value: str = ""
     # Raw float strings for colour-coding (empty = threshold not defined)
     ref_low_raw: str = ""
@@ -76,6 +76,7 @@ def _compute_param_status(
 def _recompute_params(params: list[ExamParamEntry]) -> list[ExamParamEntry]:
     """Re-evaluate all computed parameters from current non-computed NUMERIC values."""
     from gws_care.exam_type_ref.exam_formula_engine import ExamFormulaEngine
+
     context: dict[str, float] = {}
     for p in params:
         if not p.is_computed and p.code and p.value.strip() and p.value_type == "NUMERIC":
@@ -89,9 +90,12 @@ def _recompute_params(params: list[ExamParamEntry]) -> list[ExamParamEntry]:
             try:
                 computed = ExamFormulaEngine.evaluate(p.formula, context)
                 val_str = f"{computed:.4g}"
-                status = _compute_param_status(val_str, p.ref_low_raw, p.ref_high_raw,
-                                               p.critical_low_raw, p.critical_high_raw)
-                result.append(ExamParamEntry(**{**p.model_dump(), "value": val_str, "value_status": status}))
+                status = _compute_param_status(
+                    val_str, p.ref_low_raw, p.ref_high_raw, p.critical_low_raw, p.critical_high_raw
+                )
+                result.append(
+                    ExamParamEntry(**{**p.model_dump(), "value": val_str, "value_status": status})
+                )
             except Exception:
                 result.append(p)
         else:
@@ -117,7 +121,7 @@ class ExamSectionVM(BaseModel):
     category_label: str
     param_count: int = 0
     is_saved: bool = False
-    is_transmitted: bool = False   # True once results have been sent to the doctor
+    is_transmitted: bool = False  # True once results have been sent to the doctor
     transmission_target: str = ""  # "LABO" | "PSC" | "TRAVAIL" — in-memory only
     saved_exam_id: str = ""
     allows_attachment: bool = True
@@ -148,6 +152,11 @@ class CampaignPatientExamsState(ReflexMainState):
 
     # Section action dropdown selection
     section_action: str = "save"  # "save" | "labo" | "psc" | "travail"
+    _pending_section_action: str = ""  # action queued while motif dialog is open
+    visit_status: str = "pending"  # CampaignVisitStatus of the patient's visit
+
+    # True while the user has clicked "Modifier" to unlock an already-transmitted section
+    is_editing_section: bool = False
 
     # Modification motif dialog
     show_motif_dialog: bool = False
@@ -181,10 +190,7 @@ class CampaignPatientExamsState(ReflexMainState):
     @rx.var
     def has_any_value_filled(self) -> bool:
         """True when at least one non-computed active param has a non-empty value."""
-        return any(
-            p.value.strip() != "" and not p.is_computed
-            for p in self.active_params
-        )
+        return any(p.value.strip() != "" and not p.is_computed for p in self.active_params)
 
     @rx.var
     def can_save_section(self) -> bool:
@@ -192,6 +198,13 @@ class CampaignPatientExamsState(ReflexMainState):
         if not self.active_params:
             return True
         return any(p.value.strip() != "" and not p.is_computed for p in self.active_params)
+
+    @rx.var
+    def can_execute_section_action(self) -> bool:
+        """Valider enabled: labo action needs no values; all others need at least one."""
+        if self.section_action == "labo":
+            return True
+        return self.can_save_section
 
     @rx.var
     def can_validate_section(self) -> bool:
@@ -213,6 +226,16 @@ class CampaignPatientExamsState(ReflexMainState):
         """Transmission target of the currently active section (in-memory)."""
         sec = next((s for s in self.sections if s.exam_type_ref_id == self.active_section_id), None)
         return sec.transmission_target if sec else ""
+
+    @rx.var
+    def all_sections_transmitted(self) -> bool:
+        """True when every section has been transmitted to a doctor."""
+        return len(self.sections) > 0 and all(s.is_transmitted for s in self.sections)
+
+    @rx.var
+    def patient_is_on_terrain(self) -> bool:
+        """True when patient presence has been declared (visit not pending)."""
+        return self.visit_status != "pending"
 
     # Treating doctor transmission flag
     treating_doctor_transmitted: bool = False
@@ -258,6 +281,7 @@ class CampaignPatientExamsState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_patient import CampaignPatient
+
                 cp = CampaignPatient.get_or_none(
                     (CampaignPatient.campaign == campaign_id)
                     & (CampaignPatient.patient == patient_id)
@@ -278,6 +302,7 @@ class CampaignPatientExamsState(ReflexMainState):
         if section_id == self.active_section_id:
             return
         self.active_section_id = section_id
+        self.is_editing_section = False
         await self._load_active_params(section_id)
         await self._load_section_files()
 
@@ -291,13 +316,18 @@ class CampaignPatientExamsState(ReflexMainState):
             if p.param_id == param_id:
                 status = (
                     _compute_param_status(
-                        value, p.ref_low_raw, p.ref_high_raw,
-                        p.critical_low_raw, p.critical_high_raw,
+                        value,
+                        p.ref_low_raw,
+                        p.ref_high_raw,
+                        p.critical_low_raw,
+                        p.critical_high_raw,
                     )
                     if p.value_type == "NUMERIC"
                     else ""
                 )
-                updated.append(ExamParamEntry(**{**p.dict(), "value": value, "value_status": status}))
+                updated.append(
+                    ExamParamEntry(**{**p.dict(), "value": value, "value_status": status})
+                )
             else:
                 updated.append(p)
         # Recompute any formula-based parameters
@@ -308,7 +338,8 @@ class CampaignPatientExamsState(ReflexMainState):
         """Toggle whether a parameter is included in the saved results."""
         self.active_params = [
             ExamParamEntry(**{**p.model_dump(), "is_selected": not p.is_selected})
-            if p.param_id == param_id else p
+            if p.param_id == param_id
+            else p
             for p in self.active_params
         ]
 
@@ -316,8 +347,7 @@ class CampaignPatientExamsState(ReflexMainState):
     def select_all_params(self):
         """Mark all parameters as selected."""
         self.active_params = [
-            ExamParamEntry(**{**p.model_dump(), "is_selected": True})
-            for p in self.active_params
+            ExamParamEntry(**{**p.model_dump(), "is_selected": True}) for p in self.active_params
         ]
 
     @rx.event
@@ -333,11 +363,23 @@ class CampaignPatientExamsState(ReflexMainState):
     @rx.event
     def open_motif_dialog(self):
         self.modification_motif = ""
+        self._pending_section_action = ""
         self.show_motif_dialog = True
 
     @rx.event
     def close_motif_dialog(self):
         self.show_motif_dialog = False
+        self._pending_section_action = ""
+
+    @rx.event
+    def enter_edit_mode(self):
+        """Unlock the form for an already-transmitted section (requires re-transmit after editing)."""
+        self.is_editing_section = True
+
+    @rx.var
+    def active_section_is_readonly(self) -> bool:
+        """True when the active section is transmitted AND the user hasn't clicked Modifier yet."""
+        return self.active_section_is_transmitted and not self.is_editing_section
 
     @rx.event
     def set_modification_motif(self, value: str):
@@ -345,9 +387,16 @@ class CampaignPatientExamsState(ReflexMainState):
 
     @rx.event
     async def confirm_modification(self):
-        """Save the section with the provided modification reason."""
+        """Save with motif, then execute any pending transmission action."""
         self.show_motif_dialog = False
-        await self.save_active_section_with_motif(self.modification_motif)
+        pending = self._pending_section_action
+        self._pending_section_action = ""
+        await self._do_save_section(motif=self.modification_motif)
+        if self.error:
+            return
+        self.is_editing_section = False
+        if pending and pending != "save":
+            await self._do_transmit_action(pending)
 
     # ── Section action (4-option dropdown) ────────────────────────────────
 
@@ -360,14 +409,26 @@ class CampaignPatientExamsState(ReflexMainState):
         """Save the active section and optionally transmit based on section_action."""
         action = self.section_action
 
-        # Always save first
-        await self._do_save_section(motif="")
-        if self.error:
+        # Already saved → require modification motif before proceeding
+        if self.active_section_is_saved:
+            self._pending_section_action = action
+            self.modification_motif = ""
+            self.show_motif_dialog = True
             return
 
-        if action == "save":
-            return  # just save, no transmission
+        # Labo transmission: no values required, skip save
+        if action == "labo":
+            await self._do_transmit_action(action)
+            return
 
+        # All other actions: save first (at least one value required), then transmit
+        await self._do_save_section(motif="")
+        if self.error or action == "save":
+            return
+        await self._do_transmit_action(action)
+
+    async def _do_transmit_action(self, action: str):
+        """Transmit the active section based on the given action string."""
         campaign_id = self.cp_campaign_id
         patient_id = self.cp_patient_id
         section_id = self.active_section_id
@@ -392,7 +453,6 @@ class CampaignPatientExamsState(ReflexMainState):
                 else:
                     return
 
-                # Advance exam record status to IN_PROGRESS_INTERPRETATION
                 marker = f"CAMP:{campaign_id}|REF:{section_id}"
                 for exam in Exam.select().where(Exam.patient == patient_id):
                     rv = exam.reason_for_visit or ""
@@ -401,14 +461,17 @@ class CampaignPatientExamsState(ReflexMainState):
                         exam.save()
                         break
 
-            # Update in-memory state
             self.medical_status = new_status
             self.sections = [
-                ExamSectionVM(**{
-                    **s.dict(),
-                    "is_transmitted": True,
-                    "transmission_target": target,
-                }) if s.exam_type_ref_id == section_id else s
+                ExamSectionVM(
+                    **{
+                        **s.dict(),
+                        "is_transmitted": True,
+                        "transmission_target": target,
+                    }
+                )
+                if s.exam_type_ref_id == section_id
+                else s
                 for s in self.sections
             ]
             target_labels = {
@@ -419,7 +482,35 @@ class CampaignPatientExamsState(ReflexMainState):
             sec = next((s for s in self.sections if s.exam_type_ref_id == section_id), None)
             sec_name = sec.name if sec else "l'examen"
             self.success = f'Résultats "{sec_name}" transmis {target_labels.get(target, "")} ✓'
+            self.is_editing_section = False
 
+        except Exception as e:
+            self.error = str(e)
+        finally:
+            self.is_saving = False
+
+    # ── Validate lab results ──────────────────────────────────────────────
+
+    @rx.event
+    async def validate_lab(self):
+        """Advance medical_status from LAB_ENTERED to LAB_VALIDATED."""
+        campaign_id = self.cp_campaign_id
+        patient_id = self.cp_patient_id
+        self.is_saving = True
+        self.error = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_patient import CampaignPatient, MedicalRecordStatus
+
+                cp = CampaignPatient.get_or_none(
+                    (CampaignPatient.campaign == campaign_id)
+                    & (CampaignPatient.patient == patient_id)
+                )
+                if cp:
+                    cp.medical_status = MedicalRecordStatus.LAB_VALIDATED.value
+                    cp.save()
+            self.medical_status = "LAB_VALIDATED"
+            self.success = "Résultats de laboratoire validés ✓"
         except Exception as e:
             self.error = str(e)
         finally:
@@ -469,26 +560,31 @@ class CampaignPatientExamsState(ReflexMainState):
                         "unit": p.unit,
                         "reference_range": p.ref_range,
                         "status": _compute_param_status(
-                            p.value, p.ref_low_raw, p.ref_high_raw,
-                            p.critical_low_raw, p.critical_high_raw,
-                        ) if p.value_type == "NUMERIC" else ("normal" if p.value else ""),
+                            p.value,
+                            p.ref_low_raw,
+                            p.ref_high_raw,
+                            p.critical_low_raw,
+                            p.critical_high_raw,
+                        )
+                        if p.value_type == "NUMERIC"
+                        else ("normal" if p.value else ""),
                     }
                     for p in self.active_params
-                    if p.is_selected   # only save params that are selected
+                    if p.is_selected  # only save params that are selected
                 ]
 
                 # Marker in reason_for_visit to identify this exam uniquely
                 marker = f"CAMP:{campaign_id}|REF:{section_id}"
 
                 existing = Exam.get_or_none(
-                    (Exam.patient == patient_id)
-                    & Exam.reason_for_visit.startswith(marker)
+                    (Exam.patient == patient_id) & Exam.reason_for_visit.startswith(marker)
                 )
 
                 if existing:
                     existing.lab_results = lab_results
                     if motif:
                         from gws_care.exam.exam_audit_entry import ExamAuditEntry
+
                         ExamAuditEntry.create(
                             exam=existing,
                             action="MODIFICATION",
@@ -504,7 +600,7 @@ class CampaignPatientExamsState(ReflexMainState):
                     e.billing_account_id = campaign.account_id
                     e.exam_date = date.today()
                     e.exam_type = ExamType.OTHER
-                    e.exam_type_ref_id = section_id   # link to ExamTypeRef for label resolution
+                    e.exam_type_ref_id = section_id  # link to ExamTypeRef for label resolution
                     e.status = ExamStatus.IN_PROGRESS_RESULTS
                     e.reason_for_visit = f"{marker}|{section_name}"
                     e.lab_results = lab_results
@@ -513,9 +609,7 @@ class CampaignPatientExamsState(ReflexMainState):
 
                 # Update section status
                 self.sections = [
-                    ExamSectionVM(
-                        **{**s.dict(), "is_saved": True, "saved_exam_id": exam_id}
-                    )
+                    ExamSectionVM(**{**s.dict(), "is_saved": True, "saved_exam_id": exam_id})
                     if s.exam_type_ref_id == section_id
                     else s
                     for s in self.sections
@@ -536,6 +630,7 @@ class CampaignPatientExamsState(ReflexMainState):
         """Set matching DRAFT campaign exams to PENDING status."""
         from gws_care.exam.exam import Exam
         from gws_care.exam.exam_type import ExamStatus
+
         for exam in list(
             Exam.select().where(
                 Exam.patient == patient_id,
@@ -607,16 +702,18 @@ class CampaignPatientExamsState(ReflexMainState):
             self.medical_status = "LAB_ENTERED"
             # Mark every section as transmitted in local state
             self.sections = [
-                ExamSectionVM(**{**s.dict(), "is_transmitted": True})
-                for s in self.sections
+                ExamSectionVM(**{**s.dict(), "is_transmitted": True}) for s in self.sections
             ]
-            self.success = "Résultats transmis au médecin PSC. Le dossier passe en « Résultats saisis »."
+            self.success = (
+                "Résultats transmis au médecin PSC. Le dossier passe en « Résultats saisis »."
+            )
 
             # Notification au médecin PSC
             try:
                 with await self.authenticate_user():
                     from gws_care.campaign.campaign import Campaign
                     from gws_care.notification.notification_service import NotificationService
+
                     camp = Campaign.get_by_id(campaign_id)
                     if camp and camp.psc_doctor_id:
                         try:
@@ -670,6 +767,7 @@ class CampaignPatientExamsState(ReflexMainState):
 
             with await self.authenticate_user():
                 from gws_care.exam.exam_file_service import ExamFileService
+
                 for original_name, file_bytes, mime in uploads:
                     ExamFileService.create_file(
                         exam_id=sec.saved_exam_id,
@@ -690,6 +788,7 @@ class CampaignPatientExamsState(ReflexMainState):
         """Delete an attached file from the active section."""
         try:
             from gws_care.exam.exam_file_service import ExamFileService
+
             ExamFileService.delete_file(file_id)
             await self._load_section_files()
         except Exception as e:
@@ -704,19 +803,28 @@ class CampaignPatientExamsState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.exam.exam_file_service import ExamFileService
+
                 files = ExamFileService.list_files_for_exam(sec.saved_exam_id)
                 result = []
                 for f in files:
                     size_kb = (f.file_size or 0) / 1024
-                    size_label = f"{size_kb:.0f} Ko" if size_kb < 1024 else f"{size_kb/1024:.1f} Mo"
-                    dl_url = ExamFileService.get_resource_download_url(f.resource_id) if f.resource_id else ""
-                    result.append(SectionFileVM(
-                        file_id=str(f.id),
-                        name=f.original_name or "fichier",
-                        size_label=size_label,
-                        download_url=dl_url,
-                        mime_type=f.mime_type or "",
-                    ))
+                    size_label = (
+                        f"{size_kb:.0f} Ko" if size_kb < 1024 else f"{size_kb / 1024:.1f} Mo"
+                    )
+                    dl_url = (
+                        ExamFileService.get_resource_download_url(f.resource_id)
+                        if f.resource_id
+                        else ""
+                    )
+                    result.append(
+                        SectionFileVM(
+                            file_id=str(f.id),
+                            name=f.original_name or "fichier",
+                            size_label=size_label,
+                            download_url=dl_url,
+                            mime_type=f.mime_type or "",
+                        )
+                    )
                 self.section_attached_files = result
         except Exception as exc:
             self.section_attached_files = []
@@ -742,6 +850,7 @@ class CampaignPatientExamsState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.add_psc_interpretation(campaign_id, patient_id, self.psc_notes)
                 CampaignService.validate_psc_patient(campaign_id, patient_id)
             self.medical_status = "PSC_VALIDATED"
@@ -752,6 +861,7 @@ class CampaignPatientExamsState(ReflexMainState):
                 with await self.authenticate_user():
                     from gws_care.campaign.campaign import Campaign
                     from gws_care.notification.notification_service import NotificationService
+
                     camp = Campaign.get_by_id(campaign_id)
                     if camp and camp.enterprise_doctor_id:
                         doc = camp.enterprise_doctor
@@ -786,6 +896,7 @@ class CampaignPatientExamsState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.transmit_to_treating_doctor(campaign_id, patient_id)
             self.treating_doctor_transmitted = True
             self.medical_status = "TRANSMITTED_TREATING_DOCTOR"
@@ -807,6 +918,7 @@ class CampaignPatientExamsState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.finish_patient_record(campaign_id, patient_id)
             self.medical_status = "PUBLISHED"
             self.success = "Dossier patient clôturé."
@@ -835,8 +947,10 @@ class CampaignPatientExamsState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.add_enterprise_interpretation(
-                    campaign_id, patient_id,
+                    campaign_id,
+                    patient_id,
                     self.enterprise_notes,
                     self.enterprise_notes,
                 )
@@ -890,11 +1004,26 @@ class CampaignPatientExamsState(ReflexMainState):
                 self.psc_notes = (cp.psc_notes or "") if cp else ""
                 self.enterprise_notes = (cp.enterprise_notes or "") if cp else ""
                 self.enterprise_patient_message = (cp.enterprise_notes or "") if cp else ""
-                self.treating_doctor_transmitted = bool(cp.treating_doctor_transmitted_at) if cp else False
+                self.treating_doctor_transmitted = (
+                    bool(cp.treating_doctor_transmitted_at) if cp else False
+                )
+
+                # Load visit status (determines whether entry form is unlocked)
+                from gws_care.visit.visit import Visit
+
+                visit = Visit.get_or_none(
+                    (Visit.campaign == campaign_id) & (Visit.patient == patient_id)
+                )
+                if visit:
+                    vs = visit.campaign_visit_status
+                    self.visit_status = vs.value if hasattr(vs, "value") else str(vs)
+                else:
+                    self.visit_status = "pending"
 
                 # Detect viewer role
-                from gws_care.role.user_role_service import UserRoleService
                 from gws_care.role.care_role import CareRole as _CareRole
+                from gws_care.role.user_role_service import UserRoleService
+
                 with await self.authenticate_user() as auth_user:
                     roles = UserRoleService.get_roles_for_user(str(auth_user.id))
                     role_vals = [r.value for r in roles]
@@ -939,16 +1068,25 @@ class CampaignPatientExamsState(ReflexMainState):
                     from gws_care.campaign.campaign_exam_type import CampaignExamType as _OldCET
                     from gws_care.exam_type_ref.exam_type_ref import (
                         ExamCategory as _EC,
+                    )
+                    from gws_care.exam_type_ref.exam_type_ref import (
                         ExamTypeRef as _ETR,
                     )
+
                     # ExamType.value → ExamCategory.value
                     _ET_TO_CAT = {
-                        "biology": _EC.BIOLOGY.value, "hematology": _EC.BIOLOGY.value,
-                        "hormones": _EC.BIOLOGY.value, "bacteriology": _EC.BIOLOGY.value,
-                        "parasitology": _EC.BIOLOGY.value, "immunology": _EC.BIOLOGY.value,
-                        "hepatic_markers": _EC.BIOLOGY.value, "clinical": _EC.CLINICAL.value,
-                        "radiology": _EC.IMAGING.value, "ophthalmology": _EC.ORL.value,
-                        "orl": _EC.ORL.value, "ecg": _EC.ECG.value,
+                        "biology": _EC.BIOLOGY.value,
+                        "hematology": _EC.BIOLOGY.value,
+                        "hormones": _EC.BIOLOGY.value,
+                        "bacteriology": _EC.BIOLOGY.value,
+                        "parasitology": _EC.BIOLOGY.value,
+                        "immunology": _EC.BIOLOGY.value,
+                        "hepatic_markers": _EC.BIOLOGY.value,
+                        "clinical": _EC.CLINICAL.value,
+                        "radiology": _EC.IMAGING.value,
+                        "ophthalmology": _EC.ORL.value,
+                        "orl": _EC.ORL.value,
+                        "ecg": _EC.ECG.value,
                     }
                     old_types = list(_OldCET.select().where(_OldCET.campaign == campaign_id))
                     for old_cet in old_types:
@@ -1057,8 +1195,7 @@ class CampaignPatientExamsState(ReflexMainState):
                 saved_values: dict[str, str] = {}  # param_name → value
                 saved_param_names: set[str] = set()  # names that were explicitly saved
                 existing = Exam.get_or_none(
-                    (Exam.patient == patient_id)
-                    & Exam.reason_for_visit.startswith(marker)
+                    (Exam.patient == patient_id) & Exam.reason_for_visit.startswith(marker)
                 )
                 has_existing = existing is not None
                 if existing and existing.lab_results:
@@ -1087,9 +1224,7 @@ class CampaignPatientExamsState(ReflexMainState):
 
                     c_lo = str(p.critical_low) if p.critical_low is not None else ""
                     c_hi = str(p.critical_high) if p.critical_high is not None else ""
-                    crit_range = (
-                        f"{c_lo or '—'} / {c_hi or '—'}" if (c_lo or c_hi) else ""
-                    )
+                    crit_range = f"{c_lo or '—'} / {c_hi or '—'}" if (c_lo or c_hi) else ""
 
                     entries.append(
                         ExamParamEntry(
@@ -1105,11 +1240,16 @@ class CampaignPatientExamsState(ReflexMainState):
                             is_required=p.is_required,
                             value_type=p.value_type,
                             value=saved_values.get(p.name, ""),
-                            is_selected=(not has_existing) or (p.name in saved_param_names) or p.is_required,
+                            is_selected=(not has_existing)
+                            or (p.name in saved_param_names)
+                            or p.is_required,
                             value_status=(
                                 _compute_param_status(
                                     saved_values.get(p.name, ""),
-                                    r_lo, r_hi, c_lo, c_hi,
+                                    r_lo,
+                                    r_hi,
+                                    c_lo,
+                                    c_hi,
                                 )
                                 if p.value_type == "NUMERIC"
                                 else ""

@@ -1,7 +1,16 @@
 """State for the doctor's assigned-exams page.
 
-Shows all campaign exam types where doctors are assigned, expanded to
-per-patient rows. Supports filtering by doctor, status, and text search.
+Role-based task dashboard:
+  - Doctors (via CampaignExamDoctor): see their assigned exam/patient rows
+  - OPERATEUR_LABO: see all LAB_ENTERED patients (grouped under "Labo")
+  - PSC roles: see all LAB_VALIDATED + LAB_ENTERED patients (PSC interpretation queue)
+  - Admins (SUPER_ADMIN_PSC / ADMIN_PSC / DIRECTEUR_PSC): see all doctor assignments
+
+Filter values in filter_assignee:
+  "__all__"  → show all rows
+  "__lab__"  → only lab rows
+  "__psc__"  → only PSC queue rows
+  "{doctor_id}" → only rows for that specific doctor
 """
 
 import reflex as rx
@@ -10,27 +19,30 @@ from pydantic import BaseModel
 
 
 class AssignedDoctorOption(BaseModel):
-    """Doctor entry for the filter dropdown."""
-    id: str       # MedicalDoctor.id (string)
+    """Entry for the assignee filter dropdown."""
+
+    id: str   # doctor ID, "__lab__", or "__psc__"
     name: str
 
 
 class AssignedExamRowDTO(BaseModel):
-    """One row in the assigned-exams table — one patient × one exam type."""
+    """One row in the assigned-exams table."""
 
-    # Assigned doctor
+    # "doctor" | "lab" | "psc"
+    row_type: str = "doctor"
+
+    # Assigned doctor / special label
     assigned_doctor_id: str = ""
     assigned_doctor_name: str = ""
 
-    # Source context
-    source_type: str = "campaign"          # "campaign" | "individual"
+    # Campaign context
     campaign_id: str = ""
     campaign_name: str = ""
     campaign_number: str = ""
     campaign_status: str = ""
     campaign_status_label: str = ""
 
-    # Exam type
+    # Exam type (may be "Tous les examens" for lab/psc rows)
     exam_type_id: str = ""
     exam_type_name: str = ""
     exam_category: str = ""
@@ -40,35 +52,45 @@ class AssignedExamRowDTO(BaseModel):
     patient_name: str = ""
     patient_number: str = ""
 
-    # Current medical status of this patient in this campaign
+    # Medical status
     medical_status: str = "PENDING"
     medical_status_label: str = "En attente"
     medical_status_color: str = "gray"
 
-    # Deep-link to the exam entry page
+    # Pending task
+    pending_task: str = ""
+    pending_task_color: str = "gray"
+
+    # Deep-link to exam entry page
     action_url: str = ""
     can_act: bool = True
 
 
 class DoctorAssignedExamsState(ReflexMainState):
     rows: list[AssignedExamRowDTO] = []
-    available_doctors: list[AssignedDoctorOption] = []
+    available_assignees: list[AssignedDoctorOption] = []
     is_loading: bool = False
     error: str = ""
 
-    # The logged-in user's own doctor ID (empty if not a doctor)
     my_doctor_id: str = ""
+    is_lab: bool = False
+    is_psc: bool = False
 
-    # Filters
-    filter_doctor_id: str = "__all__"
+    # "__all__" | "__lab__" | "__psc__" | doctor_id
+    filter_assignee: str = "__all__"
     filter_status: str = "__all__"
     filter_search: str = ""
 
     @rx.var
     def filtered_rows(self) -> list[AssignedExamRowDTO]:
         result = self.rows
-        if self.filter_doctor_id != "__all__":
-            result = [r for r in result if r.assigned_doctor_id == self.filter_doctor_id]
+        fa = self.filter_assignee
+        if fa == "__lab__":
+            result = [r for r in result if r.row_type == "lab"]
+        elif fa == "__psc__":
+            result = [r for r in result if r.row_type == "psc"]
+        elif fa != "__all__":
+            result = [r for r in result if r.row_type == "doctor" and r.assigned_doctor_id == fa]
         if self.filter_status != "__all__":
             result = [r for r in result if r.medical_status == self.filter_status]
         if self.filter_search.strip():
@@ -84,8 +106,8 @@ class DoctorAssignedExamsState(ReflexMainState):
         return result
 
     @rx.event
-    def set_filter_doctor_id(self, value: str):
-        self.filter_doctor_id = value
+    def set_filter_assignee(self, value: str):
+        self.filter_assignee = value
 
     @rx.event
     def set_filter_status(self, value: str):
@@ -94,6 +116,15 @@ class DoctorAssignedExamsState(ReflexMainState):
     @rx.event
     def set_filter_search(self, value: str):
         self.filter_search = value
+
+    # backward-compat alias used by older component code
+    @rx.event
+    def set_filter_doctor_id(self, value: str):
+        self.filter_assignee = value
+
+    @rx.var
+    def filter_doctor_id(self) -> str:
+        return self.filter_assignee
 
     @rx.event
     async def on_load(self):
@@ -110,73 +141,105 @@ class DoctorAssignedExamsState(ReflexMainState):
     def _load_rows(self, auth_user_id) -> None:
         from gws_care.campaign.campaign import Campaign
         from gws_care.campaign.campaign_exam import CampaignExam
+        from gws_care.campaign.campaign_exam_doctor import CampaignExamDoctor
         from gws_care.campaign.campaign_patient import CampaignPatient, MedicalRecordStatus
         from gws_care.doctor.medical_doctor import MedicalDoctor
         from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
         from gws_care.patient.patient import Patient
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_role_service import UserRoleService
 
-        # Detect whether the logged-in user is a doctor (for default filter)
+        # Detect doctor identity and roles
         me = MedicalDoctor.get_or_none(
             (MedicalDoctor.user == auth_user_id)
             & (MedicalDoctor.is_active == True)
             & (MedicalDoctor.is_archived == False)
         )
         self.my_doctor_id = str(me.id) if me else ""
+        roles = UserRoleService.get_roles_for_user(str(auth_user_id))
+        role_vals = [r.value if hasattr(r, "value") else str(r) for r in roles]
 
-        # Load ALL CampaignExam records that have an assigned doctor
-        assigned_ces = list(
-            CampaignExam.select(CampaignExam, Campaign, ExamTypeRef)
-            .join(Campaign, on=(CampaignExam.campaign == Campaign.id))
-            .switch(CampaignExam)
-            .join(ExamTypeRef, on=(CampaignExam.exam_type_ref == ExamTypeRef.id))
-            .where(CampaignExam.assigned_doctor_id.is_null(False))
-            .order_by(Campaign.name, ExamTypeRef.name)
-        )
-
-        # Build unique doctor list for the filter dropdown
-        doctor_map: dict[str, str] = {}  # id → name
-        for ce in assigned_ces:
-            did = ce.assigned_doctor_id or ""
-            dname = ce.assigned_doctor_name or did
-            if did and did not in doctor_map:
-                doctor_map[did] = dname
-        self.available_doctors = [
-            AssignedDoctorOption(id=did, name=dname)
-            for did, dname in sorted(doctor_map.items(), key=lambda x: x[1])
-        ]
-
-        # If logged-in user is a doctor and filter not yet set → default to self
-        if self.filter_doctor_id == "__all__" and self.my_doctor_id:
-            self.filter_doctor_id = self.my_doctor_id
-
-        # Preload campaign patients keyed by campaign_id
-        campaign_ids = list({str(ce.campaign_id) for ce in assigned_ces})
-        campaign_patients: dict[str, list] = {}
-        for cid in campaign_ids:
-            cp_list = list(
-                CampaignPatient.select(CampaignPatient, Patient)
-                .join(Patient, on=(CampaignPatient.patient == Patient.id))
-                .where(CampaignPatient.campaign == cid)
-            )
-            campaign_patients[cid] = cp_list
+        self.is_lab = CareRole.OPERATEUR_LABO.value in role_vals
+        self.is_psc = any(r in role_vals for r in [
+            CareRole.MEDECIN_PSC.value,
+            CareRole.SUPER_ADMIN_PSC.value,
+            CareRole.ADMIN_PSC.value,
+            CareRole.DIRECTEUR_PSC.value,
+        ])
+        is_admin = any(r in role_vals for r in [
+            CareRole.SUPER_ADMIN_PSC.value,
+            CareRole.ADMIN_PSC.value,
+            CareRole.DIRECTEUR_PSC.value,
+        ])
 
         _status_labels = {
             "draft": "Brouillon", "validated": "Validée",
             "terrain_exam": "Terrain", "sample_analysis": "Analyse",
-            "lab_done": "Labo terminé", "closed": "Clôturée",
-            "archived": "Archivée",
+            "lab_done": "Labo terminé", "closed": "Clôturée", "archived": "Archivée",
+        }
+        _task_map: dict[str, tuple[str, str]] = {
+            "PENDING":                     ("Saisir les résultats",        "orange"),
+            "LAB_ENTERED":                 ("Valider résultats labo",      "amber"),
+            "LAB_VALIDATED":               ("Interprétation PSC",          "blue"),
+            "PSC_INTERPRETED":             ("Valider PSC",                 "blue"),
+            "PSC_VALIDATED":               ("Valider médecin de travail",  "teal"),
+            "TRANSMITTED_TREATING_DOCTOR": ("Valider médecin de travail",  "teal"),
+            "ENTERPRISE_VALIDATED":        ("Clôturer le dossier",         "green"),
+            "PUBLISHED":                   ("Terminé",                     "green"),
         }
 
         result: list[AssignedExamRowDTO] = []
-        for ce in assigned_ces:
-            cid = str(ce.campaign_id)
-            camp = ce.campaign
-            camp_status = (
-                camp.status.value if hasattr(camp.status, "value") else str(camp.status)
+        doctor_map: dict[str, str] = {}
+
+        # ── 1. Doctor rows via CampaignExamDoctor ─────────────────────────────
+        # CampaignExamDoctor → MedicalDoctor + CampaignExam → Campaign + ExamTypeRef
+        ced_query = (
+            CampaignExamDoctor.select(
+                CampaignExamDoctor, MedicalDoctor, CampaignExam, Campaign, ExamTypeRef
             )
+            .join(MedicalDoctor)
+            .switch(CampaignExamDoctor)
+            .join(CampaignExam)
+            .join(Campaign, on=(CampaignExam.campaign == Campaign.id))
+            .switch(CampaignExam)
+            .join(ExamTypeRef, on=(CampaignExam.exam_type_ref == ExamTypeRef.id))
+        )
+
+        # Non-admin doctors only see their own assignments
+        if not is_admin:
+            if me:
+                ced_query = ced_query.where(CampaignExamDoctor.doctor == me.id)
+            else:
+                ced_query = None  # Not a doctor, no doctor rows
+
+        assigned_ceds = list(ced_query) if ced_query is not None else []
+
+        # Collect doctor names for dropdown
+        for ced in assigned_ceds:
+            doc = ced.doctor
+            did = str(doc.id)
+            if did not in doctor_map:
+                doctor_map[did] = doc.get_full_name()
+
+        # Preload patients for all involved campaigns
+        ced_camp_ids = list({str(ced.campaign_exam.campaign_id) for ced in assigned_ceds})
+        campaign_patients: dict[str, list] = {}
+        for cid in ced_camp_ids:
+            campaign_patients[cid] = list(
+                CampaignPatient.select(CampaignPatient, Patient)
+                .join(Patient, on=(CampaignPatient.patient == Patient.id))
+                .where(CampaignPatient.campaign == cid)
+            )
+
+        # Build one row per (doctor, exam_type, patient)
+        for ced in assigned_ceds:
+            ce = ced.campaign_exam
+            camp = ce.campaign
+            cid = str(camp.id)
+            doc = ced.doctor
+            did = str(doc.id)
+            camp_status = camp.status.value if hasattr(camp.status, "value") else str(camp.status)
             camp_status_label = _status_labels.get(camp_status, camp_status)
-            doc_id = ce.assigned_doctor_id or ""
-            doc_name = ce.assigned_doctor_name or ""
 
             for cp in campaign_patients.get(cid, []):
                 patient = cp.patient
@@ -189,10 +252,19 @@ class DoctorAssignedExamsState(ReflexMainState):
                     ms_label = ms
                     ms_color = "gray"
 
+                try:
+                    exam_category = (
+                        ce.exam_type_ref.get_category_label()
+                        if hasattr(ce.exam_type_ref, "get_category_label")
+                        else (ce.exam_type_ref.category or "")
+                    )
+                except Exception:
+                    exam_category = ""
+
                 result.append(AssignedExamRowDTO(
-                    assigned_doctor_id=doc_id,
-                    assigned_doctor_name=doc_name,
-                    source_type="campaign",
+                    row_type="doctor",
+                    assigned_doctor_id=did,
+                    assigned_doctor_name=doc.get_full_name(),
                     campaign_id=cid,
                     campaign_name=camp.name,
                     campaign_number=camp.campaign_number,
@@ -200,24 +272,125 @@ class DoctorAssignedExamsState(ReflexMainState):
                     campaign_status_label=camp_status_label,
                     exam_type_id=str(ce.exam_type_ref_id),
                     exam_type_name=ce.exam_type_ref.name,
-                    exam_category=(
-                        ce.exam_type_ref.get_category_label()
-                        if hasattr(ce.exam_type_ref, "get_category_label")
-                        else (ce.exam_type_ref.category or "")
-                    ),
+                    exam_category=exam_category,
                     patient_id=str(patient.id),
                     patient_name=patient.get_full_name(),
                     patient_number=patient.patient_number,
                     medical_status=ms,
                     medical_status_label=ms_label,
                     medical_status_color=ms_color,
+                    pending_task=_task_map.get(ms, ("", "gray"))[0],
+                    pending_task_color=_task_map.get(ms, ("", "gray"))[1],
                     action_url=f"/campaign-patient/{cid}/{patient.id}",
                     can_act=camp_status in ("terrain_exam", "sample_analysis", "lab_done"),
                 ))
 
-        # Sort: actionable first, then by doctor name → campaign → patient
+        # ── 2. PSC queue ──────────────────────────────────────────────────────
+        if self.is_psc:
+            psc_statuses = [
+                MedicalRecordStatus.LAB_VALIDATED.value,
+                MedicalRecordStatus.LAB_ENTERED.value,
+            ]
+            psc_cps = list(
+                CampaignPatient.select(CampaignPatient, Patient, Campaign)
+                .join(Patient, on=(CampaignPatient.patient == Patient.id))
+                .switch(CampaignPatient)
+                .join(Campaign, on=(CampaignPatient.campaign == Campaign.id))
+                .where(CampaignPatient.medical_status.in_(psc_statuses))
+                .order_by(Campaign.name, Patient.last_name, Patient.first_name)
+            )
+            for cp in psc_cps:
+                patient = cp.patient
+                camp = cp.campaign
+                cid = str(camp.id)
+                camp_status = camp.status.value if hasattr(camp.status, "value") else str(camp.status)
+                camp_status_label = _status_labels.get(camp_status, camp_status)
+                ms = cp.medical_status or MedicalRecordStatus.PENDING.value
+                try:
+                    msr = MedicalRecordStatus(ms)
+                    ms_label = msr.get_label()
+                    ms_color = msr.get_color()
+                except Exception:
+                    ms_label = ms
+                    ms_color = "gray"
+                result.append(AssignedExamRowDTO(
+                    row_type="psc",
+                    assigned_doctor_id="__psc__",
+                    assigned_doctor_name="Médecin PSC",
+                    campaign_id=cid,
+                    campaign_name=camp.name,
+                    campaign_number=camp.campaign_number,
+                    campaign_status=camp_status,
+                    campaign_status_label=camp_status_label,
+                    exam_type_id="",
+                    exam_type_name="Tous les examens",
+                    exam_category="",
+                    patient_id=str(patient.id),
+                    patient_name=patient.get_full_name(),
+                    patient_number=patient.patient_number,
+                    medical_status=ms,
+                    medical_status_label=ms_label,
+                    medical_status_color=ms_color,
+                    pending_task=_task_map.get(ms, ("", "gray"))[0],
+                    pending_task_color=_task_map.get(ms, ("", "gray"))[1],
+                    action_url=f"/campaign-patient/{cid}/{patient.id}",
+                    can_act=True,
+                ))
+
+        # ── 3. Lab rows ───────────────────────────────────────────────────────
+        if self.is_lab:
+            lab_cps = list(
+                CampaignPatient.select(CampaignPatient, Patient, Campaign)
+                .join(Patient, on=(CampaignPatient.patient == Patient.id))
+                .switch(CampaignPatient)
+                .join(Campaign, on=(CampaignPatient.campaign == Campaign.id))
+                .where(CampaignPatient.medical_status == MedicalRecordStatus.LAB_ENTERED.value)
+                .order_by(Campaign.name, Patient.last_name, Patient.first_name)
+            )
+            for cp in lab_cps:
+                patient = cp.patient
+                camp = cp.campaign
+                cid = str(camp.id)
+                camp_status = camp.status.value if hasattr(camp.status, "value") else str(camp.status)
+                camp_status_label = _status_labels.get(camp_status, camp_status)
+                result.append(AssignedExamRowDTO(
+                    row_type="lab",
+                    assigned_doctor_id="__lab__",
+                    assigned_doctor_name="Laboratoire PSC",
+                    campaign_id=cid,
+                    campaign_name=camp.name,
+                    campaign_number=camp.campaign_number,
+                    campaign_status=camp_status,
+                    campaign_status_label=camp_status_label,
+                    exam_type_id="",
+                    exam_type_name="Tous les examens",
+                    exam_category="",
+                    patient_id=str(patient.id),
+                    patient_name=patient.get_full_name(),
+                    patient_number=patient.patient_number,
+                    medical_status=MedicalRecordStatus.LAB_ENTERED.value,
+                    medical_status_label="Résultats saisis",
+                    medical_status_color="amber",
+                    pending_task="Valider résultats labo",
+                    pending_task_color="amber",
+                    action_url=f"/campaign-patient/{cid}/{patient.id}",
+                    can_act=camp_status in ("terrain_exam", "sample_analysis", "lab_done"),
+                ))
+
+        # ── Build assignee dropdown ───────────────────────────────────────────
+        assignee_list: list[AssignedDoctorOption] = []
+        if self.is_lab:
+            assignee_list.append(AssignedDoctorOption(id="__lab__", name="Labo"))
+        if self.is_psc:
+            assignee_list.append(AssignedDoctorOption(id="__psc__", name="Médecin PSC"))
+        for did, dname in sorted(doctor_map.items(), key=lambda x: x[1]):
+            assignee_list.append(AssignedDoctorOption(id=did, name=dname))
+        self.available_assignees = assignee_list
+
+        # Sort: actionable first, then lab/psc (most urgent), then name
         result.sort(key=lambda r: (
             0 if r.can_act else 1,
+            0 if r.row_type in ("lab", "psc") else 1,
             r.assigned_doctor_name,
             r.campaign_name,
             r.patient_name,

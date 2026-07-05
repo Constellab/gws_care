@@ -1,4 +1,4 @@
-"""Doctor assigned exams page — per-patient rows with medical status and action link."""
+"""Doctor assigned exams page — role-based task dashboard."""
 
 import reflex as rx
 
@@ -11,7 +11,6 @@ from .doctor_assigned_exams_state import (
 
 
 def _medical_status_badge(row: AssignedExamRowDTO) -> rx.Component:
-    """Colour-coded badge for CampaignPatient.medical_status."""
     return rx.match(
         row.medical_status,
         ("PENDING",                     rx.badge(row.medical_status_label, color_scheme="gray",   variant="soft", size="1")),
@@ -40,12 +39,30 @@ def _campaign_status_badge(row: AssignedExamRowDTO) -> rx.Component:
     )
 
 
-def _exam_row(row: AssignedExamRowDTO) -> rx.Component:
-    return rx.table.row(
-        # Médecin assigné
-        rx.table.cell(
+def _assignee_badge(row: AssignedExamRowDTO) -> rx.Component:
+    """Badge or text for the Responsable column."""
+    return rx.cond(
+        row.row_type == "lab",
+        rx.badge(
+            rx.icon("flask-conical", size=11),
+            "Labo",
+            color_scheme="amber", variant="soft", size="1",
+        ),
+        rx.cond(
+            row.row_type == "psc",
+            rx.badge(
+                rx.icon("stethoscope", size=11),
+                "PSC",
+                color_scheme="blue", variant="soft", size="1",
+            ),
             rx.text(row.assigned_doctor_name, size="2", color="var(--gray-11)"),
         ),
+    )
+
+
+def _exam_row(row: AssignedExamRowDTO) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(_assignee_badge(row)),
         # Patient
         rx.table.cell(
             rx.vstack(
@@ -78,6 +95,14 @@ def _exam_row(row: AssignedExamRowDTO) -> rx.Component:
         ),
         # Avancement
         rx.table.cell(_medical_status_badge(row)),
+        # À faire
+        rx.table.cell(
+            rx.cond(
+                row.pending_task != "",
+                rx.badge(row.pending_task, color_scheme=row.pending_task_color, variant="soft", size="1"),
+                rx.fragment(),
+            ),
+        ),
         # Action
         rx.table.cell(
             rx.cond(
@@ -95,8 +120,7 @@ def _exam_row(row: AssignedExamRowDTO) -> rx.Component:
                 rx.tooltip(
                     rx.icon_button(
                         rx.icon("external-link", size=14),
-                        variant="soft", size="1", color_scheme="gray",
-                        disabled=True,
+                        variant="soft", size="1", color_scheme="gray", disabled=True,
                     ),
                     content="La campagne n'est pas en phase active",
                 ),
@@ -106,14 +130,14 @@ def _exam_row(row: AssignedExamRowDTO) -> rx.Component:
     )
 
 
-def _doctor_option(opt: AssignedDoctorOption) -> rx.Component:
+def _assignee_option(opt: AssignedDoctorOption) -> rx.Component:
     return rx.select.item(opt.name, value=opt.id)
 
 
 def doctor_assigned_exams_page() -> rx.Component:
     return page_layout(
         rx.vstack(
-            # Header
+            # ── Header ────────────────────────────────────────────────────────
             rx.hstack(
                 rx.icon("stethoscope", size=24, color="var(--accent-9)"),
                 rx.heading("Mes examens assignés", size="6"),
@@ -125,31 +149,32 @@ def doctor_assigned_exams_page() -> rx.Component:
                     on_click=DoctorAssignedExamsState.on_load,
                     title="Rafraîchir",
                 ),
-                spacing="3", align="center", width="100%",
+                spacing="3",
+                align="center",
+                width="100%",
             ),
             rx.separator(width="100%"),
-
-            # Filters
+            # ── Filters ───────────────────────────────────────────────────────
             rx.hstack(
-                # Doctor filter
+                # Assignee filter (Labo / PSC / doctor name)
                 rx.select.root(
                     rx.select.trigger(
-                        placeholder="Tous les médecins",
+                        placeholder="Tout afficher",
                         size="2",
                         width="220px",
                     ),
                     rx.select.content(
-                        rx.select.item("Tous les médecins", value="__all__"),
+                        rx.select.item("Tout afficher", value="__all__"),
                         rx.foreach(
-                            DoctorAssignedExamsState.available_doctors,
-                            _doctor_option,
+                            DoctorAssignedExamsState.available_assignees,
+                            _assignee_option,
                         ),
                     ),
-                    value=DoctorAssignedExamsState.filter_doctor_id,
-                    on_change=DoctorAssignedExamsState.set_filter_doctor_id,
+                    value=DoctorAssignedExamsState.filter_assignee,
+                    on_change=DoctorAssignedExamsState.set_filter_assignee,
                     size="2",
                 ),
-                # Status filter
+                # Medical status filter
                 rx.select.root(
                     rx.select.trigger(
                         placeholder="Tous les statuts",
@@ -157,15 +182,15 @@ def doctor_assigned_exams_page() -> rx.Component:
                         width="220px",
                     ),
                     rx.select.content(
-                        rx.select.item("Tous les statuts",         value="__all__"),
-                        rx.select.item("En attente",               value="PENDING"),
-                        rx.select.item("Résultats saisis",         value="LAB_ENTERED"),
-                        rx.select.item("Résultats validés labo",   value="LAB_VALIDATED"),
-                        rx.select.item("Interprétation PSC",       value="PSC_INTERPRETED"),
-                        rx.select.item("Validé PSC",               value="PSC_VALIDATED"),
-                        rx.select.item("Transmis médecin traitant", value="TRANSMITTED_TREATING_DOCTOR"),
-                        rx.select.item("Validé médecin travail",   value="ENTERPRISE_VALIDATED"),
-                        rx.select.item("Dossier terminé",          value="PUBLISHED"),
+                        rx.select.item("Tous les statuts",           value="__all__"),
+                        rx.select.item("En attente",                 value="PENDING"),
+                        rx.select.item("Résultats saisis",           value="LAB_ENTERED"),
+                        rx.select.item("Résultats validés labo",     value="LAB_VALIDATED"),
+                        rx.select.item("Interprétation PSC",         value="PSC_INTERPRETED"),
+                        rx.select.item("Validé PSC",                 value="PSC_VALIDATED"),
+                        rx.select.item("Transmis médecin traitant",  value="TRANSMITTED_TREATING_DOCTOR"),
+                        rx.select.item("Validé médecin travail",     value="ENTERPRISE_VALIDATED"),
+                        rx.select.item("Dossier terminé",            value="PUBLISHED"),
                     ),
                     value=DoctorAssignedExamsState.filter_status,
                     on_change=DoctorAssignedExamsState.set_filter_status,
@@ -182,8 +207,7 @@ def doctor_assigned_exams_page() -> rx.Component:
                 spacing="3",
                 wrap="wrap",
             ),
-
-            # Loading / error / table
+            # ── Loading / error / table ───────────────────────────────────────
             rx.cond(
                 DoctorAssignedExamsState.is_loading,
                 rx.center(rx.spinner(size="3"), padding="3rem"),
@@ -205,11 +229,12 @@ def doctor_assigned_exams_page() -> rx.Component:
                                     DoctorAssignedExamsState.rows.length() == 0,
                                     rx.vstack(
                                         rx.text(
-                                            "Aucun examen assigné pour l'instant.",
+                                            "Aucune tâche assignée pour l'instant.",
                                             size="3", color="var(--gray-9)", text_align="center",
                                         ),
                                         rx.text(
-                                            "Un opérateur peut assigner des examens depuis le détail d'une campagne.",
+                                            "Les tâches apparaissent ici une fois que des examens sont assignés "
+                                            "dans le détail d'une campagne.",
                                             size="2", color="var(--gray-8)", text_align="center",
                                         ),
                                         spacing="2", align="center",
@@ -230,12 +255,13 @@ def doctor_assigned_exams_page() -> rx.Component:
                             rx.table.root(
                                 rx.table.header(
                                     rx.table.row(
-                                        rx.table.column_header_cell(rx.text("Médecin", size="2")),
-                                        rx.table.column_header_cell(rx.text("Patient", size="2")),
-                                        rx.table.column_header_cell(rx.text("Campagne", size="2")),
-                                        rx.table.column_header_cell(rx.text("Statut campagne", size="2")),
-                                        rx.table.column_header_cell(rx.text("Examen assigné", size="2")),
-                                        rx.table.column_header_cell(rx.text("Avancement", size="2")),
+                                        rx.table.column_header_cell(rx.text("Responsable", size="2")),
+                                        rx.table.column_header_cell(rx.text("Patient",      size="2")),
+                                        rx.table.column_header_cell(rx.text("Campagne",     size="2")),
+                                        rx.table.column_header_cell(rx.text("Statut camp.", size="2")),
+                                        rx.table.column_header_cell(rx.text("Examen",       size="2")),
+                                        rx.table.column_header_cell(rx.text("Avancement",  size="2")),
+                                        rx.table.column_header_cell(rx.text("À faire",     size="2")),
                                         rx.table.column_header_cell(""),
                                     )
                                 ),
