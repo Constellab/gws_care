@@ -29,8 +29,8 @@ from .consultation_detail_state import (
     PrescriptionRowDTO,
 )
 
-
 # ── Status helpers ────────────────────────────────────────────────────────────
+
 
 def _visit_status_badge(status: str) -> rx.Component:
     return rx.match(
@@ -47,22 +47,46 @@ def _exam_status_dot(status: str) -> rx.Component:
     """Small colored circle indicating exam status — used in tab headers."""
     return rx.match(
         status,
-        ("todo", rx.box(
-            width="7px", height="7px", border_radius="50%",
-            background="var(--gray-7)", flex_shrink="0",
-        )),
-        ("in_progress_results", rx.box(
-            width="7px", height="7px", border_radius="50%",
-            background="var(--orange-9)", flex_shrink="0",
-        )),
-        ("in_progress_interpretation", rx.box(
-            width="7px", height="7px", border_radius="50%",
-            background="var(--blue-9)", flex_shrink="0",
-        )),
-        ("done", rx.box(
-            width="7px", height="7px", border_radius="50%",
-            background="var(--green-9)", flex_shrink="0",
-        )),
+        (
+            "todo",
+            rx.box(
+                width="7px",
+                height="7px",
+                border_radius="50%",
+                background="var(--gray-7)",
+                flex_shrink="0",
+            ),
+        ),
+        (
+            "in_progress_results",
+            rx.box(
+                width="7px",
+                height="7px",
+                border_radius="50%",
+                background="var(--orange-9)",
+                flex_shrink="0",
+            ),
+        ),
+        (
+            "in_progress_interpretation",
+            rx.box(
+                width="7px",
+                height="7px",
+                border_radius="50%",
+                background="var(--blue-9)",
+                flex_shrink="0",
+            ),
+        ),
+        (
+            "done",
+            rx.box(
+                width="7px",
+                height="7px",
+                border_radius="50%",
+                background="var(--green-9)",
+                flex_shrink="0",
+            ),
+        ),
         rx.box(width="7px", height="7px", border_radius="50%", background="var(--gray-5)"),
     )
 
@@ -75,7 +99,10 @@ def _param_status_badge(status: str) -> rx.Component:
         ("LOW", rx.badge("Bas", color_scheme="orange", variant="soft", size="1")),
         ("HIGH", rx.badge("Élevé", color_scheme="orange", variant="soft", size="1")),
         ("CRITICAL_LOW", rx.badge("Critique bas", color_scheme="red", variant="solid", size="1")),
-        ("CRITICAL_HIGH", rx.badge("Critique élevé", color_scheme="red", variant="solid", size="1")),
+        (
+            "CRITICAL_HIGH",
+            rx.badge("Critique élevé", color_scheme="red", variant="solid", size="1"),
+        ),
         ("POSITIVE", rx.badge("Positif", color_scheme="red", variant="solid", size="1")),
         ("PENDING", rx.badge("—", color_scheme="gray", variant="surface", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
@@ -83,6 +110,7 @@ def _param_status_badge(status: str) -> rx.Component:
 
 
 # ── Header card ───────────────────────────────────────────────────────────────
+
 
 def _info_card(label: str, value: rx.Component) -> rx.Component:
     return rx.vstack(
@@ -222,12 +250,14 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                                 c.status == "in_progress",
                                 rx.icon_button(
                                     rx.icon("pencil", size=12),
-                                    size="1", variant="ghost",
+                                    size="1",
+                                    variant="ghost",
                                     on_click=ConsultationDetailState.open_clinic_doctor_dialog,
                                 ),
                                 rx.fragment(),
                             ),
-                            spacing="2", align="center",
+                            spacing="2",
+                            align="center",
                         ),
                     ),
                     _info_card(
@@ -242,12 +272,14 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                                 c.status == "in_progress",
                                 rx.icon_button(
                                     rx.icon("pencil", size=12),
-                                    size="1", variant="ghost",
+                                    size="1",
+                                    variant="ghost",
                                     on_click=ConsultationDetailState.open_work_doctor_dialog,
                                 ),
                                 rx.fragment(),
                             ),
-                            spacing="2", align="center",
+                            spacing="2",
+                            align="center",
                         ),
                     ),
                     spacing="4",
@@ -263,11 +295,14 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
 
 # ── Tab bar ───────────────────────────────────────────────────────────────────
 
+
 def _tab_btn_informations() -> rx.Component:
     is_active = ConsultationDetailState.active_tab == "informations"
     return rx.box(
         rx.hstack(
-            rx.icon("file-text", size=13, color=rx.cond(is_active, "var(--accent-9)", "var(--gray-9)")),
+            rx.icon(
+                "file-text", size=13, color=rx.cond(is_active, "var(--accent-9)", "var(--gray-9)")
+            ),
             rx.text(
                 "Informations",
                 size="2",
@@ -353,12 +388,19 @@ def _tab_bar() -> rx.Component:
 # TAB: Informations
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _exam_summary_status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
         ("todo", rx.badge("En attente", color_scheme="gray", variant="soft", size="1")),
-        ("in_progress_results", rx.badge("Saisie en cours", color_scheme="orange", variant="soft", size="1")),
-        ("in_progress_interpretation", rx.badge("Interprétation", color_scheme="blue", variant="soft", size="1")),
+        (
+            "in_progress_results",
+            rx.badge("Saisie en cours", color_scheme="orange", variant="soft", size="1"),
+        ),
+        (
+            "in_progress_interpretation",
+            rx.badge("Interprétation", color_scheme="blue", variant="soft", size="1"),
+        ),
         ("done", rx.badge("Terminé", color_scheme="green", variant="soft", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
@@ -428,9 +470,8 @@ def _certificate_row(c: CertificateRowDTO) -> rx.Component:
 
 
 def _tab_informations() -> rx.Component:
-    can_edit = (
-        ~ConsultationDetailState.is_patient_user
-        & (ConsultationDetailState.consultation.status == "in_progress")
+    can_edit = ~ConsultationDetailState.is_patient_user & (
+        ConsultationDetailState.consultation.status == "in_progress"
     )
     return rx.vstack(
         # ── Motif ─────────────────────────────────────────────────────────────
@@ -447,6 +488,7 @@ def _tab_informations() -> rx.Component:
                 rx.text_area(
                     value=ConsultationDetailState.form_reason,
                     on_change=ConsultationDetailState.set_form_reason,
+                    on_blur=ConsultationDetailState.auto_save_info,
                     placeholder="Décrivez le motif de la consultation…",
                     size="2",
                     width="100%",
@@ -481,6 +523,7 @@ def _tab_informations() -> rx.Component:
                 rx.text_area(
                     value=ConsultationDetailState.form_history,
                     on_change=ConsultationDetailState.set_form_history,
+                    on_blur=ConsultationDetailState.auto_save_info,
                     placeholder="Antécédents médicaux, traitements en cours, allergies…",
                     size="2",
                     width="100%",
@@ -555,9 +598,7 @@ def _tab_informations() -> rx.Component:
                             rx.table.column_header_cell(rx.text("", size="2")),
                         )
                     ),
-                    rx.table.body(
-                        rx.foreach(ConsultationDetailState.exams, _exam_summary_row)
-                    ),
+                    rx.table.body(rx.foreach(ConsultationDetailState.exams, _exam_summary_row)),
                     width="100%",
                     variant="surface",
                 ),
@@ -589,7 +630,9 @@ def _tab_informations() -> rx.Component:
             ),
             rx.cond(
                 ConsultationDetailState.prescriptions.length() == 0,
-                rx.text("Aucune ordonnance liée à cette consultation.", size="2", color="var(--gray-8)"),
+                rx.text(
+                    "Aucune ordonnance liée à cette consultation.", size="2", color="var(--gray-8)"
+                ),
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
@@ -632,7 +675,9 @@ def _tab_informations() -> rx.Component:
             ),
             rx.cond(
                 ConsultationDetailState.certificates.length() == 0,
-                rx.text("Aucun certificat lié à cette consultation.", size="2", color="var(--gray-8)"),
+                rx.text(
+                    "Aucun certificat lié à cette consultation.", size="2", color="var(--gray-8)"
+                ),
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
@@ -662,25 +707,46 @@ def _tab_informations() -> rx.Component:
 # TAB: Exam parameters
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _exam_status_banner(status: str) -> rx.Component:
     return rx.match(
         status,
-        ("todo", rx.callout(
-            "Examen en attente de saisie. Renseignez les résultats ci-dessous.",
-            icon="info", color_scheme="gray", size="1",
-        )),
-        ("in_progress_results", rx.callout(
-            "Saisie des résultats en cours.",
-            icon="flask-conical", color_scheme="orange", size="1",
-        )),
-        ("in_progress_interpretation", rx.callout(
-            "Résultats transmis — en attente d'interprétation médicale.",
-            icon="clock", color_scheme="blue", size="1",
-        )),
-        ("done", rx.callout(
-            "Examen terminé et interprété.",
-            icon="circle-check", color_scheme="green", size="1",
-        )),
+        (
+            "todo",
+            rx.callout(
+                "Examen en attente de saisie. Renseignez les résultats ci-dessous.",
+                icon="info",
+                color_scheme="gray",
+                size="1",
+            ),
+        ),
+        (
+            "in_progress_results",
+            rx.callout(
+                "Saisie des résultats en cours.",
+                icon="flask-conical",
+                color_scheme="orange",
+                size="1",
+            ),
+        ),
+        (
+            "in_progress_interpretation",
+            rx.callout(
+                "Résultats transmis — en attente d'interprétation médicale.",
+                icon="clock",
+                color_scheme="blue",
+                size="1",
+            ),
+        ),
+        (
+            "done",
+            rx.callout(
+                "Examen terminé et interprété.",
+                icon="circle-check",
+                color_scheme="green",
+                size="1",
+            ),
+        ),
         rx.fragment(),
     )
 
@@ -697,7 +763,8 @@ def _param_input_cell(p: ExamParamRowVM) -> rx.Component:
         ),
         rx.match(
             p.value_type,
-            ("BOOLEAN",
+            (
+                "BOOLEAN",
                 rx.select.root(
                     rx.select.trigger(placeholder="—", size="1", width="90px"),
                     rx.select.content(
@@ -709,7 +776,8 @@ def _param_input_cell(p: ExamParamRowVM) -> rx.Component:
                     size="1",
                 ),
             ),
-            ("TEXT",
+            (
+                "TEXT",
                 rx.input(
                     value=p.value_text,
                     on_change=lambda v: ConsultationDetailState.set_param_text(p.param_id, v),
@@ -812,7 +880,9 @@ def _audit_entry_row(e: ExamAuditEntryVM) -> rx.Component:
             rx.text(e.user_name, size="1", weight="medium"),
             rx.text("•", size="1", color="var(--gray-7)"),
             rx.text(e.created_at, size="1", color="var(--gray-9)"),
-            spacing="2", align="center", wrap="wrap",
+            spacing="2",
+            align="center",
+            wrap="wrap",
         ),
         rx.cond(
             e.details != "",
@@ -947,7 +1017,9 @@ def _tab_exam_params() -> rx.Component:
                                 ),
                                 rx.spacer(),
                                 rx.select.root(
-                                    rx.select.trigger(placeholder="Choisir une action…", width="260px"),
+                                    rx.select.trigger(
+                                        placeholder="Choisir une action…", width="260px"
+                                    ),
                                     rx.select.content(
                                         rx.foreach(
                                             ConsultationDetailState.exam_action_options,
@@ -1068,7 +1140,8 @@ def _tab_exam_params() -> rx.Component:
                                 spacing="3",
                             ),
                             rx.cond(
-                                ConsultationDetailState.active_exam_status == "in_progress_interpretation",
+                                ConsultationDetailState.active_exam_status
+                                == "in_progress_interpretation",
                                 rx.callout(
                                     "Résultats transmis — en attente d'interprétation par le médecin.",
                                     icon="clock",
@@ -1123,7 +1196,8 @@ def _tab_exam_params() -> rx.Component:
                                 ),
                                 # Read-only for others
                                 rx.cond(
-                                    ConsultationDetailState.active_exam_work_doctor_interpretation != "",
+                                    ConsultationDetailState.active_exam_work_doctor_interpretation
+                                    != "",
                                     rx.box(
                                         rx.text(
                                             ConsultationDetailState.active_exam_work_doctor_interpretation,
@@ -1181,13 +1255,15 @@ def _tab_exam_params() -> rx.Component:
 # Dialogs
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _clinic_doctor_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
             rx.dialog.title("Médecin clinique (PS Consulting)"),
             rx.dialog.description(
                 "Choisissez le médecin clinique responsable de cette visite.",
-                size="2", color="var(--gray-11)",
+                size="2",
+                color="var(--gray-11)",
             ),
             rx.vstack(
                 rx.select.root(
@@ -1201,20 +1277,27 @@ def _clinic_doctor_dialog() -> rx.Component:
                     ),
                     value=ConsultationDetailState.selected_clinic_doctor_id,
                     on_change=ConsultationDetailState.set_selected_clinic_doctor,
-                    size="2", width="100%",
+                    size="2",
+                    width="100%",
                 ),
                 rx.hstack(
                     rx.spacer(),
-                    rx.button("Annuler", variant="outline",
-                              on_click=ConsultationDetailState.close_clinic_doctor_dialog),
+                    rx.button(
+                        "Annuler",
+                        variant="outline",
+                        on_click=ConsultationDetailState.close_clinic_doctor_dialog,
+                    ),
                     rx.button(
                         "Valider",
                         on_click=ConsultationDetailState.save_clinic_doctor,
                         loading=ConsultationDetailState.is_saving_clinic_doctor,
                     ),
-                    spacing="2", width="100%",
+                    spacing="2",
+                    width="100%",
                 ),
-                spacing="4", width="100%", padding_top="1rem",
+                spacing="4",
+                width="100%",
+                padding_top="1rem",
             ),
             on_interact_outside=ConsultationDetailState.close_clinic_doctor_dialog,
             on_escape_key_down=ConsultationDetailState.close_clinic_doctor_dialog,
@@ -1230,7 +1313,8 @@ def _work_doctor_dialog() -> rx.Component:
             rx.dialog.title("Médecin du travail"),
             rx.dialog.description(
                 "Choisissez le médecin du travail à notifier pour cette visite.",
-                size="2", color="var(--gray-11)",
+                size="2",
+                color="var(--gray-11)",
             ),
             rx.vstack(
                 rx.cond(
@@ -1246,25 +1330,34 @@ def _work_doctor_dialog() -> rx.Component:
                         ),
                         value=ConsultationDetailState.selected_work_doctor_id,
                         on_change=ConsultationDetailState.set_selected_work_doctor,
-                        size="2", width="100%",
+                        size="2",
+                        width="100%",
                     ),
                     rx.callout(
                         "Aucun utilisateur avec le rôle « Médecin entreprise » trouvé.",
-                        icon="info", color_scheme="orange", size="1",
+                        icon="info",
+                        color_scheme="orange",
+                        size="1",
                     ),
                 ),
                 rx.hstack(
                     rx.spacer(),
-                    rx.button("Annuler", variant="outline",
-                              on_click=ConsultationDetailState.close_work_doctor_dialog),
+                    rx.button(
+                        "Annuler",
+                        variant="outline",
+                        on_click=ConsultationDetailState.close_work_doctor_dialog,
+                    ),
                     rx.button(
                         "Valider",
                         on_click=ConsultationDetailState.save_work_doctor,
                         loading=ConsultationDetailState.is_saving_work_doctor,
                     ),
-                    spacing="2", width="100%",
+                    spacing="2",
+                    width="100%",
                 ),
-                spacing="4", width="100%", padding_top="1rem",
+                spacing="4",
+                width="100%",
+                padding_top="1rem",
             ),
             on_interact_outside=ConsultationDetailState.close_work_doctor_dialog,
             on_escape_key_down=ConsultationDetailState.close_work_doctor_dialog,
@@ -1281,7 +1374,8 @@ def _cancel_consultation_dialog() -> rx.Component:
             rx.vstack(
                 rx.text(
                     "Veuillez indiquer le motif d'annulation. Cette action est irréversible.",
-                    size="2", color="var(--gray-11)",
+                    size="2",
+                    color="var(--gray-11)",
                 ),
                 rx.vstack(
                     rx.text("Motif d'annulation *", size="2", weight="medium"),
@@ -1292,13 +1386,16 @@ def _cancel_consultation_dialog() -> rx.Component:
                         rows="3",
                         width="100%",
                     ),
-                    spacing="1", width="100%",
+                    spacing="1",
+                    width="100%",
                 ),
                 rx.cond(
                     ConsultationDetailState.cancel_reason_error != "",
                     rx.callout(
                         ConsultationDetailState.cancel_reason_error,
-                        icon="triangle-alert", color_scheme="red", size="1",
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
                     ),
                     rx.fragment(),
                 ),
@@ -1316,9 +1413,12 @@ def _cancel_consultation_dialog() -> rx.Component:
                         on_click=ConsultationDetailState.confirm_cancel_consultation,
                         loading=ConsultationDetailState.is_cancelling,
                     ),
-                    spacing="2", width="100%",
+                    spacing="2",
+                    width="100%",
                 ),
-                spacing="4", width="100%", padding_top="0.5rem",
+                spacing="4",
+                width="100%",
+                padding_top="0.5rem",
             ),
             on_interact_outside=ConsultationDetailState.close_cancel_dialog,
             on_escape_key_down=ConsultationDetailState.close_cancel_dialog,
@@ -1367,13 +1467,19 @@ def _new_exam_param_item(param: ExamParamOption) -> rx.Component:
             param.is_selected,
             rx.box(
                 rx.icon("check", size=11, color="white"),
-                width="18px", min_width="18px", height="18px",
+                width="18px",
+                min_width="18px",
+                height="18px",
                 border_radius="3px",
                 background="var(--accent-9)",
-                display="flex", align_items="center", justify_content="center",
+                display="flex",
+                align_items="center",
+                justify_content="center",
             ),
             rx.box(
-                width="18px", min_width="18px", height="18px",
+                width="18px",
+                min_width="18px",
+                height="18px",
                 border_radius="3px",
                 border="2px solid var(--gray-6)",
                 background="white",
@@ -1381,28 +1487,35 @@ def _new_exam_param_item(param: ExamParamOption) -> rx.Component:
         ),
         rx.flex(
             rx.hstack(
-                rx.text(param.name, size="2", weight=rx.cond(param.is_selected, "medium", "regular")),
+                rx.text(
+                    param.name, size="2", weight=rx.cond(param.is_selected, "medium", "regular")
+                ),
                 rx.cond(
                     param.is_required,
                     rx.badge("Requis", size="1", color_scheme="red", variant="soft"),
                     rx.fragment(),
                 ),
-                spacing="2", align="center", flex_wrap="wrap",
+                spacing="2",
+                align="center",
+                flex_wrap="wrap",
             ),
             rx.cond(
                 param.unit != "",
                 rx.text(param.unit, size="1", color="var(--gray-9)"),
                 rx.fragment(),
             ),
-            direction="column", gap="0",
+            direction="column",
+            gap="0",
         ),
         rx.spacer(),
-        align="center", gap="3",
+        align="center",
+        gap="3",
         padding="0.5rem 0.75rem",
         border_radius="var(--radius-2)",
         background=rx.cond(param.is_selected, "var(--accent-2)", "transparent"),
         border=rx.cond(param.is_selected, "1px solid var(--accent-6)", "1px solid var(--gray-4)"),
-        width="100%", cursor="pointer",
+        width="100%",
+        cursor="pointer",
         on_click=ConsultationDetailState.toggle_new_exam_param(param.id),
         _hover={"background": rx.cond(param.is_selected, "var(--accent-3)", "var(--gray-2)")},
     )
@@ -1420,7 +1533,8 @@ def _new_exam_dialog() -> rx.Component:
                         rx.hstack(
                             rx.spinner(size="1"),
                             rx.text("Chargement du référentiel…", size="2", color="var(--gray-9)"),
-                            spacing="2", align="center",
+                            spacing="2",
+                            align="center",
                         ),
                         rx.cond(
                             ConsultationDetailState.new_exam_ref_options.length() > 0,
@@ -1430,7 +1544,10 @@ def _new_exam_dialog() -> rx.Component:
                                     width="100%",
                                 ),
                                 rx.select.content(
-                                    rx.foreach(ConsultationDetailState.new_exam_ref_options, _exam_ref_option),
+                                    rx.foreach(
+                                        ConsultationDetailState.new_exam_ref_options,
+                                        _exam_ref_option,
+                                    ),
                                 ),
                                 value=ConsultationDetailState.new_exam_type,
                                 on_change=ConsultationDetailState.select_new_exam_type_ref,
@@ -1439,11 +1556,14 @@ def _new_exam_dialog() -> rx.Component:
                             ),
                             rx.callout(
                                 "Aucun type d'examen disponible. Créez-en dans l'onglet Référentiel des examens.",
-                                icon="info", color_scheme="orange", size="1",
+                                icon="info",
+                                color_scheme="orange",
+                                size="1",
                             ),
                         ),
                     ),
-                    spacing="1", width="100%",
+                    spacing="1",
+                    width="100%",
                 ),
                 rx.cond(
                     ConsultationDetailState.new_exam_type != "",
@@ -1457,31 +1577,59 @@ def _new_exam_dialog() -> rx.Component:
                                     " / ",
                                     ConsultationDetailState.new_exam_params.length().to(str),
                                     " sélectionné(s)",
-                                    size="1", color="var(--gray-9)",
+                                    size="1",
+                                    color="var(--gray-9)",
                                 ),
-                                rx.button("Tout cocher", on_click=ConsultationDetailState.select_all_new_exam_params, variant="ghost", size="1", type="button"),
-                                rx.button("Tout décocher", on_click=ConsultationDetailState.clear_all_new_exam_params, variant="ghost", size="1", type="button", color_scheme="gray"),
-                                spacing="2", align="center",
+                                rx.button(
+                                    "Tout cocher",
+                                    on_click=ConsultationDetailState.select_all_new_exam_params,
+                                    variant="ghost",
+                                    size="1",
+                                    type="button",
+                                ),
+                                rx.button(
+                                    "Tout décocher",
+                                    on_click=ConsultationDetailState.clear_all_new_exam_params,
+                                    variant="ghost",
+                                    size="1",
+                                    type="button",
+                                    color_scheme="gray",
+                                ),
+                                spacing="2",
+                                align="center",
                             ),
-                            width="100%", align="center",
+                            width="100%",
+                            align="center",
                         ),
                         rx.cond(
                             ConsultationDetailState.new_exam_params.length() > 0,
                             rx.vstack(
-                                rx.foreach(ConsultationDetailState.new_exam_params, _new_exam_param_item),
-                                spacing="1", width="100%",
-                                max_height="200px", overflow_y="auto",
+                                rx.foreach(
+                                    ConsultationDetailState.new_exam_params, _new_exam_param_item
+                                ),
+                                spacing="1",
+                                width="100%",
+                                max_height="200px",
+                                overflow_y="auto",
                                 padding="0.25rem",
                                 border="1px solid var(--gray-4)",
                                 border_radius="var(--radius-2)",
                                 background="var(--gray-1)",
                             ),
                             rx.center(
-                                rx.text("Aucun test défini pour ce type d'examen.", size="2", color="var(--gray-9)"),
-                                padding="1rem", border="1px dashed var(--gray-5)", border_radius="var(--radius-2)", width="100%",
+                                rx.text(
+                                    "Aucun test défini pour ce type d'examen.",
+                                    size="2",
+                                    color="var(--gray-9)",
+                                ),
+                                padding="1rem",
+                                border="1px dashed var(--gray-5)",
+                                border_radius="var(--radius-2)",
+                                width="100%",
                             ),
                         ),
-                        width="100%", spacing="2",
+                        width="100%",
+                        spacing="2",
                     ),
                     rx.fragment(),
                 ),
@@ -1494,24 +1642,37 @@ def _new_exam_dialog() -> rx.Component:
                         size="2",
                         width="100%",
                     ),
-                    spacing="1", width="100%",
+                    spacing="1",
+                    width="100%",
                 ),
                 rx.cond(
                     ConsultationDetailState.new_exam_error != "",
-                    rx.callout(ConsultationDetailState.new_exam_error, icon="triangle-alert", color_scheme="red", size="1"),
+                    rx.callout(
+                        ConsultationDetailState.new_exam_error,
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
+                    ),
                 ),
                 rx.hstack(
                     rx.spacer(),
-                    rx.button("Annuler", variant="outline", on_click=ConsultationDetailState.close_new_exam_dialog),
+                    rx.button(
+                        "Annuler",
+                        variant="outline",
+                        on_click=ConsultationDetailState.close_new_exam_dialog,
+                    ),
                     rx.button(
                         "Ajouter l'examen",
                         on_click=ConsultationDetailState.save_new_exam,
                         loading=ConsultationDetailState.new_exam_is_saving,
                         disabled=(ConsultationDetailState.new_exam_type == ""),
                     ),
-                    spacing="2", width="100%",
+                    spacing="2",
+                    width="100%",
                 ),
-                spacing="4", width="100%", padding_top="1rem",
+                spacing="4",
+                width="100%",
+                padding_top="1rem",
             ),
             on_interact_outside=ConsultationDetailState.close_new_exam_dialog,
             on_escape_key_down=ConsultationDetailState.close_new_exam_dialog,
@@ -1523,12 +1684,44 @@ def _new_exam_dialog() -> rx.Component:
 
 def _drug_row(drug: DrugLineDTO, index: int) -> rx.Component:
     return rx.hstack(
-        rx.input(placeholder="Médicament", value=drug.name, on_change=lambda v: ConsultationDetailState.presc_set_drug_name(index, v), size="2", flex="2"),
-        rx.input(placeholder="Dosage", value=drug.dosage, on_change=lambda v: ConsultationDetailState.presc_set_drug_dosage(index, v), size="2", flex="1"),
-        rx.input(placeholder="Fréquence", value=drug.frequency, on_change=lambda v: ConsultationDetailState.presc_set_drug_frequency(index, v), size="2", flex="1"),
-        rx.input(placeholder="Durée", value=drug.duration, on_change=lambda v: ConsultationDetailState.presc_set_drug_duration(index, v), size="2", flex="1"),
-        rx.icon_button(rx.icon("trash-2", size=14), variant="ghost", color_scheme="red", size="2", on_click=lambda: ConsultationDetailState.presc_remove_drug(index)),
-        spacing="2", width="100%", align="center",
+        rx.input(
+            placeholder="Médicament",
+            value=drug.name,
+            on_change=lambda v: ConsultationDetailState.presc_set_drug_name(index, v),
+            size="2",
+            flex="2",
+        ),
+        rx.input(
+            placeholder="Dosage",
+            value=drug.dosage,
+            on_change=lambda v: ConsultationDetailState.presc_set_drug_dosage(index, v),
+            size="2",
+            flex="1",
+        ),
+        rx.input(
+            placeholder="Fréquence",
+            value=drug.frequency,
+            on_change=lambda v: ConsultationDetailState.presc_set_drug_frequency(index, v),
+            size="2",
+            flex="1",
+        ),
+        rx.input(
+            placeholder="Durée",
+            value=drug.duration,
+            on_change=lambda v: ConsultationDetailState.presc_set_drug_duration(index, v),
+            size="2",
+            flex="1",
+        ),
+        rx.icon_button(
+            rx.icon("trash-2", size=14),
+            variant="ghost",
+            color_scheme="red",
+            size="2",
+            on_click=lambda: ConsultationDetailState.presc_remove_drug(index),
+        ),
+        spacing="2",
+        width="100%",
+        align="center",
     )
 
 
@@ -1539,35 +1732,73 @@ def _new_prescription_dialog() -> rx.Component:
             rx.vstack(
                 rx.vstack(
                     rx.text("Date", size="2", weight="medium"),
-                    rx.input(type="date", value=ConsultationDetailState.presc_form_date, on_change=ConsultationDetailState.set_presc_form_date, size="2", width="100%"),
-                    spacing="1", width="100%",
+                    rx.input(
+                        type="date",
+                        value=ConsultationDetailState.presc_form_date,
+                        on_change=ConsultationDetailState.set_presc_form_date,
+                        size="2",
+                        width="100%",
+                    ),
+                    spacing="1",
+                    width="100%",
                 ),
                 rx.vstack(
                     rx.text("Diagnostic", size="2", weight="medium"),
-                    rx.input(placeholder="Diagnostic (optionnel)", value=ConsultationDetailState.presc_form_diagnosis, on_change=ConsultationDetailState.set_presc_form_diagnosis, size="2", width="100%"),
-                    spacing="1", width="100%",
+                    rx.input(
+                        placeholder="Diagnostic (optionnel)",
+                        value=ConsultationDetailState.presc_form_diagnosis,
+                        on_change=ConsultationDetailState.set_presc_form_diagnosis,
+                        size="2",
+                        width="100%",
+                    ),
+                    spacing="1",
+                    width="100%",
                 ),
                 rx.vstack(
                     rx.hstack(
                         rx.text("Médicaments", size="2", weight="medium"),
                         rx.spacer(),
-                        rx.button(rx.icon("plus", size=13), "Ajouter", on_click=ConsultationDetailState.presc_add_drug, size="1", variant="ghost"),
-                        width="100%", align="center",
+                        rx.button(
+                            rx.icon("plus", size=13),
+                            "Ajouter",
+                            on_click=ConsultationDetailState.presc_add_drug,
+                            size="1",
+                            variant="ghost",
+                        ),
+                        width="100%",
+                        align="center",
                     ),
                     rx.foreach(ConsultationDetailState.presc_form_drugs, _drug_row),
-                    spacing="2", width="100%",
+                    spacing="2",
+                    width="100%",
                 ),
                 rx.cond(
                     ConsultationDetailState.presc_form_error != "",
-                    rx.callout(ConsultationDetailState.presc_form_error, icon="triangle-alert", color_scheme="red", size="1"),
+                    rx.callout(
+                        ConsultationDetailState.presc_form_error,
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
+                    ),
                 ),
                 rx.hstack(
                     rx.spacer(),
-                    rx.button("Annuler", variant="outline", on_click=ConsultationDetailState.close_new_prescription_dialog),
-                    rx.button("Créer l'ordonnance", on_click=ConsultationDetailState.save_new_prescription, loading=ConsultationDetailState.is_saving_prescription),
-                    spacing="2", width="100%",
+                    rx.button(
+                        "Annuler",
+                        variant="outline",
+                        on_click=ConsultationDetailState.close_new_prescription_dialog,
+                    ),
+                    rx.button(
+                        "Créer l'ordonnance",
+                        on_click=ConsultationDetailState.save_new_prescription,
+                        loading=ConsultationDetailState.is_saving_prescription,
+                    ),
+                    spacing="2",
+                    width="100%",
                 ),
-                spacing="4", width="100%", padding_top="1rem",
+                spacing="4",
+                width="100%",
+                padding_top="1rem",
             ),
             on_interact_outside=ConsultationDetailState.close_new_prescription_dialog,
             on_escape_key_down=ConsultationDetailState.close_new_prescription_dialog,
@@ -1584,8 +1815,15 @@ def _new_certificate_dialog() -> rx.Component:
             rx.vstack(
                 rx.vstack(
                     rx.text("Date d'émission", size="2", weight="medium"),
-                    rx.input(type="date", value=ConsultationDetailState.cert_form_issue_date, on_change=ConsultationDetailState.set_cert_form_issue_date, size="2", width="100%"),
-                    spacing="1", width="100%",
+                    rx.input(
+                        type="date",
+                        value=ConsultationDetailState.cert_form_issue_date,
+                        on_change=ConsultationDetailState.set_cert_form_issue_date,
+                        size="2",
+                        width="100%",
+                    ),
+                    spacing="1",
+                    width="100%",
                 ),
                 rx.vstack(
                     rx.text("Aptitude", size="2", weight="medium"),
@@ -1595,34 +1833,60 @@ def _new_certificate_dialog() -> rx.Component:
                             rx.text("Apte", size="2"),
                             rx.radio_group.item(value="false"),
                             rx.text("Inapte", size="2"),
-                            spacing="2", align="center",
+                            spacing="2",
+                            align="center",
                         ),
-                        value=rx.cond(ConsultationDetailState.cert_form_is_fit_for_work, "true", "false"),
-                        on_change=lambda v: ConsultationDetailState.set_cert_form_is_fit_for_work(v == "true"),
+                        value=rx.cond(
+                            ConsultationDetailState.cert_form_is_fit_for_work, "true", "false"
+                        ),
+                        on_change=lambda v: ConsultationDetailState.set_cert_form_is_fit_for_work(
+                            v == "true"
+                        ),
                     ),
-                    spacing="1", width="100%",
+                    spacing="1",
+                    width="100%",
                 ),
                 rx.vstack(
                     rx.text("Conclusion", size="2", weight="medium"),
-                    rx.text_area(placeholder="Conclusion médicale…", value=ConsultationDetailState.cert_form_conclusion, on_change=ConsultationDetailState.set_cert_form_conclusion, size="2", width="100%", rows="3"),
-                    spacing="1", width="100%",
+                    rx.text_area(
+                        placeholder="Conclusion médicale…",
+                        value=ConsultationDetailState.cert_form_conclusion,
+                        on_change=ConsultationDetailState.set_cert_form_conclusion,
+                        size="2",
+                        width="100%",
+                        rows="3",
+                    ),
+                    spacing="1",
+                    width="100%",
                 ),
                 rx.cond(
                     ConsultationDetailState.cert_form_error != "",
-                    rx.callout(ConsultationDetailState.cert_form_error, icon="triangle-alert", color_scheme="red", size="1"),
+                    rx.callout(
+                        ConsultationDetailState.cert_form_error,
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
+                    ),
                 ),
                 rx.hstack(
                     rx.spacer(),
-                    rx.button("Annuler", variant="outline", on_click=ConsultationDetailState.close_new_certificate_dialog),
+                    rx.button(
+                        "Annuler",
+                        variant="outline",
+                        on_click=ConsultationDetailState.close_new_certificate_dialog,
+                    ),
                     rx.button(
                         "Émettre le certificat",
                         on_click=ConsultationDetailState.save_new_certificate,
                         loading=ConsultationDetailState.is_saving_certificate,
                         disabled=(ConsultationDetailState.cert_form_conclusion == ""),
                     ),
-                    spacing="2", width="100%",
+                    spacing="2",
+                    width="100%",
                 ),
-                spacing="4", width="100%", padding_top="1rem",
+                spacing="4",
+                width="100%",
+                padding_top="1rem",
             ),
             on_interact_outside=ConsultationDetailState.close_new_certificate_dialog,
             on_escape_key_down=ConsultationDetailState.close_new_certificate_dialog,
@@ -1654,28 +1918,38 @@ def _edit_reason_dialog() -> rx.Component:
                         width="100%",
                         rows="3",
                     ),
-                    spacing="1", width="100%",
+                    spacing="1",
+                    width="100%",
                 ),
                 rx.cond(
                     ConsultationDetailState.edit_reason_error != "",
                     rx.callout(
                         ConsultationDetailState.edit_reason_error,
-                        icon="triangle-alert", color_scheme="red", size="1",
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
                     ),
                     rx.fragment(),
                 ),
                 rx.hstack(
                     rx.spacer(),
-                    rx.button("Annuler", variant="soft", color_scheme="gray",
-                              on_click=ConsultationDetailState.close_edit_reason_dialog),
+                    rx.button(
+                        "Annuler",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=ConsultationDetailState.close_edit_reason_dialog,
+                    ),
                     rx.button(
                         "Enregistrer la modification",
                         on_click=ConsultationDetailState.confirm_edit_save,
                         loading=ConsultationDetailState.is_saving_params,
                     ),
-                    spacing="2", width="100%",
+                    spacing="2",
+                    width="100%",
                 ),
-                spacing="4", width="100%", padding_top="0.5rem",
+                spacing="4",
+                width="100%",
+                padding_top="0.5rem",
             ),
             on_interact_outside=ConsultationDetailState.close_edit_reason_dialog,
             on_escape_key_down=ConsultationDetailState.close_edit_reason_dialog,
@@ -1713,23 +1987,32 @@ def _delete_exam_dialog() -> rx.Component:
                     ConsultationDetailState.delete_exam_reason_error != "",
                     rx.callout(
                         ConsultationDetailState.delete_exam_reason_error,
-                        icon="triangle-alert", color_scheme="red", size="1",
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
                     ),
                     rx.fragment(),
                 ),
                 rx.hstack(
                     rx.spacer(),
-                    rx.button("Annuler", variant="soft", color_scheme="gray",
-                              on_click=ConsultationDetailState.close_delete_exam_dialog),
+                    rx.button(
+                        "Annuler",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=ConsultationDetailState.close_delete_exam_dialog,
+                    ),
                     rx.button(
                         "Confirmer la suppression",
                         color_scheme="red",
                         on_click=ConsultationDetailState.confirm_delete_exam,
                         loading=ConsultationDetailState.is_deleting_exam,
                     ),
-                    spacing="2", width="100%",
+                    spacing="2",
+                    width="100%",
                 ),
-                spacing="4", width="100%", padding_top="0.5rem",
+                spacing="4",
+                width="100%",
+                padding_top="0.5rem",
             ),
             on_interact_outside=ConsultationDetailState.close_delete_exam_dialog,
             on_escape_key_down=ConsultationDetailState.close_delete_exam_dialog,
@@ -1745,13 +2028,19 @@ def _add_param_item(p: ExamParamOption) -> rx.Component:
             p.is_selected,
             rx.box(
                 rx.icon("check", size=11, color="white"),
-                width="18px", min_width="18px", height="18px",
+                width="18px",
+                min_width="18px",
+                height="18px",
                 border_radius="3px",
                 background="var(--accent-9)",
-                display="flex", align_items="center", justify_content="center",
+                display="flex",
+                align_items="center",
+                justify_content="center",
             ),
             rx.box(
-                width="18px", min_width="18px", height="18px",
+                width="18px",
+                min_width="18px",
+                height="18px",
                 border_radius="3px",
                 border="2px solid var(--gray-6)",
                 background="white",
@@ -1765,21 +2054,25 @@ def _add_param_item(p: ExamParamOption) -> rx.Component:
                     rx.badge("Requis", size="1", color_scheme="red", variant="soft"),
                     rx.fragment(),
                 ),
-                spacing="2", align="center",
+                spacing="2",
+                align="center",
             ),
             rx.cond(
                 p.unit != "",
                 rx.text(p.unit, size="1", color="var(--gray-9)"),
                 rx.fragment(),
             ),
-            direction="column", gap="0",
+            direction="column",
+            gap="0",
         ),
-        align="center", gap="3",
+        align="center",
+        gap="3",
         padding="0.5rem 0.75rem",
         border_radius="var(--radius-2)",
         background=rx.cond(p.is_selected, "var(--accent-2)", "transparent"),
         border=rx.cond(p.is_selected, "1px solid var(--accent-6)", "1px solid var(--gray-4)"),
-        width="100%", cursor="pointer",
+        width="100%",
+        cursor="pointer",
         on_click=lambda: ConsultationDetailState.toggle_add_param(p.id),
         _hover={"background": rx.cond(p.is_selected, "var(--accent-3)", "var(--gray-2)")},
     )
@@ -1791,14 +2084,17 @@ def _add_param_dialog() -> rx.Component:
             rx.dialog.title("Ajouter des tests"),
             rx.dialog.description(
                 "Sélectionnez les tests à ajouter à cet examen.",
-                size="2", color="var(--gray-11)",
+                size="2",
+                color="var(--gray-11)",
             ),
             rx.vstack(
                 rx.cond(
                     ConsultationDetailState.add_param_error != "",
                     rx.callout(
                         ConsultationDetailState.add_param_error,
-                        icon="info", color_scheme="orange", size="1",
+                        icon="info",
+                        color_scheme="orange",
+                        size="1",
                     ),
                     rx.cond(
                         ConsultationDetailState.add_param_options.length() > 0,
@@ -1809,21 +2105,27 @@ def _add_param_dialog() -> rx.Component:
                                     " / ",
                                     ConsultationDetailState.add_param_options.length().to(str),
                                     " sélectionné(s)",
-                                    size="1", color="var(--gray-9)",
+                                    size="1",
+                                    color="var(--gray-9)",
                                 ),
                                 spacing="2",
                                 width="100%",
                             ),
                             rx.vstack(
-                                rx.foreach(ConsultationDetailState.add_param_options, _add_param_item),
-                                spacing="1", width="100%",
-                                max_height="240px", overflow_y="auto",
+                                rx.foreach(
+                                    ConsultationDetailState.add_param_options, _add_param_item
+                                ),
+                                spacing="1",
+                                width="100%",
+                                max_height="240px",
+                                overflow_y="auto",
                                 padding="0.25rem",
                                 border="1px solid var(--gray-4)",
                                 border_radius="var(--radius-2)",
                                 background="var(--gray-1)",
                             ),
-                            width="100%", spacing="2",
+                            width="100%",
+                            spacing="2",
                         ),
                         rx.fragment(),
                     ),
@@ -1844,18 +2146,23 @@ def _add_param_dialog() -> rx.Component:
                             ConsultationDetailState.add_param_reason_error != "",
                             rx.text(
                                 ConsultationDetailState.add_param_reason_error,
-                                size="1", color="var(--red-9)",
+                                size="1",
+                                color="var(--red-9)",
                             ),
                             rx.fragment(),
                         ),
-                        spacing="1", width="100%",
+                        spacing="1",
+                        width="100%",
                     ),
                     rx.fragment(),
                 ),
                 rx.hstack(
                     rx.spacer(),
-                    rx.button("Annuler", variant="outline",
-                              on_click=ConsultationDetailState.close_add_param_dialog),
+                    rx.button(
+                        "Annuler",
+                        variant="outline",
+                        on_click=ConsultationDetailState.close_add_param_dialog,
+                    ),
                     rx.button(
                         "Ajouter les tests",
                         on_click=ConsultationDetailState.save_add_params,
@@ -1865,9 +2172,12 @@ def _add_param_dialog() -> rx.Component:
                             | (ConsultationDetailState.add_param_error != "")
                         ),
                     ),
-                    spacing="2", width="100%",
+                    spacing="2",
+                    width="100%",
                 ),
-                spacing="4", width="100%", padding_top="1rem",
+                spacing="4",
+                width="100%",
+                padding_top="1rem",
             ),
             on_interact_outside=ConsultationDetailState.close_add_param_dialog,
             on_escape_key_down=ConsultationDetailState.close_add_param_dialog,
@@ -1886,7 +2196,8 @@ def _delete_param_dialog() -> rx.Component:
                     rx.text("Supprimer le test"),
                     rx.text(ConsultationDetailState.delete_param_name, weight="bold"),
                     rx.text("? Le résultat associé sera également supprimé."),
-                    spacing="1", wrap="wrap",
+                    spacing="1",
+                    wrap="wrap",
                 ),
                 size="2",
             ),
@@ -1904,11 +2215,14 @@ def _delete_param_dialog() -> rx.Component:
                     ConsultationDetailState.delete_param_reason_error != "",
                     rx.text(
                         ConsultationDetailState.delete_param_reason_error,
-                        size="1", color="var(--red-9)",
+                        size="1",
+                        color="var(--red-9)",
                     ),
                     rx.fragment(),
                 ),
-                spacing="1", width="100%", padding_top="0.75rem",
+                spacing="1",
+                width="100%",
+                padding_top="0.75rem",
             ),
             rx.hstack(
                 rx.spacer(),
@@ -1922,7 +2236,8 @@ def _delete_param_dialog() -> rx.Component:
                     on_click=ConsultationDetailState.confirm_delete_param,
                     loading=ConsultationDetailState.is_deleting_param,
                 ),
-                spacing="3", margin_top="1rem",
+                spacing="3",
+                margin_top="1rem",
             ),
         ),
         open=ConsultationDetailState.show_delete_param_dialog,
@@ -1933,6 +2248,7 @@ def _delete_param_dialog() -> rx.Component:
 # ══════════════════════════════════════════════════════════════════════════════
 # Page
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def consultation_detail_page() -> rx.Component:
     return main_component(
@@ -1957,14 +2273,16 @@ def consultation_detail_page() -> rx.Component:
                             ConsultationDetailState.error_message != "",
                             rx.callout(
                                 ConsultationDetailState.error_message,
-                                icon="circle-alert", color_scheme="red",
+                                icon="circle-alert",
+                                color_scheme="red",
                             ),
                         ),
                         rx.cond(
                             ConsultationDetailState.success_message != "",
                             rx.callout(
                                 ConsultationDetailState.success_message,
-                                icon="circle-check", color_scheme="green",
+                                icon="circle-check",
+                                color_scheme="green",
                             ),
                         ),
                         # Header card

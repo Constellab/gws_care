@@ -25,7 +25,9 @@ def _refuse_dialog() -> rx.Component:
                     CampaignDetailState.refuse_error != "",
                     rx.callout(
                         CampaignDetailState.refuse_error,
-                        icon="info", color_scheme="red", size="1",
+                        icon="info",
+                        color_scheme="red",
+                        size="1",
                     ),
                 ),
                 spacing="2",
@@ -34,9 +36,15 @@ def _refuse_dialog() -> rx.Component:
             ),
             rx.hstack(
                 rx.dialog.close(rx.button("Annuler", variant="soft", color_scheme="gray")),
-                rx.button("Confirmer le refus", color_scheme="red",
-                          on_click=CampaignDetailState.confirm_refuse_medical),
-                spacing="2", justify="end", margin_top="1rem", width="100%",
+                rx.button(
+                    "Confirmer le refus",
+                    color_scheme="red",
+                    on_click=CampaignDetailState.confirm_refuse_medical,
+                ),
+                spacing="2",
+                justify="end",
+                margin_top="1rem",
+                width="100%",
             ),
             max_width="480px",
         ),
@@ -71,7 +79,8 @@ def _add_patient_dialog() -> rx.Component:
             rx.dialog.title("Ajouter des patients à la campagne"),
             rx.dialog.description(
                 "Patients actifs affiliés au compte de l'entreprise de cette campagne.",
-                size="2", color="var(--gray-9)",
+                size="2",
+                color="var(--gray-9)",
             ),
             rx.vstack(
                 rx.hstack(
@@ -125,23 +134,36 @@ def _add_patient_dialog() -> rx.Component:
                     size="1",
                     color="var(--gray-9)",
                 ),
-                spacing="3", width="100%", margin_top="1rem",
+                spacing="3",
+                width="100%",
+                margin_top="1rem",
             ),
             rx.hstack(
-                rx.dialog.close(rx.button("Annuler", variant="soft", color_scheme="gray",
-                                          on_click=CampaignDetailState.close_add_patient_dialog)),
+                rx.dialog.close(
+                    rx.button(
+                        "Annuler",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=CampaignDetailState.close_add_patient_dialog,
+                    )
+                ),
                 rx.button(
                     rx.icon("user-plus", size=14),
                     rx.cond(
                         CampaignDetailState.selected_patient_ids.length() > 0,
-                        "Ajouter (" + CampaignDetailState.selected_patient_ids.length().to_string() + ")",
+                        "Ajouter ("
+                        + CampaignDetailState.selected_patient_ids.length().to_string()
+                        + ")",
                         "Ajouter",
                     ),
                     on_click=CampaignDetailState.confirm_add_patient,
                     loading=CampaignDetailState.is_adding_patient,
                     disabled=CampaignDetailState.selected_patient_ids.length() == 0,
                 ),
-                spacing="2", justify="end", margin_top="1rem", width="100%",
+                spacing="2",
+                justify="end",
+                margin_top="1rem",
+                width="100%",
             ),
             max_width="520px",
         ),
@@ -151,6 +173,41 @@ def _add_patient_dialog() -> rx.Component:
 
 
 def _add_exam_type_dialog() -> rx.Component:
+    def _param_row(p) -> rx.Component:
+        is_selected = p.is_selected
+        return rx.hstack(
+            rx.checkbox(
+                checked=is_selected,
+                on_change=lambda _: CampaignDetailState.toggle_add_exam_param(p.id),
+                size="2",
+                disabled=p.is_required,
+            ),
+            rx.text(p.name, size="2"),
+            rx.cond(
+                p.unit != "",
+                rx.badge(p.unit, variant="soft", color_scheme="gray", size="1"),
+                rx.fragment(),
+            ),
+            rx.cond(
+                p.is_required,
+                rx.badge("requis", variant="soft", color_scheme="blue", size="1"),
+                rx.fragment(),
+            ),
+            spacing="2",
+            align="center",
+            width="100%",
+            padding="0.3rem 0.5rem",
+            border_radius="var(--radius-1)",
+            background=rx.cond(is_selected, "var(--accent-3)", "transparent"),
+            _hover={"background": rx.cond(is_selected, "var(--accent-4)", "var(--gray-2)")},
+            cursor=rx.cond(p.is_required, "default", "pointer"),
+            on_click=rx.cond(
+                p.is_required,
+                rx.fragment(),
+                CampaignDetailState.toggle_add_exam_param(p.id),
+            ),
+        )
+
     return rx.dialog.root(
         rx.dialog.content(
             rx.dialog.title("Ajouter un type d'examen"),
@@ -158,7 +215,9 @@ def _add_exam_type_dialog() -> rx.Component:
                 rx.cond(
                     CampaignDetailState.exam_type_options.length() > 0,
                     rx.select.root(
-                        rx.select.trigger(placeholder="Sélectionner un type d'examen…", width="100%"),
+                        rx.select.trigger(
+                            placeholder="Sélectionner un type d'examen…", width="100%"
+                        ),
                         rx.select.content(
                             rx.foreach(
                                 CampaignDetailState.exam_type_options,
@@ -170,23 +229,91 @@ def _add_exam_type_dialog() -> rx.Component:
                     ),
                     rx.callout(
                         "Aucun type d'examen disponible. Créez-en dans l'onglet Référentiel des examens.",
-                        icon="info", color_scheme="orange", size="1",
+                        icon="info",
+                        color_scheme="orange",
+                        size="1",
                     ),
                 ),
-                spacing="3", width="100%", margin_top="1rem",
+                rx.cond(
+                    CampaignDetailState.add_exam_is_loading_params,
+                    rx.hstack(
+                        rx.spinner(size="2"),
+                        rx.text("Chargement des tests…", size="2", color="var(--gray-9)"),
+                        spacing="2",
+                        align="center",
+                    ),
+                    rx.cond(
+                        CampaignDetailState.add_exam_params.length() > 0,
+                        rx.vstack(
+                            rx.hstack(
+                                rx.text("Tests inclus", size="2", weight="medium"),
+                                rx.spacer(),
+                                rx.badge(
+                                    CampaignDetailState.add_exam_selected_param_count.to_string()
+                                    + " / "
+                                    + CampaignDetailState.add_exam_params.length().to_string(),
+                                    color_scheme="blue",
+                                    size="1",
+                                ),
+                                rx.button(
+                                    "Tout sélectionner",
+                                    variant="ghost",
+                                    size="1",
+                                    on_click=CampaignDetailState.select_all_add_exam_params,
+                                ),
+                                rx.button(
+                                    "Désélectionner",
+                                    variant="ghost",
+                                    size="1",
+                                    on_click=CampaignDetailState.clear_all_add_exam_params,
+                                ),
+                                width="100%",
+                                align="center",
+                            ),
+                            rx.box(
+                                rx.foreach(CampaignDetailState.add_exam_params, _param_row),
+                                max_height="220px",
+                                overflow_y="auto",
+                                border="1px solid var(--gray-4)",
+                                border_radius="var(--radius-2)",
+                                padding="0.25rem",
+                                width="100%",
+                            ),
+                            spacing="2",
+                            width="100%",
+                        ),
+                        rx.fragment(),
+                    ),
+                ),
+                spacing="3",
+                width="100%",
+                margin_top="1rem",
             ),
             rx.hstack(
-                rx.dialog.close(rx.button("Annuler", variant="soft", color_scheme="gray",
-                                          on_click=CampaignDetailState.close_add_exam_type_dialog)),
-                rx.button("Ajouter", on_click=CampaignDetailState.confirm_add_exam_type,
-                          loading=CampaignDetailState.is_adding_exam_type,
-                          disabled=CampaignDetailState.selected_exam_type_id == ""),
-                spacing="2", justify="end", margin_top="1rem", width="100%",
+                rx.dialog.close(
+                    rx.button(
+                        "Annuler",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=CampaignDetailState.close_add_exam_type_dialog,
+                    )
+                ),
+                rx.button(
+                    "Ajouter",
+                    on_click=CampaignDetailState.confirm_add_exam_type,
+                    loading=CampaignDetailState.is_adding_exam_type,
+                    disabled=CampaignDetailState.selected_exam_type_id == "",
+                ),
+                spacing="2",
+                justify="end",
+                margin_top="1rem",
+                width="100%",
             ),
-            max_width="480px",
+            max_width="520px",
+            on_interact_outside=CampaignDetailState.close_add_exam_type_dialog,
+            on_escape_key_down=CampaignDetailState.close_add_exam_type_dialog,
         ),
         open=CampaignDetailState.add_exam_type_dialog_open,
-        on_open_change=lambda _: CampaignDetailState.close_add_exam_type_dialog(),
     )
 
 
@@ -209,14 +336,27 @@ def _psc_dialog() -> rx.Component:
                     width="100%",
                     rows="5",
                 ),
-                spacing="2", width="100%", margin_top="1rem",
+                spacing="2",
+                width="100%",
+                margin_top="1rem",
             ),
             rx.hstack(
-                rx.dialog.close(rx.button("Annuler", variant="soft", color_scheme="gray",
-                                          on_click=CampaignDetailState.close_psc_dialog)),
-                rx.button("Enregistrer l'interprétation",
-                          on_click=CampaignDetailState.save_psc_interpretation),
-                spacing="2", justify="end", margin_top="1rem", width="100%",
+                rx.dialog.close(
+                    rx.button(
+                        "Annuler",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=CampaignDetailState.close_psc_dialog,
+                    )
+                ),
+                rx.button(
+                    "Enregistrer l'interprétation",
+                    on_click=CampaignDetailState.save_psc_interpretation,
+                ),
+                spacing="2",
+                justify="end",
+                margin_top="1rem",
+                width="100%",
             ),
             max_width="600px",
         ),
@@ -258,13 +398,26 @@ def _enterprise_dialog() -> rx.Component:
                     color_scheme="blue",
                     size="1",
                 ),
-                spacing="2", width="100%", margin_top="1rem",
+                spacing="2",
+                width="100%",
+                margin_top="1rem",
             ),
             rx.hstack(
-                rx.dialog.close(rx.button("Annuler", variant="soft", color_scheme="gray",
-                                          on_click=CampaignDetailState.close_enterprise_dialog)),
-                rx.button("Enregistrer", on_click=CampaignDetailState.save_enterprise_interpretation),
-                spacing="2", justify="end", margin_top="1rem", width="100%",
+                rx.dialog.close(
+                    rx.button(
+                        "Annuler",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=CampaignDetailState.close_enterprise_dialog,
+                    )
+                ),
+                rx.button(
+                    "Enregistrer", on_click=CampaignDetailState.save_enterprise_interpretation
+                ),
+                spacing="2",
+                justify="end",
+                margin_top="1rem",
+                width="100%",
             ),
             max_width="600px",
         ),
@@ -285,7 +438,8 @@ def _edit_dialog() -> rx.Component:
                         on_change=CampaignDetailState.set_edit_name,
                         width="100%",
                     ),
-                    spacing="1", width="100%",
+                    spacing="1",
+                    width="100%",
                 ),
                 rx.grid(
                     rx.vstack(
@@ -308,7 +462,9 @@ def _edit_dialog() -> rx.Component:
                         ),
                         spacing="1",
                     ),
-                    columns="2", spacing="4", width="100%",
+                    columns="2",
+                    spacing="4",
+                    width="100%",
                 ),
                 rx.vstack(
                     rx.text("Lieu", size="2", weight="medium"),
@@ -317,7 +473,8 @@ def _edit_dialog() -> rx.Component:
                         on_change=CampaignDetailState.set_edit_location,
                         width="100%",
                     ),
-                    spacing="1", width="100%",
+                    spacing="1",
+                    width="100%",
                 ),
                 rx.hstack(
                     rx.text("Revue médicale requise", size="2"),
@@ -325,7 +482,8 @@ def _edit_dialog() -> rx.Component:
                         checked=CampaignDetailState.edit_requires_medical_review,
                         on_change=CampaignDetailState.set_edit_requires_medical_review,
                     ),
-                    spacing="2", align="center",
+                    spacing="2",
+                    align="center",
                 ),
                 rx.vstack(
                     rx.text("Notes internes", size="2", weight="medium"),
@@ -335,22 +493,37 @@ def _edit_dialog() -> rx.Component:
                         width="100%",
                         rows="3",
                     ),
-                    spacing="1", width="100%",
+                    spacing="1",
+                    width="100%",
                 ),
                 rx.cond(
                     CampaignDetailState.edit_error != "",
-                    rx.callout(CampaignDetailState.edit_error, icon="info",
-                               color_scheme="red", size="1"),
+                    rx.callout(
+                        CampaignDetailState.edit_error, icon="info", color_scheme="red", size="1"
+                    ),
                 ),
-                spacing="3", width="100%", margin_top="1rem",
+                spacing="3",
+                width="100%",
+                margin_top="1rem",
             ),
             rx.hstack(
-                rx.dialog.close(rx.button("Annuler", variant="soft", color_scheme="gray",
-                                          on_click=CampaignDetailState.close_edit_dialog)),
-                rx.button("Enregistrer",
-                          on_click=CampaignDetailState.save_edit,
-                          loading=CampaignDetailState.is_saving_edit),
-                spacing="2", justify="end", margin_top="1rem", width="100%",
+                rx.dialog.close(
+                    rx.button(
+                        "Annuler",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=CampaignDetailState.close_edit_dialog,
+                    )
+                ),
+                rx.button(
+                    "Enregistrer",
+                    on_click=CampaignDetailState.save_edit,
+                    loading=CampaignDetailState.is_saving_edit,
+                ),
+                spacing="2",
+                justify="end",
+                margin_top="1rem",
+                width="100%",
             ),
             max_width="520px",
         ),
@@ -389,13 +562,15 @@ def _assign_doctor_dialog() -> rx.Component:
                     rx.icon("stethoscope", size=18),
                     rx.text("Assigner des médecins — "),
                     rx.text(CampaignDetailState.assign_doctor_exam_name, weight="bold"),
-                    spacing="1", align="center",
+                    spacing="1",
+                    align="center",
                 )
             ),
             rx.dialog.description(
                 "Les médecins assignés pourront accéder aux résultats de cet examen. "
                 "Ils seront également ajoutés à l'onglet Médecins de la campagne.",
-                size="2", color="var(--gray-9)",
+                size="2",
+                color="var(--gray-9)",
             ),
             rx.vstack(
                 # Specialty filter
@@ -421,7 +596,8 @@ def _assign_doctor_dialog() -> rx.Component:
                             size="2",
                             width="100%",
                         ),
-                        spacing="1", width="100%",
+                        spacing="1",
+                        width="100%",
                     ),
                     rx.fragment(),
                 ),
@@ -433,11 +609,13 @@ def _assign_doctor_dialog() -> rx.Component:
                             CampaignDetailState.assign_doctor_selected_ids.length() > 0,
                             rx.badge(
                                 CampaignDetailState.assign_doctor_selected_ids.length().to_string(),
-                                color_scheme="blue", size="1",
+                                color_scheme="blue",
+                                size="1",
                             ),
                             rx.fragment(),
                         ),
-                        spacing="2", align="center",
+                        spacing="2",
+                        align="center",
                     ),
                     rx.cond(
                         CampaignDetailState.doctor_options_for_assign.length() == 0,
@@ -448,20 +626,28 @@ def _assign_doctor_dialog() -> rx.Component:
                                     CampaignDetailState.doctor_options_for_assign,
                                     _doctor_row,
                                 ),
-                                spacing="1", width="100%",
+                                spacing="1",
+                                width="100%",
                             ),
                             max_height="280px",
                             width="100%",
                         ),
                     ),
-                    spacing="2", width="100%",
+                    spacing="2",
+                    width="100%",
                 ),
-                spacing="3", width="100%", margin_top="1rem",
+                spacing="3",
+                width="100%",
+                margin_top="1rem",
             ),
             rx.hstack(
                 rx.dialog.close(
-                    rx.button("Annuler", variant="soft", color_scheme="gray",
-                              on_click=CampaignDetailState.close_assign_doctor_dialog)
+                    rx.button(
+                        "Annuler",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=CampaignDetailState.close_assign_doctor_dialog,
+                    )
                 ),
                 rx.button(
                     rx.icon("check", size=14),
@@ -469,7 +655,10 @@ def _assign_doctor_dialog() -> rx.Component:
                     on_click=CampaignDetailState.confirm_assign_doctor,
                     loading=CampaignDetailState.is_assigning_doctor,
                 ),
-                spacing="2", justify="end", margin_top="1rem", width="100%",
+                spacing="2",
+                justify="end",
+                margin_top="1rem",
+                width="100%",
             ),
             max_width="500px",
             on_interact_outside=CampaignDetailState.close_assign_doctor_dialog,

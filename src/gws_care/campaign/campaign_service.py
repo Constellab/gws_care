@@ -475,7 +475,7 @@ class CampaignService:
         return [(row.exam_type_ref, row) for row in rows]
 
     @classmethod
-    def add_exam_ref(cls, campaign_id: str, exam_ref_id: str) -> None:
+    def add_exam_ref(cls, campaign_id: str, exam_ref_id: str, selected_param_ids: list | None = None) -> None:
         """Link an ExamTypeRef to a campaign."""
         from gws_care.campaign.campaign_exam import CampaignExam
         from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
@@ -497,7 +497,7 @@ class CampaignService:
             is not None
         ):
             raise BadRequestException("Ce type d'examen est déjà dans cette campagne.")
-        CampaignExam.create(campaign=campaign, exam_type_ref=ref)
+        CampaignExam.create(campaign=campaign, exam_type_ref=ref, selected_param_ids=selected_param_ids or None)
 
     @classmethod
     def remove_exam_ref(cls, campaign_id: str, exam_ref_id: str) -> None:

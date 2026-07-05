@@ -57,6 +57,7 @@ class ExamStatus(Enum):
 
     TODO = "todo"
     IN_PROGRESS_RESULTS = "in_progress_results"
+    TRANSMITTED_TO_LAB = "transmitted_to_lab"
     IN_PROGRESS_INTERPRETATION = "in_progress_interpretation"
     DONE = "done"
     CANCELLED = "cancelled"
@@ -65,6 +66,7 @@ class ExamStatus(Enum):
         labels = {
             ExamStatus.TODO: "À faire",
             ExamStatus.IN_PROGRESS_RESULTS: "En cours — Résultats",
+            ExamStatus.TRANSMITTED_TO_LAB: "Transmis au labo",
             ExamStatus.IN_PROGRESS_INTERPRETATION: "En cours — Interprétation",
             ExamStatus.DONE: "Terminé",
             ExamStatus.CANCELLED: "Annulé",

@@ -36,18 +36,18 @@ class PatientRowDTO(BaseModel):
 
 
 class DoctorOptionDTO(BaseModel):
-    id: str           # MedicalDoctor.id
-    label: str        # "Dr. Prénom NOM — Spécialité"
+    id: str  # MedicalDoctor.id
+    label: str  # "Dr. Prénom NOM — Spécialité"
     specialty: str = ""
 
 
 class ExamTypeRowDTO(BaseModel):
-    id: str          # ExamTypeRef.id (primary key in the referential)
-    code: str = ""   # kept for compatibility, unused for new exams
+    id: str  # ExamTypeRef.id (primary key in the referential)
+    code: str = ""  # kept for compatibility, unused for new exams
     name: str
     category: str = ""
     assigned_doctors: list[DoctorOptionDTO] = []
-    location_mode: str = ""   # AppointmentMode value, empty = not set
+    location_mode: str = ""  # AppointmentMode value, empty = not set
 
 
 class VisitRowDTO(BaseModel):
@@ -64,6 +64,15 @@ class VisitRowDTO(BaseModel):
 class ExamTypeOptionDTO(BaseModel):
     id: str
     label: str
+
+
+class ExamParamOption(BaseModel):
+    id: str
+    name: str
+    unit: str = ""
+    value_type: str = "NUMERIC"
+    is_required: bool = False
+    is_selected: bool = True
 
 
 class PatientOptionDTO(BaseModel):
@@ -139,6 +148,8 @@ class CampaignDetailState(PatientPickerState):
     exam_type_options: list[ExamTypeOptionDTO] = []
     selected_exam_type_id: str = ""
     is_adding_exam_type: bool = False
+    add_exam_params: list[ExamParamOption] = []
+    add_exam_is_loading_params: bool = False
 
     # PDF download
     is_downloading_pdf: bool = False
@@ -161,9 +172,9 @@ class CampaignDetailState(PatientPickerState):
 
     # Assign doctors to exam dialog (multi-select)
     assign_doctor_dialog_open: bool = False
-    assign_doctor_exam_id: str = ""        # ExamTypeRef.id being assigned
+    assign_doctor_exam_id: str = ""  # ExamTypeRef.id being assigned
     assign_doctor_exam_name: str = ""
-    assign_doctor_selected_ids: list[str] = []   # MedicalDoctor ids chosen
+    assign_doctor_selected_ids: list[str] = []  # MedicalDoctor ids chosen
     doctor_options_for_assign: list[DoctorOptionDTO] = []
     specialty_options_for_assign: list[str] = []
     is_assigning_doctor: bool = False
@@ -198,7 +209,9 @@ class CampaignDetailState(PatientPickerState):
     @rx.event
     async def on_load(self):
         await self._load_roles()
-        redirect = await self._require_any_of(self.is_operator, self.is_doctor, self.is_account_admin, self.is_admin)
+        redirect = await self._require_any_of(
+            self.is_operator, self.is_doctor, self.is_account_admin, self.is_admin
+        )
         if redirect:
             return redirect
         await self._load_program()
@@ -228,12 +241,15 @@ class CampaignDetailState(PatientPickerState):
 
     async def _refresh_visits(self):
         """Reload only the visits list from DB (lightweight, called on tab switch)."""
-        page_id = self.router.page.params.get("campaign_id_param", "") or (self.program.id if self.program else "")
+        page_id = self.router.page.params.get("campaign_id_param", "") or (
+            self.program.id if self.program else ""
+        )
         if not page_id:
             return
         try:
             with await self.authenticate_user():
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
+
                 visits = CampaignVisitService.list_for_campaign(page_id)
                 self.visits = [
                     VisitRowDTO(
@@ -271,6 +287,7 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_dto import SaveCampaignDTO
                 from gws_care.campaign.campaign_service import CampaignService
+
                 dto = SaveCampaignDTO(
                     name=self.program.name,
                     account_id=self.program.account_id,
@@ -464,6 +481,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.force_set_status(self.program.id, status)
             await self._load_program(preserve_tab=True)
         except Exception as e:
@@ -482,6 +500,7 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user() as auth_user:
                 from gws_care.campaign.campaign_service import CampaignService
                 from gws_care.user.user import User
+
                 user = User.get_by_id(str(auth_user.id))
                 CampaignService.validate_campaign(self.program.id, user)
             await self._load_program(preserve_tab=True)
@@ -499,6 +518,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.start_campaign(self.program.id)
             await self._load_program(preserve_tab=True)
             self.success_message = "Campagne démarrée."
@@ -515,6 +535,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.complete_terrain_phase(self.program.id)
             await self._load_program(preserve_tab=True)
             self.success_message = "Phase terrain terminée. Passez à la saisie des résultats."
@@ -532,6 +553,7 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user() as auth_user:
                 from gws_care.campaign.campaign_service import CampaignService
                 from gws_care.user.user import User
+
                 user = User.get_by_id(str(auth_user.id))
                 CampaignService.validate_lab_campaign(self.program.id, user)
             await self._load_program(preserve_tab=True)
@@ -550,6 +572,7 @@ class CampaignDetailState(PatientPickerState):
             with await self.authenticate_user() as auth_user:
                 from gws_care.campaign.campaign_service import CampaignService
                 from gws_care.user.user import User
+
                 user = User.get_by_id(str(auth_user.id))
                 CampaignService.validate_doctor_clinic_campaign(self.program.id, user)
             await self._load_program(preserve_tab=True)
@@ -567,6 +590,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.close_campaign(self.program.id)
             await self._load_program(preserve_tab=True)
             self.success_message = "Campaign closed successfully."
@@ -605,6 +629,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.archive_campaign(self.program.id, reason=reason)
             self.archive_dialog_open = False
             self.archive_reason_input = ""
@@ -627,6 +652,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.qr_code import QrCodeService
+
                 pdf_bytes = QrCodeService.generate_tube_qr_grid(self.program.id)
             filename = f"qr_grid_{self.program.campaign_number}.pdf"
             return rx.download(data=pdf_bytes, filename=filename)
@@ -645,6 +671,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.pdf import generate_campaign_report_pdf
+
                 pdf_bytes = generate_campaign_report_pdf(self.program.id)
             filename = f"rapport_{self.program.campaign_number}.pdf"
             return rx.download(data=pdf_bytes, filename=filename)
@@ -668,9 +695,12 @@ class CampaignDetailState(PatientPickerState):
                 from gws_care.account.account import Account
                 from gws_care.campaign.campaign_patient import CampaignPatient
                 from gws_care.patient.patient_service import PatientService
+
                 already_ids = {
                     str(cp.patient_id)
-                    for cp in CampaignPatient.select().where(CampaignPatient.campaign == self.program.id)
+                    for cp in CampaignPatient.select().where(
+                        CampaignPatient.campaign == self.program.id
+                    )
                 }
                 account_id = self.program.account_id or None
 
@@ -728,7 +758,9 @@ class CampaignDetailState(PatientPickerState):
     @rx.event
     def toggle_patient_selection(self, patient_id: str):
         if patient_id in self.selected_patient_ids:
-            self.selected_patient_ids = [pid for pid in self.selected_patient_ids if pid != patient_id]
+            self.selected_patient_ids = [
+                pid for pid in self.selected_patient_ids if pid != patient_id
+            ]
         else:
             self.selected_patient_ids = self.selected_patient_ids + [patient_id]
 
@@ -749,6 +781,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 for pid in self.selected_patient_ids:
                     CampaignService.add_patient(self.program.id, pid)
             self.add_patient_dialog_open = False
@@ -767,6 +800,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.remove_patient(self.program.id, patient_id)
             await self._load_program(preserve_tab=True)
         except Exception as e:
@@ -784,6 +818,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
+
                 enrolled_ids = {et.id for et in self.exam_types}
                 all_refs = ExamTypeRefService.list_all(active_only=True)
                 self.exam_type_options = [
@@ -801,10 +836,61 @@ class CampaignDetailState(PatientPickerState):
     @rx.event
     def close_add_exam_type_dialog(self):
         self.add_exam_type_dialog_open = False
+        self.add_exam_params = []
+
+    @rx.var
+    def add_exam_selected_param_count(self) -> int:
+        return sum(1 for p in self.add_exam_params if p.is_selected)
 
     @rx.event
-    def set_selected_exam_type(self, value: str):
+    async def set_selected_exam_type(self, value: str):
         self.selected_exam_type_id = value
+        self.add_exam_params = []
+        if not value:
+            return
+        self.add_exam_is_loading_params = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
+
+                detail = ExamTypeRefService.get(value)
+                self.add_exam_params = [
+                    ExamParamOption(
+                        id=p.id,
+                        name=p.name,
+                        unit=p.unit or "",
+                        value_type=p.value_type,
+                        is_required=p.is_required,
+                        is_selected=True,
+                    )
+                    for p in detail.parameters
+                ]
+        except Exception:
+            pass
+        finally:
+            self.add_exam_is_loading_params = False
+
+    @rx.event
+    def toggle_add_exam_param(self, param_id: str):
+        self.add_exam_params = [
+            ExamParamOption(**{**p.dict(), "is_selected": not p.is_selected})
+            if p.id == param_id
+            else p
+            for p in self.add_exam_params
+        ]
+
+    @rx.event
+    def select_all_add_exam_params(self):
+        self.add_exam_params = [
+            ExamParamOption(**{**p.dict(), "is_selected": True}) for p in self.add_exam_params
+        ]
+
+    @rx.event
+    def clear_all_add_exam_params(self):
+        self.add_exam_params = [
+            ExamParamOption(**{**p.dict(), "is_selected": p.is_required})
+            for p in self.add_exam_params
+        ]
 
     @rx.event
     async def confirm_add_exam_type(self):
@@ -812,10 +898,17 @@ class CampaignDetailState(PatientPickerState):
             return
         self.is_adding_exam_type = True
         try:
+            selected_ids = [p.id for p in self.add_exam_params if p.is_selected]
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
-                CampaignService.add_exam_ref(self.program.id, self.selected_exam_type_id)
+
+                CampaignService.add_exam_ref(
+                    self.program.id,
+                    self.selected_exam_type_id,
+                    selected_param_ids=selected_ids if selected_ids else None,
+                )
             self.add_exam_type_dialog_open = False
+            self.add_exam_params = []
             await self._load_program(preserve_tab=True)
         except Exception as e:
             self.error_message = str(e)
@@ -829,6 +922,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.remove_exam_ref(self.program.id, exam_type_id)
             await self._load_program(preserve_tab=True)
         except Exception as e:
@@ -849,6 +943,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+
                 already_ids = {d.id for d in self.campaign_doctors}
                 docs = MedicalDoctorService.list_for_selection()
                 self.add_campaign_doctor_specialty_options = sorted(
@@ -884,7 +979,9 @@ class CampaignDetailState(PatientPickerState):
         base = self._add_campaign_doctor_all_options
         if self.add_campaign_doctor_specialty_filter:
             base = [d for d in base if d.specialty == self.add_campaign_doctor_specialty_filter]
-        self.add_campaign_doctor_options = [d for d in base if not q or q in d.label.lower()] if q else base
+        self.add_campaign_doctor_options = (
+            [d for d in base if not q or q in d.label.lower()] if q else base
+        )
 
     @rx.event
     def set_add_campaign_doctor_specialty_filter(self, value: str):
@@ -894,7 +991,9 @@ class CampaignDetailState(PatientPickerState):
         base = self._add_campaign_doctor_all_options
         if sf:
             base = [d for d in base if d.specialty == sf]
-        self.add_campaign_doctor_options = [d for d in base if not q or q in d.label.lower()] if q else base
+        self.add_campaign_doctor_options = (
+            [d for d in base if not q or q in d.label.lower()] if q else base
+        )
 
     @rx.event
     async def confirm_add_campaign_doctor(self):
@@ -904,6 +1003,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.add_doctor_to_campaign(
                     self.program.id, self.add_campaign_doctor_selected_id
                 )
@@ -922,6 +1022,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.remove_doctor_from_campaign(self.program.id, doctor_id)
             await self._load_program(preserve_tab=True)
         except Exception as e:
@@ -943,6 +1044,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+
                 self.specialty_options_for_assign = MedicalDoctorService.get_specializations()
                 docs = MedicalDoctorService.list_for_selection()
                 self.doctor_options_for_assign = [
@@ -968,6 +1070,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.set_exam_location_mode(
                     self.program.id, exam_ref_id, mode if mode not in ("", "_none_") else None
                 )
@@ -994,6 +1097,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.doctor.medical_doctor_service import MedicalDoctorService
+
                 docs = MedicalDoctorService.list_for_selection(
                     specialization=self.assign_doctor_specialty_filter
                 )
@@ -1016,6 +1120,7 @@ class CampaignDetailState(PatientPickerState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
+
                 CampaignService.assign_doctors_to_exam_ref(
                     self.program.id,
                     self.assign_doctor_exam_id,
@@ -1086,7 +1191,8 @@ class CampaignDetailState(PatientPickerState):
                         assigned_doctors=[
                             DoctorOptionDTO(
                                 id=str(d.id),
-                                label=d.get_full_name() + (" — " + d.specialization if d.specialization else ""),
+                                label=d.get_full_name()
+                                + (" — " + d.specialization if d.specialization else ""),
                                 specialty=d.specialization or "",
                             )
                             for d in doctors_map.get(str(ref.id), [])
@@ -1101,7 +1207,8 @@ class CampaignDetailState(PatientPickerState):
                 self.campaign_doctors = [
                     DoctorOptionDTO(
                         id=str(d.id),
-                        label=d.get_full_name() + (" — " + d.specialization if d.specialization else ""),
+                        label=d.get_full_name()
+                        + (" — " + d.specialization if d.specialization else ""),
                         specialty=d.specialization or "",
                     )
                     for d in campaign_docs
@@ -1124,8 +1231,16 @@ class CampaignDetailState(PatientPickerState):
                 ]
 
                 # Default tab: show visits once the campaign is validated or beyond
-                if self.program.status in ("validated", "terrain_exam", "sample_analysis", "closed", "archived",
-                                           "lab_done", "doctor_clinic_validated", "doctor_company_validated"):
+                if self.program.status in (
+                    "validated",
+                    "terrain_exam",
+                    "sample_analysis",
+                    "closed",
+                    "archived",
+                    "lab_done",
+                    "doctor_clinic_validated",
+                    "doctor_company_validated",
+                ):
                     self.active_tab = "visits"
                 else:
                     self.active_tab = "patients"

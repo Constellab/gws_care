@@ -898,13 +898,30 @@ def _transmit_panel() -> rx.Component:
                             variant="soft",
                             size="2",
                         ),
-                        rx.button(
-                            rx.icon("check-circle", size=14),
-                            "Valider résultats labo",
-                            color_scheme="amber",
-                            size="2",
-                            loading=CampaignPatientExamsState.is_saving,
-                            on_click=CampaignPatientExamsState.validate_lab,
+                        rx.hstack(
+                            rx.button(
+                                rx.icon("check-circle", size=14),
+                                "Valider résultats labo",
+                                color_scheme="amber",
+                                size="2",
+                                loading=CampaignPatientExamsState.is_saving,
+                                on_click=CampaignPatientExamsState.validate_lab,
+                            ),
+                            rx.cond(
+                                CampaignPatientExamsState.next_patient_id != "",
+                                rx.button(
+                                    rx.icon("check-circle", size=14),
+                                    "Valider et suivant",
+                                    color_scheme="amber",
+                                    variant="soft",
+                                    size="2",
+                                    loading=CampaignPatientExamsState.is_saving,
+                                    on_click=CampaignPatientExamsState.validate_lab_and_next,
+                                ),
+                                rx.fragment(),
+                            ),
+                            spacing="2",
+                            align="center",
                         ),
                     ),
                     align="center",
@@ -1035,7 +1052,22 @@ def _psc_interpretation_panel() -> rx.Component:
                             loading=CampaignPatientExamsState.is_saving,
                             on_click=CampaignPatientExamsState.validate_and_send_to_enterprise,
                         ),
+                        rx.cond(
+                            CampaignPatientExamsState.next_patient_id != "",
+                            rx.button(
+                                rx.icon("send", size=14),
+                                "Valider et suivant",
+                                color_scheme="blue",
+                                variant="soft",
+                                size="2",
+                                loading=CampaignPatientExamsState.is_saving,
+                                on_click=CampaignPatientExamsState.validate_psc_and_next,
+                            ),
+                            rx.fragment(),
+                        ),
                         width="100%",
+                        spacing="2",
+                        align="center",
                     ),
                     rx.fragment(),
                 ),
@@ -1268,6 +1300,21 @@ def campaign_patient_exams_page() -> rx.Component:
                         size="2",
                         on_click=CampaignPatientExamsState.go_back,
                     ),
+                    rx.cond(
+                        CampaignPatientExamsState.visit_id != "",
+                        rx.tooltip(
+                            rx.button(
+                                rx.icon("stethoscope", size=14),
+                                "Interprétation médecin",
+                                variant="soft",
+                                color_scheme="blue",
+                                size="2",
+                                on_click=CampaignPatientExamsState.go_to_visit_detail,
+                            ),
+                            content="Aller à la page d'interprétation médecin",
+                        ),
+                        rx.fragment(),
+                    ),
                     rx.spacer(),
                     rx.cond(
                         CampaignPatientExamsState.success != "",
@@ -1283,6 +1330,7 @@ def campaign_patient_exams_page() -> rx.Component:
                     ),
                     width="100%",
                     align="center",
+                    spacing="2",
                 ),
                 # ── Patient card ──────────────────────────────────────────
                 rx.card(
@@ -1312,6 +1360,66 @@ def campaign_patient_exams_page() -> rx.Component:
                                 spacing="2",
                             ),
                             spacing="1",
+                        ),
+                        rx.spacer(),
+                        # Patient navigation controls
+                        rx.cond(
+                            CampaignPatientExamsState.patient_nav_label != "",
+                            rx.hstack(
+                                rx.cond(
+                                    CampaignPatientExamsState.prev_patient_id != "",
+                                    rx.tooltip(
+                                        rx.link(
+                                            rx.icon_button(
+                                                rx.icon("chevron-left", size=16),
+                                                variant="ghost",
+                                                size="2",
+                                                color_scheme="gray",
+                                            ),
+                                            href="/campaign-patient/" + CampaignPatientExamsState.cp_campaign_id + "/" + CampaignPatientExamsState.prev_patient_id,
+                                        ),
+                                        content="Patient précédent",
+                                    ),
+                                    rx.icon_button(
+                                        rx.icon("chevron-left", size=16),
+                                        variant="ghost",
+                                        size="2",
+                                        color_scheme="gray",
+                                        disabled=True,
+                                    ),
+                                ),
+                                rx.text(
+                                    CampaignPatientExamsState.patient_nav_label,
+                                    size="1",
+                                    color="var(--gray-9)",
+                                    style={"min_width": "40px", "text_align": "center"},
+                                ),
+                                rx.cond(
+                                    CampaignPatientExamsState.next_patient_id != "",
+                                    rx.tooltip(
+                                        rx.link(
+                                            rx.icon_button(
+                                                rx.icon("chevron-right", size=16),
+                                                variant="ghost",
+                                                size="2",
+                                                color_scheme="gray",
+                                            ),
+                                            href="/campaign-patient/" + CampaignPatientExamsState.cp_campaign_id + "/" + CampaignPatientExamsState.next_patient_id,
+                                        ),
+                                        content="Patient suivant",
+                                    ),
+                                    rx.icon_button(
+                                        rx.icon("chevron-right", size=16),
+                                        variant="ghost",
+                                        size="2",
+                                        color_scheme="gray",
+                                        disabled=True,
+                                    ),
+                                ),
+                                spacing="1",
+                                align="center",
+                            ),
+                            rx.fragment(),
                         ),
                         spacing="3",
                         align="center",

@@ -13,6 +13,7 @@ from .doctor_assigned_exams_state import (
 def _medical_status_badge(row: AssignedExamRowDTO) -> rx.Component:
     return rx.match(
         row.medical_status,
+        # Campaign medical statuses
         ("PENDING",                     rx.badge(row.medical_status_label, color_scheme="gray",   variant="soft", size="1")),
         ("LAB_ENTERED",                 rx.badge(row.medical_status_label, color_scheme="orange", variant="soft", size="1")),
         ("LAB_VALIDATED",               rx.badge(row.medical_status_label, color_scheme="amber",  variant="soft", size="1")),
@@ -21,6 +22,12 @@ def _medical_status_badge(row: AssignedExamRowDTO) -> rx.Component:
         ("TRANSMITTED_TREATING_DOCTOR", rx.badge(row.medical_status_label, color_scheme="teal",   variant="soft", size="1")),
         ("ENTERPRISE_VALIDATED",        rx.badge(row.medical_status_label, color_scheme="green",  variant="soft", size="1")),
         ("PUBLISHED",                   rx.badge(row.medical_status_label, color_scheme="green",  variant="soft", size="1")),
+        # Exam statuses (private consultations)
+        ("todo",                        rx.badge(row.medical_status_label, color_scheme="gray",   variant="soft", size="1")),
+        ("in_progress_results",         rx.badge(row.medical_status_label, color_scheme="orange", variant="soft", size="1")),
+        ("transmitted_to_lab",          rx.badge(row.medical_status_label, color_scheme="amber",  variant="soft", size="1")),
+        ("in_progress_interpretation",  rx.badge(row.medical_status_label, color_scheme="blue",   variant="soft", size="1")),
+        ("done",                        rx.badge(row.medical_status_label, color_scheme="green",  variant="soft", size="1")),
         rx.badge(row.medical_status_label, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -28,6 +35,7 @@ def _medical_status_badge(row: AssignedExamRowDTO) -> rx.Component:
 def _campaign_status_badge(row: AssignedExamRowDTO) -> rx.Component:
     return rx.match(
         row.campaign_status,
+        ("",            rx.fragment()),
         ("draft",           rx.badge(row.campaign_status_label, color_scheme="gray",   variant="soft", size="1")),
         ("validated",       rx.badge(row.campaign_status_label, color_scheme="blue",   variant="soft", size="1")),
         ("terrain_exam",    rx.badge(row.campaign_status_label, color_scheme="amber",  variant="soft", size="1")),
@@ -172,6 +180,22 @@ def doctor_assigned_exams_page() -> rx.Component:
                     ),
                     value=DoctorAssignedExamsState.filter_assignee,
                     on_change=DoctorAssignedExamsState.set_filter_assignee,
+                    size="2",
+                ),
+                # Source filter (Campagnes / Consultations privées)
+                rx.select.root(
+                    rx.select.trigger(
+                        placeholder="Toutes les sources",
+                        size="2",
+                        width="220px",
+                    ),
+                    rx.select.content(
+                        rx.select.item("Toutes les sources",    value="__all__"),
+                        rx.select.item("Campagnes",             value="campaign"),
+                        rx.select.item("Consultations privées", value="private"),
+                    ),
+                    value=DoctorAssignedExamsState.filter_source,
+                    on_change=DoctorAssignedExamsState.set_filter_source,
                     size="2",
                 ),
                 # Medical status filter

@@ -60,7 +60,7 @@ class PatientVisitRowDTO(BaseModel):
 
     id: str
     visit_number: str
-    visit_type: str = "campaign"    # "campaign" or "consultation"
+    visit_type: str = "campaign"  # "campaign" or "consultation"
     campaign_name: str = ""
     campaign_id: str = ""
     scheduled_at: str = ""
@@ -115,6 +115,7 @@ class CertificateRowDTO(BaseModel):
 
 class ExamHistoryItemDTO(BaseModel):
     """One exam line inside a consultation history card."""
+
     exam_type_label: str
     status: str
     has_abnormal: bool = False
@@ -122,6 +123,7 @@ class ExamHistoryItemDTO(BaseModel):
 
 class ConsultationHistoryDTO(BaseModel):
     """One consultation card in the patient history timeline."""
+
     id: str
     visit_number: str
     scheduled_at: str
@@ -438,16 +440,16 @@ class PatientDetailState(ReflexMainState):
             reverse=not self.cert_sort_ascending,
         )
 
-
     @rx.event
     async def on_load(self):
         """Load patient data, exam list and tab states when the page is mounted."""
         await self._load_patient()
         patient_id = self.patient_id_param
         if patient_id:
-            from .patient_doctor_tab_state import PatientDoctorTabState
             from .patient_account_tab_state import PatientAccountTabState
             from .patient_campaign_tab_state import PatientCampaignTabState
+            from .patient_doctor_tab_state import PatientDoctorTabState
+
             yield PatientDoctorTabState.load(patient_id)
             yield PatientAccountTabState.load(patient_id)
             yield PatientCampaignTabState.load(patient_id)
@@ -471,6 +473,7 @@ class PatientDetailState(ReflexMainState):
     @rx.event
     def open_prescription_dialog(self):
         from datetime import date
+
         self.prescription_form_date = date.today().isoformat()
         self.prescription_form_diagnosis = ""
         self.prescription_form_instructions = ""
@@ -573,6 +576,7 @@ class PatientDetailState(ReflexMainState):
                     SavePrescriptionDTO,
                 )
                 from gws_care.user.user import User
+
                 doctor = User.get_by_id(str(auth_user.id))
                 dto = SavePrescriptionDTO(
                     patient_id=self.patient.id,
@@ -604,6 +608,7 @@ class PatientDetailState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.pdf import generate_prescription_pdf
+
                 pdf_bytes = generate_prescription_pdf(prescription_id)
             return rx.download(data=pdf_bytes, filename=f"ordonnance_{prescription_id[:8]}.pdf")
         except Exception as e:
@@ -615,6 +620,7 @@ class PatientDetailState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.prescription.prescription import PrescriptionService
+
                 PrescriptionService.delete(prescription_id)
             await self._load_prescriptions()
         except Exception as e:
@@ -628,6 +634,7 @@ class PatientDetailState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.pdf import generate_patient_id_card_pdf
+
                 pdf_bytes = generate_patient_id_card_pdf(self.patient.id)
             filename = f"carte_patient_{self.patient.patient_number}.pdf"
             return rx.download(data=pdf_bytes, filename=filename)
@@ -686,6 +693,7 @@ class PatientDetailState(ReflexMainState):
         if not self.patient or not self.patient.id:
             return
         from ..appointment_list.appointment_form_state import AppointmentFormState
+
         label = f"{self.patient.last_name} {self.patient.first_name}"
         return AppointmentFormState.open_create_dialog(
             self.patient.id, label, self.patient.account_id or ""
@@ -726,6 +734,7 @@ class PatientDetailState(ReflexMainState):
             with await self.authenticate_user():
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
                 from gws_care.visit.visit_dto import SaveStandaloneVisitDTO
+
                 dto = SaveStandaloneVisitDTO(
                     patient_id=self.patient.id,
                     billing_account_id=self.create_visit_account_id or None,
@@ -749,6 +758,7 @@ class PatientDetailState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.export.csv_export_service import generate_exam_history_csv
+
                 csv_bytes = generate_exam_history_csv(self.patient.id)
 
             filename = f"exam_history_{self.patient.patient_number}.csv"
@@ -775,6 +785,7 @@ class PatientDetailState(ReflexMainState):
                 from gws_care.exam.exam_service import ExamService
                 from gws_care.patient.patient_service import PatientService
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
+
                 p = PatientService.get_patient(patient_id)
                 # Resolve referent doctor from PatientDoctor table
                 physician_id = ""
@@ -784,6 +795,7 @@ class PatientDetailState(ReflexMainState):
                 physician_email = ""
                 try:
                     from gws_care.patient.patient_doctor_service import PatientDoctorService
+
                     referent = PatientDoctorService.get_referent(patient_id)
                     if referent:
                         physician_id = str(referent.id)
@@ -804,7 +816,9 @@ class PatientDetailState(ReflexMainState):
                     gender=p.gender,
                     photo=p.photo,
                     address=p.address,
-                    address_complement=p.address_complement if hasattr(p, "address_complement") else None,
+                    address_complement=p.address_complement
+                    if hasattr(p, "address_complement")
+                    else None,
                     postal_code=p.postal_code,
                     city=p.city,
                     country=p.country if hasattr(p, "country") else None,
@@ -830,12 +844,14 @@ class PatientDetailState(ReflexMainState):
 
                 # Resolve exam type ref labels in one pass
                 _ref_label_cache: dict[str, str] = {}
+
                 def _exam_label(e) -> str:
                     ref_id = str(getattr(e, "exam_type_ref_id", None) or "")
                     if ref_id:
                         if ref_id not in _ref_label_cache:
                             try:
                                 from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+
                                 ref = ExamTypeRef.get_or_none(ExamTypeRef.id == ref_id)
                                 _ref_label_cache[ref_id] = ref.name if ref else ""
                             except Exception:
@@ -864,6 +880,7 @@ class PatientDetailState(ReflexMainState):
                         options.append(lbl)
                 self.exam_type_options = sorted(options)
                 from gws_care.visit.visit_type import VisitType
+
                 visits = CampaignVisitService.list_for_patient(patient_id)
                 campaign_rows = [
                     PatientVisitRowDTO(
@@ -882,22 +899,27 @@ class PatientDetailState(ReflexMainState):
                     if v.visit_type == VisitType.CAMPAIGN
                 ]
                 from gws_care.visit.consultation_service import ConsultationService
+
                 consultations = ConsultationService.list_for_patient(patient_id)
                 consultation_rows = []
                 for cv in consultations:
                     cvs = cv.consultation_visit_status
-                    consultation_rows.append(PatientVisitRowDTO(
-                        id=str(cv.id),
-                        visit_number=cv.visit_number,
-                        visit_type="consultation",
-                        campaign_name="",
-                        campaign_id="",
-                        scheduled_at=cv.scheduled_at.isoformat() if cv.scheduled_at else "",
-                        campaign_visit_status=cvs.value if cvs else "",
-                        status_label=cvs.get_label() if cvs else "",
-                        appointment_mode=cv.appointment_mode.value if cv.appointment_mode else "",
-                        doctor_name=cv.doctor.get_full_name() if cv.doctor_id else "",
-                    ))
+                    consultation_rows.append(
+                        PatientVisitRowDTO(
+                            id=str(cv.id),
+                            visit_number=cv.visit_number,
+                            visit_type="consultation",
+                            campaign_name="",
+                            campaign_id="",
+                            scheduled_at=cv.scheduled_at.isoformat() if cv.scheduled_at else "",
+                            campaign_visit_status=cvs.value if cvs else "",
+                            status_label=cvs.get_label() if cvs else "",
+                            appointment_mode=cv.appointment_mode.value
+                            if cv.appointment_mode
+                            else "",
+                            doctor_name=cv.doctor.get_full_name() if cv.doctor_id else "",
+                        )
+                    )
                 all_rows = campaign_rows + consultation_rows
                 all_rows.sort(key=lambda r: r.scheduled_at or "", reverse=True)
                 self.patient_visits = all_rows
@@ -922,11 +944,15 @@ class PatientDetailState(ReflexMainState):
                 abnormal_exam_ids: set[str] = set()
                 try:
                     from gws_care.exam.exam_parameter_result import ExamParameterResult
-                    for r in ExamParameterResult.select(ExamParameterResult.exam).where(
-                        ExamParameterResult.status << [
-                            "HIGH", "LOW", "CRITICAL_HIGH", "CRITICAL_LOW", "POSITIVE"
-                        ]
-                    ).distinct():
+
+                    for r in (
+                        ExamParameterResult.select(ExamParameterResult.exam)
+                        .where(
+                            ExamParameterResult.status
+                            << ["HIGH", "LOW", "CRITICAL_HIGH", "CRITICAL_LOW", "POSITIVE"]
+                        )
+                        .distinct()
+                    ):
                         abnormal_exam_ids.add(str(r.exam_id))
                 except Exception:
                     pass
@@ -937,15 +963,16 @@ class PatientDetailState(ReflexMainState):
                 try:
                     from gws_care.certificate.medical_certificate import MedicalCertificate
                     from gws_care.prescription.prescription import Prescription
+
                     for p in Prescription.select(Prescription.id, Prescription.visit).where(
                         Prescription.patient == patient_id
                     ):
                         if p.visit_id:
                             vid = str(p.visit_id)
                             presc_counts[vid] = presc_counts.get(vid, 0) + 1
-                    for c in MedicalCertificate.select(MedicalCertificate.id, MedicalCertificate.visit).where(
-                        MedicalCertificate.patient == patient_id
-                    ):
+                    for c in MedicalCertificate.select(
+                        MedicalCertificate.id, MedicalCertificate.visit
+                    ).where(MedicalCertificate.patient == patient_id):
                         if c.visit_id:
                             vid = str(c.visit_id)
                             cert_counts[vid] = cert_counts.get(vid, 0) + 1
@@ -954,6 +981,7 @@ class PatientDetailState(ReflexMainState):
 
                 history_items: list[ConsultationHistoryDTO] = []
                 from datetime import datetime as _datetime
+
                 for cv in sorted(
                     list(consultations),
                     key=lambda v: v.scheduled_at or _datetime.min,
@@ -972,31 +1000,36 @@ class PatientDetailState(ReflexMainState):
                         if getattr(e, "exam_type_ref_id", None):
                             try:
                                 from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+
                                 ref = ExamTypeRef.get_or_none(ExamTypeRef.id == e.exam_type_ref_id)
                                 if ref:
                                     label = ref.name
                             except Exception:
                                 pass
-                        exam_items.append(ExamHistoryItemDTO(
-                            exam_type_label=label,
-                            status=e.status.value,
-                            has_abnormal=e_abnormal,
-                        ))
+                        exam_items.append(
+                            ExamHistoryItemDTO(
+                                exam_type_label=label,
+                                status=e.status.value,
+                                has_abnormal=e_abnormal,
+                            )
+                        )
                     prescription_count = presc_counts.get(vid, 0)
                     certificate_count = cert_counts.get(vid, 0)
                     cvs = cv.consultation_visit_status
-                    history_items.append(ConsultationHistoryDTO(
-                        id=vid,
-                        visit_number=cv.visit_number,
-                        scheduled_at=cv.scheduled_at.isoformat() if cv.scheduled_at else "",
-                        status=cvs.value if cvs else "",
-                        reason_for_visit=getattr(cv, "reason_for_visit", None) or "",
-                        medical_history=getattr(cv, "medical_history", None) or "",
-                        exams=exam_items,
-                        prescription_count=prescription_count,
-                        certificate_count=certificate_count,
-                        has_abnormal_results=has_abnormal,
-                    ))
+                    history_items.append(
+                        ConsultationHistoryDTO(
+                            id=vid,
+                            visit_number=cv.visit_number,
+                            scheduled_at=cv.scheduled_at.isoformat() if cv.scheduled_at else "",
+                            status=cvs.value if cvs else "",
+                            reason_for_visit=getattr(cv, "reason_for_visit", None) or "",
+                            medical_history=getattr(cv, "medical_history", None) or "",
+                            exams=exam_items,
+                            prescription_count=prescription_count,
+                            certificate_count=certificate_count,
+                            has_abnormal_results=has_abnormal,
+                        )
+                    )
                 self.consultation_history = history_items
                 # Store the most recent non-empty medical history for quick reference
                 self.latest_medical_history = next(
@@ -1004,6 +1037,7 @@ class PatientDetailState(ReflexMainState):
                 )
 
                 from gws_care.patient.patient_account import PatientAccount
+
                 links = list(PatientAccount.select().where(PatientAccount.patient == patient_id))
                 self.patient_accounts = [
                     AccountForVisitDTO(id=str(link.account_id), name=link.account.name)
@@ -1030,6 +1064,7 @@ class PatientDetailState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.prescription.prescription import PrescriptionService
+
                 rows = PrescriptionService.list_for_patient(patient_id, include_archived=True)
                 self.prescriptions = [
                     PrescriptionRowDTO(
@@ -1055,6 +1090,7 @@ class PatientDetailState(ReflexMainState):
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
                 from gws_care.visit.consultation_service import ConsultationService
                 from gws_care.visit.visit_type import VisitType
+
                 visits = CampaignVisitService.list_for_patient(patient_id)
                 campaign_rows = [
                     PatientVisitRowDTO(
@@ -1076,18 +1112,22 @@ class PatientDetailState(ReflexMainState):
                 consultation_rows = []
                 for cv in consultations:
                     cvs = cv.consultation_visit_status
-                    consultation_rows.append(PatientVisitRowDTO(
-                        id=str(cv.id),
-                        visit_number=cv.visit_number,
-                        visit_type="consultation",
-                        campaign_name="",
-                        campaign_id="",
-                        scheduled_at=cv.scheduled_at.isoformat() if cv.scheduled_at else "",
-                        campaign_visit_status=cvs.value if cvs else "",
-                        status_label=cvs.get_label() if cvs else "",
-                        appointment_mode=cv.appointment_mode.value if cv.appointment_mode else "",
-                        doctor_name=cv.doctor.get_full_name() if cv.doctor_id else "",
-                    ))
+                    consultation_rows.append(
+                        PatientVisitRowDTO(
+                            id=str(cv.id),
+                            visit_number=cv.visit_number,
+                            visit_type="consultation",
+                            campaign_name="",
+                            campaign_id="",
+                            scheduled_at=cv.scheduled_at.isoformat() if cv.scheduled_at else "",
+                            campaign_visit_status=cvs.value if cvs else "",
+                            status_label=cvs.get_label() if cvs else "",
+                            appointment_mode=cv.appointment_mode.value
+                            if cv.appointment_mode
+                            else "",
+                            doctor_name=cv.doctor.get_full_name() if cv.doctor_id else "",
+                        )
+                    )
                 all_rows = campaign_rows + consultation_rows
                 all_rows.sort(key=lambda r: r.scheduled_at or "", reverse=True)
                 self.patient_visits = all_rows
@@ -1129,6 +1169,23 @@ class PatientDetailState(ReflexMainState):
     @rx.event
     def close_certificate_dialog(self):
         self.show_certificate_dialog = False
+        self.cert_form_type = "APTITUDE"
+        self.cert_form_date = ""
+        self.cert_form_conclusion = ""
+        self.cert_form_is_fit_for_work = True
+        self.cert_form_restrictions = ""
+        self.cert_form_start_date = ""
+        self.cert_form_end_date = ""
+        self.cert_form_return_date = ""
+        self.cert_form_visit_subtype = ""
+        self.cert_form_accident_date = ""
+        self.cert_form_body_part = ""
+        self.cert_form_exposure_type = ""
+        self.cert_form_vaccine_name = ""
+        self.cert_form_vaccine_lot = ""
+        self.cert_form_next_booster = ""
+        self.cert_form_error = ""
+        self.is_saving_certificate = False
 
     @rx.event
     def set_cert_form_type(self, value: str):
@@ -1209,6 +1266,7 @@ class PatientDetailState(ReflexMainState):
                     MedicalCertificateService,
                     SaveMedicalCertificateDTO,
                 )
+
                 dto = SaveMedicalCertificateDTO(
                     patient_id=self.patient_id_param,
                     issue_date=date.fromisoformat(self.cert_form_date),
@@ -1241,8 +1299,10 @@ class PatientDetailState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.pdf import generate_certificate_pdf
+
                 pdf_bytes = generate_certificate_pdf(certificate_id)
             import base64
+
             b64 = base64.b64encode(pdf_bytes).decode()
             yield rx.call_script(
                 f"const a=document.createElement('a');a.href='data:application/pdf;base64,{b64}';"
@@ -1257,6 +1317,7 @@ class PatientDetailState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.certificate.medical_certificate import MedicalCertificateService
+
                 MedicalCertificateService.delete(certificate_id)
             await self._load_certificates()
         except Exception as e:
@@ -1273,6 +1334,7 @@ class PatientDetailState(ReflexMainState):
                     CERTIFICATE_TYPES,
                     MedicalCertificateService,
                 )
+
                 rows = MedicalCertificateService.list_for_patient(patient_id, include_archived=True)
                 issued_by_cache: dict = {}
 
@@ -1283,6 +1345,7 @@ class PatientDetailState(ReflexMainState):
                     if uid not in issued_by_cache:
                         try:
                             from gws_care.user.user import User
+
                             u = User.get_by_id(uid)
                             issued_by_cache[uid] = f"Dr. {u.first_name} {u.last_name}"
                         except Exception:
@@ -1337,11 +1400,13 @@ class PatientDetailState(ReflexMainState):
         try:
             with await _main.authenticate_user():
                 from gws_care.patient.patient_service import PatientService
+
                 PatientService.archive_patient(patient_id, reason)
             async with self:
                 self.show_archive_dialog = False
             yield rx.toast.success("Patient archivé")
             from ..patient_list.patient_list_state import PatientListState
+
             yield PatientListState.on_load
             yield PatientDetailState.on_load()
         except Exception as e:
@@ -1381,9 +1446,11 @@ class PatientDetailState(ReflexMainState):
         try:
             with await _main.authenticate_user():
                 from gws_care.patient.patient_service import PatientService
+
                 PatientService.delete_patient(patient_id, reason)
             yield rx.toast.success("Patient supprimé définitivement")
             from ..patient_list.patient_list_state import PatientListState
+
             yield PatientListState.on_load
             yield rx.redirect("/")
         except Exception as e:

@@ -7,7 +7,7 @@ from ..common.role_state import RoleState
 
 
 class ExamResultRowDTO(BaseModel):
-    exam_id: str = ""          # empty when the Exam record hasn't been created yet
+    exam_id: str = ""  # empty when the Exam record hasn't been created yet
     exam_type_model_id: str = ""  # ExamTypeModel PK — always populated for campaign exams
     exam_type_name: str
     exam_type_code: str
@@ -123,6 +123,7 @@ class VisitDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from datetime import date
+
                 from gws_care.exam.exam import Exam
                 from gws_care.exam.exam_type_service import ExamTypeService
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
@@ -136,8 +137,7 @@ class VisitDetailState(RoleState):
 
                 # Reuse existing exam for this visit+type if already created
                 existing = Exam.get_or_none(
-                    (Exam.visit == self.visit.id)
-                    & (Exam.exam_type_ref_id == exam_type_model_id)
+                    (Exam.visit == self.visit.id) & (Exam.exam_type_ref_id == exam_type_model_id)
                 )
                 if existing:
                     return rx.redirect(f"/exam/{existing.id}")
@@ -157,7 +157,13 @@ class VisitDetailState(RoleState):
     @rx.var
     def visit_status_index(self) -> int:
         """Return the 0-based index of the current visit status in the workflow order."""
-        order = ["pending", "visit_done", "lab_done", "doctor_clinic_validated", "doctor_company_validated"]
+        order = [
+            "pending",
+            "visit_done",
+            "lab_done",
+            "doctor_clinic_validated",
+            "doctor_company_validated",
+        ]
         if not self.visit:
             return 0
         try:
@@ -175,6 +181,7 @@ class VisitDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
+
                 CampaignVisitService.force_set_status(self.visit.id, status)
             await self._load_visit()
         except Exception as e:
@@ -191,7 +198,9 @@ class VisitDetailState(RoleState):
     def go_to_results_entry(self):
         """Navigate to the campaign patient results entry page."""
         if self.visit and self.visit.campaign_id and self.visit.patient_id:
-            return rx.redirect(f"/campaign-patient/{self.visit.campaign_id}/{self.visit.patient_id}")
+            return rx.redirect(
+                f"/campaign-patient/{self.visit.campaign_id}/{self.visit.patient_id}"
+            )
 
     @rx.event
     def set_exam_edit_value(self, etm_id: str, value: str):
@@ -247,7 +256,9 @@ class VisitDetailState(RoleState):
                 ExamResultService.save_result(
                     exam_id,
                     SaveExamResultDTO(
-                        result_data={"value": primary_value if primary_value is not None else value_str},
+                        result_data={
+                            "value": primary_value if primary_value is not None else value_str
+                        },
                         primary_value=primary_value,
                         exam_type_model_id=etm_id,
                     ),
@@ -270,6 +281,23 @@ class VisitDetailState(RoleState):
     def set_company_message(self, value: str):
         self.company_message = value
 
+    @rx.event
+    async def save_interpretation_draft(self):
+        """Silently persist interpretation fields to the Visit record (on blur, no toast)."""
+        if not self.visit:
+            return
+        try:
+            with await self.authenticate_user():
+                from gws_care.visit.visit import Visit
+
+                visit = Visit.get_by_id(self.visit.id)
+                visit.doctor_clinic_interpretation = self.clinic_interpretation or None
+                visit.doctor_company_interpretation = self.company_interpretation or None
+                visit.doctor_company_message = self.company_message or None
+                visit.save()
+        except Exception:
+            pass
+
     # ── Certificate form setters ──────────────────────────────────────────────
 
     @rx.event
@@ -291,6 +319,7 @@ class VisitDetailState(RoleState):
     @rx.event
     def open_certificate_dialog(self):
         from datetime import date
+
         self.cert_form_issue_date = date.today().isoformat()
         self.cert_form_conclusion = ""
         self.cert_form_is_fit_for_work = True
@@ -344,6 +373,7 @@ class VisitDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from gws_care.pdf import generate_certificate_pdf
+
                 pdf_bytes = generate_certificate_pdf(certificate_id)
             return rx.download(data=pdf_bytes, filename=f"certificat_{certificate_id[:8]}.pdf")
         except Exception as e:
@@ -359,11 +389,13 @@ class VisitDetailState(RoleState):
                 from gws_care.patient.patient import Patient
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
                 from gws_care.visit.visit import Visit
+
                 CampaignVisitService.mark_terrain_done(self.visit.id)
 
                 # Phase 5 — send on-site thank-you notification
                 try:
                     from gws_care.notification.notification_service import NotificationService
+
                     visit_obj = Visit.get_by_id(self.visit.id)
                     patient_obj = Patient.get_by_id(str(visit_obj.patient_id))
                     NotificationService.send_terrain_thank_you(patient_obj, visit_obj)
@@ -384,6 +416,7 @@ class VisitDetailState(RoleState):
             with await self.authenticate_user() as auth_user:
                 from gws_care.user.user import User
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
+
                 user = User.get_by_id(str(auth_user.id))
                 CampaignVisitService.validate_lab(self.visit.id, user)
             await self._load_visit()
@@ -402,6 +435,7 @@ class VisitDetailState(RoleState):
                 from gws_care.user.user import User
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
                 from gws_care.visit.visit_dto import ValidateDoctorClinicDTO
+
                 user = User.get_by_id(str(auth_user.id))
                 dto = ValidateDoctorClinicDTO(interpretation=self.clinic_interpretation)
                 CampaignVisitService.validate_doctor_clinic(self.visit.id, user, dto)
@@ -421,6 +455,7 @@ class VisitDetailState(RoleState):
                 from gws_care.user.user import User
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
                 from gws_care.visit.visit_dto import ValidateDoctorCompanyDTO
+
                 user = User.get_by_id(str(auth_user.id))
                 dto = ValidateDoctorCompanyDTO(
                     interpretation=self.company_interpretation,
@@ -443,6 +478,7 @@ class VisitDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from gws_care.pdf import generate_visit_results_pdf
+
                 pdf_bytes = generate_visit_results_pdf(self.visit.id)
             filename = f"resultats_{self.visit.visit_number}.pdf"
             return rx.download(data=pdf_bytes, filename=filename)
@@ -486,6 +522,7 @@ class VisitDetailState(RoleState):
                         return ""
                     try:
                         from gws_care.user.user import User
+
                         u = User.get_by_id(str(row.validated_by_id))
                         return f"{u.first_name} {u.last_name}"
                     except Exception:
@@ -510,7 +547,9 @@ class VisitDetailState(RoleState):
                     doctor_clinic_validated_at=str(clinic_row.validated_at) if clinic_row else "",
                     doctor_clinic_interpretation=visit.doctor_clinic_interpretation or "",
                     doctor_company_validated_by=_user_name(company_row),
-                    doctor_company_validated_at=str(company_row.validated_at) if company_row else "",
+                    doctor_company_validated_at=str(company_row.validated_at)
+                    if company_row
+                    else "",
                     doctor_company_interpretation=visit.doctor_company_interpretation or "",
                     doctor_company_message=visit.doctor_company_message or "",
                 )
@@ -555,23 +594,26 @@ class VisitDetailState(RoleState):
                             ref_id = str(ref.id)
                             exam = existing_map.get(ref_id)
 
-                            rows.append(ExamResultRowDTO(
-                                exam_id=str(exam.id) if exam else "",
-                                exam_type_model_id=ref_id,
-                                exam_type_name=ref.name,
-                                exam_type_code=ref.get_category_label(),
-                                status=exam.status.value if exam else "",
-                                result_data={},
-                                primary_value="",
-                                edit_value="",
-                                appreciation="",
-                                appreciation_label="",
-                                appreciation_override=False,
-                            ))
+                            rows.append(
+                                ExamResultRowDTO(
+                                    exam_id=str(exam.id) if exam else "",
+                                    exam_type_model_id=ref_id,
+                                    exam_type_name=ref.name,
+                                    exam_type_code=ref.get_category_label(),
+                                    status=exam.status.value if exam else "",
+                                    result_data={},
+                                    primary_value="",
+                                    edit_value="",
+                                    appreciation="",
+                                    appreciation_label="",
+                                    appreciation_override=False,
+                                )
+                            )
 
                     self.exam_results = rows
                 except Exception as ex:
                     import traceback
+
                     print(f"[VisitDetailState] Could not load exam results: {ex}")
                     traceback.print_exc()
                     self.exam_results = []
@@ -583,6 +625,7 @@ class VisitDetailState(RoleState):
                         MedicalCertificateService,
                     )
                     from gws_care.user.user import User as UserModel
+
                     certs_raw = MedicalCertificateService.list_for_patient(str(visit.patient_id))
                     cert_rows = []
                     for cert in certs_raw:
@@ -593,14 +636,16 @@ class VisitDetailState(RoleState):
                                 issued_name = f"{u.first_name} {u.last_name}"
                             except Exception:
                                 pass
-                        cert_rows.append(VisitCertificateRowDTO(
-                            id=str(cert.id),
-                            issue_date=str(cert.issue_date),
-                            conclusion=cert.conclusion,
-                            is_fit_for_work=cert.is_fit_for_work,
-                            issued_by_name=issued_name,
-                            restrictions=cert.restrictions or "",
-                        ))
+                        cert_rows.append(
+                            VisitCertificateRowDTO(
+                                id=str(cert.id),
+                                issue_date=str(cert.issue_date),
+                                conclusion=cert.conclusion,
+                                is_fit_for_work=cert.is_fit_for_work,
+                                issued_by_name=issued_name,
+                                restrictions=cert.restrictions or "",
+                            )
+                        )
                     self.certificates = cert_rows
                 except Exception as ex:
                     print(f"[VisitDetailState] Could not load certificates: {ex}")

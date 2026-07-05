@@ -30,6 +30,8 @@ class AssignedExamRowDTO(BaseModel):
 
     # "doctor" | "lab" | "psc"
     row_type: str = "doctor"
+    # "campaign" | "private"
+    source: str = "campaign"
 
     # Assigned doctor / special label
     assigned_doctor_id: str = ""
@@ -75,10 +77,12 @@ class DoctorAssignedExamsState(ReflexMainState):
     my_doctor_id: str = ""
     is_lab: bool = False
     is_psc: bool = False
+    is_admin: bool = False
 
     # "__all__" | "__lab__" | "__psc__" | doctor_id
     filter_assignee: str = "__all__"
     filter_status: str = "__all__"
+    filter_source: str = "__all__"
     filter_search: str = ""
 
     @rx.var
@@ -93,6 +97,8 @@ class DoctorAssignedExamsState(ReflexMainState):
             result = [r for r in result if r.row_type == "doctor" and r.assigned_doctor_id == fa]
         if self.filter_status != "__all__":
             result = [r for r in result if r.medical_status == self.filter_status]
+        if self.filter_source != "__all__":
+            result = [r for r in result if r.source == self.filter_source]
         if self.filter_search.strip():
             q = self.filter_search.strip().lower()
             result = [
@@ -112,6 +118,10 @@ class DoctorAssignedExamsState(ReflexMainState):
     @rx.event
     def set_filter_status(self, value: str):
         self.filter_status = value
+
+    @rx.event
+    def set_filter_source(self, value: str):
+        self.filter_source = value
 
     @rx.event
     def set_filter_search(self, value: str):
@@ -144,10 +154,13 @@ class DoctorAssignedExamsState(ReflexMainState):
         from gws_care.campaign.campaign_exam_doctor import CampaignExamDoctor
         from gws_care.campaign.campaign_patient import CampaignPatient, MedicalRecordStatus
         from gws_care.doctor.medical_doctor import MedicalDoctor
+        from gws_care.exam.exam import Exam
+        from gws_care.exam.exam_type import ExamStatus
         from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
         from gws_care.patient.patient import Patient
         from gws_care.role.care_role import CareRole
         from gws_care.role.user_role_service import UserRoleService
+        from gws_care.visit.visit import Visit
 
         # Detect doctor identity and roles
         me = MedicalDoctor.get_or_none(
@@ -171,6 +184,7 @@ class DoctorAssignedExamsState(ReflexMainState):
             CareRole.ADMIN_PSC.value,
             CareRole.DIRECTEUR_PSC.value,
         ])
+        self.is_admin = is_admin
 
         _status_labels = {
             "draft": "Brouillon", "validated": "Validée",
@@ -289,7 +303,6 @@ class DoctorAssignedExamsState(ReflexMainState):
         if self.is_psc:
             psc_statuses = [
                 MedicalRecordStatus.LAB_VALIDATED.value,
-                MedicalRecordStatus.LAB_ENTERED.value,
             ]
             psc_cps = list(
                 CampaignPatient.select(CampaignPatient, Patient, Campaign)
@@ -338,7 +351,7 @@ class DoctorAssignedExamsState(ReflexMainState):
                 ))
 
         # ── 3. Lab rows ───────────────────────────────────────────────────────
-        if self.is_lab:
+        if self.is_lab or is_admin:
             lab_cps = list(
                 CampaignPatient.select(CampaignPatient, Patient, Campaign)
                 .join(Patient, on=(CampaignPatient.patient == Patient.id))
@@ -377,9 +390,162 @@ class DoctorAssignedExamsState(ReflexMainState):
                     can_act=camp_status in ("terrain_exam", "sample_analysis", "lab_done"),
                 ))
 
+        # ── 4. Private consultation exam rows (no campaign) ───────────────────
+        _exam_status_label = {
+            "todo": "À faire",
+            "in_progress_results": "En cours — Résultats",
+            "transmitted_to_lab": "Transmis au labo",
+            "in_progress_interpretation": "En cours — Interprétation",
+            "done": "Terminé",
+        }
+        _exam_status_color = {
+            "todo": "gray",
+            "in_progress_results": "orange",
+            "transmitted_to_lab": "amber",
+            "in_progress_interpretation": "blue",
+            "done": "green",
+        }
+        _exam_pending_task = {
+            "todo": ("Saisir résultats", "orange"),
+            "in_progress_results": ("Compléter résultats", "orange"),
+            "transmitted_to_lab": ("Saisir au labo", "amber"),
+            "in_progress_interpretation": ("Interpréter résultats", "blue"),
+        }
+
+        # Doctor rows — private visits assigned to current doctor (or all for admin)
+        private_visit_q = Visit.select().where(Visit.campaign.is_null(True))
+        if not is_admin:
+            if me:
+                private_visit_q = private_visit_q.where(Visit.doctor == me.id)
+            else:
+                private_visit_q = None
+
+        for visit in (list(private_visit_q) if private_visit_q is not None else []):
+            try:
+                patient = visit.patient
+                if not patient:
+                    continue
+            except Exception:
+                continue
+            p_exams = list(
+                Exam.select()
+                .where((Exam.visit == visit.id) & (Exam.status != ExamStatus.CANCELLED))
+            )
+            for exam in p_exams:
+                exam_type_name = ""
+                try:
+                    if exam.exam_type_ref_id:
+                        ref = ExamTypeRef.get_or_none(ExamTypeRef.id == exam.exam_type_ref_id)
+                        if ref:
+                            exam_type_name = ref.name
+                    if not exam_type_name:
+                        exam_type_name = (
+                            exam.exam_type.get_label()
+                            if hasattr(exam.exam_type, "get_label")
+                            else exam.exam_type.value
+                        )
+                except Exception:
+                    exam_type_name = ""
+                doc_id = ""
+                doc_name = ""
+                try:
+                    if visit.doctor_id:
+                        doc = visit.doctor
+                        doc_id = str(visit.doctor_id)
+                        doc_name = doc.get_full_name()
+                        if doc_id not in doctor_map:
+                            doctor_map[doc_id] = doc_name
+                except Exception:
+                    pass
+                exam_st = exam.status.value
+                result.append(AssignedExamRowDTO(
+                    row_type="doctor",
+                    source="private",
+                    assigned_doctor_id=doc_id,
+                    assigned_doctor_name=doc_name or "Non assigné",
+                    campaign_id="",
+                    campaign_name="Consultation privée",
+                    campaign_number=visit.visit_number,
+                    campaign_status="",
+                    campaign_status_label="",
+                    exam_type_id=str(exam.exam_type_ref_id) if exam.exam_type_ref_id else "",
+                    exam_type_name=exam_type_name,
+                    exam_category="",
+                    patient_id=str(patient.id),
+                    patient_name=patient.get_full_name(),
+                    patient_number=patient.patient_number,
+                    medical_status=exam_st,
+                    medical_status_label=_exam_status_label.get(exam_st, exam_st),
+                    medical_status_color=_exam_status_color.get(exam_st, "gray"),
+                    pending_task=_exam_pending_task.get(exam_st, ("", "gray"))[0],
+                    pending_task_color=_exam_pending_task.get(exam_st, ("", "gray"))[1],
+                    action_url=f"/consultation/{visit.id}",
+                    can_act=True,
+                ))
+
+        # Lab rows — private consultation exams transmitted to lab
+        if self.is_lab or is_admin:
+            try:
+                lab_priv_exams = list(
+                    Exam.select(Exam, Visit)
+                    .join(Visit, on=(Exam.visit == Visit.id))
+                    .where(
+                        (Visit.campaign.is_null(True))
+                        & (Exam.status == ExamStatus.TRANSMITTED_TO_LAB)
+                    )
+                )
+                for exam in lab_priv_exams:
+                    visit = exam.visit
+                    try:
+                        patient = visit.patient
+                        if not patient:
+                            continue
+                    except Exception:
+                        continue
+                    exam_type_name = ""
+                    try:
+                        if exam.exam_type_ref_id:
+                            ref = ExamTypeRef.get_or_none(ExamTypeRef.id == exam.exam_type_ref_id)
+                            if ref:
+                                exam_type_name = ref.name
+                        if not exam_type_name:
+                            exam_type_name = (
+                                exam.exam_type.get_label()
+                                if hasattr(exam.exam_type, "get_label")
+                                else exam.exam_type.value
+                            )
+                    except Exception:
+                        pass
+                    result.append(AssignedExamRowDTO(
+                        row_type="lab",
+                        source="private",
+                        assigned_doctor_id="__lab__",
+                        assigned_doctor_name="Laboratoire PSC",
+                        campaign_id="",
+                        campaign_name="Consultation privée",
+                        campaign_number=visit.visit_number,
+                        campaign_status="",
+                        campaign_status_label="",
+                        exam_type_id=str(exam.exam_type_ref_id) if exam.exam_type_ref_id else "",
+                        exam_type_name=exam_type_name,
+                        exam_category="",
+                        patient_id=str(patient.id),
+                        patient_name=patient.get_full_name(),
+                        patient_number=patient.patient_number,
+                        medical_status="transmitted_to_lab",
+                        medical_status_label="Transmis au labo",
+                        medical_status_color="amber",
+                        pending_task="Saisir au labo",
+                        pending_task_color="amber",
+                        action_url=f"/consultation/{visit.id}",
+                        can_act=True,
+                    ))
+            except Exception:
+                pass
+
         # ── Build assignee dropdown ───────────────────────────────────────────
         assignee_list: list[AssignedDoctorOption] = []
-        if self.is_lab:
+        if self.is_lab or is_admin:
             assignee_list.append(AssignedDoctorOption(id="__lab__", name="Labo"))
         if self.is_psc:
             assignee_list.append(AssignedDoctorOption(id="__psc__", name="Médecin PSC"))

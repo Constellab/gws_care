@@ -154,6 +154,7 @@ class CampaignPatientExamsState(ReflexMainState):
     section_action: str = "save"  # "save" | "labo" | "psc" | "travail"
     _pending_section_action: str = ""  # action queued while motif dialog is open
     visit_status: str = "pending"  # CampaignVisitStatus of the patient's visit
+    visit_id: str = ""  # Visit ID for linking to the visit detail / doctor interpretation page
 
     # True while the user has clicked "Modifier" to unlock an already-transmitted section
     is_editing_section: bool = False
@@ -161,6 +162,9 @@ class CampaignPatientExamsState(ReflexMainState):
     # Modification motif dialog
     show_motif_dialog: bool = False
     modification_motif: str = ""
+
+    # Ordered list of patient IDs in the same campaign (for prev/next navigation)
+    patient_nav_ids: list[str] = []
 
     # File attachments for the active section
     section_attached_files: list[SectionFileVM] = []
@@ -237,6 +241,40 @@ class CampaignPatientExamsState(ReflexMainState):
         """True when patient presence has been declared (visit not pending)."""
         return self.visit_status != "pending"
 
+    # ── Patient navigation ────────────────────────────────────────────────
+
+    @rx.var
+    def patient_nav_index(self) -> int:
+        try:
+            return self.patient_nav_ids.index(self.cp_patient_id)
+        except ValueError:
+            return -1
+
+    @rx.var
+    def prev_patient_id(self) -> str:
+        try:
+            idx = self.patient_nav_ids.index(self.cp_patient_id)
+        except ValueError:
+            return ""
+        return self.patient_nav_ids[idx - 1] if idx > 0 else ""
+
+    @rx.var
+    def next_patient_id(self) -> str:
+        try:
+            idx = self.patient_nav_ids.index(self.cp_patient_id)
+        except ValueError:
+            return ""
+        total = len(self.patient_nav_ids)
+        return self.patient_nav_ids[idx + 1] if idx < total - 1 else ""
+
+    @rx.var
+    def patient_nav_label(self) -> str:
+        try:
+            idx = self.patient_nav_ids.index(self.cp_patient_id)
+        except ValueError:
+            return ""
+        return str(idx + 1) + " / " + str(len(self.patient_nav_ids))
+
     # Treating doctor transmission flag
     treating_doctor_transmitted: bool = False
 
@@ -265,6 +303,24 @@ class CampaignPatientExamsState(ReflexMainState):
     @rx.event
     def go_back(self):
         return rx.redirect(f"/campaign/{self.cp_campaign_id}")
+
+    @rx.event
+    def go_to_prev_patient(self):
+        nxt = self.prev_patient_id
+        if nxt:
+            return rx.redirect("/campaign-patient/" + self.cp_campaign_id + "/" + nxt)
+
+    @rx.event
+    def go_to_next_patient(self):
+        nxt = self.next_patient_id
+        if nxt:
+            return rx.redirect("/campaign-patient/" + self.cp_campaign_id + "/" + nxt)
+
+    @rx.event
+    def go_to_visit_detail(self):
+        """Navigate to the visit detail page (doctor interpretation / main page)."""
+        if self.visit_id:
+            return rx.redirect(f"/visit/{self.visit_id}")
 
     # ── Terrain notes ─────────────────────────────────────────────────────
 
@@ -494,13 +550,28 @@ class CampaignPatientExamsState(ReflexMainState):
     @rx.event
     async def validate_lab(self):
         """Advance medical_status from LAB_ENTERED to LAB_VALIDATED."""
+        await self._do_validate_lab()
+
+    @rx.event
+    async def validate_lab_and_next(self):
+        """Validate lab results then navigate to the next patient."""
+        await self._do_validate_lab()
+        if self.error:
+            return
+        nxt = self.next_patient_id
+        if nxt:
+            return rx.redirect("/campaign-patient/" + self.cp_campaign_id + "/" + nxt)
+
+    async def _do_validate_lab(self):
         campaign_id = self.cp_campaign_id
         patient_id = self.cp_patient_id
         self.is_saving = True
         self.error = ""
         try:
-            with await self.authenticate_user():
+            with await self.authenticate_user() as auth_user:
                 from gws_care.campaign.campaign_patient import CampaignPatient, MedicalRecordStatus
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.visit import Visit
 
                 cp = CampaignPatient.get_or_none(
                     (CampaignPatient.campaign == campaign_id)
@@ -509,6 +580,15 @@ class CampaignPatientExamsState(ReflexMainState):
                 if cp:
                     cp.medical_status = MedicalRecordStatus.LAB_VALIDATED.value
                     cp.save()
+
+                visit = Visit.get_or_none(
+                    (Visit.campaign == campaign_id) & (Visit.patient == patient_id)
+                )
+                if visit:
+                    try:
+                        CampaignVisitService.validate_lab(visit.id, auth_user)
+                    except Exception:
+                        pass
             self.medical_status = "LAB_VALIDATED"
             self.success = "Résultats de laboratoire validés ✓"
         except Exception as e:
@@ -843,6 +923,19 @@ class CampaignPatientExamsState(ReflexMainState):
     @rx.event
     async def validate_and_send_to_enterprise(self):
         """PSC doctor: save interpretation + validate + notify enterprise doctor."""
+        await self._do_validate_psc()
+
+    @rx.event
+    async def validate_psc_and_next(self):
+        """PSC doctor: validate + notify enterprise + navigate to next patient."""
+        await self._do_validate_psc()
+        if self.error:
+            return
+        nxt = self.next_patient_id
+        if nxt:
+            return rx.redirect("/campaign-patient/" + self.cp_campaign_id + "/" + nxt)
+
+    async def _do_validate_psc(self):
         campaign_id = self.cp_campaign_id
         patient_id = self.cp_patient_id
         self.is_saving = True
@@ -995,6 +1088,15 @@ class CampaignPatientExamsState(ReflexMainState):
                 self.patient_number = patient.patient_number
                 patient_id = str(patient.id)
 
+                # Load ordered patient list for navigation
+                all_cps = list(
+                    CampaignPatient.select(CampaignPatient.patient_id)
+                    .join(Patient, on=(CampaignPatient.patient == Patient.id))
+                    .where(CampaignPatient.campaign == campaign_id)
+                    .order_by(Patient.last_name, Patient.first_name)
+                )
+                self.patient_nav_ids = [str(cp.patient_id) for cp in all_cps]
+
                 cp = CampaignPatient.get_or_none(
                     (CampaignPatient.campaign == campaign_id)
                     & (CampaignPatient.patient == patient_id)
@@ -1017,8 +1119,10 @@ class CampaignPatientExamsState(ReflexMainState):
                 if visit:
                     vs = visit.campaign_visit_status
                     self.visit_status = vs.value if hasattr(vs, "value") else str(vs)
+                    self.visit_id = str(visit.id)
                 else:
                     self.visit_status = "pending"
+                    self.visit_id = ""
 
                 # Detect viewer role
                 from gws_care.role.care_role import CareRole as _CareRole
@@ -1209,6 +1313,18 @@ class CampaignPatientExamsState(ReflexMainState):
                     .where(ExamParameter.exam_type_ref == section_id)
                     .order_by(ExamParameter.display_order)
                 )
+
+                # Filter by campaign-level param selection if set
+                from gws_care.campaign.campaign_exam import CampaignExam
+                ce = CampaignExam.get_or_none(
+                    (CampaignExam.campaign == campaign_id)
+                    & (CampaignExam.exam_type_ref == section_id)
+                )
+                allowed_ids: set | None = None
+                if ce and ce.selected_param_ids:
+                    allowed_ids = set(str(pid) for pid in ce.selected_param_ids)
+                if allowed_ids is not None:
+                    params = [p for p in params if str(p.id) in allowed_ids or p.is_required]
                 entries: list[ExamParamEntry] = []
                 for p in params:
                     r_lo = str(p.ref_low) if p.ref_low is not None else ""

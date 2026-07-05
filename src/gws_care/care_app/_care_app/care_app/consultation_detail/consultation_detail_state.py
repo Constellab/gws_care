@@ -68,6 +68,7 @@ class ExamRowDTO(BaseModel):
 
 class ExamTabHeaderVM(BaseModel):
     """Lightweight data for one exam tab button."""
+
     exam_id: str
     exam_type_label: str
     status: str
@@ -75,12 +76,14 @@ class ExamTabHeaderVM(BaseModel):
 
 class ExamActionOption(BaseModel):
     """One entry in the exam action dropdown (save / transmit to X)."""
+
     value: str
     label: str
 
 
 class ExamParamRowVM(BaseModel):
     """One parameter row displayed inside an exam tab."""
+
     result_id: str = ""
     param_id: str
     param_name: str
@@ -91,7 +94,7 @@ class ExamParamRowVM(BaseModel):
     # Input binding values (all as strings)
     value_numeric: str = ""
     value_text: str = ""
-    value_boolean: str = ""       # "true" | "false" | ""
+    value_boolean: str = ""  # "true" | "false" | ""
     # Display after save
     status: str = "PENDING"
     status_color: str = "gray"
@@ -100,6 +103,7 @@ class ExamParamRowVM(BaseModel):
 
 class ExamAuditEntryVM(BaseModel):
     """One entry of the exam's action history (add/remove a test, modify a value…)."""
+
     action_label: str
     details: str = ""
     user_name: str = ""
@@ -125,6 +129,7 @@ class CertificateRowDTO(BaseModel):
 
 class DrugLineDTO(BaseModel):
     """One drug line in a prescription form."""
+
     name: str = ""
     dosage: str = ""
     frequency: str = ""
@@ -135,6 +140,7 @@ def _status_color(status: str) -> str:
     return {
         "todo": "gray",
         "in_progress_results": "orange",
+        "transmitted_to_lab": "amber",
         "in_progress_interpretation": "blue",
         "done": "green",
     }.get(status, "gray")
@@ -270,7 +276,10 @@ class ConsultationDetailState(RoleState):
     async def on_load(self):
         await self._load_roles()
         redirect = await self._require_any_of(
-            self.is_operator, self.is_doctor, self.is_account_admin, self.is_admin,
+            self.is_operator,
+            self.is_doctor,
+            self.is_account_admin,
+            self.is_admin,
             self.is_patient_user,
         )
         if redirect:
@@ -304,29 +313,48 @@ class ConsultationDetailState(RoleState):
         self.is_saving_info = True
         self.error_message = ""
         try:
-            with await self.authenticate_user():
-                from gws_care.visit.visit import Visit
-                visit = Visit.get_by_id(self.consultation.id)
-                visit.reason_for_visit = self.form_reason or None
-                visit.medical_history = self.form_history or None
-                visit.save()
-            self.consultation = ConsultationDTO(
-                **{
-                    **self.consultation.dict(),
-                    "reason_for_visit": self.form_reason,
-                    "medical_history": self.form_history,
-                }
-            )
+            await self._persist_consultation_info()
             yield rx.toast.success("Informations enregistrées.")
         except Exception as e:
             self.error_message = f"Erreur : {e}"
         finally:
             self.is_saving_info = False
 
+    @rx.event
+    async def auto_save_info(self):
+        """Silently persist motif and antécédents (on blur, no toast)."""
+        if not self.consultation:
+            return
+        try:
+            await self._persist_consultation_info()
+        except Exception:
+            pass
+
+    async def _persist_consultation_info(self):
+        with await self.authenticate_user():
+            from gws_care.visit.visit import Visit
+
+            visit = Visit.get_by_id(self.consultation.id)
+            visit.reason_for_visit = self.form_reason or None
+            visit.medical_history = self.form_history or None
+            visit.save()
+        self.consultation = ConsultationDTO(
+            **{
+                **self.consultation.dict(),
+                "reason_for_visit": self.form_reason,
+                "medical_history": self.form_history,
+            }
+        )
+
     # ── Tab navigation ────────────────────────────────────────────────────────
 
     @rx.event
     async def set_active_tab(self, tab_value: str):
+        if self.active_tab == "informations" and tab_value != "informations":
+            try:
+                await self._persist_consultation_info()
+            except Exception:
+                pass
         self.active_tab = tab_value
         if tab_value != "informations":
             await self._load_exam_params(tab_value)
@@ -339,7 +367,9 @@ class ConsultationDetailState(RoleState):
         updated = []
         for p in self.active_exam_params:
             if p.param_id == param_id:
-                updated.append(ExamParamRowVM(**{**p.dict(), "value_numeric": value, "value_text": value}))
+                updated.append(
+                    ExamParamRowVM(**{**p.dict(), "value_numeric": value, "value_text": value})
+                )
             else:
                 updated.append(p)
         self.active_exam_params = updated
@@ -347,8 +377,7 @@ class ConsultationDetailState(RoleState):
     @rx.event
     def set_param_numeric(self, param_id: str, value: str):
         self.active_exam_params = [
-            ExamParamRowVM(**{**p.dict(), "value_numeric": value})
-            if p.param_id == param_id else p
+            ExamParamRowVM(**{**p.dict(), "value_numeric": value}) if p.param_id == param_id else p
             for p in self.active_exam_params
         ]
         if param_id not in self.modified_param_ids:
@@ -357,8 +386,7 @@ class ConsultationDetailState(RoleState):
     @rx.event
     def set_param_text(self, param_id: str, value: str):
         self.active_exam_params = [
-            ExamParamRowVM(**{**p.dict(), "value_text": value})
-            if p.param_id == param_id else p
+            ExamParamRowVM(**{**p.dict(), "value_text": value}) if p.param_id == param_id else p
             for p in self.active_exam_params
         ]
         if param_id not in self.modified_param_ids:
@@ -367,8 +395,7 @@ class ConsultationDetailState(RoleState):
     @rx.event
     def set_param_boolean(self, param_id: str, value: str):
         self.active_exam_params = [
-            ExamParamRowVM(**{**p.dict(), "value_boolean": value})
-            if p.param_id == param_id else p
+            ExamParamRowVM(**{**p.dict(), "value_boolean": value}) if p.param_id == param_id else p
             for p in self.active_exam_params
         ]
         if param_id not in self.modified_param_ids:
@@ -395,9 +422,12 @@ class ConsultationDetailState(RoleState):
             # choices, not one-or-the-other. "Particulier" only has "Terminer"
             # since there is no médecin du travail to notify.
             if self.consultation and self.consultation.is_campaign:
-                options.append(ExamActionOption(
-                    value="transmit_work_doctor", label="Transmettre au médecin du travail",
-                ))
+                options.append(
+                    ExamActionOption(
+                        value="transmit_work_doctor",
+                        label="Transmettre au médecin du travail",
+                    )
+                )
             options.append(ExamActionOption(value="finish_local", label="Terminer"))
         return options
 
@@ -438,8 +468,7 @@ class ConsultationDetailState(RoleState):
         # result in DB (result_id != "").  A brand-new param (result_id == "") is a first save.
         modified_ids_set = set(self.modified_param_ids)
         has_modified_existing = any(
-            p.result_id != "" and p.param_id in modified_ids_set
-            for p in self.active_exam_params
+            p.result_id != "" and p.param_id in modified_ids_set for p in self.active_exam_params
         )
         if has_modified_existing:
             self.edit_reason = ""
@@ -490,7 +519,9 @@ class ConsultationDetailState(RoleState):
                     raw = p.value_numeric.strip().replace(",", ".")
                     entry["value_numeric"] = float(raw) if raw else None
                 elif p.value_type == "BOOLEAN":
-                    entry["value_boolean"] = (p.value_boolean == "true") if p.value_boolean else None
+                    entry["value_boolean"] = (
+                        (p.value_boolean == "true") if p.value_boolean else None
+                    )
                 else:
                     entry["value_text"] = p.value_text or None
                 entries.append(entry)
@@ -515,10 +546,10 @@ class ConsultationDetailState(RoleState):
                 # results (reason is None for a brand-new value's first save)
                 if reason:
                     from gws_care.exam.exam_audit_entry import ExamAuditAction
+
                     modified_ids = set(self.modified_param_ids)
                     modified_names = [
-                        p.param_name for p in self.active_exam_params
-                        if p.param_id in modified_ids
+                        p.param_name for p in self.active_exam_params if p.param_id in modified_ids
                     ]
                     body = f"{', '.join(modified_names)} : {reason}" if modified_names else reason
                     self._log_exam_audit(exam, ExamAuditAction.MODIFY_VALUE.value, body)
@@ -556,6 +587,7 @@ class ConsultationDetailState(RoleState):
             with await self.authenticate_user() as auth_user:
                 from gws_care.exam.exam import Exam
                 from gws_care.user.user import User
+
                 exam = Exam.get_by_id(exam_id)
                 exam.interpretation = self.active_exam_interpretation or None
                 if self.active_exam_interpretation.strip():
@@ -578,8 +610,11 @@ class ConsultationDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from gws_care.exam.exam import Exam
+
                 exam = Exam.get_by_id(exam_id)
-                exam.work_doctor_interpretation = self.active_exam_work_doctor_interpretation or None
+                exam.work_doctor_interpretation = (
+                    self.active_exam_work_doctor_interpretation or None
+                )
                 exam.save()
             yield rx.toast.success("Interprétation médecin du travail enregistrée.")
         except Exception as e:
@@ -605,11 +640,14 @@ class ConsultationDetailState(RoleState):
             with await self.authenticate_user():
                 from gws_care.exam.exam import Exam
                 from gws_care.exam.exam_audit_entry import ExamAuditAction
+                from gws_care.exam.exam_type import ExamStatus
                 from gws_care.notification.notification_service import NotificationService
                 from gws_care.role.care_role import CareRole
                 from gws_care.role.user_care_role import UserCareRole
 
                 exam = Exam.get_by_id(exam_id)
+                exam.status = ExamStatus.TRANSMITTED_TO_LAB
+                exam.save()
                 exam_label = exam.exam_type.get_label()
                 patient_name = self.consultation.patient_name if self.consultation else "le patient"
                 message = f"Nouvel examen à réaliser pour {patient_name} — {exam_label}."
@@ -620,10 +658,12 @@ class ConsultationDetailState(RoleState):
                     NotificationService.create_bell(str(role_entry.user_id), message)
 
                 self._log_exam_audit(
-                    exam, ExamAuditAction.TRANSMIT_TO_LAB.value,
+                    exam,
+                    ExamAuditAction.TRANSMIT_TO_LAB.value,
                     "Examen transmis au laboratoire pour saisie des résultats.",
                 )
 
+            self.active_exam_status = "transmitted_to_lab"
             await self._refresh_exam_headers()
             yield rx.toast.success("Résultats enregistrés et examen transmis au laboratoire.")
         except Exception as e:
@@ -661,8 +701,7 @@ class ConsultationDetailState(RoleState):
                     "En attente d'interprétation."
                 )
                 doctor_roles = list(
-                    UserCareRole.select()
-                    .where(
+                    UserCareRole.select().where(
                         (UserCareRole.role == CareRole.MEDECIN_PSC)
                         | (UserCareRole.role == CareRole.DOCTOR)
                     )
@@ -711,15 +750,14 @@ class ConsultationDetailState(RoleState):
                 # user holding that role
                 exam_label = exam.exam_type.get_label()
                 patient_name = self.consultation.patient_name if self.consultation else "le patient"
-                message = (
-                    f"Résultats interprétés disponibles pour {patient_name} — {exam_label}."
-                )
+                message = f"Résultats interprétés disponibles pour {patient_name} — {exam_label}."
                 if self.consultation and self.consultation.work_doctor_id:
                     NotificationService.create_bell(self.consultation.work_doctor_id, message)
                 else:
                     work_doctor_roles = list(
-                        UserCareRole.select()
-                        .where(UserCareRole.role == CareRole.MEDECIN_ENTREPRISE)
+                        UserCareRole.select().where(
+                            UserCareRole.role == CareRole.MEDECIN_ENTREPRISE
+                        )
                     )
                     for role_entry in work_doctor_roles:
                         NotificationService.create_bell(str(role_entry.user_id), message)
@@ -787,6 +825,7 @@ class ConsultationDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from gws_care.visit.consultation_service import ConsultationService
+
                 ConsultationService.mark_in_progress(visit_id=self.consultation.id)
             self.success_message = "Consultation démarrée."
             await self._load_consultation()
@@ -804,6 +843,7 @@ class ConsultationDetailState(RoleState):
         try:
             with await self.authenticate_user() as auth_user:
                 from gws_care.visit.consultation_service import ConsultationService
+
                 ConsultationService.mark_done(
                     visit_id=self.consultation.id,
                     closed_by_user_id=str(auth_user.id),
@@ -844,6 +884,7 @@ class ConsultationDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from gws_care.visit.consultation_service import ConsultationService
+
                 ConsultationService.cancel(visit_id=self.consultation.id, reason=reason)
             self.show_cancel_dialog = False
             self.success_message = "Consultation annulée."
@@ -865,14 +906,14 @@ class ConsultationDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from gws_care.doctor.medical_doctor import MedicalDoctor
+
                 doctors = list(
                     MedicalDoctor.select()
                     .where(MedicalDoctor.is_active == True)
                     .order_by(MedicalDoctor.last_name, MedicalDoctor.first_name)
                 )
                 self.clinic_doctor_options = [
-                    DoctorPickerOption(id=str(d.id), label=d.get_full_name())
-                    for d in doctors
+                    DoctorPickerOption(id=str(d.id), label=d.get_full_name()) for d in doctors
                 ]
         except Exception as e:
             self.error_message = str(e)
@@ -895,6 +936,7 @@ class ConsultationDetailState(RoleState):
             with await self.authenticate_user():
                 from gws_care.doctor.medical_doctor import MedicalDoctor
                 from gws_care.visit.visit import Visit
+
                 visit = Visit.get_by_id(self.consultation.id)
                 visit.doctor_id = self.selected_clinic_doctor_id or None
                 visit.save()
@@ -902,11 +944,13 @@ class ConsultationDetailState(RoleState):
                 if self.selected_clinic_doctor_id:
                     d = MedicalDoctor.get_by_id(self.selected_clinic_doctor_id)
                     doctor_name = d.get_full_name()
-            self.consultation = ConsultationDTO(**{
-                **self.consultation.dict(),
-                "clinic_doctor_id": self.selected_clinic_doctor_id,
-                "clinic_doctor_name": doctor_name,
-            })
+            self.consultation = ConsultationDTO(
+                **{
+                    **self.consultation.dict(),
+                    "clinic_doctor_id": self.selected_clinic_doctor_id,
+                    "clinic_doctor_name": doctor_name,
+                }
+            )
             self.show_clinic_doctor_dialog = False
             yield rx.toast.success("Médecin clinique assigné.")
         except Exception as e:
@@ -925,9 +969,11 @@ class ConsultationDetailState(RoleState):
             with await self.authenticate_user():
                 from gws_care.role.care_role import CareRole
                 from gws_care.role.user_care_role import UserCareRole
+
                 rows = list(
-                    UserCareRole.select(UserCareRole)
-                    .where(UserCareRole.role == CareRole.MEDECIN_ENTREPRISE)
+                    UserCareRole.select(UserCareRole).where(
+                        UserCareRole.role == CareRole.MEDECIN_ENTREPRISE
+                    )
                 )
                 seen: set[str] = set()
                 options: list[DoctorPickerOption] = []
@@ -937,7 +983,9 @@ class ConsultationDetailState(RoleState):
                         continue
                     seen.add(uid)
                     u = r.user
-                    options.append(DoctorPickerOption(id=uid, label=f"{u.first_name} {u.last_name}".strip()))
+                    options.append(
+                        DoctorPickerOption(id=uid, label=f"{u.first_name} {u.last_name}".strip())
+                    )
                 self.work_doctor_options = options
         except Exception as e:
             self.error_message = str(e)
@@ -960,6 +1008,7 @@ class ConsultationDetailState(RoleState):
             with await self.authenticate_user():
                 from gws_care.user.user import User
                 from gws_care.visit.visit import Visit
+
                 visit = Visit.get_by_id(self.consultation.id)
                 visit.work_doctor_id = self.selected_work_doctor_id or None
                 visit.save()
@@ -967,11 +1016,13 @@ class ConsultationDetailState(RoleState):
                 if self.selected_work_doctor_id:
                     u = User.get_by_id(self.selected_work_doctor_id)
                     doctor_name = f"{u.first_name} {u.last_name}".strip()
-            self.consultation = ConsultationDTO(**{
-                **self.consultation.dict(),
-                "work_doctor_id": self.selected_work_doctor_id,
-                "work_doctor_name": doctor_name,
-            })
+            self.consultation = ConsultationDTO(
+                **{
+                    **self.consultation.dict(),
+                    "work_doctor_id": self.selected_work_doctor_id,
+                    "work_doctor_name": doctor_name,
+                }
+            )
             self.show_work_doctor_dialog = False
             yield rx.toast.success("Médecin du travail assigné.")
         except Exception as e:
@@ -984,6 +1035,7 @@ class ConsultationDetailState(RoleState):
     @rx.event
     async def open_new_exam_dialog(self):
         from datetime import date
+
         self.new_exam_type = ""
         self.new_exam_date = date.today().isoformat()
         self.new_exam_error = ""
@@ -995,6 +1047,7 @@ class ConsultationDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
+
                 rows = ExamTypeRefService.list_all(active_only=True)
                 self.new_exam_ref_options = [
                     ExamTypeRefOption(
@@ -1027,6 +1080,7 @@ class ConsultationDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
+
                 detail = ExamTypeRefService.get(ref_id)
                 self.new_exam_params = [
                     ExamParamOption(
@@ -1046,22 +1100,21 @@ class ConsultationDetailState(RoleState):
     def toggle_new_exam_param(self, param_id: str):
         self.new_exam_params = [
             ExamParamOption(**{**p.dict(), "is_selected": not p.is_selected})
-            if p.id == param_id else p
+            if p.id == param_id
+            else p
             for p in self.new_exam_params
         ]
 
     @rx.event
     def select_all_new_exam_params(self):
         self.new_exam_params = [
-            ExamParamOption(**{**p.dict(), "is_selected": True})
-            for p in self.new_exam_params
+            ExamParamOption(**{**p.dict(), "is_selected": True}) for p in self.new_exam_params
         ]
 
     @rx.event
     def clear_all_new_exam_params(self):
         self.new_exam_params = [
-            ExamParamOption(**{**p.dict(), "is_selected": False})
-            for p in self.new_exam_params
+            ExamParamOption(**{**p.dict(), "is_selected": False}) for p in self.new_exam_params
         ]
 
     @rx.event
@@ -1080,6 +1133,7 @@ class ConsultationDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from datetime import date
+
                 from gws_care.exam.exam import Exam
                 from gws_care.exam.exam_type import ExamStatus, ExamType
 
@@ -1137,6 +1191,7 @@ class ConsultationDetailState(RoleState):
             with await self.authenticate_user():
                 from gws_care.exam.exam import Exam
                 from gws_care.exam.exam_type import ExamStatus
+
                 exam = Exam.get_by_id(exam_id)
                 exam.status = ExamStatus.CANCELLED
                 exam.interpretation = f"[Annulé] {reason}"
@@ -1160,6 +1215,7 @@ class ConsultationDetailState(RoleState):
     @staticmethod
     def _log_exam_audit(exam, action: str, details: str) -> None:
         from gws_care.exam.exam_audit_entry import ExamAuditEntry
+
         ExamAuditEntry(exam=exam, action=action, details=details).save()
 
     # ── Add missed params to existing exam ────────────────────────────────────
@@ -1177,9 +1233,10 @@ class ConsultationDetailState(RoleState):
         if exam.requested_param_ids is not None:
             return [str(i) for i in exam.requested_param_ids]
         from gws_care.exam_type_ref.exam_parameter import ExamParameter
+
         return [
-            str(p.id) for p in ExamParameter.select()
-            .where(
+            str(p.id)
+            for p in ExamParameter.select().where(
                 (ExamParameter.exam_type_ref == exam.exam_type_ref_id)
                 & (ExamParameter.is_active == True)
             )
@@ -1200,6 +1257,7 @@ class ConsultationDetailState(RoleState):
             with await self.authenticate_user():
                 from gws_care.exam.exam import Exam
                 from gws_care.exam_type_ref.exam_parameter import ExamParameter
+
                 exam = Exam.get_by_id(exam_id)
                 already = set(self._resolve_requested_param_ids(exam))
                 all_params = list(
@@ -1235,7 +1293,8 @@ class ConsultationDetailState(RoleState):
     def toggle_add_param(self, param_id: str):
         self.add_param_options = [
             ExamParamOption(**{**p.dict(), "is_selected": not p.is_selected})
-            if p.id == param_id else p
+            if p.id == param_id
+            else p
             for p in self.add_param_options
         ]
 
@@ -1269,6 +1328,7 @@ class ConsultationDetailState(RoleState):
             with await self.authenticate_user():
                 from gws_care.exam.exam import Exam
                 from gws_care.exam.exam_audit_entry import ExamAuditAction
+
                 exam = Exam.get_by_id(exam_id)
                 current = self._resolve_requested_param_ids(exam)
                 selected_ids = [p.id for p in selected_options]
@@ -1331,7 +1391,9 @@ class ConsultationDetailState(RoleState):
                 current = self._resolve_requested_param_ids(exam)
                 exam.requested_param_ids = [i for i in current if str(i) != param_id]
                 exam.save()
-                self._log_exam_audit(exam, ExamAuditAction.REMOVE_TEST.value, f"{param_name} : {reason}")
+                self._log_exam_audit(
+                    exam, ExamAuditAction.REMOVE_TEST.value, f"{param_name} : {reason}"
+                )
                 # Delete the saved result if it exists
                 ExamParameterResult.delete().where(
                     (ExamParameterResult.exam == exam_id)
@@ -1352,6 +1414,7 @@ class ConsultationDetailState(RoleState):
     @rx.event
     def open_new_prescription_dialog(self):
         from datetime import date
+
         self.presc_form_date = date.today().isoformat()
         self.presc_form_diagnosis = ""
         self.presc_form_drugs = [DrugLineDTO()]
@@ -1423,6 +1486,8 @@ class ConsultationDetailState(RoleState):
             with await self.authenticate_user() as auth_user:
                 from gws_care.prescription.prescription import (
                     DrugLineDTO as ServiceDrugLineDTO,
+                )
+                from gws_care.prescription.prescription import (
                     Prescription,
                     PrescriptionService,
                     SavePrescriptionDTO,
@@ -1462,6 +1527,7 @@ class ConsultationDetailState(RoleState):
     @rx.event
     def open_new_certificate_dialog(self):
         from datetime import date
+
         self.cert_form_issue_date = date.today().isoformat()
         self.cert_form_conclusion = ""
         self.cert_form_is_fit_for_work = True
@@ -1563,7 +1629,9 @@ class ConsultationDetailState(RoleState):
                 visit = CampaignVisitService.get_visit(visit_id)
 
                 if self.is_patient_user:
-                    if not self._linked_patient_id or str(visit.patient_id) != str(self._linked_patient_id):
+                    if not self._linked_patient_id or str(visit.patient_id) != str(
+                        self._linked_patient_id
+                    ):
                         self.consultation = None
                         self.error_message = "Access denied."
                         return
@@ -1612,8 +1680,12 @@ class ConsultationDetailState(RoleState):
                     account_name=account_name,
                     account_id=str(visit.billing_account_id) if visit.billing_account_id else "",
                     scheduled_at=visit.scheduled_at.isoformat() if visit.scheduled_at else "",
-                    status=visit.consultation_visit_status.value if visit.consultation_visit_status else "",
-                    status_label=visit.consultation_visit_status.get_label() if visit.consultation_visit_status else "",
+                    status=visit.consultation_visit_status.value
+                    if visit.consultation_visit_status
+                    else "",
+                    status_label=visit.consultation_visit_status.get_label()
+                    if visit.consultation_visit_status
+                    else "",
                     cancellation_reason=getattr(visit, "cancellation_reason", None) or "",
                     reason_for_visit=getattr(visit, "reason_for_visit", None) or "",
                     medical_history=getattr(visit, "medical_history", None) or "",
@@ -1630,12 +1702,10 @@ class ConsultationDetailState(RoleState):
 
                 # Linked exams → tab headers (creation order, exclude cancelled)
                 from gws_care.exam.exam_type import ExamStatus
+
                 exams = list(
                     Exam.select()
-                    .where(
-                        (Exam.visit == visit.id)
-                        & (Exam.status != ExamStatus.CANCELLED)
-                    )
+                    .where((Exam.visit == visit.id) & (Exam.status != ExamStatus.CANCELLED))
                     .order_by(Exam.created_at.asc())
                 )
 
@@ -1644,12 +1714,17 @@ class ConsultationDetailState(RoleState):
                     if ref_id:
                         try:
                             from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+
                             ref = ExamTypeRef.get_or_none(ExamTypeRef.id == ref_id)
                             if ref:
                                 return ref.name
                         except Exception:
                             pass
-                    return e.exam_type.get_label() if hasattr(e.exam_type, "get_label") else e.exam_type.value
+                    return (
+                        e.exam_type.get_label()
+                        if hasattr(e.exam_type, "get_label")
+                        else e.exam_type.value
+                    )
 
                 self.exams = [
                     ExamRowDTO(
@@ -1658,7 +1733,9 @@ class ConsultationDetailState(RoleState):
                         exam_type=e.exam_type.value,
                         exam_type_label=_exam_label(e),
                         status=e.status.value,
-                        status_label=e.status.get_label() if hasattr(e.status, "get_label") else e.status.value,
+                        status_label=e.status.get_label()
+                        if hasattr(e.status, "get_label")
+                        else e.status.value,
                     )
                     for e in exams
                 ]
@@ -1680,11 +1757,14 @@ class ConsultationDetailState(RoleState):
                 self.prescriptions = [
                     PrescriptionRowDTO(
                         id=str(p.id),
-                        prescription_date=p.prescription_date.isoformat() if p.prescription_date else "",
+                        prescription_date=p.prescription_date.isoformat()
+                        if p.prescription_date
+                        else "",
                         diagnosis=p.diagnosis or "",
                         prescribed_by_name=(
                             f"{p.prescribed_by.first_name} {p.prescribed_by.last_name}"
-                            if p.prescribed_by_id else ""
+                            if p.prescribed_by_id
+                            else ""
                         ),
                         drug_count=len(p.drugs) if p.drugs else 0,
                         is_archived=bool(p.is_archived),
@@ -1706,7 +1786,8 @@ class ConsultationDetailState(RoleState):
                         is_fit_for_work=bool(c.is_fit_for_work),
                         issued_by_name=(
                             f"{c.issued_by.first_name} {c.issued_by.last_name}"
-                            if c.issued_by_id else ""
+                            if c.issued_by_id
+                            else ""
                         ),
                     )
                     for c in certificates
@@ -1725,13 +1806,12 @@ class ConsultationDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from gws_care.exam.exam import Exam
-
                 from gws_care.exam.exam_type import ExamStatus
+
                 exams = list(
                     Exam.select()
                     .where(
-                        (Exam.visit == self.consultation.id)
-                        & (Exam.status != ExamStatus.CANCELLED)
+                        (Exam.visit == self.consultation.id) & (Exam.status != ExamStatus.CANCELLED)
                     )
                     .order_by(Exam.created_at.asc())
                 )
@@ -1741,12 +1821,17 @@ class ConsultationDetailState(RoleState):
                     if ref_id:
                         try:
                             from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+
                             ref = ExamTypeRef.get_or_none(ExamTypeRef.id == ref_id)
                             if ref:
                                 return ref.name
                         except Exception:
                             pass
-                    return e.exam_type.get_label() if hasattr(e.exam_type, "get_label") else e.exam_type.value
+                    return (
+                        e.exam_type.get_label()
+                        if hasattr(e.exam_type, "get_label")
+                        else e.exam_type.value
+                    )
 
                 self.exam_tab_headers = [
                     ExamTabHeaderVM(
@@ -1773,13 +1858,15 @@ class ConsultationDetailState(RoleState):
             with await self.authenticate_user():
                 from gws_care.exam.exam import Exam
                 from gws_care.exam.exam_parameter_result import ExamParameterResult
+                from gws_care.exam.exam_type import ExamStatus as _ExamStatus
                 from gws_care.exam_type_ref.exam_parameter import ExamParameter
 
-                from gws_care.exam.exam_type import ExamStatus as _ExamStatus
                 exam = Exam.get_by_id(exam_id)
                 self.active_exam_date = exam.exam_date.isoformat()
                 self.active_exam_interpretation = exam.interpretation or ""
-                self.active_exam_work_doctor_interpretation = getattr(exam, "work_doctor_interpretation", None) or ""
+                self.active_exam_work_doctor_interpretation = (
+                    getattr(exam, "work_doctor_interpretation", None) or ""
+                )
                 exam_type_ref_id = str(exam.exam_type_ref_id) if exam.exam_type_ref_id else ""
                 self.active_exam_type_ref_id = exam_type_ref_id
 
@@ -1807,8 +1894,7 @@ class ConsultationDetailState(RoleState):
 
                 existing = {
                     str(r.parameter_id): r
-                    for r in ExamParameterResult.select()
-                    .where(ExamParameterResult.exam == exam_id)
+                    for r in ExamParameterResult.select().where(ExamParameterResult.exam == exam_id)
                 }
 
                 # Auto-fix: if results already exist in DB but status is still TODO,
@@ -1832,9 +1918,12 @@ class ConsultationDetailState(RoleState):
 
                 def _status_color_from_status(s: str) -> str:
                     return {
-                        "NORMAL": "green", "NEGATIVE": "green",
-                        "LOW": "orange", "HIGH": "orange",
-                        "CRITICAL_LOW": "red", "CRITICAL_HIGH": "red",
+                        "NORMAL": "green",
+                        "NEGATIVE": "green",
+                        "LOW": "orange",
+                        "HIGH": "orange",
+                        "CRITICAL_LOW": "red",
+                        "CRITICAL_HIGH": "red",
                         "POSITIVE": "red",
                     }.get(s, "gray")
 
@@ -1842,32 +1931,37 @@ class ConsultationDetailState(RoleState):
                 for param in all_params:
                     result = existing.get(str(param.id))
                     status = result.status if result else "PENDING"
-                    rows.append(ExamParamRowVM(
-                        result_id=str(result.id) if result else "",
-                        param_id=str(param.id),
-                        param_name=param.name,
-                        unit=param.unit or "",
-                        value_type=param.value_type,
-                        is_computed=bool(param.is_computed),
-                        is_required=bool(param.is_required),
-                        value_numeric=(
-                            str(result.value_numeric)
-                            if result and result.value_numeric is not None else ""
-                        ),
-                        value_text=result.value_text or "" if result else "",
-                        value_boolean=(
-                            "true" if (result and result.value_boolean is True)
-                            else ("false" if (result and result.value_boolean is False) else "")
-                        ),
-                        status=status,
-                        status_color=_status_color_from_status(status),
-                        ref_range_label=_ref_label(param),
-                    ))
+                    rows.append(
+                        ExamParamRowVM(
+                            result_id=str(result.id) if result else "",
+                            param_id=str(param.id),
+                            param_name=param.name,
+                            unit=param.unit or "",
+                            value_type=param.value_type,
+                            is_computed=bool(param.is_computed),
+                            is_required=bool(param.is_required),
+                            value_numeric=(
+                                str(result.value_numeric)
+                                if result and result.value_numeric is not None
+                                else ""
+                            ),
+                            value_text=result.value_text or "" if result else "",
+                            value_boolean=(
+                                "true"
+                                if (result and result.value_boolean is True)
+                                else ("false" if (result and result.value_boolean is False) else "")
+                            ),
+                            status=status,
+                            status_color=_status_color_from_status(status),
+                            ref_range_label=_ref_label(param),
+                        )
+                    )
 
                 self.active_exam_params = rows
 
                 # Action history (add/remove a test, modify a value…)
                 from gws_care.exam.exam_audit_entry import ExamAuditAction, ExamAuditEntry
+
                 audit_rows = list(
                     ExamAuditEntry.select()
                     .where(ExamAuditEntry.exam == exam_id)
@@ -1876,15 +1970,19 @@ class ConsultationDetailState(RoleState):
                 audit_log = []
                 for entry in audit_rows:
                     try:
-                        user_name = f"{entry.created_by.first_name} {entry.created_by.last_name}".strip()
+                        user_name = (
+                            f"{entry.created_by.first_name} {entry.created_by.last_name}".strip()
+                        )
                     except Exception:
                         user_name = ""
-                    audit_log.append(ExamAuditEntryVM(
-                        action_label=ExamAuditAction(entry.action).get_label(),
-                        details=entry.details or "",
-                        user_name=user_name or "Utilisateur",
-                        created_at=entry.created_at.strftime("%d/%m/%Y %H:%M"),
-                    ))
+                    audit_log.append(
+                        ExamAuditEntryVM(
+                            action_label=ExamAuditAction(entry.action).get_label(),
+                            details=entry.details or "",
+                            user_name=user_name or "Utilisateur",
+                            created_at=entry.created_at.strftime("%d/%m/%Y %H:%M"),
+                        )
+                    )
                 self.active_exam_audit_log = audit_log
 
         except Exception as e:

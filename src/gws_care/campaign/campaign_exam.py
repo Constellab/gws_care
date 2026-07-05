@@ -3,12 +3,14 @@
 Defines which exam types are included in a given campaign.
 """
 
+from gws_core.core.model.db_field import JSONField
+from peewee import CharField, ForeignKeyField
+
 from gws_care.campaign.campaign import Campaign
 from gws_care.core.care_db_manager import CareDbManager
-from gws_care.visit.appointment_mode import AppointmentMode
-from gws_core import Model, EnumField
 from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
-from peewee import CharField, ForeignKeyField
+from gws_care.visit.appointment_mode import AppointmentMode
+from gws_core import EnumField, Model
 
 
 class CampaignExam(Model):
@@ -29,6 +31,8 @@ class CampaignExam(Model):
     assigned_doctor_name: str = CharField(max_length=300, null=True, default=None)
     # Where / how this exam takes place (AT_WORK, HOSPITAL, VISIO, …)
     location_mode: AppointmentMode = EnumField(choices=AppointmentMode, null=True, default=None)
+    # Subset of ExamParameter IDs to include for this campaign (null = all params)
+    selected_param_ids: list = JSONField(null=True, default=None)
 
     class Meta:
         table_name = "gws_care_campaign_exam"
