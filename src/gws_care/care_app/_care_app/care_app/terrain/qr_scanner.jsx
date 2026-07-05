@@ -38,6 +38,10 @@ export function QrScannerComponent({ active = false, onScan, onError, ...props }
 
         const startScanner = async () => {
             try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    if (onError) onError(!window.isSecureContext ? "NOT_SECURE" : "PERMISSION_DENIED");
+                    return;
+                }
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: { ideal: "environment" } },
                 });
@@ -78,7 +82,20 @@ export function QrScannerComponent({ active = false, onScan, onError, ...props }
                 rafRef.current = requestAnimationFrame(tick);
             } catch (err) {
                 if (!cancelled && onError) {
-                    onError(err.message || "Camera error");
+                    const name = err.name || "";
+                    let msg;
+                    if (name === "NotAllowedError" || name === "PermissionDeniedError" || err.message === "Permission denied") {
+                        msg = "PERMISSION_DENIED";
+                    } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+                        msg = "NO_CAMERA";
+                    } else if (name === "NotReadableError" || name === "TrackStartError") {
+                        msg = "CAMERA_BUSY";
+                    } else if (!window.isSecureContext) {
+                        msg = "NOT_SECURE";
+                    } else {
+                        msg = err.message || "UNKNOWN";
+                    }
+                    onError(msg);
                 }
             }
         };

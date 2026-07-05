@@ -18,8 +18,9 @@ from .terrain_state import TerrainExamDTO, TerrainPatientDTO, TerrainState
 def _terrain_status_badge(p: TerrainPatientDTO) -> rx.Component:
     return rx.match(
         p.visit_status,
-        ("pending", rx.badge(LanguageState.tr["status_pending"], color_scheme="gray", variant="soft", size="1")),
-        ("visit_done", rx.badge(LanguageState.tr["status_visit_done"], color_scheme="green", variant="solid", size="1")),
+        ("pending", rx.badge("En attente", color_scheme="gray", variant="soft", size="1")),
+        ("visit_done", rx.badge(rx.icon("user-check", size=11), "Présent(e)", color_scheme="green", variant="solid", size="1")),
+        ("cancelled", rx.badge(rx.icon("user-x", size=11), "Absent(e)", color_scheme="red", variant="solid", size="1")),
         ("lab_done", rx.badge(LanguageState.tr["status_lab_done"], color_scheme="blue", variant="soft", size="1")),
         ("doctor_clinic_validated", rx.badge(LanguageState.tr["status_doctor_clinic_validated"], color_scheme="violet", variant="soft", size="1")),
         ("doctor_company_validated", rx.badge(LanguageState.tr["status_doctor_company_validated"], color_scheme="green", variant="soft", size="1")),
@@ -141,24 +142,58 @@ def _patient_card(p: TerrainPatientDTO) -> rx.Component:
             # Action buttons — depend on visit status
             rx.cond(
                 (p.visit_status == "pending") | (p.visit_status == ""),
-                # Pending: mark done + absent buttons side by side
-                rx.hstack(
-                    rx.button(
-                        rx.icon("check-check", size=14),
-                        LanguageState.tr["terrain_mark_visit_done_btn"],
-                        variant="solid",
-                        color_scheme="green",
-                        size="2",
-                        flex="1",
-                        on_click=lambda: TerrainState.mark_terrain_done(p.id),
+                # Pending: declare PRESENT or ABSENT — no result entry yet
+                rx.vstack(
+                    rx.text(
+                        "Le patient est-il présent ?",
+                        size="2", color="var(--gray-9)", weight="medium",
+                    ),
+                    rx.hstack(
+                        rx.button(
+                            rx.icon("user-check", size=14),
+                            LanguageState.tr["terrain_mark_visit_done_btn"],
+                            variant="solid",
+                            color_scheme="green",
+                            size="2",
+                            flex="1",
+                            on_click=lambda: TerrainState.mark_terrain_done(p.id),
+                        ),
+                        rx.button(
+                            rx.icon("user-x", size=14),
+                            LanguageState.tr["terrain_cancel_visit_btn"],
+                            variant="soft",
+                            color_scheme="red",
+                            size="2",
+                            flex="1",
+                            on_click=lambda: TerrainState.cancel_visit(p.id),
+                        ),
+                        spacing="2",
+                        width="100%",
+                    ),
+                    spacing="2",
+                    width="100%",
+                ),
+            ),
+            rx.cond(
+                p.visit_status == "visit_done",
+                # Present: result entry is now unlocked
+                rx.vstack(
+                    rx.hstack(
+                        rx.icon("circle-check", size=14, color="var(--green-9)"),
+                        rx.text(
+                            "Patient présent — saisie des résultats disponible",
+                            size="2", color="var(--green-11)",
+                        ),
+                        spacing="2", align="center",
                     ),
                     rx.button(
-                        rx.icon("user-x", size=14),
-                        LanguageState.tr["terrain_cancel_visit_btn"],
-                        variant="soft",
-                        color_scheme="red",
+                        rx.icon("pencil", size=14),
+                        "Saisir les résultats",
+                        variant="solid",
+                        color_scheme="blue",
                         size="2",
-                        on_click=lambda: TerrainState.cancel_visit(p.id),
+                        width="100%",
+                        on_click=lambda: TerrainState.go_to_patient_results(p.id),
                     ),
                     spacing="2",
                     width="100%",
@@ -166,15 +201,20 @@ def _patient_card(p: TerrainPatientDTO) -> rx.Component:
             ),
             rx.cond(
                 p.visit_status == "cancelled",
-                # Cancelled: reactivate button
-                rx.button(
-                    rx.icon("rotate-ccw", size=14),
-                    LanguageState.tr["terrain_reactivate_visit_btn"],
-                    variant="soft",
-                    color_scheme="blue",
-                    size="2",
-                    width="100%",
-                    on_click=lambda: TerrainState.reactivate_visit(p.id),
+                # Absent: reactivate button
+                rx.hstack(
+                    rx.icon("user-x", size=14, color="var(--red-9)"),
+                    rx.text("Patient absent", size="2", color="var(--red-10)", weight="medium"),
+                    rx.spacer(),
+                    rx.button(
+                        rx.icon("rotate-ccw", size=14),
+                        LanguageState.tr["terrain_reactivate_visit_btn"],
+                        variant="soft",
+                        color_scheme="gray",
+                        size="2",
+                        on_click=lambda: TerrainState.reactivate_visit(p.id),
+                    ),
+                    spacing="2", align="center", width="100%",
                 ),
             ),
             width="100%",
@@ -314,11 +354,23 @@ def terrain_page() -> rx.Component:
                     ),
                     rx.cond(
                         TerrainState.scan_error != "",
-                        rx.callout(
-                            TerrainState.scan_error,
-                            color_scheme="red",
-                            icon="triangle-alert",
-                            size="1",
+                        rx.vstack(
+                            rx.callout(
+                                TerrainState.scan_error,
+                                color_scheme="red",
+                                icon="triangle-alert",
+                                size="1",
+                                width="100%",
+                            ),
+                            rx.button(
+                                rx.icon("refresh-cw", size=13),
+                                "Réessayer",
+                                variant="soft",
+                                size="1",
+                                on_click=TerrainState.toggle_scanner,
+                            ),
+                            spacing="2",
+                            width="100%",
                         ),
                     ),
                     rx.cond(

@@ -151,20 +151,7 @@ def _exam_result_row(row: ExamResultRowDTO) -> rx.Component:
             rx.cond(
                 row.exam_id != "",
                 _exam_status_badge(row.status),
-                rx.badge("—", color_scheme="gray", variant="soft", size="1"),
-            )
-        ),
-        rx.table.cell(
-            rx.cond(
-                row.exam_id != "",
-                rx.button(
-                    rx.icon("external-link", size=12),
-                    LanguageState.tr["btn_open_exam_detail"],
-                    variant="ghost",
-                    size="1",
-                    color_scheme="blue",
-                    on_click=lambda: VisitDetailState.open_exam_detail(row.exam_id),
-                ),
+                rx.badge("À faire", color_scheme="gray", variant="soft", size="1"),
             )
         ),
     )
@@ -483,7 +470,26 @@ def visit_detail_page() -> rx.Component:
                         # Exam Results section
                         rx.card(
                             rx.vstack(
-                                rx.heading(LanguageState.tr["section_exam_results"], size="4"),
+                                rx.hstack(
+                                    rx.heading(LanguageState.tr["section_exam_results"], size="4"),
+                                    rx.spacer(),
+                                    rx.cond(
+                                        (
+                                            (VisitDetailState.visit.campaign_visit_status == "visit_done")
+                                            | (VisitDetailState.visit.campaign_visit_status == "pending")
+                                        ) & (VisitDetailState.is_operator | VisitDetailState.is_admin),
+                                        rx.button(
+                                            rx.icon("pencil", size=14),
+                                            "Saisir les résultats",
+                                            variant="solid",
+                                            color_scheme="blue",
+                                            size="2",
+                                            on_click=VisitDetailState.go_to_results_entry,
+                                        ),
+                                    ),
+                                    align="center",
+                                    width="100%",
+                                ),
                                 rx.cond(
                                     VisitDetailState.exam_results.length() == 0,
                                     rx.text(LanguageState.tr["no_results_entered"], size="2", color="var(--gray-9)"),
@@ -492,7 +498,6 @@ def visit_detail_page() -> rx.Component:
                                             rx.table.row(
                                                 rx.table.column_header_cell(LanguageState.tr["col_exam_name"]),
                                                 rx.table.column_header_cell(LanguageState.tr["col_status"]),
-                                                rx.table.column_header_cell(""),
                                             )
                                         ),
                                         rx.table.body(
@@ -560,7 +565,17 @@ def visit_detail_page() -> rx.Component:
                                                 on_change=VisitDetailState.set_clinic_interpretation,
                                                 rows="4",
                                                 width="100%",
-                                                disabled=(VisitDetailState.visit.campaign_visit_status != "lab_done"),
+                                                disabled=(
+                                                    (VisitDetailState.visit.campaign_visit_status != "lab_done")
+                                                    & (VisitDetailState.visit.campaign_visit_status != "visit_done")
+                                                ),
+                                            ),
+                                            rx.cond(
+                                                (VisitDetailState.visit.campaign_visit_status == "visit_done"),
+                                                rx.callout(
+                                                    "Vous pouvez saisir votre interprétation dès maintenant. La validation sera possible une fois les résultats labo disponibles.",
+                                                    icon="info", color_scheme="amber", size="1",
+                                                ),
                                             ),
                                             rx.cond(
                                                 (VisitDetailState.visit.campaign_visit_status == "lab_done")

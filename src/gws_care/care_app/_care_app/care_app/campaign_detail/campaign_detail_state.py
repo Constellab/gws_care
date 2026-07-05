@@ -190,6 +190,11 @@ class CampaignDetailState(PatientPickerState):
     visit_sort_col: str = "patient_name"
     visit_sort_dir: str = "asc"
 
+    # ── Inline date editing (DRAFT / VALIDATED) ───────────────────────────────
+    program_start_date_input: str = ""
+    program_end_date_input: str = ""
+    is_saving_dates: bool = False
+
     @rx.event
     async def on_load(self):
         await self._load_roles()
@@ -204,6 +209,11 @@ class CampaignDetailState(PatientPickerState):
 
     @rx.event
     def go_to_visit(self, visit_id: str):
+        if self.program.status in ("draft", "validated"):
+            return
+        visit = next((v for v in self.visits if v.id == visit_id), None)
+        if visit and visit.campaign_visit_status == "pending":
+            return
         return rx.redirect(f"/visit/{visit_id}")
 
     @rx.event
@@ -211,8 +221,69 @@ class CampaignDetailState(PatientPickerState):
         return rx.redirect(f"/campaign-patient/{campaign_id}/{patient_id}")
 
     @rx.event
-    def set_active_tab(self, tab: str):
+    async def set_active_tab(self, tab: str):
         self.active_tab = tab
+        if tab == "visits":
+            await self._refresh_visits()
+
+    async def _refresh_visits(self):
+        """Reload only the visits list from DB (lightweight, called on tab switch)."""
+        page_id = self.router.page.params.get("campaign_id_param", "") or (self.program.id if self.program else "")
+        if not page_id:
+            return
+        try:
+            with await self.authenticate_user():
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                visits = CampaignVisitService.list_for_campaign(page_id)
+                self.visits = [
+                    VisitRowDTO(
+                        id=str(v.id),
+                        visit_number=v.visit_number,
+                        patient_name=v.patient.get_full_name() if v.patient_id else "",
+                        patient_number=v.patient.patient_number if v.patient_id else "",
+                        patient_id=str(v.patient_id) if v.patient_id else "",
+                        campaign_id=page_id,
+                        campaign_visit_status=v.campaign_visit_status.value,
+                        status_label=v.campaign_visit_status.get_label(),
+                    )
+                    for v in visits
+                ]
+        except Exception:
+            pass  # keep existing visits on error
+
+    @rx.event
+    def set_program_start_date_input(self, value: str):
+        self.program_start_date_input = value
+
+    @rx.event
+    def set_program_end_date_input(self, value: str):
+        self.program_end_date_input = value
+
+    @rx.event
+    async def save_campaign_dates(self):
+        """Persist the edited start/end dates for the campaign (DRAFT or VALIDATED)."""
+        if not self.program:
+            return
+        self.error_message = ""
+        self.success_message = ""
+        self.is_saving_dates = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_dto import SaveCampaignDTO
+                from gws_care.campaign.campaign_service import CampaignService
+                dto = SaveCampaignDTO(
+                    name=self.program.name,
+                    account_id=self.program.account_id,
+                    start_date=self.program_start_date_input,
+                    end_date=self.program_end_date_input,
+                    notes=self.program.notes or None,
+                )
+                CampaignService.update_campaign(self.program.id, dto)
+            await self._load_program(preserve_tab=True)
+        except Exception as e:
+            self.error_message = str(e)
+        finally:
+            self.is_saving_dates = False
 
     # ── Patient filter / sort ──────────────────────────────────────────────────
 
@@ -335,9 +406,25 @@ class CampaignDetailState(PatientPickerState):
         return rows
 
     @rx.var
+    def all_exams_have_location(self) -> bool:
+        """True if every exam type has a location mode set."""
+        return len(self.exam_types) > 0 and all(et.location_mode != "" for et in self.exam_types)
+
+    @rx.var
+    def has_campaign_doctor(self) -> bool:
+        """True if at least one doctor is assigned (campaign level or per exam type)."""
+        return len(self.campaign_doctors) > 0 or any(
+            len(et.assigned_doctors) > 0 for et in self.exam_types
+        )
+
+    @rx.var
     def can_validate_program(self) -> bool:
-        """True if the program has at least one patient and one exam type."""
-        return len(self.patients) > 0 and len(self.exam_types) > 0
+        """True when all required fields are filled: ≥1 patient, ≥1 exam with location, ≥1 doctor."""
+        if not self.patients or not self.exam_types:
+            return False
+        if not self.all_exams_have_location:
+            return False
+        return self.has_campaign_doctor
 
     @rx.var
     def all_visits_lab_ready(self) -> bool:
@@ -974,6 +1061,8 @@ class CampaignDetailState(PatientPickerState):
                     notes=program.notes or "",
                     is_individual=bool(program.is_individual),
                 )
+                self.program_start_date_input = str(program.start_date)
+                self.program_end_date_input = str(program.end_date)
 
                 # Patients
                 patients = CampaignService.get_patients(page_id)

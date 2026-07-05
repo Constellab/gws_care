@@ -1,7 +1,7 @@
 {
   "name": "gws_care",
   "author": "Gencovery",
-  "version": "0.58.0",
+  "version": "0.64.0",
   "variables": {
     "gws_care:testdata_dir": "${CURRENT_DIR}/tests/testdata"
   },
@@ -17,12 +17,24 @@
       {
         "source": "https://pypi.python.org/simple",
         "packages": [
-          {"name": "reportlab"},
-          {"name": "pdfplumber"},
-          {"name": "rapidfuzz"},
-          {"name": "qrcode[pil]"},
-          {"name": "phonenumbers"},
-          {"name": "httpx"}
+          {
+            "name": "reportlab"
+          },
+          {
+            "name": "pdfplumber"
+          },
+          {
+            "name": "rapidfuzz"
+          },
+          {
+            "name": "qrcode[pil]"
+          },
+          {
+            "name": "phonenumbers"
+          },
+          {
+            "name": "httpx"
+          }
         ]
       }
     ],

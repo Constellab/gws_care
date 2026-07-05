@@ -343,9 +343,10 @@ def generate_campaign_report_pdf(program_id: str) -> bytes:
     story.append(Paragraph("Statistiques de présence", h2))
     total = len(patients)
     present = sum(
-        1 for v in visits if v.campaign_visit_status != CampaignVisitStatus.PENDING
+        1 for v in visits
+        if v.campaign_visit_status not in (CampaignVisitStatus.PENDING, CampaignVisitStatus.CANCELLED)
     )
-    absent = total - present
+    absent = sum(1 for v in visits if v.campaign_visit_status == CampaignVisitStatus.CANCELLED)
     pct = round(present / total * 100) if total else 0
 
     stats_data = [
@@ -383,10 +384,12 @@ def generate_campaign_report_pdf(program_id: str) -> bytes:
     attendance_rows = [attendance_header]
     for p in patients:
         visit = visit_map.get(str(p.id))
-        if visit and visit.campaign_visit_status != CampaignVisitStatus.PENDING:
+        if visit and visit.campaign_visit_status not in (CampaignVisitStatus.PENDING, CampaignVisitStatus.CANCELLED):
             status_cell = Paragraph("<font color='green'>✓ Présent</font>", body)
-        else:
+        elif visit and visit.campaign_visit_status == CampaignVisitStatus.CANCELLED:
             status_cell = Paragraph("<font color='red'>✗ Absent</font>", body)
+        else:
+            status_cell = Paragraph("<font color='gray'>— En attente</font>", body)
         attendance_rows.append([
             Paragraph(p.patient_number, body),
             Paragraph(p.last_name, body),

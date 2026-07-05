@@ -92,6 +92,11 @@ class TerrainState(RoleState):
         return rx.call_script("window.history.back()")
 
     @rx.event
+    def go_to_patient_results(self, patient_id: str):
+        """Navigate directly to the result entry page for a patient."""
+        return rx.redirect(f"/campaign-patient/{self.campaign_id}/{patient_id}")
+
+    @rx.event
     def set_search_query(self, value: str):
         self.search_query = value.lower()
         self._apply_filter()
@@ -135,7 +140,17 @@ class TerrainState(RoleState):
     def on_scan_error(self, message: str):
         """Called by the camera scanner component on error."""
         self.scanner_active = False
-        self.scan_error = f"Erreur scanner : {message}"
+        _messages = {
+            "PERMISSION_DENIED": (
+                "Accès à la caméra refusé. "
+                "Autorisez la caméra dans les paramètres de votre navigateur, "
+                "puis réessayez."
+            ),
+            "NO_CAMERA": "Aucune caméra détectée sur cet appareil.",
+            "CAMERA_BUSY": "La caméra est déjà utilisée par une autre application. Fermez-la et réessayez.",
+            "NOT_SECURE": "La caméra nécessite une connexion sécurisée (HTTPS).",
+        }
+        self.scan_error = _messages.get(message, f"Erreur caméra : {message}")
 
     @rx.event
     def set_scan_result(self, value: str):
@@ -298,7 +313,7 @@ class TerrainState(RoleState):
                 for p in self.patients
             ]
             self._apply_filter()
-            self.success_message = "Visite sur site marquée comme terminée."
+            self.success_message = "Patient marqué comme présent(e). La saisie des résultats est maintenant disponible."
         except Exception as e:
             self.error_message = str(e)
 

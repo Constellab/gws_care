@@ -110,6 +110,50 @@ class VisitDetailState(RoleState):
     def open_exam_detail(self, exam_id: str):
         return rx.redirect(f"/exam/{exam_id}")
 
+    @rx.event
+    async def create_and_open_exam(self, exam_type_model_id: str):
+        """Create an Exam record for this visit + exam type, then navigate to it.
+
+        Auto-transitions PENDING → VISIT_DONE so result entry is possible
+        without a separate "mark terrain done" step.
+        """
+        if not self.visit:
+            return
+        self.error_message = ""
+        try:
+            with await self.authenticate_user():
+                from datetime import date
+                from gws_care.exam.exam import Exam
+                from gws_care.exam.exam_type_service import ExamTypeService
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+
+                # Auto-transition PENDING → VISIT_DONE when starting result entry
+                if self.visit.campaign_visit_status == "pending":
+                    CampaignVisitService.mark_terrain_done(self.visit.id)
+                    self.visit = self.visit.model_copy(
+                        update={"campaign_visit_status": "visit_done"}
+                    )
+
+                # Reuse existing exam for this visit+type if already created
+                existing = Exam.get_or_none(
+                    (Exam.visit == self.visit.id)
+                    & (Exam.exam_type_ref_id == exam_type_model_id)
+                )
+                if existing:
+                    return rx.redirect(f"/exam/{existing.id}")
+
+                et_model = ExamTypeService.get_exam_type(exam_type_model_id)
+                exam = Exam()
+                exam.patient_id = self.visit.patient_id
+                exam.exam_type = et_model.category
+                exam.exam_type_ref_id = exam_type_model_id
+                exam.exam_date = date.today()
+                exam.visit_id = self.visit.id
+                exam.save()
+            return rx.redirect(f"/exam/{exam.id}")
+        except Exception as e:
+            self.error_message = str(e)
+
     @rx.var
     def visit_status_index(self) -> int:
         """Return the 0-based index of the current visit status in the workflow order."""
@@ -138,10 +182,16 @@ class VisitDetailState(RoleState):
 
     @rx.var
     def all_exams_done(self) -> bool:
-        """True only if there is at least one exam and every exam's status is Done."""
+        """True only if all exam types have at least been saved (non-empty exam_id)."""
         if not self.exam_results:
             return False
-        return all(r.status == "done" for r in self.exam_results)
+        return all(r.exam_id != "" for r in self.exam_results)
+
+    @rx.event
+    def go_to_results_entry(self):
+        """Navigate to the campaign patient results entry page."""
+        if self.visit and self.visit.campaign_id and self.visit.patient_id:
+            return rx.redirect(f"/campaign-patient/{self.visit.campaign_id}/{self.visit.patient_id}")
 
     @rx.event
     def set_exam_edit_value(self, etm_id: str, value: str):
@@ -469,61 +519,61 @@ class VisitDetailState(RoleState):
                 self.company_interpretation = visit.doctor_company_interpretation or ""
                 self.company_message = visit.doctor_company_message or ""
 
-                # Load exam results from campaign exam types (creates rows for all
-                # configured exam types, even those without a result yet).
+                # Load exam results from campaign exam types (new system: CampaignExam → ExamTypeRef).
+                # Existing exam records are identified via reason_for_visit marker
+                # "CAMP:{campaign_id}|REF:{ref_id}" (same convention as campaign_patient_exams page).
                 try:
-                    from gws_care.campaign.campaign_service import CampaignService
+                    from gws_care.campaign.campaign_exam import CampaignExam
                     from gws_care.exam.exam import Exam
 
                     rows = []
                     if visit.campaign_id:
-                        campaign_exam_types = CampaignService.get_exam_types(str(visit.campaign_id))
+                        campaign_id_str = str(visit.campaign_id)
+                        patient_id_str = str(visit.patient_id) if visit.patient_id else ""
 
-                        # Index existing exam records by their exam_type category
-                        existing_exams = list(Exam.select().where(Exam.visit_id == str(visit_id)))
-                        exams_by_category: dict = {}
-                        for ex in existing_exams:
-                            if ex.exam_type:
-                                exams_by_category[ex.exam_type.value] = ex
+                        campaign_exams = list(
+                            CampaignExam.select()
+                            .where(CampaignExam.campaign == campaign_id_str)
+                            .order_by(CampaignExam.id)
+                        )
 
-                        for et_model in campaign_exam_types:
-                            cat_key = et_model.category.value if et_model.category else ""
-                            exam = exams_by_category.get(cat_key)
+                        # Index existing saved exams by ExamTypeRef id via marker
+                        existing_map: dict = {}
+                        if patient_id_str:
+                            marker_prefix = f"CAMP:{campaign_id_str}|"
+                            for ex in Exam.select().where(Exam.patient == patient_id_str):
+                                rv = ex.reason_for_visit or ""
+                                if rv.startswith(marker_prefix):
+                                    try:
+                                        ref_id = rv.split("|REF:")[1].split("|")[0]
+                                        existing_map[ref_id] = ex
+                                    except (IndexError, AttributeError):
+                                        pass
 
-                            result = ExamResultService.get_result_for_exam(str(exam.id)) if exam else None
-                            appr = ""
-                            appr_label = ""
-                            appr_override = False
-                            primary_val = ""
-                            result_data = {}
-                            if result:
-                                appr = result.appreciation.value if result.appreciation else ""
-                                appr_label = _APPRECIATION_LABELS.get(appr, appr)
-                                appr_override = result.appreciation_override or False
-                                result_data = result.result_data or {}
-                                if isinstance(result_data, dict) and result_data.get("primary_value") is not None:
-                                    primary_val = str(result_data["primary_value"])
-                                elif isinstance(result_data, dict) and result_data.get("value") is not None:
-                                    primary_val = str(result_data["value"])
+                        for ce in campaign_exams:
+                            ref = ce.exam_type_ref
+                            ref_id = str(ref.id)
+                            exam = existing_map.get(ref_id)
 
                             rows.append(ExamResultRowDTO(
                                 exam_id=str(exam.id) if exam else "",
-                                exam_type_model_id=str(et_model.id),
-                                exam_type_name=et_model.name,
-                                exam_type_code=et_model.code,
+                                exam_type_model_id=ref_id,
+                                exam_type_name=ref.name,
+                                exam_type_code=ref.get_category_label(),
                                 status=exam.status.value if exam else "",
-                                result_data=result_data,
-                                primary_value=primary_val,
-                                edit_value=primary_val,
-                                appreciation=appr,
-                                appreciation_label=appr_label,
-                                appreciation_override=appr_override,
+                                result_data={},
+                                primary_value="",
+                                edit_value="",
+                                appreciation="",
+                                appreciation_label="",
+                                appreciation_override=False,
                             ))
 
                     self.exam_results = rows
                 except Exception as ex:
-                    # Non-fatal: visit loads even without exam results
+                    import traceback
                     print(f"[VisitDetailState] Could not load exam results: {ex}")
+                    traceback.print_exc()
                     self.exam_results = []
 
                 # Load certificates for this patient

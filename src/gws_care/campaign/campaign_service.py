@@ -550,6 +550,107 @@ class CampaignService:
             CampaignExamDoctor.create(campaign_exam=link, doctor=doc)
             cls.add_doctor_to_campaign(campaign_id, str(doc.id))
 
+    # ── Per-patient medical workflow ──────────────────────────────────────────
+
+    @classmethod
+    def _get_campaign_patient(cls, campaign_id: str, patient_id: str) -> CampaignPatient:
+        from gws_care.campaign.campaign_patient import MedicalRecordStatus
+        cp = CampaignPatient.get_or_none(
+            (CampaignPatient.campaign == campaign_id) & (CampaignPatient.patient == patient_id)
+        )
+        if cp is None:
+            raise BadRequestException(f"Patient '{patient_id}' not found in campaign '{campaign_id}'.")
+        return cp
+
+    @classmethod
+    def mark_lab_entered(cls, campaign_id: str, patient_id: str) -> None:
+        """Mark patient results as entered by operator/lab (draft saved)."""
+        from gws_care.campaign.campaign_patient import MedicalRecordStatus
+        cp = cls._get_campaign_patient(campaign_id, patient_id)
+        if cp.medical_status == MedicalRecordStatus.PENDING.value:
+            cp.medical_status = MedicalRecordStatus.LAB_ENTERED.value
+            cp.save()
+
+    @classmethod
+    def save_psc_notes_draft(cls, campaign_id: str, patient_id: str, notes: str) -> None:
+        """Save PSC doctor notes as draft (no status change)."""
+        cp = cls._get_campaign_patient(campaign_id, patient_id)
+        cp.psc_notes = notes
+        cp.save()
+
+    @classmethod
+    def add_psc_interpretation(cls, campaign_id: str, patient_id: str, notes: str) -> None:
+        """Save PSC interpretation and advance status to PSC_INTERPRETED."""
+        from gws_care.campaign.campaign_patient import MedicalRecordStatus
+        cp = cls._get_campaign_patient(campaign_id, patient_id)
+        cp.psc_notes = notes
+        cp.medical_status = MedicalRecordStatus.PSC_INTERPRETED.value
+        cp.save()
+
+    @classmethod
+    def validate_psc_patient(cls, campaign_id: str, patient_id: str) -> None:
+        """Mark PSC interpretation as validated and advance to PSC_VALIDATED."""
+        from gws_care.campaign.campaign_patient import MedicalRecordStatus
+        cp = cls._get_campaign_patient(campaign_id, patient_id)
+        cp.medical_status = MedicalRecordStatus.PSC_VALIDATED.value
+        cp.psc_validated_at = datetime.utcnow()
+        cp.save()
+
+    @classmethod
+    def validate_psc_campaign(cls, campaign_id: str) -> None:
+        """Mark all PSC_INTERPRETED patients in campaign as PSC_VALIDATED."""
+        from gws_care.campaign.campaign_patient import MedicalRecordStatus
+        CampaignPatient.update(
+            medical_status=MedicalRecordStatus.PSC_VALIDATED.value,
+            psc_validated_at=datetime.utcnow(),
+        ).where(
+            (CampaignPatient.campaign == campaign_id)
+            & (CampaignPatient.medical_status == MedicalRecordStatus.PSC_INTERPRETED.value)
+        ).execute()
+
+    @classmethod
+    def transmit_to_treating_doctor(cls, campaign_id: str, patient_id: str) -> None:
+        """Record that results have been transmitted to the patient's treating doctor."""
+        from gws_care.campaign.campaign_patient import MedicalRecordStatus
+        cp = cls._get_campaign_patient(campaign_id, patient_id)
+        cp.treating_doctor_transmitted_at = datetime.utcnow()
+        if cp.medical_status in (
+            MedicalRecordStatus.PSC_VALIDATED.value,
+            MedicalRecordStatus.PSC_INTERPRETED.value,
+            MedicalRecordStatus.LAB_VALIDATED.value,
+            MedicalRecordStatus.LAB_ENTERED.value,
+        ):
+            cp.medical_status = MedicalRecordStatus.TRANSMITTED_TREATING_DOCTOR.value
+        cp.save()
+
+    @classmethod
+    def add_enterprise_interpretation(
+        cls, campaign_id: str, patient_id: str, notes: str, patient_message: str = ""
+    ) -> None:
+        """Save enterprise doctor interpretation."""
+        cp = cls._get_campaign_patient(campaign_id, patient_id)
+        cp.enterprise_notes = notes
+        cp.patient_message = patient_message or notes
+        cp.save()
+
+    @classmethod
+    def validate_enterprise_patient(cls, campaign_id: str, patient_id: str) -> None:
+        """Mark enterprise validation as done and advance to ENTERPRISE_VALIDATED."""
+        from gws_care.campaign.campaign_patient import MedicalRecordStatus
+        cp = cls._get_campaign_patient(campaign_id, patient_id)
+        cp.medical_status = MedicalRecordStatus.ENTERPRISE_VALIDATED.value
+        cp.enterprise_validated_at = datetime.utcnow()
+        cp.save()
+
+    @classmethod
+    def finish_patient_record(cls, campaign_id: str, patient_id: str) -> None:
+        """Close the patient dossier (PUBLISHED)."""
+        from gws_care.campaign.campaign_patient import MedicalRecordStatus
+        cp = cls._get_campaign_patient(campaign_id, patient_id)
+        cp.medical_status = MedicalRecordStatus.PUBLISHED.value
+        cp.published_at = datetime.utcnow()
+        cp.save()
+
     # ── ExamType management (legacy ExamTypeModel-based) ─────────────────────
 
     @classmethod

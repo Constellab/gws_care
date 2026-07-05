@@ -44,6 +44,7 @@ class ExamTypeRef(ModelWithUser):
     allows_attachment: bool = BooleanField(default=True, null=False)
     requires_attachment: bool = BooleanField(default=False, null=False)
     required_sample_type: str = CharField(max_length=200, null=True)  # e.g. "Sang total (EDTA)"
+    requires_lab_validation: bool = BooleanField(default=True, null=False)  # False = on-site exam, no lab needed
 
     def get_category_label(self) -> str:
         try:

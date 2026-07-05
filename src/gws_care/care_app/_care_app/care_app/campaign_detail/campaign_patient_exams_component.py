@@ -5,13 +5,18 @@ Route: /campaign-patient/[cp_campaign_id]/[cp_patient_id]
 Layout:
   ┌──────────────────────────────────────────────────────────┐
   │ ← Retour campagne     [Patient] [Campagne] [Statut badge]│
+  ├──────────────────────────────────────────────────────────┤
+  │  [1: Résultats] ─── [2: PSC] ─── [3: Validé] ─ [4: Fin]│  progress indicator
   ├────────────────────┬─────────────────────────────────────┤
   │ SECTIONS (left)    │ Form: paramètres actifs (right)     │
-  │ ✓ NFS              │ Param  | Unité | Ref | Valeur       │
-  │ ○ ECG              │ ...                                 │
-  │ ○ Glycémie         │         [Enregistrer NFS]           │
+  │ ✓ NFS  [Labo]      │ Param  | Unité | Ref | Valeur       │
+  │ ○ ECG  [Sur place] │ ...                                 │
+  │ ○ Glycémie [Labo]  │         [Enregistrer NFS]           │
   ├────────────────────┴─────────────────────────────────────┤
-  │            [Transmettre les résultats au médecin PSC]    │
+  │         [Transmettre les résultats au médecin PSC]       │
+  │         [Transmettre au médecin traitant] (optional)     │
+  │         [Interprétation PSC]                             │
+  │         [Interprétation Entreprise + Terminer]           │
   └──────────────────────────────────────────────────────────┘
 """
 
@@ -28,37 +33,156 @@ from .campaign_patient_exams_state import (
 )
 
 
-# ── Section sidebar ───────────────────────────────────────────────────────────
+# ── Progress indicator ────────────────────────────────────────────────────────
 
-def _section_button(s: ExamSectionVM) -> rx.Component:
-    """One button in the left section list."""
+def _progress_step(label: str, is_done) -> rx.Component:
+    """One circle + label in the step progress bar."""
+    return rx.vstack(
+        rx.cond(
+            is_done,
+            rx.box(
+                rx.icon("check", size=12, color="white"),
+                width="26px",
+                height="26px",
+                border_radius="50%",
+                background="var(--green-9)",
+                display="flex",
+                align_items="center",
+                justify_content="center",
+                flex_shrink="0",
+            ),
+            rx.box(
+                width="26px",
+                height="26px",
+                border_radius="50%",
+                background="var(--gray-3)",
+                border="2px solid var(--gray-6)",
+                flex_shrink="0",
+            ),
+        ),
+        rx.text(
+            label,
+            size="1",
+            color=rx.cond(is_done, "var(--green-11)", "var(--gray-9)"),
+            text_align="center",
+            weight=rx.cond(is_done, "medium", "regular"),
+            style={"white_space": "nowrap"},
+        ),
+        align="center",
+        spacing="1",
+    )
+
+
+def _progress_connector(is_done) -> rx.Component:
+    """Horizontal line between two progress steps."""
+    return rx.box(
+        height="2px",
+        flex="1",
+        min_width="20px",
+        background=rx.cond(is_done, "var(--green-9)", "var(--gray-4)"),
+        margin_top="11px",
+        align_self="start",
+    )
+
+
+def _progress_indicator() -> rx.Component:
+    """Horizontal workflow progress bar (same terms as visit detail lifeline)."""
+    s = CampaignPatientExamsState.medical_status
+
+    # Visit Done = results being entered (at least one section saved)
+    step_visit_done = CampaignPatientExamsState.has_saved_sections
+    # Lab Done = all results transmitted to PSC doctor
+    step_lab_done = (
+        (s == "LAB_ENTERED")
+        | (s == "PSC_INTERPRETED")
+        | (s == "PSC_VALIDATED")
+        | (s == "TRANSMITTED_TREATING_DOCTOR")
+        | (s == "ENTERPRISE_VALIDATED")
+        | (s == "PUBLISHED")
+    )
+    step_clinic = (
+        (s == "PSC_VALIDATED")
+        | (s == "TRANSMITTED_TREATING_DOCTOR")
+        | (s == "ENTERPRISE_VALIDATED")
+        | (s == "PUBLISHED")
+    )
+    step_company = (s == "ENTERPRISE_VALIDATED") | (s == "PUBLISHED")
+    step_done    = s == "PUBLISHED"
+
+    return rx.card(
+        rx.hstack(
+            _progress_step("Pending",           step_visit_done),
+            _progress_connector(step_visit_done),
+            _progress_step("Visit Done",        step_lab_done),
+            _progress_connector(step_lab_done),
+            _progress_step("Lab Done",          step_clinic),
+            _progress_connector(step_clinic),
+            _progress_step("Clinic Validated",  step_company),
+            _progress_connector(step_company),
+            _progress_step("Company Validated", step_done),
+            width="100%",
+            align="start",
+            spacing="0",
+        ),
+        width="100%",
+        padding="0.75rem 1.5rem",
+    )
+
+
+# ── Horizontal exam tab bar ───────────────────────────────────────────────────
+
+def _exam_tab(s: ExamSectionVM) -> rx.Component:
+    """One horizontal tab button for an exam type."""
     is_active = CampaignPatientExamsState.active_section_id == s.exam_type_ref_id
     return rx.button(
         rx.hstack(
             rx.cond(
-                s.is_saved,
-                rx.icon("circle-check", size=14, color="var(--green-9)"),
-                rx.icon("circle", size=14, color="var(--gray-7)"),
-            ),
-            rx.vstack(
-                rx.text(s.name, size="2", weight="medium"),
-                rx.text(
-                    s.category_label + " · " + s.param_count.to(str) + " param.",
-                    size="1", color="var(--gray-9)",
+                s.is_transmitted,
+                rx.icon("send", size=13, color="var(--teal-9)"),
+                rx.cond(
+                    s.is_saved,
+                    rx.icon("circle-check", size=13, color="var(--green-9)"),
+                    rx.icon("circle", size=13, color="var(--gray-6)"),
                 ),
-                spacing="0",
-                align_items="start",
             ),
-            spacing="2",
+            rx.text(s.name, size="2", weight=rx.cond(is_active, "bold", "regular")),
+            rx.cond(
+                ~s.requires_lab_validation,
+                rx.badge("Sur place", size="1", color_scheme="violet", variant="soft"),
+                rx.fragment(),
+            ),
+            spacing="1",
             align="center",
-            width="100%",
         ),
-        variant=rx.cond(is_active, "solid", "ghost"),
-        color_scheme=rx.cond(s.is_saved, "green", rx.cond(is_active, "indigo", "gray")),
-        width="100%",
-        justify="start",
+        variant="ghost",
+        radius="none",
+        color_scheme=rx.cond(
+            s.is_transmitted, "teal",
+            rx.cond(s.is_saved, "green", rx.cond(is_active, "indigo", "gray"))
+        ),
         on_click=CampaignPatientExamsState.set_active_section(s.exam_type_ref_id),
-        style={"text_align": "left"},
+        padding="0.5rem 0.9rem",
+        border_bottom=rx.cond(
+            is_active,
+            "2px solid var(--accent-9)",
+            "2px solid transparent",
+        ),
+        border_radius="0",
+        flex_shrink="0",
+    )
+
+
+def _exam_tabs() -> rx.Component:
+    """Scrollable horizontal tab bar listing all exam types."""
+    return rx.box(
+        rx.hstack(
+            rx.foreach(CampaignPatientExamsState.sections, _exam_tab),
+            spacing="0",
+            width="max-content",
+        ),
+        width="100%",
+        overflow_x="auto",
+        border_bottom="1px solid var(--gray-4)",
     )
 
 
@@ -192,7 +316,7 @@ def _param_row(p: ExamParamEntry) -> rx.Component:
                 checked=p.is_selected,
                 on_change=lambda _: CampaignPatientExamsState.toggle_param_selection(p.param_id),
                 size="2",
-                disabled=p.is_required,  # required params cannot be deselected
+                disabled=p.is_required,
             ),
             width="36px",
         ),
@@ -231,48 +355,66 @@ def _param_row(p: ExamParamEntry) -> rx.Component:
                 rx.text("—", size="2", color="var(--gray-7)"),
             )
         ),
-        # Value cell — disabled visually when not selected
         rx.table.cell(
             rx.cond(
-                p.is_selected,
-                rx.cond(
-                    p.value_type == "NUMERIC",
+                p.is_computed,
+                # Computed param: read-only with calculator icon
+                rx.hstack(
                     rx.input(
-                        placeholder="0.0",
-                        type="number",
                         value=p.value,
-                        on_change=CampaignPatientExamsState.set_param_value(p.param_id),
-                        width="130px",
+                        read_only=True,
+                        width="120px",
                         size="2",
-                        style={"background": "transparent"},
+                        style={"background": "var(--gray-2)", "cursor": "not-allowed",
+                               "color": "var(--gray-11)"},
                     ),
+                    rx.tooltip(
+                        rx.icon("calculator", size=13, color="var(--accent-9)"),
+                        content="Calculé automatiquement",
+                    ),
+                    spacing="1", align="center",
+                ),
+                rx.cond(
+                    p.is_selected,
                     rx.cond(
-                        p.value_type == "BOOLEAN",
-                        rx.select.root(
-                            rx.select.trigger(
-                                placeholder="— choisir",
-                                size="2",
-                                width="160px",
-                            ),
-                            rx.select.content(
-                                rx.select.item("Négatif", value="Négatif"),
-                                rx.select.item("Positif", value="Positif"),
-                            ),
-                            value=p.value,
-                            on_change=CampaignPatientExamsState.set_param_value(p.param_id),
-                            size="2",
-                        ),
+                        p.value_type == "NUMERIC",
                         rx.input(
-                            placeholder="Résultat…",
+                            placeholder="0.0",
+                            type="number",
                             value=p.value,
                             on_change=CampaignPatientExamsState.set_param_value(p.param_id),
-                            width="180px",
+                            width="130px",
                             size="2",
                             style={"background": "transparent"},
                         ),
+                        rx.cond(
+                            p.value_type == "BOOLEAN",
+                            rx.select.root(
+                                rx.select.trigger(
+                                    placeholder="— choisir",
+                                    size="2",
+                                    width="160px",
+                                ),
+                                rx.select.content(
+                                    rx.select.item("Négatif", value="Négatif"),
+                                    rx.select.item("Positif", value="Positif"),
+                                ),
+                                value=p.value,
+                                on_change=CampaignPatientExamsState.set_param_value(p.param_id),
+                                size="2",
+                            ),
+                            rx.input(
+                                placeholder="Résultat…",
+                                value=p.value,
+                                on_change=CampaignPatientExamsState.set_param_value(p.param_id),
+                                width="180px",
+                                size="2",
+                                style={"background": "transparent"},
+                            ),
+                        ),
                     ),
+                    rx.text("— non saisi", size="1", color="var(--gray-6)", font_style="italic"),
                 ),
-                rx.text("— non saisi", size="1", color="var(--gray-6)", font_style="italic"),
             ),
             style={"background": rx.cond(p.is_selected, value_cell_bg, "transparent"), "border_radius": "4px"},
         ),
@@ -282,9 +424,8 @@ def _param_row(p: ExamParamEntry) -> rx.Component:
 
 
 def _color_legend() -> rx.Component:
-    """Color coding legend shown below the param table."""
     return rx.hstack(
-        rx.text("Code couleur :", size="1", weight="medium", color="var(--gray-10)"),
+        rx.text("Code couleur :", size="1", weight="medium", color="var(--gray-10)"),
         rx.hstack(
             rx.box(width="14px", height="14px", border_radius="3px", background="var(--green-4)", flex_shrink="0"),
             rx.text("Normal", size="1", color="var(--gray-11)"),
@@ -313,18 +454,14 @@ def _color_legend() -> rx.Component:
 def _param_form() -> rx.Component:
     """Right-side panel: param table + save button for the active section."""
     return rx.vstack(
-        # Section title
         rx.hstack(
             rx.icon("file-text", size=16, color="var(--accent-9)"),
             rx.heading(CampaignPatientExamsState.active_section_name, size="4"),
             spacing="2", align="center",
         ),
-        # Params table or empty state
         rx.cond(
             CampaignPatientExamsState.active_params.length() > 0,
-            # True branch: table + legend
             rx.vstack(
-                # Select / Deselect all buttons
                 rx.hstack(
                     rx.text("Sélection des paramètres :", size="2", color="var(--gray-9)"),
                     rx.button(
@@ -369,7 +506,6 @@ def _param_form() -> rx.Component:
                 width="100%",
                 spacing="2",
             ),
-            # False branch: empty state
             rx.center(
                 rx.vstack(
                     rx.icon("circle-check", size=32, color="var(--gray-5)"),
@@ -389,74 +525,103 @@ def _param_form() -> rx.Component:
                 width="100%",
             ),
         ),
-        # Error
-        rx.cond(
-            CampaignPatientExamsState.error != "",
-            rx.callout(
-                CampaignPatientExamsState.error,
-                icon="info", color_scheme="red", size="2",
-                on_click=CampaignPatientExamsState.dismiss_messages,
-                style={"cursor": "pointer"},
-            ),
-        ),
-        # Save + per-section transmit buttons
         rx.hstack(
             rx.spacer(),
             rx.cond(
                 CampaignPatientExamsState.active_section_is_transmitted,
-                rx.badge(
-                    rx.icon("check", size=13),
-                    "Transmis au médecin",
-                    color_scheme="teal",
-                    variant="soft",
-                    size="2",
-                ),
+                # ── Transmitted: badge (with target label) + Modifier (with motif) ──
                 rx.hstack(
-                    rx.cond(
-                        CampaignPatientExamsState.active_section_is_saved,
-                        rx.fragment(),
+                    rx.match(
+                        CampaignPatientExamsState.active_section_transmission_target,
+                        ("LABO", rx.badge(
+                            rx.icon("send", size=13),
+                            "Transmis au labo",
+                            color_scheme="orange", variant="soft", size="2",
+                        )),
+                        ("PSC", rx.badge(
+                            rx.icon("send", size=13),
+                            "Transmis au médecin PSC",
+                            color_scheme="teal", variant="soft", size="2",
+                        )),
+                        ("TRAVAIL", rx.badge(
+                            rx.icon("send", size=13),
+                            "Transmis au médecin de travail",
+                            color_scheme="blue", variant="soft", size="2",
+                        )),
+                        rx.badge(
+                            rx.icon("send", size=13),
+                            "Transmis",
+                            color_scheme="teal", variant="soft", size="2",
+                        ),
+                    ),
+                    rx.button(
+                        rx.icon("pencil", size=13),
+                        "Modifier",
+                        variant="ghost",
+                        size="2",
+                        color_scheme="gray",
+                        loading=CampaignPatientExamsState.is_saving,
+                        on_click=CampaignPatientExamsState.open_motif_dialog,
+                    ),
+                    spacing="2", align="center",
+                ),
+                # ── Not transmitted: 4-action dropdown + Valider ──
+                rx.vstack(
+                    rx.hstack(
+                        rx.select.root(
+                            rx.select.trigger(
+                                placeholder="Choisir une action…",
+                                size="2",
+                                width="260px",
+                            ),
+                            rx.select.content(
+                                rx.select.item("Enregistrer sans transmettre", value="save"),
+                                rx.select.item("Transmettre au labo", value="labo"),
+                                rx.select.item("Transmettre au médecin PSC", value="psc"),
+                                rx.select.item("Transmettre au médecin de travail", value="travail"),
+                            ),
+                            value=CampaignPatientExamsState.section_action,
+                            on_change=CampaignPatientExamsState.set_section_action,
+                            size="2",
+                        ),
                         rx.button(
-                            rx.icon("save", size=14),
-                            "Enregistrer ces résultats",
-                            variant="soft",
+                            rx.icon("check", size=14),
+                            "Valider",
+                            color_scheme="indigo",
                             size="2",
                             loading=CampaignPatientExamsState.is_saving,
-                            on_click=CampaignPatientExamsState.save_active_section,
+                            disabled=~CampaignPatientExamsState.can_save_section,
+                            on_click=CampaignPatientExamsState.execute_section_action,
                         ),
+                        spacing="2", align="center",
                     ),
                     rx.cond(
                         CampaignPatientExamsState.active_section_is_saved,
                         rx.hstack(
-                            rx.button(
-                                rx.icon("save", size=14),
-                                "Mettre à jour",
-                                variant="soft",
-                                size="2",
-                                loading=CampaignPatientExamsState.is_saving,
-                                on_click=CampaignPatientExamsState.save_active_section,
+                            rx.badge(
+                                rx.icon("circle-check", size=12),
+                                "Enregistré",
+                                color_scheme="green", variant="soft", size="1",
                             ),
-                            rx.button(
-                                rx.icon("send", size=14),
-                                "Transmettre cet examen",
-                                color_scheme="teal",
-                                size="2",
-                                loading=CampaignPatientExamsState.is_saving,
-                                on_click=CampaignPatientExamsState.transmit_section(
-                                    CampaignPatientExamsState.active_section_id
-                                ),
+                            rx.text(
+                                "Résultats déjà enregistrés — choisissez une action pour transmettre.",
+                                size="1", color="var(--gray-9)", font_style="italic",
                             ),
-                            spacing="2",
+                            spacing="2", align="center",
                         ),
-                        rx.fragment(),
+                        rx.text(
+                            "« Enregistrer sans transmettre » sauvegarde sans envoyer — "
+                            "transmettez plus tard quand vous êtes prêt.",
+                            size="1", color="var(--gray-8)", font_style="italic",
+                        ),
                     ),
-                    spacing="2",
+                    spacing="1", align="end", width="100%",
                 ),
             ),
             width="100%",
             padding_top="0.25rem",
             spacing="2",
         ),
-        # Attachment zone (shown once section is saved)
         _attachment_zone(),
         spacing="3",
         width="100%",
@@ -464,26 +629,27 @@ def _param_form() -> rx.Component:
     )
 
 
-# ── Transmit panel ────────────────────────────────────────────────────────────
+# ── Transmit panel (PSC) ──────────────────────────────────────────────────────
 
 def _transmit_panel() -> rx.Component:
+    """Global panel to transfer ALL validated exams to the PSC doctor."""
     already_sent = CampaignPatientExamsState.medical_status != "PENDING"
     return rx.card(
         rx.hstack(
             rx.vstack(
                 rx.hstack(
                     rx.icon("send", size=16, color="var(--teal-9)"),
-                    rx.text("Transmission au médecin PSC", size="3", weight="bold"),
+                    rx.text("Transférer tous les résultats au médecin PSC", size="3", weight="bold"),
                     spacing="2", align="center",
                 ),
                 rx.cond(
-                    CampaignPatientExamsState.has_saved_sections,
+                    CampaignPatientExamsState.all_sections_saved,
                     rx.text(
-                        "Résultats enregistrés. Cliquez ci-contre pour transmettre au médecin PSC.",
+                        "Tous les examens sont enregistrés. Cliquez ci-contre pour transférer au médecin PSC.",
                         size="2", color="var(--gray-9)",
                     ),
                     rx.text(
-                        "Enregistrez d'abord au moins une section de résultats avant de transmettre.",
+                        "Enregistrez tous les examens avant de transférer l'ensemble.",
                         size="2", color="var(--orange-9)",
                     ),
                 ),
@@ -494,18 +660,18 @@ def _transmit_panel() -> rx.Component:
                 already_sent,
                 rx.badge(
                     rx.icon("check", size=13),
-                    "Déjà transmis",
-                    color_scheme="green",
+                    "Transféré",
+                    color_scheme="teal",
                     variant="soft",
                     size="2",
                 ),
                 rx.button(
                     rx.icon("send", size=14),
-                    "Transmettre au médecin PSC",
+                    "Transférer au médecin PSC",
                     color_scheme="teal",
                     size="3",
                     loading=CampaignPatientExamsState.is_saving,
-                    disabled=~CampaignPatientExamsState.has_saved_sections,
+                    disabled=~CampaignPatientExamsState.all_sections_saved,
                     on_click=CampaignPatientExamsState.transmit_to_doctor,
                 ),
             ),
@@ -517,6 +683,64 @@ def _transmit_panel() -> rx.Component:
         background="var(--teal-2)",
     )
 
+
+# ── Treating doctor panel (optional) ─────────────────────────────────────────
+
+def _treating_doctor_panel() -> rx.Component:
+    """Optional step: transmit results to the patient's treating doctor."""
+    s = CampaignPatientExamsState.medical_status
+    can_show = (
+        (s == "PSC_VALIDATED")
+        | (s == "TRANSMITTED_TREATING_DOCTOR")
+        | (s == "ENTERPRISE_VALIDATED")
+        | (s == "PUBLISHED")
+    )
+    already_sent = CampaignPatientExamsState.treating_doctor_transmitted
+    return rx.cond(
+        can_show,
+        rx.card(
+            rx.hstack(
+                rx.vstack(
+                    rx.hstack(
+                        rx.icon("user-round", size=16, color="var(--teal-9)"),
+                        rx.text("Médecin traitant", size="3", weight="bold"),
+                        rx.badge("Optionnel", size="1", color_scheme="gray", variant="soft"),
+                        spacing="2", align="center",
+                    ),
+                    rx.text(
+                        "Transmettre les résultats au médecin traitant du patient.",
+                        size="2", color="var(--gray-9)",
+                    ),
+                    spacing="1",
+                ),
+                rx.spacer(),
+                rx.cond(
+                    already_sent,
+                    rx.badge(
+                        rx.icon("check", size=13),
+                        "Transmis",
+                        color_scheme="teal", variant="soft", size="2",
+                    ),
+                    rx.button(
+                        rx.icon("send", size=14),
+                        "Transmettre au médecin traitant",
+                        color_scheme="teal",
+                        variant="soft",
+                        size="2",
+                        loading=CampaignPatientExamsState.is_saving,
+                        on_click=CampaignPatientExamsState.transmit_to_treating_doctor,
+                    ),
+                ),
+                align="center", spacing="4", width="100%",
+            ),
+            width="100%",
+            background="var(--teal-2)",
+        ),
+        rx.fragment(),
+    )
+
+
+# ── PSC interpretation panel ──────────────────────────────────────────────────
 
 def _psc_interpretation_panel() -> rx.Component:
     """Panel for PSC doctor to add interpretation and send to enterprise doctor."""
@@ -553,7 +777,7 @@ def _psc_interpretation_panel() -> rx.Component:
                         rx.spacer(),
                         rx.button(
                             rx.icon("send", size=14),
-                            "Valider et transmettre au médecin entreprise",
+                            "Transférer au médecin de travail",
                             color_scheme="blue",
                             size="2",
                             loading=CampaignPatientExamsState.is_saving,
@@ -572,13 +796,17 @@ def _psc_interpretation_panel() -> rx.Component:
     )
 
 
+# ── Enterprise interpretation panel ──────────────────────────────────────────
+
 def _enterprise_interpretation_panel() -> rx.Component:
-    """Panel for enterprise doctor to add interpretation."""
-    already_validated = CampaignPatientExamsState.medical_status == "ENTERPRISE_VALIDATED"
+    """Panel for enterprise doctor to add interpretation and validate."""
+    s = CampaignPatientExamsState.medical_status
+    already_validated = s == "ENTERPRISE_VALIDATED"
     psc_done = (
-        (CampaignPatientExamsState.medical_status == "PSC_VALIDATED")
-        | (CampaignPatientExamsState.medical_status == "ENTERPRISE_INTERPRETED")
+        (s == "PSC_VALIDATED")
+        | (s == "TRANSMITTED_TREATING_DOCTOR")
         | already_validated
+        | (s == "PUBLISHED")
     )
     return rx.cond(
         CampaignPatientExamsState.viewer_is_enterprise,
@@ -639,10 +867,120 @@ def _enterprise_interpretation_panel() -> rx.Component:
     )
 
 
+# ── Finish / close panel ──────────────────────────────────────────────────────
+
+def _finish_panel() -> rx.Component:
+    """Shown when enterprise validated — allows closing the dossier."""
+    s = CampaignPatientExamsState.medical_status
+    can_show = (s == "ENTERPRISE_VALIDATED") | (s == "PUBLISHED")
+    already_done = s == "PUBLISHED"
+    return rx.cond(
+        can_show,
+        rx.card(
+            rx.hstack(
+                rx.vstack(
+                    rx.hstack(
+                        rx.icon("archive", size=16, color="var(--green-9)"),
+                        rx.text("Clôture du dossier", size="3", weight="bold"),
+                        spacing="2", align="center",
+                    ),
+                    rx.cond(
+                        already_done,
+                        rx.text(
+                            "Dossier clôturé et publié.",
+                            size="2", color="var(--green-10)",
+                        ),
+                        rx.text(
+                            "L'interprétation est validée. Clôturez le dossier pour le marquer comme terminé.",
+                            size="2", color="var(--gray-9)",
+                        ),
+                    ),
+                    spacing="1",
+                ),
+                rx.spacer(),
+                rx.cond(
+                    already_done,
+                    rx.badge(
+                        rx.icon("check", size=13),
+                        "Dossier clôturé",
+                        color_scheme="green", variant="soft", size="2",
+                    ),
+                    rx.button(
+                        rx.icon("check-circle", size=14),
+                        "Terminer",
+                        color_scheme="green",
+                        size="3",
+                        loading=CampaignPatientExamsState.is_saving,
+                        on_click=CampaignPatientExamsState.finish_record,
+                    ),
+                ),
+                align="center", spacing="4", width="100%",
+            ),
+            width="100%",
+            background="var(--green-2)",
+        ),
+        rx.fragment(),
+    )
+
+
+# ── Motif (modification reason) dialog ───────────────────────────────────────
+
+def _motif_dialog() -> rx.Component:
+    """Dialog asking for a reason when the user modifies saved exam results."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Motif de modification"),
+            rx.dialog.description(
+                "Indiquez la raison pour laquelle vous modifiez les résultats déjà enregistrés.",
+                size="2", color="var(--gray-9)",
+            ),
+            rx.vstack(
+                rx.text_area(
+                    placeholder="Ex. : erreur de saisie, valeur corrigée après analyse complémentaire…",
+                    value=CampaignPatientExamsState.modification_motif,
+                    on_change=CampaignPatientExamsState.set_modification_motif,
+                    rows="3",
+                    width="100%",
+                ),
+                rx.hstack(
+                    rx.dialog.close(
+                        rx.button(
+                            "Annuler",
+                            variant="ghost",
+                            color_scheme="gray",
+                            size="2",
+                            on_click=CampaignPatientExamsState.close_motif_dialog,
+                        ),
+                    ),
+                    rx.button(
+                        rx.icon("check", size=14),
+                        "Confirmer la modification",
+                        color_scheme="indigo",
+                        size="2",
+                        disabled=CampaignPatientExamsState.modification_motif.strip() == "",
+                        on_click=CampaignPatientExamsState.confirm_modification,
+                    ),
+                    spacing="2",
+                    justify="end",
+                    width="100%",
+                ),
+                spacing="3",
+                width="100%",
+                margin_top="0.75rem",
+            ),
+            on_interact_outside=CampaignPatientExamsState.close_motif_dialog,
+            on_escape_key_down=CampaignPatientExamsState.close_motif_dialog,
+            max_width="500px",
+        ),
+        open=CampaignPatientExamsState.show_motif_dialog,
+    )
+
+
 # ── Main page ─────────────────────────────────────────────────────────────────
 
 def campaign_patient_exams_page() -> rx.Component:
     return main_component(
+        _motif_dialog(),
         page_layout(
             rx.vstack(
                 # ── Header ────────────────────────────────────────────────
@@ -700,6 +1038,21 @@ def campaign_patient_exams_page() -> rx.Component:
                     width="100%",
                 ),
 
+                # ── Progress indicator ────────────────────────────────────
+                _progress_indicator(),
+
+                # ── Error display (always visible, even when sections=0) ──
+                rx.cond(
+                    CampaignPatientExamsState.error != "",
+                    rx.callout(
+                        CampaignPatientExamsState.error,
+                        icon="triangle-alert", color_scheme="red", size="2",
+                        on_click=CampaignPatientExamsState.dismiss_messages,
+                        style={"cursor": "pointer"},
+                        width="100%",
+                    ),
+                ),
+
                 # ── Loading / content ─────────────────────────────────────
                 rx.cond(
                     CampaignPatientExamsState.is_loading,
@@ -707,46 +1060,59 @@ def campaign_patient_exams_page() -> rx.Component:
                     rx.cond(
                         CampaignPatientExamsState.sections.length() > 0,
                         rx.vstack(
-                            # Two-column layout
-                            rx.hstack(
-                                # Left: section list
+                            # ── Motif / terrain notes ─────────────────────
+                            rx.card(
                                 rx.vstack(
-                                    rx.text(
-                                        "Examens de la campagne",
-                                        size="2", weight="medium",
-                                        color="var(--gray-9)",
+                                    rx.hstack(
+                                        rx.icon("notebook-pen", size=15, color="var(--accent-9)"),
+                                        rx.text(
+                                            "Motif / Observations terrain",
+                                            size="2", weight="bold",
+                                        ),
+                                        rx.cond(
+                                            CampaignPatientExamsState.is_saving_notes,
+                                            rx.spinner(size="1"),
+                                            rx.fragment(),
+                                        ),
+                                        spacing="2", align="center",
                                     ),
-                                    rx.separator(width="100%"),
-                                    rx.foreach(
-                                        CampaignPatientExamsState.sections,
-                                        _section_button,
+                                    rx.text_area(
+                                        placeholder="Motif de consultation, antécédents, observations à la visite…",
+                                        value=CampaignPatientExamsState.terrain_notes,
+                                        on_change=CampaignPatientExamsState.set_terrain_notes,
+                                        on_blur=CampaignPatientExamsState.save_terrain_notes,
+                                        rows="2",
+                                        width="100%",
                                     ),
-                                    spacing="2",
-                                    width="220px",
-                                    flex_shrink="0",
-                                    padding="1rem",
-                                    background="var(--gray-2)",
-                                    border_radius="12px",
-                                    align_items="start",
+                                    spacing="2", width="100%",
                                 ),
-                                # Right: param form
-                                _param_form(),
-                                spacing="4",
-                                align_items="start",
                                 width="100%",
+                                padding="0.75rem 1rem",
                             ),
-                            # Transmit panel
+                            # ── Horizontal tab bar ─────────────────────────
+                            _exam_tabs(),
+                            # ── Active exam form ───────────────────────────
+                            _param_form(),
+                            # ── Transfer to PSC panel ──────────────────────
                             _transmit_panel(),
-                            # PSC interpretation
+                            # ── Treating doctor (optional) ─────────────────
+                            _treating_doctor_panel(),
+                            # ── PSC interpretation ─────────────────────────
                             rx.cond(
                                 NavRoleState.can_see_interpretation,
                                 _psc_interpretation_panel(),
                                 rx.fragment(),
                             ),
-                            # Enterprise interpretation
+                            # ── Enterprise interpretation ──────────────────
                             rx.cond(
                                 NavRoleState.can_see_interpretation,
                                 _enterprise_interpretation_panel(),
+                                rx.fragment(),
+                            ),
+                            # ── Close record ───────────────────────────────
+                            rx.cond(
+                                NavRoleState.can_see_interpretation,
+                                _finish_panel(),
                                 rx.fragment(),
                             ),
                             spacing="4",
@@ -760,7 +1126,7 @@ def campaign_patient_exams_page() -> rx.Component:
                                     size="2", color="var(--gray-9)",
                                 ),
                                 rx.text(
-                                    "Allez dans le référentiel examens pour en ajouter.",
+                                    "Allez dans l'onglet « Examens » de la campagne pour en ajouter.",
                                     size="2", color="var(--gray-9)",
                                 ),
                                 spacing="2", align="center",

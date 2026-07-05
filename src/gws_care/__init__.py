@@ -150,6 +150,12 @@ from gws_care.core.migration_46 import Migration460
 from gws_care.core.migration_47 import Migration470
 from gws_care.core.migration_48 import Migration480
 from gws_care.core.migration_49 import Migration490
+from gws_care.core.migration_50 import Migration500
+from gws_care.core.migration_51 import Migration510
+from gws_care.core.migration_52 import Migration520
+from gws_care.core.migration_53 import Migration530
+from gws_care.core.migration_54 import Migration540
+from gws_care.core.migration_55 import Migration550
 
 # User sync service — keeps local User table in sync with gws_core
 from gws_care.user.care_user_sync_service import CareUserSyncService

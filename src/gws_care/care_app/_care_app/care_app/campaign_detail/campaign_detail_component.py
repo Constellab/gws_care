@@ -195,11 +195,15 @@ def _workflow_buttons() -> rx.Component:
                 loading=CampaignDetailState.is_downloading_pdf,
             ),
         ),
-        rx.button(
-            rx.icon("file-bar-chart", size=16), "Rapport PDF",
-            on_click=CampaignDetailState.download_campaign_report_pdf,
-            variant="soft", color_scheme="gray", size="2",
-            loading=CampaignDetailState.is_downloading_pdf,
+        rx.cond(
+            (CampaignDetailState.program.status == "closed")
+            | (CampaignDetailState.program.status == "archived"),
+            rx.button(
+                rx.icon("file-bar-chart", size=16), "Rapport PDF",
+                on_click=CampaignDetailState.download_campaign_report_pdf,
+                variant="soft", color_scheme="gray", size="2",
+                loading=CampaignDetailState.is_downloading_pdf,
+            ),
         ),
         spacing="2",
         flex_wrap="wrap",
@@ -506,27 +510,67 @@ def _visit_row(visit: VisitRowDTO) -> rx.Component:
         rx.table.cell(
             rx.hstack(
                 rx.cond(
-                    visit.patient_id != "",
-                    rx.tooltip(
-                        rx.icon_button(
-                            rx.icon("file-pen", size=14), variant="soft", size="1",
+                    (visit.patient_id != "")
+                    & (visit.campaign_visit_status != "cancelled")
+                    & (visit.campaign_visit_status != "doctor_company_validated"),
+                    rx.cond(
+                        # Active only when campaign is started AND patient is checked in (not pending)
+                        (CampaignDetailState.program.status != "draft")
+                        & (CampaignDetailState.program.status != "validated")
+                        & (visit.campaign_visit_status != "pending"),
+                        rx.button(
+                            rx.icon("pencil", size=13),
+                            "Saisir résultats",
+                            variant="soft",
+                            size="1",
                             color_scheme="blue",
                             on_click=lambda: CampaignDetailState.go_to_patient_exams(visit.campaign_id, visit.patient_id),
                         ),
-                        content="Saisir les résultats",
+                        rx.tooltip(
+                            rx.button(
+                                rx.icon("lock", size=13),
+                                "Saisir résultats",
+                                variant="soft",
+                                size="1",
+                                color_scheme="gray",
+                                disabled=True,
+                            ),
+                            content=rx.cond(
+                                (CampaignDetailState.program.status == "draft")
+                                | (CampaignDetailState.program.status == "validated"),
+                                "Démarrez la campagne pour accéder à la saisie des résultats",
+                                "Déclarez la présence du patient sur le terrain pour accéder à la saisie",
+                            ),
+                        ),
                     ),
                 ),
                 rx.tooltip(
                     rx.icon_button(
                         rx.icon("chevron-right", size=14), variant="ghost", size="1",
                         on_click=lambda: CampaignDetailState.go_to_visit(visit.id),
+                        disabled=rx.cond(
+                            (CampaignDetailState.program.status == "draft")
+                            | (CampaignDetailState.program.status == "validated")
+                            | (visit.campaign_visit_status == "pending"),
+                            True,
+                            False,
+                        ),
                     ),
-                    content=LanguageState.tr["tooltip_view_visit"],
+                    content=rx.cond(
+                        visit.campaign_visit_status == "pending",
+                        "Marquez d'abord le patient comme présent sur le terrain",
+                        LanguageState.tr["tooltip_view_visit"],
+                    ),
                 ),
-                spacing="1",
+                spacing="2",
             )
         ),
-        style={":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
+        style=rx.cond(
+            (CampaignDetailState.program.status != "draft")
+            & (CampaignDetailState.program.status != "validated"),
+            {":hover": {"background_color": "var(--gray-2)"}, "cursor": "pointer"},
+            {},
+        ),
         on_click=lambda: CampaignDetailState.go_to_visit(visit.id),
     )
 
@@ -994,16 +1038,42 @@ def campaign_detail_page() -> rx.Component:
                                                 size="2"),
                                         spacing="2", align="center",
                                     ),
-                                    rx.hstack(
-                                        rx.icon("calendar", size=13,
-                                                color="var(--gray-9)"),
-                                        rx.text(
-                                            CampaignDetailState.program.start_date
-                                            + " → "
-                                            + CampaignDetailState.program.end_date,
-                                            size="2", color="var(--gray-9)",
+                                    rx.cond(
+                                        (CampaignDetailState.program.status == "draft")
+                                        | (CampaignDetailState.program.status == "validated"),
+                                        rx.hstack(
+                                            rx.icon("calendar", size=13, color="var(--gray-9)"),
+                                            rx.input(
+                                                type="date",
+                                                value=CampaignDetailState.program_start_date_input,
+                                                on_change=CampaignDetailState.set_program_start_date_input,
+                                                size="1", width="145px",
+                                            ),
+                                            rx.text("→", size="2", color="var(--gray-9)"),
+                                            rx.input(
+                                                type="date",
+                                                value=CampaignDetailState.program_end_date_input,
+                                                on_change=CampaignDetailState.set_program_end_date_input,
+                                                size="1", width="145px",
+                                            ),
+                                            rx.button(
+                                                rx.icon("save", size=13),
+                                                on_click=CampaignDetailState.save_campaign_dates,
+                                                size="1", variant="soft",
+                                                loading=CampaignDetailState.is_saving_dates,
+                                            ),
+                                            spacing="1", align="center",
                                         ),
-                                        spacing="1", align="center",
+                                        rx.hstack(
+                                            rx.icon("calendar", size=13, color="var(--gray-9)"),
+                                            rx.text(
+                                                CampaignDetailState.program.start_date
+                                                + " → "
+                                                + CampaignDetailState.program.end_date,
+                                                size="2", color="var(--gray-9)",
+                                            ),
+                                            spacing="1", align="center",
+                                        ),
                                     ),
                                     spacing="1", align_items="start",
                                 ),
@@ -1065,6 +1135,95 @@ def campaign_detail_page() -> rx.Component:
                                 icon="archive", color_scheme="gray", size="1",
                             )),
                             rx.fragment(),
+                        ),
+                        # Validation checklist — visible only in DRAFT when something is missing
+                        rx.cond(
+                            (CampaignDetailState.program.status == "draft")
+                            & ~CampaignDetailState.can_validate_program,
+                            rx.card(
+                                rx.vstack(
+                                    rx.hstack(
+                                        rx.icon("list-checks", size=15, color="var(--accent-9)"),
+                                        rx.text("Prérequis avant validation", size="2", weight="bold"),
+                                        spacing="2", align="center",
+                                    ),
+                                    rx.hstack(
+                                        rx.cond(
+                                            CampaignDetailState.program.start_date != "",
+                                            rx.icon("circle-check", size=14, color="var(--green-9)"),
+                                            rx.icon("circle", size=14, color="var(--gray-7)"),
+                                        ),
+                                        rx.text("Rendez-vous (dates de campagne)", size="2"),
+                                        spacing="2", align="center",
+                                    ),
+                                    rx.hstack(
+                                        rx.cond(
+                                            CampaignDetailState.patients.length() > 0,
+                                            rx.icon("circle-check", size=14, color="var(--green-9)"),
+                                            rx.icon("circle", size=14, color="var(--gray-7)"),
+                                        ),
+                                        rx.text(
+                                            rx.cond(
+                                                CampaignDetailState.patients.length() > 0,
+                                                CampaignDetailState.patients.length().to_string() + " patient(s) ajouté(s)",
+                                                "Ajouter au moins 1 patient (onglet Patients)",
+                                            ),
+                                            size="2",
+                                        ),
+                                        spacing="2", align="center",
+                                    ),
+                                    rx.hstack(
+                                        rx.cond(
+                                            CampaignDetailState.exam_types.length() > 0,
+                                            rx.icon("circle-check", size=14, color="var(--green-9)"),
+                                            rx.icon("circle", size=14, color="var(--gray-7)"),
+                                        ),
+                                        rx.text(
+                                            rx.cond(
+                                                CampaignDetailState.exam_types.length() > 0,
+                                                CampaignDetailState.exam_types.length().to_string() + " examen(s) configuré(s)",
+                                                "Ajouter au moins 1 type d'examen (onglet Examens)",
+                                            ),
+                                            size="2",
+                                        ),
+                                        spacing="2", align="center",
+                                    ),
+                                    rx.hstack(
+                                        rx.cond(
+                                            CampaignDetailState.all_exams_have_location,
+                                            rx.icon("circle-check", size=14, color="var(--green-9)"),
+                                            rx.icon("circle", size=14, color="var(--gray-7)"),
+                                        ),
+                                        rx.text(
+                                            rx.cond(
+                                                CampaignDetailState.all_exams_have_location,
+                                                "Lieu défini pour chaque examen",
+                                                "Définir le lieu pour chaque examen (onglet Examens)",
+                                            ),
+                                            size="2",
+                                        ),
+                                        spacing="2", align="center",
+                                    ),
+                                    rx.hstack(
+                                        rx.cond(
+                                            CampaignDetailState.has_campaign_doctor,
+                                            rx.icon("circle-check", size=14, color="var(--green-9)"),
+                                            rx.icon("circle", size=14, color="var(--gray-7)"),
+                                        ),
+                                        rx.text(
+                                            rx.cond(
+                                                CampaignDetailState.has_campaign_doctor,
+                                                "Médecin assigné",
+                                                "Assigner au moins 1 médecin (onglet Médecins ou Examens)",
+                                            ),
+                                            size="2",
+                                        ),
+                                        spacing="2", align="center",
+                                    ),
+                                    spacing="2", align_items="start",
+                                ),
+                                width="100%", padding="0.75rem 1.25rem",
+                            ),
                         ),
                         # Alerts
                         rx.cond(

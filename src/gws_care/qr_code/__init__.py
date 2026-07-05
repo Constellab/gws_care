@@ -99,10 +99,28 @@ class QrCodeService:
         from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
         from gws_care.campaign.campaign_service import CampaignService
+        from gws_care.campaign.campaign_exam import CampaignExam
+        from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef as _ETR
 
         program = CampaignService.get_campaign(program_id)
         patients = CampaignService.get_patients(program_id)
-        exam_types = CampaignService.get_exam_types(program_id)
+
+        # Try new CampaignExam → ExamTypeRef first; fall back to old CampaignExamType system
+        new_refs = list(
+            _ETR.select()
+            .join(CampaignExam)
+            .where(CampaignExam.campaign == program_id)
+            .order_by(_ETR.name)
+        )
+        if new_refs:
+            # Use ExamTypeRef name as both label and tube code slug
+            exam_entries = [
+                (ref.name, ref.name[:12].upper().replace(" ", "_").replace("-", "_"))
+                for ref in new_refs
+            ]
+        else:
+            old_exam_types = CampaignService.get_exam_types(program_id)
+            exam_entries = [(et.name, et.code) for et in old_exam_types]
 
         buf = _io.BytesIO()
         doc = SimpleDocTemplate(
@@ -152,7 +170,7 @@ class QrCodeService:
             subtitle_style,
         ))
 
-        if not exam_types:
+        if not exam_entries:
             story.append(Paragraph("Aucun type d'examen configuré pour cette campagne.", styles["Normal"]))
         elif not patients:
             story.append(Paragraph("Aucun patient inscrit dans cette campagne.", styles["Normal"]))
@@ -168,20 +186,20 @@ class QrCodeService:
 
                 # Build a row of QR codes (one per exam type)
                 table_data = [[], []]  # row 0 = QR images, row 1 = labels
-                for et in exam_types:
-                    tube_code = f"TUBE-{patient.patient_number}-{et.code}"
+                for (et_name, et_code) in exam_entries:
+                    tube_code = f"TUBE-{patient.patient_number}-{et_code}"
                     qr_uri = generate_tube_qr_data_uri(tube_code)
                     # Convert data URI to PIL image, then to RLImage
                     b64_data = qr_uri.split(",", 1)[1]
                     img_bytes = base64.b64decode(b64_data)
                     rl_img = RLImage(_io.BytesIO(img_bytes), width=qr_size, height=qr_size)
                     table_data[0].append(rl_img)
-                    table_data[1].append(Paragraph(et.name[:20], label_style))
+                    table_data[1].append(Paragraph(et_name[:20], label_style))
 
                 col_width = qr_size + 4 * mm
                 tbl = Table(
                     table_data,
-                    colWidths=[col_width] * len(exam_types),
+                    colWidths=[col_width] * len(exam_entries),
                     rowHeights=[qr_size + 2 * mm, 10 * mm],
                 )
                 tbl.setStyle(TableStyle([
