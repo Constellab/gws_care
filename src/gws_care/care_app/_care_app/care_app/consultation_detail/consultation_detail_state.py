@@ -269,6 +269,8 @@ class ConsultationDetailState(RoleState):
     cert_form_issue_date: str = ""
     cert_form_conclusion: str = ""
     cert_form_is_fit_for_work: bool = True
+    cert_form_unfitness_start: str = ""
+    cert_form_unfitness_end: str = ""
     cert_form_error: str = ""
     is_saving_certificate: bool = False
 
@@ -842,12 +844,25 @@ class ConsultationDetailState(RoleState):
         self.error_message = ""
         try:
             with await self.authenticate_user() as auth_user:
+                from gws_care.exam.exam import Exam
+                from gws_care.exam.exam_type import ExamStatus
                 from gws_care.visit.consultation_service import ConsultationService
 
                 ConsultationService.mark_done(
                     visit_id=self.consultation.id,
                     closed_by_user_id=str(auth_user.id),
                 )
+                # Auto-close any exam not yet finished
+                open_statuses = [
+                    ExamStatus.TODO.value,
+                    ExamStatus.IN_PROGRESS_RESULTS.value,
+                    ExamStatus.TRANSMITTED_TO_LAB.value,
+                    ExamStatus.IN_PROGRESS_INTERPRETATION.value,
+                ]
+                Exam.update(status=ExamStatus.DONE.value).where(
+                    (Exam.visit == self.consultation.id)
+                    & (Exam.status.in_(open_statuses))
+                ).execute()
             self.show_close_dialog = False
             self.success_message = "Consultation clôturée."
             await self._load_consultation()
@@ -1531,6 +1546,8 @@ class ConsultationDetailState(RoleState):
         self.cert_form_issue_date = date.today().isoformat()
         self.cert_form_conclusion = ""
         self.cert_form_is_fit_for_work = True
+        self.cert_form_unfitness_start = ""
+        self.cert_form_unfitness_end = ""
         self.cert_form_error = ""
         self.is_saving_certificate = False
         self.show_new_certificate_dialog = True
@@ -1552,12 +1569,27 @@ class ConsultationDetailState(RoleState):
         self.cert_form_is_fit_for_work = value
 
     @rx.event
+    def set_cert_form_unfitness_start(self, value: str):
+        self.cert_form_unfitness_start = value
+
+    @rx.event
+    def set_cert_form_unfitness_end(self, value: str):
+        self.cert_form_unfitness_end = value
+
+    @rx.event
     async def save_new_certificate(self):
         if not self.consultation:
             return
         if not self.cert_form_conclusion.strip():
             self.cert_form_error = "La conclusion est requise."
             return
+        if not self.cert_form_is_fit_for_work:
+            if not self.cert_form_unfitness_start:
+                self.cert_form_error = "La date de début d'inaptitude est requise."
+                return
+            if not self.cert_form_unfitness_end:
+                self.cert_form_error = "La date de fin d'inaptitude est requise."
+                return
         self.cert_form_error = ""
         self.is_saving_certificate = True
         try:
@@ -1576,6 +1608,8 @@ class ConsultationDetailState(RoleState):
                     issue_date=self.cert_form_issue_date,
                     conclusion=self.cert_form_conclusion,
                     is_fit_for_work=self.cert_form_is_fit_for_work,
+                    start_date=self.cert_form_unfitness_start if not self.cert_form_is_fit_for_work else None,
+                    end_date=self.cert_form_unfitness_end if not self.cert_form_is_fit_for_work else None,
                 )
                 cert = MedicalCertificateService.create_certificate(dto, doctor)
                 cert_obj = MedicalCertificate.get_by_id(str(cert.id))

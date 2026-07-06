@@ -9,7 +9,6 @@ from .language_state import LanguageState
 from .role_state import RoleState
 from .user_menu_component import user_menu_button
 
-
 _SIDEBAR_FULL = "300px"
 _SIDEBAR_FOLDED = "60px"
 
@@ -33,13 +32,16 @@ class SidebarFoldState(rx.State):
 
 # ── Bell notification popover ─────────────────────────────────────────────────
 
+
 def _bell_entry(entry: BellEntryDTO) -> rx.Component:
     return rx.box(
         rx.vstack(
             rx.hstack(
                 rx.cond(
                     ~entry.is_read,
-                    rx.box(width="6px", height="6px", border_radius="50%", background="var(--accent-9)"),
+                    rx.box(
+                        width="6px", height="6px", border_radius="50%", background="var(--accent-9)"
+                    ),
                 ),
                 rx.text(entry.message, size="2", flex="1"),
                 spacing="2",
@@ -112,12 +114,18 @@ def _bell_button() -> rx.Component:
                         overflow_y="auto",
                     ),
                     rx.center(
-                        rx.text(LanguageState.tr["notifications_empty"], size="2", color="var(--gray-9)"),
+                        rx.text(
+                            LanguageState.tr["notifications_empty"], size="2", color="var(--gray-9)"
+                        ),
                         padding="1rem",
                     ),
                 ),
                 rx.link(
-                    rx.text(LanguageState.tr["notifications_view_all"], size="2", color="var(--accent-9)"),
+                    rx.text(
+                        LanguageState.tr["notifications_view_all"],
+                        size="2",
+                        color="var(--accent-9)",
+                    ),
                     href=rx.cond(RoleState.is_patient_user, "/my-notifications", "/notifications"),
                     text_align="center",
                     width="100%",
@@ -133,6 +141,7 @@ def _bell_button() -> rx.Component:
 
 
 # ── Nav helpers ───────────────────────────────────────────────────────────────
+
 
 def _nav_group_label(label: str) -> rx.Component:
     """Category header: full text when open, thin separator when folded."""
@@ -186,14 +195,20 @@ def _nav_item(
 ) -> rx.Component:
     """Full or folded nav item depending on sidebar state."""
     full = menu_item_component(
-        icon_name, label, href,
-        **({"additional_active_route_prefixes": additional_active_route_prefixes}
-           if additional_active_route_prefixes else {}),
+        icon_name,
+        label,
+        href,
+        **(
+            {"additional_active_route_prefixes": additional_active_route_prefixes}
+            if additional_active_route_prefixes
+            else {}
+        ),
     )
     return rx.cond(SidebarFoldState.is_folded, _folded_item(icon_name, label, href), full)
 
 
 # ── Sidebar content ───────────────────────────────────────────────────────────
+
 
 def _sidebar_content() -> rx.Component:
     return rx.box(
@@ -252,13 +267,27 @@ def _sidebar_content() -> rx.Component:
                 RoleState.is_patient_user,
                 rx.vstack(
                     _nav_group_label(LanguageState.tr["nav_group_patient_essentials"]),
-                    _nav_item("layout-dashboard", LanguageState.tr["nav_patient_dashboard"], "/patient-dashboard"),
-                    _nav_item("calendar-plus", LanguageState.tr["nav_my_appointments"], "/my-appointments"),
-                    _nav_item("stethoscope", LanguageState.tr["nav_my_consultations"], "/my-consultations"),
-                    _nav_item("bell", LanguageState.tr["nav_my_notifications"], "/my-notifications"),
+                    _nav_item(
+                        "layout-dashboard",
+                        LanguageState.tr["nav_patient_dashboard"],
+                        "/patient-dashboard",
+                    ),
+                    _nav_item(
+                        "calendar-plus", LanguageState.tr["nav_my_appointments"], "/my-appointments"
+                    ),
+                    _nav_item(
+                        "stethoscope", LanguageState.tr["nav_my_consultations"], "/my-consultations"
+                    ),
+                    _nav_item(
+                        "bell", LanguageState.tr["nav_my_notifications"], "/my-notifications"
+                    ),
                     _nav_group_label(LanguageState.tr["nav_group_patient_documents"]),
-                    _nav_item("file-text", LanguageState.tr["nav_my_prescriptions"], "/my-prescriptions"),
-                    _nav_item("folder-open", LanguageState.tr["nav_my_all_documents"], "/my-all-documents"),
+                    _nav_item(
+                        "file-text", LanguageState.tr["nav_my_prescriptions"], "/my-prescriptions"
+                    ),
+                    _nav_item(
+                        "folder-open", LanguageState.tr["nav_my_all_documents"], "/my-all-documents"
+                    ),
                     width="100%",
                     spacing="1",
                     align_items="start",
@@ -271,7 +300,9 @@ def _sidebar_content() -> rx.Component:
                     _nav_group_label(LanguageState.tr["nav_group_essentials"]),
                     _nav_item("layout-dashboard", LanguageState.tr["nav_dashboard"], "/dashboard"),
                     _nav_item("users", LanguageState.tr["nav_patients"], "/"),
-                    _nav_item("calendar-clock", LanguageState.tr["nav_appointments"], "/appointments"),
+                    _nav_item(
+                        "calendar-clock", LanguageState.tr["nav_appointments"], "/appointments"
+                    ),
                     _nav_item(
                         "stethoscope",
                         LanguageState.tr["nav_consultations"],
@@ -325,7 +356,10 @@ def _sidebar_content() -> rx.Component:
             ),
             # Administration — Operator, Doctor, Admin, Account Admin
             rx.cond(
-                RoleState.is_operator | RoleState.is_doctor | RoleState.is_admin | RoleState.is_account_admin,
+                RoleState.is_operator
+                | RoleState.is_doctor
+                | RoleState.is_admin
+                | RoleState.is_account_admin,
                 rx.vstack(
                     _nav_group_label(LanguageState.tr["nav_group_administration"]),
                     _nav_item(
@@ -335,14 +369,18 @@ def _sidebar_content() -> rx.Component:
                         additional_active_route_prefixes=["/account"],
                     ),
                     _nav_item("user-round-check", LanguageState.tr["nav_doctors"], "/doctors"),
-                    _nav_item("calendar-clock", LanguageState.tr["nav_doctor_schedule"], "/doctor-schedule"),
+                    _nav_item(
+                        "calendar-clock",
+                        LanguageState.tr["nav_doctor_schedule"],
+                        "/doctor-schedule",
+                    ),
                     width="100%",
                     spacing="1",
                     align_items="start",
                 ),
             ),
             width="100%",
-            spacing="1",
+            spacing="4",
             align_items="start",
             padding_x=rx.cond(SidebarFoldState.is_folded, "0.35rem", "1rem"),
             overflow_y="auto",
@@ -375,6 +413,7 @@ def _sidebar_content() -> rx.Component:
 
 
 # ── Page layout ───────────────────────────────────────────────────────────────
+
 
 def page_layout(*children: rx.Component, **kwargs) -> rx.Component:
     """Wrap content in the standard collapsible sidebar layout."""

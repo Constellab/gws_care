@@ -68,6 +68,16 @@ def _exam_status_dot(status: str) -> rx.Component:
             ),
         ),
         (
+            "transmitted_to_lab",
+            rx.box(
+                width="7px",
+                height="7px",
+                border_radius="50%",
+                background="var(--amber-9)",
+                flex_shrink="0",
+            ),
+        ),
+        (
             "in_progress_interpretation",
             rx.box(
                 width="7px",
@@ -396,6 +406,10 @@ def _exam_summary_status_badge(status: str) -> rx.Component:
         (
             "in_progress_results",
             rx.badge("Saisie en cours", color_scheme="orange", variant="soft", size="1"),
+        ),
+        (
+            "transmitted_to_lab",
+            rx.badge("Transmis au labo", color_scheme="amber", variant="soft", size="1"),
         ),
         (
             "in_progress_interpretation",
@@ -730,6 +744,15 @@ def _exam_status_banner(status: str) -> rx.Component:
             ),
         ),
         (
+            "transmitted_to_lab",
+            rx.callout(
+                "Examen transmis au laboratoire — en attente des résultats.",
+                icon="flask-conical",
+                color_scheme="amber",
+                size="1",
+            ),
+        ),
+        (
             "in_progress_interpretation",
             rx.callout(
                 "Résultats transmis — en attente d'interprétation médicale.",
@@ -931,12 +954,13 @@ def _tab_exam_params() -> rx.Component:
         & (ConsultationDetailState.active_exam_status != "in_progress_interpretation")
     )
     # show_action_bar: controls the action dropdown + Valider button.
-    # Stays visible in in_progress_interpretation so the doctor can select
-    # "Terminer" or "Transmettre au médecin du travail" after reviewing results.
+    # Hidden at in_progress_interpretation — params are locked and the doctor
+    # uses the interpretation section buttons (Terminer / Transmettre) instead.
     show_action_bar = (
         ~ConsultationDetailState.is_patient_user
         & (ConsultationDetailState.consultation.status == "in_progress")
         & (ConsultationDetailState.active_exam_status != "done")
+        & (ConsultationDetailState.active_exam_status != "in_progress_interpretation")
     )
     return rx.vstack(
         # ── Exam action bar ────────────────────────────────────────────────────
@@ -1102,7 +1126,19 @@ def _tab_exam_params() -> rx.Component:
                                         size="2",
                                         color_scheme="teal",
                                     ),
-                                    rx.fragment(),
+                                    # Private consultation — show "Terminer" to close the exam
+                                    rx.cond(
+                                        ConsultationDetailState.active_exam_status == "in_progress_interpretation",
+                                        rx.button(
+                                            rx.icon("check-circle", size=14),
+                                            "Terminer l'examen",
+                                            on_click=ConsultationDetailState.finish_exam_locally,
+                                            loading=ConsultationDetailState.is_transmitting,
+                                            size="2",
+                                            color_scheme="green",
+                                        ),
+                                        rx.fragment(),
+                                    ),
                                 ),
                                 spacing="2",
                                 width="100%",
@@ -1845,6 +1881,43 @@ def _new_certificate_dialog() -> rx.Component:
                     ),
                     spacing="1",
                     width="100%",
+                ),
+                # Dates d'inaptitude — visibles seulement si Inapte
+                rx.cond(
+                    ~ConsultationDetailState.cert_form_is_fit_for_work,
+                    rx.vstack(
+                        rx.hstack(
+                            rx.vstack(
+                                rx.text("Début d'inaptitude *", size="2", weight="medium"),
+                                rx.input(
+                                    type="date",
+                                    value=ConsultationDetailState.cert_form_unfitness_start,
+                                    on_change=ConsultationDetailState.set_cert_form_unfitness_start,
+                                    size="2",
+                                    width="100%",
+                                ),
+                                spacing="1",
+                                width="100%",
+                            ),
+                            rx.vstack(
+                                rx.text("Fin d'inaptitude *", size="2", weight="medium"),
+                                rx.input(
+                                    type="date",
+                                    value=ConsultationDetailState.cert_form_unfitness_end,
+                                    on_change=ConsultationDetailState.set_cert_form_unfitness_end,
+                                    size="2",
+                                    width="100%",
+                                ),
+                                spacing="1",
+                                width="100%",
+                            ),
+                            spacing="3",
+                            width="100%",
+                        ),
+                        width="100%",
+                        spacing="2",
+                    ),
+                    rx.fragment(),
                 ),
                 rx.vstack(
                     rx.text("Conclusion", size="2", weight="medium"),

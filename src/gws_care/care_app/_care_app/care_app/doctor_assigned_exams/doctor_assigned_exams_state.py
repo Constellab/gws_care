@@ -63,6 +63,9 @@ class AssignedExamRowDTO(BaseModel):
     pending_task: str = ""
     pending_task_color: str = "gray"
 
+    # Appointment date (YYYY-MM-DD or empty)
+    scheduled_at: str = ""
+
     # Deep-link to exam entry page
     action_url: str = ""
     can_act: bool = True
@@ -122,6 +125,7 @@ class DoctorAssignedExamsState(ReflexMainState):
     @rx.event
     def set_filter_source(self, value: str):
         self.filter_source = value
+        self.filter_status = "__all__"  # reset status filter when source changes
 
     @rx.event
     def set_filter_search(self, value: str):
@@ -410,6 +414,7 @@ class DoctorAssignedExamsState(ReflexMainState):
             "in_progress_results": ("Compléter résultats", "orange"),
             "transmitted_to_lab": ("Saisir au labo", "amber"),
             "in_progress_interpretation": ("Interpréter résultats", "blue"),
+            "done": ("Terminé", "green"),
         }
 
         # Doctor rows — private visits assigned to current doctor (or all for admin)
@@ -479,7 +484,8 @@ class DoctorAssignedExamsState(ReflexMainState):
                     medical_status_color=_exam_status_color.get(exam_st, "gray"),
                     pending_task=_exam_pending_task.get(exam_st, ("", "gray"))[0],
                     pending_task_color=_exam_pending_task.get(exam_st, ("", "gray"))[1],
-                    action_url=f"/consultation/{visit.id}",
+                    scheduled_at=visit.scheduled_at.strftime("%d/%m/%Y") if visit.scheduled_at else "",
+                    action_url=f"/consultation/{visit.id}/exam/{exam.id}",
                     can_act=True,
                 ))
 
@@ -537,7 +543,8 @@ class DoctorAssignedExamsState(ReflexMainState):
                         medical_status_color="amber",
                         pending_task="Saisir au labo",
                         pending_task_color="amber",
-                        action_url=f"/consultation/{visit.id}",
+                        scheduled_at=visit.scheduled_at.strftime("%d/%m/%Y") if visit.scheduled_at else "",
+                        action_url=f"/consultation/{visit.id}/exam/{exam.id}",
                         can_act=True,
                     ))
             except Exception:

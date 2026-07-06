@@ -87,6 +87,14 @@ def _exam_row(row: AssignedExamRowDTO) -> rx.Component:
                 spacing="0",
             )
         ),
+        # Date RDV
+        rx.table.cell(
+            rx.cond(
+                row.scheduled_at != "",
+                rx.text(row.scheduled_at, size="2"),
+                rx.text("—", size="2", color="var(--gray-7)"),
+            )
+        ),
         # Statut campagne
         rx.table.cell(_campaign_status_badge(row)),
         # Examen assigné
@@ -198,27 +206,50 @@ def doctor_assigned_exams_page() -> rx.Component:
                     on_change=DoctorAssignedExamsState.set_filter_source,
                     size="2",
                 ),
-                # Medical status filter
-                rx.select.root(
-                    rx.select.trigger(
-                        placeholder="Tous les statuts",
+                # Medical status filter — adapts to selected source
+                rx.match(
+                    DoctorAssignedExamsState.filter_source,
+                    # Private consultations → exam statuses
+                    (
+                        "private",
+                        rx.select.root(
+                            rx.select.trigger(placeholder="Tous les statuts", size="2", width="220px"),
+                            rx.select.content(
+                                rx.select.item("Tous les statuts",              value="__all__"),
+                                rx.select.item("À faire",                       value="todo"),
+                                rx.select.item("En cours — Résultats",          value="in_progress_results"),
+                                rx.select.item("Transmis au labo",              value="transmitted_to_lab"),
+                                rx.select.item("En cours — Interprétation",     value="in_progress_interpretation"),
+                                rx.select.item("Terminé",                       value="done"),
+                            ),
+                            value=DoctorAssignedExamsState.filter_status,
+                            on_change=DoctorAssignedExamsState.set_filter_status,
+                            size="2",
+                        ),
+                    ),
+                    # Default (all sources or campaign) → campaign medical statuses
+                    rx.select.root(
+                        rx.select.trigger(placeholder="Tous les statuts", size="2", width="220px"),
+                        rx.select.content(
+                            rx.select.item("Tous les statuts",           value="__all__"),
+                            rx.select.item("En attente",                 value="PENDING"),
+                            rx.select.item("Résultats saisis",           value="LAB_ENTERED"),
+                            rx.select.item("Résultats validés labo",     value="LAB_VALIDATED"),
+                            rx.select.item("Interprétation PSC",         value="PSC_INTERPRETED"),
+                            rx.select.item("Validé PSC",                 value="PSC_VALIDATED"),
+                            rx.select.item("Transmis médecin traitant",  value="TRANSMITTED_TREATING_DOCTOR"),
+                            rx.select.item("Validé médecin travail",     value="ENTERPRISE_VALIDATED"),
+                            rx.select.item("Dossier terminé",            value="PUBLISHED"),
+                            rx.select.item("À faire",                    value="todo"),
+                            rx.select.item("En cours — Résultats",       value="in_progress_results"),
+                            rx.select.item("Transmis au labo",           value="transmitted_to_lab"),
+                            rx.select.item("En cours — Interprétation",  value="in_progress_interpretation"),
+                            rx.select.item("Terminé",                    value="done"),
+                        ),
+                        value=DoctorAssignedExamsState.filter_status,
+                        on_change=DoctorAssignedExamsState.set_filter_status,
                         size="2",
-                        width="220px",
                     ),
-                    rx.select.content(
-                        rx.select.item("Tous les statuts",           value="__all__"),
-                        rx.select.item("En attente",                 value="PENDING"),
-                        rx.select.item("Résultats saisis",           value="LAB_ENTERED"),
-                        rx.select.item("Résultats validés labo",     value="LAB_VALIDATED"),
-                        rx.select.item("Interprétation PSC",         value="PSC_INTERPRETED"),
-                        rx.select.item("Validé PSC",                 value="PSC_VALIDATED"),
-                        rx.select.item("Transmis médecin traitant",  value="TRANSMITTED_TREATING_DOCTOR"),
-                        rx.select.item("Validé médecin travail",     value="ENTERPRISE_VALIDATED"),
-                        rx.select.item("Dossier terminé",            value="PUBLISHED"),
-                    ),
-                    value=DoctorAssignedExamsState.filter_status,
-                    on_change=DoctorAssignedExamsState.set_filter_status,
-                    size="2",
                 ),
                 # Text search
                 rx.input(
@@ -282,6 +313,7 @@ def doctor_assigned_exams_page() -> rx.Component:
                                         rx.table.column_header_cell(rx.text("Responsable", size="2")),
                                         rx.table.column_header_cell(rx.text("Patient",      size="2")),
                                         rx.table.column_header_cell(rx.text("Campagne",     size="2")),
+                                        rx.table.column_header_cell(rx.text("Date RDV",     size="2")),
                                         rx.table.column_header_cell(rx.text("Statut camp.", size="2")),
                                         rx.table.column_header_cell(rx.text("Examen",       size="2")),
                                         rx.table.column_header_cell(rx.text("Avancement",  size="2")),

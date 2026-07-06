@@ -35,7 +35,6 @@ class AppointmentDetailState(RoleState):
     status_label: str = ""
     patient_notes: str = ""
 
-
     # ── Edit mode ─────────────────────────────────────────────────────────────
     is_editing: bool = False
     show_edit_dialog: bool = False
@@ -129,14 +128,14 @@ class AppointmentDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from gws_care.doctor.medical_doctor import MedicalDoctor
+
                 doctors = list(
                     MedicalDoctor.select()
                     .where(MedicalDoctor.is_active == True)
                     .order_by(MedicalDoctor.last_name)
                 )
                 self.doctor_options = [
-                    DoctorOptionDTO(id=str(d.id), name=d.get_full_name())
-                    for d in doctors
+                    DoctorOptionDTO(id=str(d.id), name=d.get_full_name()) for d in doctors
                 ]
         except Exception:
             self.doctor_options = []
@@ -184,6 +183,7 @@ class AppointmentDetailState(RoleState):
     @rx.event
     def open_address_in_google_maps(self):
         from urllib.parse import quote
+
         if self.appointment_address:
             encoded = quote(self.appointment_address, safe="")
             return rx.call_script(
@@ -193,6 +193,7 @@ class AppointmentDetailState(RoleState):
     @rx.event
     def open_edit_address_in_google_maps(self):
         from urllib.parse import quote
+
         if self.edit_appointment_address:
             encoded = quote(self.edit_appointment_address, safe="")
             return rx.call_script(
@@ -256,6 +257,7 @@ class AppointmentDetailState(RoleState):
         try:
             with await self.authenticate_user():
                 from gws_care.visit.visit import Visit
+
                 visit = Visit.get_by_id(self.visit_id)
                 visit.delete_instance()
             return rx.redirect("/appointments")
@@ -282,6 +284,7 @@ class AppointmentDetailState(RoleState):
             with await self.authenticate_user():
                 from gws_care.visit.consultation_visit_status import ConsultationVisitStatus
                 from gws_care.visit.visit import Visit
+
                 visit = Visit.get_by_id(self.visit_id)
                 visit.consultation_visit_status = ConsultationVisitStatus.CANCELLED
                 visit.save()
@@ -314,14 +317,13 @@ class AppointmentDetailState(RoleState):
         if not self.appointment_address:
             return ""
         from urllib.parse import quote
+
         encoded = quote(self.appointment_address, safe="")
         return f"https://www.google.com/maps/search/?api=1&query={encoded}"
 
     @rx.var
     def can_edit(self) -> bool:
-        """Staff can always edit; patients can only edit when scheduled."""
-        if self.is_admin or self.is_operator or self.is_doctor or self.is_account_admin:
-            return True
+        """Only editable when still scheduled — once started, the appointment is locked."""
         return self.status == "scheduled"
 
     @rx.var
@@ -331,4 +333,3 @@ class AppointmentDetailState(RoleState):
     @rx.var
     def can_delete(self) -> bool:
         return self.is_admin or self.is_operator
-
