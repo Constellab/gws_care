@@ -1888,6 +1888,7 @@ class ConsultationDetailState(RoleState):
         self.modified_param_ids = []
         self.exam_action = "save"
         self.active_exam_id = exam_id
+        self.active_exam_status = ""
         try:
             with await self.authenticate_user():
                 from gws_care.exam.exam import Exam

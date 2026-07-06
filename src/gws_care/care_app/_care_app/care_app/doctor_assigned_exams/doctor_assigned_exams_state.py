@@ -434,7 +434,11 @@ class DoctorAssignedExamsState(ReflexMainState):
                 continue
             p_exams = list(
                 Exam.select()
-                .where((Exam.visit == visit.id) & (Exam.status != ExamStatus.CANCELLED))
+                .where(
+                    (Exam.visit == visit.id)
+                    & (Exam.status != ExamStatus.CANCELLED)
+                    & (Exam.status != ExamStatus.TRANSMITTED_TO_LAB)
+                )
             )
             for exam in p_exams:
                 exam_type_name = ""
@@ -463,6 +467,7 @@ class DoctorAssignedExamsState(ReflexMainState):
                 except Exception:
                     pass
                 exam_st = exam.status.value
+                is_doctor_active = exam_st not in (ExamStatus.DONE.value, ExamStatus.CANCELLED.value)
                 result.append(AssignedExamRowDTO(
                     row_type="doctor",
                     source="private",
@@ -486,20 +491,34 @@ class DoctorAssignedExamsState(ReflexMainState):
                     pending_task_color=_exam_pending_task.get(exam_st, ("", "gray"))[1],
                     scheduled_at=visit.scheduled_at.strftime("%d/%m/%Y") if visit.scheduled_at else "",
                     action_url=f"/consultation/{visit.id}/exam/{exam.id}",
-                    can_act=True,
+                    can_act=is_doctor_active,
                 ))
 
-        # Lab rows — private consultation exams transmitted to lab
+        # Lab rows — private consultation exams transmitted to lab (or beyond)
         if self.is_lab or is_admin:
             try:
-                lab_priv_exams = list(
-                    Exam.select(Exam, Visit)
+                from gws_care.exam.exam_audit_entry import ExamAuditAction, ExamAuditEntry
+
+                # Only exams that were actually sent to the lab (have a TRANSMIT_TO_LAB audit entry)
+                lab_transmitted_ids = {
+                    str(entry.exam_id)
+                    for entry in ExamAuditEntry.select(ExamAuditEntry.exam).where(
+                        ExamAuditEntry.action == ExamAuditAction.TRANSMIT_TO_LAB.value
+                    )
+                }
+                lab_priv_exams = [
+                    e for e in Exam.select(Exam, Visit)
                     .join(Visit, on=(Exam.visit == Visit.id))
                     .where(
                         (Visit.campaign.is_null(True))
-                        & (Exam.status == ExamStatus.TRANSMITTED_TO_LAB)
+                        & (Exam.status.in_([
+                            ExamStatus.TRANSMITTED_TO_LAB,
+                            ExamStatus.IN_PROGRESS_INTERPRETATION,
+                            ExamStatus.DONE,
+                        ]))
                     )
-                )
+                    if str(e.id) in lab_transmitted_ids
+                ]
                 for exam in lab_priv_exams:
                     visit = exam.visit
                     try:
@@ -522,6 +541,8 @@ class DoctorAssignedExamsState(ReflexMainState):
                             )
                     except Exception:
                         pass
+                    exam_st = exam.status.value
+                    is_lab_active = exam_st == ExamStatus.TRANSMITTED_TO_LAB.value
                     result.append(AssignedExamRowDTO(
                         row_type="lab",
                         source="private",
@@ -538,14 +559,14 @@ class DoctorAssignedExamsState(ReflexMainState):
                         patient_id=str(patient.id),
                         patient_name=patient.get_full_name(),
                         patient_number=patient.patient_number,
-                        medical_status="transmitted_to_lab",
-                        medical_status_label="Transmis au labo",
-                        medical_status_color="amber",
-                        pending_task="Saisir au labo",
-                        pending_task_color="amber",
+                        medical_status=exam_st,
+                        medical_status_label=_exam_status_label.get(exam_st, exam_st),
+                        medical_status_color=_exam_status_color.get(exam_st, "gray"),
+                        pending_task=_exam_pending_task.get(exam_st, ("", "gray"))[0],
+                        pending_task_color=_exam_pending_task.get(exam_st, ("", "gray"))[1],
                         scheduled_at=visit.scheduled_at.strftime("%d/%m/%Y") if visit.scheduled_at else "",
                         action_url=f"/consultation/{visit.id}/exam/{exam.id}",
-                        can_act=True,
+                        can_act=is_lab_active,
                     ))
             except Exception:
                 pass
