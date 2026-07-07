@@ -87,6 +87,7 @@ from gws_care.core.migration_57 import Migration570
 from gws_care.core.migration_58 import Migration580
 from gws_care.core.migration_59 import Migration590
 from gws_care.core.migration_60 import Migration600
+from gws_care.core.migration_61 import Migration610
 
 # Dashboard
 from gws_care.dashboard.dashboard_snapshot import DashboardSnapshot

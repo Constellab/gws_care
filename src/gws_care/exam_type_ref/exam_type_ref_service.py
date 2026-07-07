@@ -111,6 +111,11 @@ class ExamTypeRefService:
         p.ref_high_f = dto.ref_high_f
         p.critical_low_f = dto.critical_low_f
         p.critical_high_f = dto.critical_high_f
+        p.label_normal = dto.label_normal or None
+        p.label_low = dto.label_low or None
+        p.label_high = dto.label_high or None
+        p.label_critical_low = dto.label_critical_low or None
+        p.label_critical_high = dto.label_critical_high or None
         p.save()
         return cls._param_to_dto(p)
 
@@ -139,6 +144,11 @@ class ExamTypeRefService:
         p.ref_high_f = dto.ref_high_f
         p.critical_low_f = dto.critical_low_f
         p.critical_high_f = dto.critical_high_f
+        p.label_normal = dto.label_normal or None
+        p.label_low = dto.label_low or None
+        p.label_high = dto.label_high or None
+        p.label_critical_low = dto.label_critical_low or None
+        p.label_critical_high = dto.label_critical_high or None
         p.save()
         return cls._param_to_dto(p)
 
@@ -210,6 +220,11 @@ class ExamTypeRefService:
             ref_high_f=p.ref_high_f,
             critical_low_f=p.critical_low_f,
             critical_high_f=p.critical_high_f,
+            label_normal=p.label_normal or None,
+            label_low=p.label_low or None,
+            label_high=p.label_high or None,
+            label_critical_low=p.label_critical_low or None,
+            label_critical_high=p.label_critical_high or None,
         )
 
     @classmethod

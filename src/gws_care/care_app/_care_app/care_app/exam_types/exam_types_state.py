@@ -42,6 +42,11 @@ class ExamParamVM(BaseModel):
     ref_high_f: str = ""
     critical_low_f: str = ""
     critical_high_f: str = ""
+    label_normal: str = ""
+    label_low: str = ""
+    label_high: str = ""
+    label_critical_low: str = ""
+    label_critical_high: str = ""
 
 
 class ExamTypeFormVM(BaseModel):
@@ -77,6 +82,11 @@ class ExamParamFormVM(BaseModel):
     ref_high_f: str = ""
     critical_low_f: str = ""
     critical_high_f: str = ""
+    label_normal: str = ""
+    label_low: str = ""
+    label_high: str = ""
+    label_critical_low: str = ""
+    label_critical_high: str = ""
 
 
 class ExamTypesState(ReflexMainState):
@@ -320,6 +330,11 @@ class ExamTypesState(ReflexMainState):
             ref_high_f=found.ref_high_f,
             critical_low_f=found.critical_low_f,
             critical_high_f=found.critical_high_f,
+            label_normal=found.label_normal,
+            label_low=found.label_low,
+            label_high=found.label_high,
+            label_critical_low=found.label_critical_low,
+            label_critical_high=found.label_critical_high,
         )
         self.is_editing_param = True
         self.edit_param_id = param_id
@@ -413,6 +428,26 @@ class ExamTypesState(ReflexMainState):
         self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "critical_high_f": v})
 
     @rx.event
+    def set_param_label_normal(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "label_normal": v})
+
+    @rx.event
+    def set_param_label_low(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "label_low": v})
+
+    @rx.event
+    def set_param_label_high(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "label_high": v})
+
+    @rx.event
+    def set_param_label_critical_low(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "label_critical_low": v})
+
+    @rx.event
+    def set_param_label_critical_high(self, v: str):
+        self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "label_critical_high": v})
+
+    @rx.event
     def set_param_formula(self, v: str):
         self.param_form = ExamParamFormVM(**{**self.param_form.dict(), "formula": v})
 
@@ -487,6 +522,11 @@ class ExamTypesState(ReflexMainState):
                     ref_high_f=_parse_float(self.param_form.ref_high_f),
                     critical_low_f=_parse_float(self.param_form.critical_low_f),
                     critical_high_f=_parse_float(self.param_form.critical_high_f),
+                    label_normal=self.param_form.label_normal.strip() or None,
+                    label_low=self.param_form.label_low.strip() or None,
+                    label_high=self.param_form.label_high.strip() or None,
+                    label_critical_low=self.param_form.label_critical_low.strip() or None,
+                    label_critical_high=self.param_form.label_critical_high.strip() or None,
                 )
                 if self.is_editing_param:
                     ExamTypeRefService.update_parameter(self.edit_param_id, dto)
@@ -785,6 +825,11 @@ class ExamTypesState(ReflexMainState):
                         ref_high_f=_f(p.ref_high_f),
                         critical_low_f=_f(p.critical_low_f),
                         critical_high_f=_f(p.critical_high_f),
+                        label_normal=p.label_normal or "",
+                        label_low=p.label_low or "",
+                        label_high=p.label_high or "",
+                        label_critical_low=p.label_critical_low or "",
+                        label_critical_high=p.label_critical_high or "",
                     )
                     for p in detail.parameters
                 ]

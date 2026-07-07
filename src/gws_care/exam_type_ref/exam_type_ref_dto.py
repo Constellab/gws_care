@@ -28,6 +28,11 @@ class ExamParameterDTO(BaseModel):
     ref_high_f: float | None = None
     critical_low_f: float | None = None
     critical_high_f: float | None = None
+    label_normal: str | None = None
+    label_low: str | None = None
+    label_high: str | None = None
+    label_critical_low: str | None = None
+    label_critical_high: str | None = None
 
 
 class SaveExamParameterDTO(BaseModel):
@@ -52,6 +57,11 @@ class SaveExamParameterDTO(BaseModel):
     ref_high_f: float | None = None
     critical_low_f: float | None = None
     critical_high_f: float | None = None
+    label_normal: str | None = None
+    label_low: str | None = None
+    label_high: str | None = None
+    label_critical_low: str | None = None
+    label_critical_high: str | None = None
 
 
 class ExamTypeRefDTO(BaseModel):

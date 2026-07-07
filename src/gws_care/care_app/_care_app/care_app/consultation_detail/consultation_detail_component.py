@@ -101,21 +101,26 @@ def _exam_status_dot(status: str) -> rx.Component:
     )
 
 
-def _param_status_badge(status: str) -> rx.Component:
-    return rx.match(
-        status,
-        ("NORMAL", rx.badge("Normal", color_scheme="green", variant="soft", size="1")),
-        ("NEGATIVE", rx.badge("Négatif", color_scheme="green", variant="soft", size="1")),
-        ("LOW", rx.badge("Bas", color_scheme="orange", variant="soft", size="1")),
-        ("HIGH", rx.badge("Élevé", color_scheme="orange", variant="soft", size="1")),
-        ("CRITICAL_LOW", rx.badge("Critique bas", color_scheme="red", variant="solid", size="1")),
-        (
-            "CRITICAL_HIGH",
-            rx.badge("Critique élevé", color_scheme="red", variant="solid", size="1"),
-        ),
-        ("POSITIVE", rx.badge("Positif", color_scheme="red", variant="solid", size="1")),
-        ("PENDING", rx.badge("—", color_scheme="gray", variant="surface", size="1")),
-        rx.badge(status, color_scheme="gray", variant="soft", size="1"),
+def _param_status_badge(p: ExamParamRowVM) -> rx.Component:
+    label = rx.match(
+        p.status,
+        ("NORMAL", p.label_normal),
+        ("LOW", p.label_low),
+        ("HIGH", p.label_high),
+        ("CRITICAL_LOW", p.label_critical_low),
+        ("CRITICAL_HIGH", p.label_critical_high),
+        "",
+    )
+    variant = rx.match(
+        p.status,
+        ("CRITICAL_LOW", "solid"),
+        ("CRITICAL_HIGH", "solid"),
+        "soft",
+    )
+    return rx.cond(
+        label != "",
+        rx.badge(label, color_scheme=p.status_color, variant=variant, size="1"),
+        rx.fragment(),
     )
 
 
@@ -872,7 +877,7 @@ def _param_row(p: ExamParamRowVM) -> rx.Component:
         rx.table.cell(
             rx.cond(
                 (p.status != "PENDING") & (p.status != "NOT_EVALUATED"),
-                _param_status_badge(p.status),
+                _param_status_badge(p),
                 rx.fragment(),
             ),
             vertical_align="middle",

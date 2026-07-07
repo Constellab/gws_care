@@ -56,6 +56,12 @@ class ExamParameter(Model):
     ref_high_f: float = DoubleField(null=True)
     critical_low_f: float = DoubleField(null=True)
     critical_high_f: float = DoubleField(null=True)
+    # Custom interpretation labels (operator-defined, optional)
+    label_normal: str = TextField(null=True)
+    label_low: str = TextField(null=True)
+    label_high: str = TextField(null=True)
+    label_critical_low: str = TextField(null=True)
+    label_critical_high: str = TextField(null=True)
 
     class Meta:
         table_name = "gws_care_exam_parameter"

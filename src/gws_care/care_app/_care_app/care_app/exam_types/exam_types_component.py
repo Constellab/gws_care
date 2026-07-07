@@ -614,10 +614,9 @@ def _param_dialog() -> rx.Component:
                     ),
                     columns="2", spacing="4", width="100%",
                 ),
-                # ── Code d'identification ────────────────────────────────────
                 rx.vstack(
                     rx.hstack(
-                        rx.text("Code d'identification", size="2", weight="medium"),
+                        rx.text("Code d’identification", size="2", weight="medium"),
                         rx.tooltip(
                             rx.icon("info", size=14, color="var(--gray-9)"),
                             content="Identifiant court (lettres, chiffres, _) utilisé dans les formules pour référencer ce paramètre.",
@@ -632,12 +631,11 @@ def _param_dialog() -> rx.Component:
                     ),
                     spacing="1", width="100%",
                 ),
-                # ── Paramètre calculé ────────────────────────────────────────
                 rx.hstack(
                     rx.vstack(
                         rx.text("Paramètre calculé", size="2", weight="medium"),
                         rx.text(
-                            "La valeur est dérivée d'une formule basée sur d'autres paramètres.",
+                            "La valeur est dérivée d’une formule basée sur d’autres paramètres.",
                             size="1", color="var(--gray-9)",
                         ),
                         spacing="0",
@@ -657,7 +655,6 @@ def _param_dialog() -> rx.Component:
                         "var(--gray-1)",
                     ),
                 ),
-                # ── Formule (visible si is_computed) ─────────────────────────
                 rx.cond(
                     ExamTypesState.param_form.is_computed,
                     rx.vstack(
@@ -682,7 +679,7 @@ def _param_dialog() -> rx.Component:
                             ExamTypesState.available_param_codes.length() > 0,
                             rx.vstack(
                                 rx.text(
-                                    "Cliquez sur un code pour l'insérer dans la formule :",
+                                    "Cliquez sur un code pour l’insérer dans la formule :",
                                     size="1", color="var(--gray-9)",
                                 ),
                                 rx.flex(
@@ -705,7 +702,6 @@ def _param_dialog() -> rx.Component:
                     ),
                     rx.fragment(),
                 ),
-                # ── Unité ────────────────────────────────────────────────────
                 rx.vstack(
                     rx.text("Unité", size="2", weight="medium"),
                     rx.input(
@@ -716,7 +712,6 @@ def _param_dialog() -> rx.Component:
                     ),
                     spacing="1", width="100%",
                 ),
-                # ── Applicabilité + seuils par sexe ──────────────────────────
                 rx.vstack(
                     rx.hstack(
                         rx.text("Valeurs de référence", size="2", weight="medium", color="var(--gray-11)"),
@@ -735,7 +730,6 @@ def _param_dialog() -> rx.Component:
                         ),
                         width="100%", align="center",
                     ),
-                    # Section seuils communs / par défaut
                     rx.vstack(
                         rx.text(
                             rx.cond(
@@ -782,7 +776,6 @@ def _param_dialog() -> rx.Component:
                         ),
                         spacing="1", width="100%",
                     ),
-                    # Section seuils Homme — visible seulement si ALL
                     rx.cond(
                         ExamTypesState.param_form.target_gender == "ALL",
                         rx.vstack(
@@ -830,7 +823,6 @@ def _param_dialog() -> rx.Component:
                         ),
                         rx.fragment(),
                     ),
-                    # Section seuils Femme — visible seulement si ALL
                     rx.cond(
                         ExamTypesState.param_form.target_gender == "ALL",
                         rx.vstack(
@@ -880,6 +872,78 @@ def _param_dialog() -> rx.Component:
                     ),
                     spacing="2", width="100%",
                 ),
+                # Libellés d'interprétation
+                rx.vstack(
+                        rx.hstack(
+                            rx.icon("tag", size=14, color="var(--gray-9)"),
+                            rx.text("Libellés d’interprétation", size="2", weight="medium"),
+                            rx.tooltip(
+                                rx.icon("info", size=14, color="var(--gray-9)"),
+                                content="Optionnel. Personnalisez les messages affichés pour chaque catégorie de résultat. Ex. : Hypoglycémie au lieu de Bas.",
+                            ),
+                            spacing="2", align="center",
+                        ),
+                        rx.grid(
+                            rx.vstack(
+                                rx.text("Normal", size="1", color="var(--green-9)", weight="medium"),
+                                rx.input(
+                                    placeholder="ex: Dans la norme",
+                                    value=ExamTypesState.param_form.label_normal,
+                                    on_change=ExamTypesState.set_param_label_normal,
+                                    width="100%",
+                                ),
+                                spacing="1",
+                            ),
+                            rx.vstack(
+                                rx.text("Bas", size="1", color="var(--orange-9)", weight="medium"),
+                                rx.input(
+                                    placeholder="ex: Hypoglycémie",
+                                    value=ExamTypesState.param_form.label_low,
+                                    on_change=ExamTypesState.set_param_label_low,
+                                    width="100%",
+                                ),
+                                spacing="1",
+                            ),
+                            rx.vstack(
+                                rx.text("Haut", size="1", color="var(--orange-9)", weight="medium"),
+                                rx.input(
+                                    placeholder="ex: Hyperglycémie",
+                                    value=ExamTypesState.param_form.label_high,
+                                    on_change=ExamTypesState.set_param_label_high,
+                                    width="100%",
+                                ),
+                                spacing="1",
+                            ),
+                            rx.vstack(
+                                rx.text("Critique bas", size="1", color="var(--red-9)", weight="medium"),
+                                rx.input(
+                                    placeholder="ex: Hypoglycémie sévère",
+                                    value=ExamTypesState.param_form.label_critical_low,
+                                    on_change=ExamTypesState.set_param_label_critical_low,
+                                    width="100%",
+                                ),
+                                spacing="1",
+                            ),
+                            rx.vstack(
+                                rx.text("Critique haut", size="1", color="var(--red-9)", weight="medium"),
+                                rx.input(
+                                    placeholder="ex: Hyperglycémie sévère",
+                                    value=ExamTypesState.param_form.label_critical_high,
+                                    on_change=ExamTypesState.set_param_label_critical_high,
+                                    width="100%",
+                                ),
+                                spacing="1",
+                            ),
+                            columns="2",
+                            spacing="3",
+                            width="100%",
+                        ),
+                        spacing="2", width="100%",
+                        padding="0.75rem",
+                        border="1px solid var(--gray-4)",
+                        border_radius="var(--radius-2)",
+                        background="var(--gray-1)",
+                    ),
                 rx.cond(
                     ~ExamTypesState.param_form.is_computed,
                     rx.hstack(
@@ -896,6 +960,9 @@ def _param_dialog() -> rx.Component:
                                color_scheme="red", size="1"),
                 ),
                 spacing="3", width="100%", margin_top="0.5rem",
+                overflow_y="auto",
+                max_height="65vh",
+                padding_right="0.25rem",
             ),
             rx.hstack(
                 rx.dialog.close(rx.button("Annuler", variant="soft", color_scheme="gray",

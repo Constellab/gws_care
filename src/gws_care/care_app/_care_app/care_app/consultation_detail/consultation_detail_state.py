@@ -99,6 +99,12 @@ class ExamParamRowVM(BaseModel):
     status: str = "PENDING"
     status_color: str = "gray"
     ref_range_label: str = ""
+    # Custom interpretation labels from the referential (empty = display nothing)
+    label_normal: str = ""
+    label_low: str = ""
+    label_high: str = ""
+    label_critical_low: str = ""
+    label_critical_high: str = ""
 
 
 class ExamAuditEntryVM(BaseModel):
@@ -1989,6 +1995,11 @@ class ConsultationDetailState(RoleState):
                             status=status,
                             status_color=_status_color_from_status(status),
                             ref_range_label=_ref_label(param),
+                            label_normal=param.label_normal or "",
+                            label_low=param.label_low or "",
+                            label_high=param.label_high or "",
+                            label_critical_low=param.label_critical_low or "",
+                            label_critical_high=param.label_critical_high or "",
                         )
                     )
 
