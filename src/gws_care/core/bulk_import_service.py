@@ -41,6 +41,18 @@ _PATIENT_REQUIRED_COLS = {"last_name", "first_name", "date_of_birth", "gender"}
 _VALID_GENDERS = {"M", "F", "Other"}
 _DOCTOR_REQUIRED_COLS = {"last_name", "first_name"}
 _ACCOUNT_INDIVIDUAL_REQUIRED_COLS = {"contact_last_name", "contact_first_name"}
+_EXAM_TYPE_REQUIRED_COLS = {"type_examen", "categorie"}
+_VALID_VALUE_TYPES = {"NUMERIC", "TEXT", "BOOLEAN"}
+_CATEGORY_NORM = {
+    "BIOLOGY": "BIOLOGY", "BIOLOGIE": "BIOLOGY", "BIOCHIMIE": "BIOLOGY",
+    "HEMATOLOGIE": "BIOLOGY", "HÉMATOLOGIE": "BIOLOGY",
+    "URINE": "URINE",
+    "CLINICAL": "CLINICAL", "CLINIQUE": "CLINICAL",
+    "IMAGING": "IMAGING", "IMAGERIE": "IMAGING",
+    "ECG": "ECG",
+    "ORL": "ORL",
+    "OTHER": "OTHER", "AUTRE": "OTHER",
+}
 
 
 class BulkImportService:
@@ -326,9 +338,13 @@ class BulkImportService:
         first_name = row_data.get("contact_first_name", "").strip()
         name = f"{last_name} {first_name}".strip()
 
-        if Account.get_or_none(
-            (Account.contact_last_name == last_name) & (Account.contact_first_name == first_name)
-        ) is not None:
+        if (
+            Account.get_or_none(
+                (Account.contact_last_name == last_name)
+                & (Account.contact_first_name == first_name)
+            )
+            is not None
+        ):
             return
 
         dto = SaveAccountDTO(
@@ -373,3 +389,137 @@ class BulkImportService:
             email=row_data.get("email", "").strip() or None,
         )
         AccountService.create_account(dto)
+
+    # ── Exam type referential ─────────────────────────────────────────────────
+
+    @classmethod
+    def parse_exam_types_csv(cls, content: str) -> "CsvParseResult":
+        """Parse and validate an exam type referential CSV string."""
+        result = CsvParseResult()
+        try:
+            reader = csv.DictReader(io.StringIO(content.lstrip("\ufeff")))
+            rows = list(reader)
+        except Exception as exc:
+            result.parse_error = f"CSV read error: {exc}"
+            return result
+
+        if not rows:
+            result.parse_error = "The CSV file is empty or has no data rows."
+            return result
+
+        missing = _EXAM_TYPE_REQUIRED_COLS - set(rows[0].keys())
+        if missing:
+            result.parse_error = f"Missing required columns: {', '.join(sorted(missing))}"
+            return result
+
+        for i, row in enumerate(rows, 1):
+            result.rows.append(cls._validate_exam_type_row(i, row))
+
+        return result
+
+    @classmethod
+    def _validate_exam_type_row(cls, row_num: int, row: dict) -> "RowValidationResult":
+        errors: list[str] = []
+
+        if not row.get("type_examen", "").strip():
+            errors.append("type_examen requis")
+        if not row.get("categorie", "").strip():
+            errors.append("categorie requise")
+
+        val_type = row.get("type_valeur", "").strip().upper() or "NUMERIC"
+        if val_type not in _VALID_VALUE_TYPES:
+            errors.append(f"type_valeur invalide '{val_type}' (NUMERIC/TEXT/BOOLEAN)")
+
+        return RowValidationResult(
+            row_num=row_num, row_data=row, is_valid=not errors, errors=errors
+        )
+
+    @classmethod
+    def import_exam_type_row(cls, row_data: dict) -> None:
+        """Create or update one exam type + optional parameter from a validated row.
+
+        Gets or creates the exam type by name, then appends the parameter if a
+        parameter name is provided. Idempotent: skips if param name already exists.
+        Must be called inside a gws_core auth context.
+        """
+        from gws_care.exam_type_ref.exam_parameter import ExamParameter
+        from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
+        from gws_care.exam_type_ref.exam_type_ref_dto import (
+            SaveExamParameterDTO,
+            SaveExamTypeRefDTO,
+        )
+        from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
+
+        def _f(key: str) -> "float | None":
+            v = row_data.get(key, "").strip()
+            try:
+                return float(v) if v else None
+            except ValueError:
+                return None
+
+        def _s(key: str) -> "str | None":
+            v = row_data.get(key, "").strip()
+            return v or None
+
+        name = row_data["type_examen"].strip()
+        raw_cat = row_data.get("categorie", "").strip().upper()
+        category = _CATEGORY_NORM.get(raw_cat, "OTHER")
+
+        existing = ExamTypeRef.get_or_none(ExamTypeRef.name == name)
+        if existing is None:
+            ref_dto = ExamTypeRefService.create(
+                SaveExamTypeRefDTO(
+                    name=name,
+                    category=category,
+                    department=_s("departement"),
+                    description=_s("description"),
+                    is_active=True,
+                    allows_attachment=True,
+                    requires_attachment=False,
+                )
+            )
+            ref_id = ref_dto.id
+        else:
+            ref_id = str(existing.id)
+
+        param_name = row_data.get("parametre", "").strip()
+        if not param_name:
+            return
+
+        if (
+            ExamParameter.get_or_none(
+                (ExamParameter.exam_type_ref == ref_id) & (ExamParameter.name == param_name)
+            )
+            is not None
+        ):
+            return
+
+        val_type = row_data.get("type_valeur", "").strip().upper() or "NUMERIC"
+        ExamTypeRefService.add_parameter(
+            ref_id,
+            SaveExamParameterDTO(
+                name=param_name,
+                value_type=val_type,
+                unit=_s("unite"),
+                ref_low=_f("ref_basse"),
+                ref_high=_f("ref_haute"),
+                critical_low=_f("critique_bas"),
+                critical_high=_f("critique_haut"),
+                ref_low_m=_f("ref_basse_H"),
+                ref_high_m=_f("ref_haute_H"),
+                critical_low_m=_f("critique_bas_H"),
+                critical_high_m=_f("critique_haut_H"),
+                ref_low_f=_f("ref_basse_F"),
+                ref_high_f=_f("ref_haute_F"),
+                critical_low_f=_f("critique_bas_F"),
+                critical_high_f=_f("critique_haut_F"),
+                label_normal=_s("label_normal"),
+                label_low=_s("label_bas"),
+                label_high=_s("label_haut"),
+                label_critical_low=_s("label_critique_bas"),
+                label_critical_high=_s("label_critique_haut"),
+                code=_s("code"),
+                is_required=False,
+                display_order=0,
+            ),
+        )

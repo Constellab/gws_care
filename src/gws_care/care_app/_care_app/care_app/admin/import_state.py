@@ -77,27 +77,79 @@ _DOCTOR_TEMPLATE = (
     "COULIBALY,Seydou,Médecine générale,+2250707110001,seydou.coulibaly@medecin.ci,\n"
 )
 
+_EXAM_TYPE_TEMPLATE = (
+    "type_examen,categorie,departement,description,parametre,code,type_valeur,unite,"
+    "ref_basse,ref_haute,critique_bas,critique_haut,"
+    "ref_basse_H,ref_haute_H,critique_bas_H,critique_haut_H,"
+    "ref_basse_F,ref_haute_F,critique_bas_F,critique_haut_F,"
+    "label_normal,label_bas,label_haut,label_critique_bas,label_critique_haut\n"
+    # ── Bilan lipidique ──────────────────────────────────────────────────────
+    "Bilan lipidique,Biochimie,Biologie,,Triglycérides,,NUMERIC,g/L,,1.5,,,,,,,,,,,,,,,\n"
+    "Bilan lipidique,Biochimie,Biologie,,LDL,,NUMERIC,g/L,,,,,,,,,,,,,,,,,\n"
+    "Bilan lipidique,Biochimie,Biologie,,HDL,,NUMERIC,g/L,,,,,0.4,,,,0.5,,,,,,,,\n"
+    "Bilan lipidique,Biochimie,Biologie,,Cholestérol total,,NUMERIC,g/L,,2.0,,,,,,,,,,,,,,,\n"
+    # ── Sérologies infectieuses ──────────────────────────────────────────────
+    "Sérologies infectieuses,Biologie,Biologie,,TPHA (Syphilis),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
+    "Sérologies infectieuses,Biologie,Biologie,,Ac anti-HBs (Hépatite B — anticorps),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
+    "Sérologies infectieuses,Biologie,Biologie,,Sérologie VIH (Ag/Ac combinés),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
+    "Sérologies infectieuses,Biologie,Biologie,,VDRL (Syphilis — activité),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
+    "Sérologies infectieuses,Biologie,Biologie,,Ac anti-HBc (Hépatite B — core),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
+    "Sérologies infectieuses,Biologie,Biologie,,Ac anti-VHC (Hépatite C),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
+    "Sérologies infectieuses,Biologie,Biologie,,AgHBs (Hépatite B — antigène surface),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
+    # ── Bilan ophtalmologique ────────────────────────────────────────────────
+    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Acuité visuelle OG (sans correction),,TEXT,,,,,,,,,,,,,,,,,,\n"
+    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Acuité visuelle OD (avec correction),,TEXT,,,,,,,,,,,,,,,,,,\n"
+    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Tension oculaire OD,,NUMERIC,mmHg,10.0,21.0,,30.0,,,,,,,,,,,,,\n"
+    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Acuité visuelle OD (sans correction),,TEXT,,,,,,,,,,,,,,,,,,\n"
+    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Vision des couleurs,,TEXT,,,,,,,,,,,,,,,,,,\n"
+    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Acuité visuelle OG (avec correction),,TEXT,,,,,,,,,,,,,,,,,,\n"
+    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Tension oculaire OG,,NUMERIC,,10.0,21.0,,30.0,,,,,,,,,,,,,\n"
+    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Champ visuel,,TEXT,,,,,,,,,,,,,,,,,,\n"
+    # ── Constantes vitales ───────────────────────────────────────────────────
+    "Constantes vitales,CLINICAL,Médecine du travail,,IMC,,NUMERIC,kg/cm²,18.5,25.0,13.0,40.0,,,,,,,,,Corpulence normale,Insuffisance pondérale,Surpoids / Obésité,Dénutrition sévère,Obésité morbide\n"
+    "Constantes vitales,CLINICAL,Médecine du travail,,SpO2,,NUMERIC,%,95.0,100.0,88.0,,,,,,,,,,,,,,\n"
+    "Constantes vitales,CLINICAL,Médecine du travail,,Taille,,NUMERIC,m,,,,,,,,,,,,,,,,,\n"
+    "Constantes vitales,CLINICAL,Médecine du travail,,Tension systolique,,NUMERIC,mmHg,90.0,140.0,70.0,180.0,,,,,,,,,,,,,\n"
+    "Constantes vitales,CLINICAL,Médecine du travail,,Poids,,NUMERIC,kg,,,,,,,,,,,,,,,,,\n"
+    "Constantes vitales,CLINICAL,Médecine du travail,,Fréquence cardiaque,,NUMERIC,bpm,50.0,100.0,30.0,150.0,,,,,,,,,,,,,\n"
+    "Constantes vitales,CLINICAL,Médecine du travail,,Température,,NUMERIC,°C,36.1,37.5,34.0,40.0,,,,,,,,,,,,,\n"
+    # ── NFS — Numération Formule Sanguine ────────────────────────────────────
+    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Neutrophiles %,,NUMERIC,%,40.0,75.0,,,,,,,,,,,,,,,\n"
+    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,CCMH,,NUMERIC,g/dL,32.0,36.0,,,,,,,,,,,,,,,\n"
+    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Globules blancs,,NUMERIC,10³/mm³,4.0,10.0,2.0,30.0,,,,,,,,,Numération leucocytaire normale,Leucopénie,Hyperleucocytose,Agranulocytose,Hyperleucocytose sévère\n"
+    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Monocytes %,,NUMERIC,%,2.0,10.0,,,,,,,,,,,,,,,\n"
+    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Globules rouges,,NUMERIC,10⁶/mm³,4.2,5.9,2.0,7.0,,,,,,,,,,,,,\n"
+    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Lymphocytes %,,NUMERIC,%,20.0,45.0,,,,,,,,,,,,,,,\n"
+    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Hémoglobine,,NUMERIC,g/dL,12.0,17.5,7.0,20.0,13.0,17.5,7.0,20.0,12.0,16.0,7.0,20.0,Hémoglobine normale,Anémie,Polyglobulie,Anémie sévère,Polyglobulie majeure\n"
+    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Plaquettes,,NUMERIC,10³/mm³,150.0,400.0,50.0,1000.0,,,,,,,,,,,,,\n"
+    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,VGM,,NUMERIC,fL,80.0,100.0,,,,,,,,,,,,,,,\n"
+    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,hematocrite,,NUMERIC,%,38.0,54.0,20.0,60.0,,,,,,,,,,,,,\n"
+    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,TCMH,,NUMERIC,pg,27.0,32.0,,,,,,,,,,,,,,,\n"
+)
+
 
 # ── DTOs ─────────────────────────────────────────────────────────────────────
+
 
 class ImportRowResultDTO(BaseModel):
     """Represents one CSV row with its parsed display values and import result."""
 
     row_num: int
-    cells: list[str]       # display values: [row_num, field1, ..., status_text]
-    status: str = "pending"    # "pending" | "error" | "success"
+    cells: list[str]  # display values: [row_num, field1, ..., status_text]
+    status: str = "pending"  # "pending" | "error" | "success"
     message: str = ""
 
 
 # ── State ─────────────────────────────────────────────────────────────────────
 
+
 class ImportState(ReflexMainState):
     """State for the bulk CSV import dialogs on the Admin page."""
 
     import_dialog_open: bool = False
-    import_type: str = ""        # "patients" | "accounts"
+    import_type: str = ""  # "patients" | "accounts"
 
-    _raw_rows: list[dict] = []   # private — raw dicts parsed from CSV, parallel to preview_rows
+    _raw_rows: list[dict] = []  # private — raw dicts parsed from CSV, parallel to preview_rows
 
     preview_rows: list[ImportRowResultDTO] = []
     preview_headers: list[str] = []
@@ -158,6 +210,11 @@ class ImportState(ReflexMainState):
                 data=_ACCOUNT_INDIVIDUAL_TEMPLATE.encode("utf-8"),
                 filename="accounts_individual_import_template.csv",
             )
+        if self.import_type == "exam_types":
+            return rx.download(
+                data=_EXAM_TYPE_TEMPLATE.encode("utf-8"),
+                filename="examens_referentiel_import_template.csv",
+            )
         return rx.download(
             data=_ACCOUNT_COMPANY_TEMPLATE.encode("utf-8"),
             filename="accounts_company_import_template.csv",
@@ -178,16 +235,21 @@ class ImportState(ReflexMainState):
             try:
                 content = raw_bytes.decode("utf-8-sig")
             except UnicodeDecodeError:
-                self.parse_error = "Impossible de lire le fichier. Veuillez l'enregistrer en UTF-8 CSV."
+                self.parse_error = (
+                    "Impossible de lire le fichier. Veuillez l'enregistrer en UTF-8 CSV."
+                )
                 return
 
             from gws_care.core.bulk_import_service import BulkImportService
+
             if self.import_type == "patients":
                 parse_result = BulkImportService.parse_patients_csv(content)
             elif self.import_type == "doctors":
                 parse_result = BulkImportService.parse_doctors_csv(content)
             elif self.import_type == "accounts_individual":
                 parse_result = BulkImportService.parse_accounts_individual_csv(content)
+            elif self.import_type == "exam_types":
+                parse_result = BulkImportService.parse_exam_types_csv(content)
             else:
                 parse_result = BulkImportService.parse_accounts_csv(content)
 
@@ -202,8 +264,17 @@ class ImportState(ReflexMainState):
                 self.preview_headers = ["#", "Nom", "Prénom", "Spécialisation", "Statut"]
             elif self.import_type == "accounts_individual":
                 self.preview_headers = ["#", "Nom", "Prénom", "Ville", "Téléphone", "Statut"]
+            elif self.import_type == "exam_types":
+                self.preview_headers = ["#", "Examen", "Catégorie", "Paramètre", "Statut"]
             else:
-                self.preview_headers = ["#", "Nom entreprise", "Contact", "Ville", "Téléphone", "Statut"]
+                self.preview_headers = [
+                    "#",
+                    "Nom entreprise",
+                    "Contact",
+                    "Ville",
+                    "Téléphone",
+                    "Statut",
+                ]
             self.preview_rows = self._build_preview_rows(parse_result)
         except Exception as e:
             self.parse_error = f"Erreur de lecture : {e}"
@@ -229,6 +300,7 @@ class ImportState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.user.user import User
+
                 if User.select().count() == 0:
                     self.parse_error = (
                         "⚠ La table des utilisateurs locaux est vide — "
@@ -239,6 +311,7 @@ class ImportState(ReflexMainState):
                     return
 
                 from gws_care.core.bulk_import_service import BulkImportService
+
                 for i, row_data in enumerate(rows):
                     if updated_rows[i].status != "pending":
                         continue
@@ -249,6 +322,8 @@ class ImportState(ReflexMainState):
                             BulkImportService.import_doctor_row(row_data)
                         elif self.import_type == "accounts_individual":
                             BulkImportService.import_individual_account_row(row_data)
+                        elif self.import_type == "exam_types":
+                            BulkImportService.import_exam_type_row(row_data)
                         else:
                             BulkImportService.import_account_row(row_data)
 
@@ -296,6 +371,7 @@ class ImportState(ReflexMainState):
     def _build_preview_rows(self, parse_result) -> list[ImportRowResultDTO]:
         """Convert BulkImportService parse results into frontend DTOs."""
         from gws_care.core.bulk_import_service import CsvParseResult
+
         results: list[ImportRowResultDTO] = []
         for r in parse_result.rows:
             status_text = ("⚠ " + "; ".join(r.errors)) if r.errors else "Ready"
@@ -326,6 +402,14 @@ class ImportState(ReflexMainState):
                     r.row_data.get("phone", ""),
                     status_text,
                 ]
+            elif self.import_type == "exam_types":
+                cells = [
+                    str(r.row_num),
+                    r.row_data.get("type_examen", ""),
+                    r.row_data.get("categorie", ""),
+                    r.row_data.get("parametre", "") or "—",
+                    status_text,
+                ]
             else:
                 first = r.row_data.get("contact_first_name", "").strip()
                 last = r.row_data.get("contact_last_name", "").strip()
@@ -338,10 +422,12 @@ class ImportState(ReflexMainState):
                     r.row_data.get("phone", ""),
                     status_text,
                 ]
-            results.append(ImportRowResultDTO(
-                row_num=r.row_num,
-                cells=cells,
-                status="error" if r.errors else "pending",
-                message="; ".join(r.errors),
-            ))
+            results.append(
+                ImportRowResultDTO(
+                    row_num=r.row_num,
+                    cells=cells,
+                    status="error" if r.errors else "pending",
+                    message="; ".join(r.errors),
+                )
+            )
         return results

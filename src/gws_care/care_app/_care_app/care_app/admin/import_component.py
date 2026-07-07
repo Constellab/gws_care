@@ -7,6 +7,7 @@ from .import_state import ImportRowResultDTO, ImportState
 
 # ── Sub-components ─────────────────────────────────────────────────────────────
 
+
 def _header_cell(text: str) -> rx.Component:
     return rx.table.column_header_cell(rx.text(text, size="2"))
 
@@ -89,22 +90,54 @@ def _format_requirements() -> rx.Component:
                     icon="info",
                     size="1",
                 ),
-                rx.callout(
-                    rx.vstack(
-                        rx.text("Colonnes obligatoires :", size="2", weight="medium"),
-                        rx.code("name", size="1"),
-                        rx.text("Colonnes optionnelles :", size="2", weight="medium"),
-                        rx.code(
-                            "registration_number, address, postal_code, city, "
-                            "contact_first_name, contact_last_name, phone, email",
-                            size="1",
+                rx.cond(
+                    ImportState.import_type == "exam_types",
+                    rx.callout(
+                        rx.vstack(
+                            rx.text("Colonnes obligatoires :", size="2", weight="medium"),
+                            rx.code(
+                                "type_examen, categorie (BIOLOGY/URINE/CLINICAL/IMAGING/ECG/ORL/OTHER)",
+                                size="1",
+                            ),
+                            rx.text("Colonnes optionnelles :", size="2", weight="medium"),
+                            rx.code(
+                                "departement, description, parametre, code, type_valeur (NUMERIC/TEXT/BOOLEAN), unite, "
+                                "ref_basse, ref_haute, critique_bas, critique_haut, "
+                                "ref_basse_H, ref_haute_H, critique_bas_H, critique_haut_H, "
+                                "ref_basse_F, ref_haute_F, critique_bas_F, critique_haut_F, "
+                                "label_normal, label_bas, label_haut, label_critique_bas, label_critique_haut",
+                                size="1",
+                            ),
+                            rx.text(
+                                "Chaque ligne = un paramètre. Plusieurs lignes avec le même type_examen "
+                                "créent les paramètres d'un même examen. Laisser parametre vide = créer l'examen sans paramètre.",
+                                size="1",
+                                color="var(--gray-9)",
+                            ),
+                            spacing="2",
+                            align_items="start",
                         ),
-                        spacing="2",
-                        align_items="start",
+                        color_scheme="blue",
+                        icon="info",
+                        size="1",
                     ),
-                    color_scheme="blue",
-                    icon="info",
-                    size="1",
+                    rx.callout(
+                        rx.vstack(
+                            rx.text("Colonnes obligatoires :", size="2", weight="medium"),
+                            rx.code("name", size="1"),
+                            rx.text("Colonnes optionnelles :", size="2", weight="medium"),
+                            rx.code(
+                                "registration_number, address, postal_code, city, "
+                                "contact_first_name, contact_last_name, phone, email",
+                                size="1",
+                            ),
+                            spacing="2",
+                            align_items="start",
+                        ),
+                        color_scheme="blue",
+                        icon="info",
+                        size="1",
+                    ),
                 ),
             ),
         ),
@@ -141,9 +174,7 @@ def _upload_zone() -> rx.Component:
         id="bulk_import_csv",
         multiple=False,
         accept={"text/csv": [".csv"], "text/plain": [".csv", ".txt"]},
-        on_drop=ImportState.handle_csv_upload(
-            rx.upload_files(upload_id="bulk_import_csv")
-        ),
+        on_drop=ImportState.handle_csv_upload(rx.upload_files(upload_id="bulk_import_csv")),
         border="2px dashed var(--gray-5)",
         border_radius="8px",
         padding="0.75rem",
@@ -231,6 +262,7 @@ def _import_summary() -> rx.Component:
 
 # ── Main dialog ───────────────────────────────────────────────────────────────
 
+
 def import_dialog() -> rx.Component:
     """Controlled dialog for bulk CSV import (patients or accounts)."""
     return rx.dialog.root(
@@ -246,7 +278,11 @@ def import_dialog() -> rx.Component:
                         rx.cond(
                             ImportState.import_type == "accounts_individual",
                             "Importer des comptes particuliers depuis un CSV",
-                            "Importer des comptes entreprises depuis un CSV",
+                            rx.cond(
+                                ImportState.import_type == "exam_types",
+                                "Importer le référentiel examens depuis un CSV",
+                                "Importer des comptes entreprises depuis un CSV",
+                            ),
                         ),
                     ),
                 )
@@ -261,7 +297,11 @@ def import_dialog() -> rx.Component:
                         rx.cond(
                             ImportState.import_type == "accounts_individual",
                             "Créez plusieurs comptes particuliers en une seule importation CSV.",
-                            "Créez plusieurs comptes entreprises en une seule importation CSV.",
+                            rx.cond(
+                                ImportState.import_type == "exam_types",
+                                "Créez ou complétez les types d'examens et leurs paramètres en une seule importation CSV.",
+                                "Créez plusieurs comptes entreprises en une seule importation CSV.",
+                            ),
                         ),
                     ),
                 ),
@@ -269,7 +309,6 @@ def import_dialog() -> rx.Component:
                 margin_bottom="0.5rem",
                 color="var(--gray-10)",
             ),
-
             # Body
             rx.vstack(
                 # Format requirements + template download
@@ -288,10 +327,8 @@ def import_dialog() -> rx.Component:
                     align="start",
                     spacing="3",
                 ),
-
                 # Upload zone
                 _upload_zone(),
-
                 # Parse error
                 rx.cond(
                     ImportState.parse_error != "",
@@ -302,17 +339,13 @@ def import_dialog() -> rx.Component:
                         size="1",
                     ),
                 ),
-
                 # Preview table (shown once CSV is parsed)
                 rx.cond(ImportState.has_preview, _preview_table()),
-
                 # Import result summary
                 rx.cond(ImportState.import_done, _import_summary()),
-
                 width="100%",
                 spacing="4",
             ),
-
             # Footer buttons
             rx.hstack(
                 rx.button(
@@ -368,7 +401,6 @@ def import_dialog() -> rx.Component:
                 padding_top="1rem",
                 align="center",
             ),
-
             on_interact_outside=ImportState.close_import_dialog,
             on_escape_key_down=ImportState.close_import_dialog,
             max_width="860px",
