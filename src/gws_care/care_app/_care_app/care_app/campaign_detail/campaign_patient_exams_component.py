@@ -26,6 +26,7 @@ from gws_reflex_main import main_component
 from ..common.nav_role_state import NavRoleState
 from ..common.page_layout import page_layout
 from .campaign_patient_exams_state import (
+    AddParamOption,
     CampaignPatientExamsState,
     ExamParamEntry,
     ExamSectionVM,
@@ -327,14 +328,29 @@ def _attachment_zone() -> rx.Component:
 
 def _param_row(p: ExamParamEntry) -> rx.Component:
     """One parameter row with a selection checkbox and an input field."""
-    value_cell_bg = rx.match(
+    status_label = rx.match(
         p.value_status,
-        ("critical_low", "var(--red-4)"),
-        ("critical_high", "var(--red-4)"),
-        ("low", "var(--orange-4)"),
-        ("high", "var(--orange-4)"),
-        ("normal", "var(--green-4)"),
-        "transparent",
+        ("normal", p.label_normal),
+        ("low", p.label_low),
+        ("high", p.label_high),
+        ("critical_low", p.label_critical_low),
+        ("critical_high", p.label_critical_high),
+        "",
+    )
+    status_color = rx.match(
+        p.value_status,
+        ("critical_low", "red"),
+        ("critical_high", "red"),
+        ("low", "orange"),
+        ("high", "orange"),
+        ("normal", "green"),
+        "gray",
+    )
+    status_variant = rx.match(
+        p.value_status,
+        ("critical_low", "solid"),
+        ("critical_high", "solid"),
+        "soft",
     )
     return rx.table.row(
         # Checkbox: deselected rows are greyed out and their value won't be saved
@@ -461,66 +477,23 @@ def _param_row(p: ExamParamEntry) -> rx.Component:
                     rx.text("— non saisi", size="1", color="var(--gray-6)", font_style="italic"),
                 ),
             ),
-            style={
-                "background": rx.cond(p.is_selected, value_cell_bg, "transparent"),
-                "border_radius": "4px",
-            },
+        ),
+        # Interprétation column: badge based on value status and parameter labels
+        rx.table.cell(
+            rx.cond(
+                status_label != "",
+                rx.badge(
+                    status_label,
+                    color_scheme=status_color,
+                    variant=status_variant,
+                    size="1",
+                ),
+                rx.fragment(),
+            ),
+            vertical_align="middle",
         ),
         align="center",
         opacity=rx.cond(p.is_selected, "1", "0.45"),
-    )
-
-
-def _color_legend() -> rx.Component:
-    return rx.hstack(
-        rx.text("Code couleur :", size="1", weight="medium", color="var(--gray-10)"),
-        rx.hstack(
-            rx.box(
-                width="14px",
-                height="14px",
-                border_radius="3px",
-                background="var(--green-4)",
-                flex_shrink="0",
-            ),
-            rx.text("Normal", size="1", color="var(--gray-11)"),
-            spacing="1",
-            align="center",
-        ),
-        rx.hstack(
-            rx.box(
-                width="14px",
-                height="14px",
-                border_radius="3px",
-                background="var(--orange-4)",
-                flex_shrink="0",
-            ),
-            rx.text(
-                "Hors norme (au-dessus ou en-dessous du seuil normal)",
-                size="1",
-                color="var(--gray-11)",
-            ),
-            spacing="1",
-            align="center",
-        ),
-        rx.hstack(
-            rx.box(
-                width="14px",
-                height="14px",
-                border_radius="3px",
-                background="var(--red-4)",
-                flex_shrink="0",
-            ),
-            rx.text("Valeur critique", size="1", color="var(--gray-11)"),
-            spacing="1",
-            align="center",
-        ),
-        spacing="4",
-        align="center",
-        padding="0.5rem 0.75rem",
-        border="1px solid var(--gray-4)",
-        border_radius="8px",
-        background="var(--gray-1)",
-        wrap="wrap",
     )
 
 
@@ -530,8 +503,22 @@ def _param_form() -> rx.Component:
         rx.hstack(
             rx.icon("file-text", size=16, color="var(--accent-9)"),
             rx.heading(CampaignPatientExamsState.active_section_name, size="4"),
+            rx.spacer(),
+            rx.cond(
+                ~CampaignPatientExamsState.active_section_is_readonly,
+                rx.button(
+                    rx.icon("plus-circle", size=14),
+                    "Ajouter un test",
+                    on_click=CampaignPatientExamsState.open_add_param_dialog,
+                    size="1",
+                    variant="soft",
+                    color_scheme="teal",
+                ),
+                rx.fragment(),
+            ),
             spacing="2",
             align="center",
+            width="100%",
         ),
         rx.cond(
             CampaignPatientExamsState.active_params.length() > 0,
@@ -567,6 +554,7 @@ def _param_form() -> rx.Component:
                             rx.table.column_header_cell("Réf."),
                             rx.table.column_header_cell("Seuil critique"),
                             rx.table.column_header_cell("Résultat"),
+                            rx.table.column_header_cell("Interprétation"),
                         )
                     ),
                     rx.table.body(rx.foreach(CampaignPatientExamsState.active_params, _param_row)),
@@ -574,7 +562,6 @@ def _param_form() -> rx.Component:
                     variant="surface",
                     size="2",
                 ),
-                _color_legend(),
                 width="100%",
                 spacing="2",
             ),
@@ -1286,9 +1273,117 @@ def _motif_dialog() -> rx.Component:
 # ── Main page ─────────────────────────────────────────────────────────────────
 
 
+def _add_param_item(p: AddParamOption) -> rx.Component:
+    return rx.hstack(
+        rx.checkbox(
+            checked=p.is_selected,
+            on_change=lambda _: CampaignPatientExamsState.toggle_add_param_option(p.id),
+            size="2",
+        ),
+        rx.text(p.name, size="2", weight=rx.cond(p.is_selected, "medium", "regular")),
+        rx.cond(
+            p.unit != "",
+            rx.text(p.unit, size="1", color="var(--gray-9)"),
+            rx.fragment(),
+        ),
+        spacing="2",
+        align="center",
+        padding="0.5rem 0.75rem",
+        border_radius="var(--radius-2)",
+        background=rx.cond(p.is_selected, "var(--accent-2)", "transparent"),
+        border=rx.cond(p.is_selected, "1px solid var(--accent-6)", "1px solid var(--gray-4)"),
+        width="100%",
+        cursor="pointer",
+        on_click=CampaignPatientExamsState.toggle_add_param_option(p.id),
+        _hover={"background": rx.cond(p.is_selected, "var(--accent-3)", "var(--gray-2)")},
+    )
+
+
+def _add_param_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Ajouter des tests"),
+            rx.dialog.description(
+                "Sélectionnez les tests à ajouter à cet examen.",
+                size="2",
+                color="var(--gray-11)",
+            ),
+            rx.vstack(
+                rx.cond(
+                    CampaignPatientExamsState.add_param_error != "",
+                    rx.callout(
+                        CampaignPatientExamsState.add_param_error,
+                        icon="info",
+                        color_scheme="orange",
+                        size="1",
+                    ),
+                    rx.cond(
+                        CampaignPatientExamsState.add_param_options.length() > 0,
+                        rx.vstack(
+                            rx.hstack(
+                                rx.text(
+                                    CampaignPatientExamsState.add_param_selected_count.to(str),
+                                    " / ",
+                                    CampaignPatientExamsState.add_param_options.length().to(str),
+                                    " sélectionné(s)",
+                                    size="1",
+                                    color="var(--gray-9)",
+                                ),
+                                width="100%",
+                            ),
+                            rx.vstack(
+                                rx.foreach(
+                                    CampaignPatientExamsState.add_param_options,
+                                    _add_param_item,
+                                ),
+                                spacing="1",
+                                width="100%",
+                                max_height="280px",
+                                overflow_y="auto",
+                                padding="0.25rem",
+                                border="1px solid var(--gray-4)",
+                                border_radius="var(--radius-2)",
+                                background="var(--gray-1)",
+                            ),
+                            width="100%",
+                            spacing="2",
+                        ),
+                        rx.fragment(),
+                    ),
+                ),
+                rx.hstack(
+                    rx.spacer(),
+                    rx.button(
+                        "Annuler",
+                        variant="outline",
+                        on_click=CampaignPatientExamsState.close_add_param_dialog,
+                    ),
+                    rx.button(
+                        "Ajouter les tests",
+                        on_click=CampaignPatientExamsState.save_add_params,
+                        loading=CampaignPatientExamsState.is_saving_add_params,
+                        disabled=(CampaignPatientExamsState.add_param_selected_count == 0)
+                        | (CampaignPatientExamsState.add_param_error != ""),
+                    ),
+                    spacing="2",
+                    width="100%",
+                ),
+                spacing="4",
+                width="100%",
+                padding_top="1rem",
+            ),
+            on_interact_outside=CampaignPatientExamsState.close_add_param_dialog,
+            on_escape_key_down=CampaignPatientExamsState.close_add_param_dialog,
+            max_width="500px",
+        ),
+        open=CampaignPatientExamsState.show_add_param_dialog,
+    )
+
+
 def campaign_patient_exams_page() -> rx.Component:
     return main_component(
         _motif_dialog(),
+        _add_param_dialog(),
         page_layout(
             rx.vstack(
                 # ── Header ────────────────────────────────────────────────

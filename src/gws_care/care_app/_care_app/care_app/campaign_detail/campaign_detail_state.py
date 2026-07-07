@@ -151,6 +151,14 @@ class CampaignDetailState(PatientPickerState):
     add_exam_params: list[ExamParamOption] = []
     add_exam_is_loading_params: bool = False
 
+    # Edit exam params dialog (for already-added exam types)
+    edit_exam_params_dialog_open: bool = False
+    editing_exam_ref_id: str = ""
+    editing_exam_name: str = ""
+    edit_exam_params: list[ExamParamOption] = []
+    edit_exam_is_loading: bool = False
+    is_saving_exam_params: bool = False
+
     # PDF download
     is_downloading_pdf: bool = False
 
@@ -874,7 +882,7 @@ class CampaignDetailState(PatientPickerState):
     def toggle_add_exam_param(self, param_id: str):
         self.add_exam_params = [
             ExamParamOption(**{**p.dict(), "is_selected": not p.is_selected})
-            if p.id == param_id
+            if p.id == param_id and not p.is_required
             else p
             for p in self.add_exam_params
         ]
@@ -927,6 +935,104 @@ class CampaignDetailState(PatientPickerState):
             await self._load_program(preserve_tab=True)
         except Exception as e:
             self.error_message = str(e)
+
+    # ── Edit exam params ──────────────────────────────────────────────────────
+
+    @rx.var
+    def edit_exam_selected_param_count(self) -> int:
+        return sum(1 for p in self.edit_exam_params if p.is_selected)
+
+    @rx.event
+    async def open_edit_exam_params(self, exam_ref_id: str, exam_name: str):
+        self.editing_exam_ref_id = exam_ref_id
+        self.editing_exam_name = exam_name
+        self.edit_exam_params = []
+        self.edit_exam_is_loading = True
+        self.edit_exam_params_dialog_open = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_exam import CampaignExam
+                from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
+
+                detail = ExamTypeRefService.get(exam_ref_id)
+                ce = CampaignExam.get_or_none(
+                    (CampaignExam.campaign == self.program.id)
+                    & (CampaignExam.exam_type_ref == exam_ref_id)
+                )
+                selected_ids: set[str] = set()
+                if ce and ce.selected_param_ids:
+                    selected_ids = {str(pid) for pid in ce.selected_param_ids}
+                self.edit_exam_params = [
+                    ExamParamOption(
+                        id=str(p.id),
+                        name=p.name,
+                        unit=p.unit or "",
+                        value_type=p.value_type,
+                        is_required=p.is_required,
+                        is_selected=(not selected_ids) or (str(p.id) in selected_ids) or p.is_required,
+                    )
+                    for p in detail.parameters
+                ]
+        except Exception:
+            pass
+        finally:
+            self.edit_exam_is_loading = False
+
+    @rx.event
+    def close_edit_exam_params(self):
+        self.edit_exam_params_dialog_open = False
+        self.edit_exam_params = []
+        self.editing_exam_ref_id = ""
+        self.editing_exam_name = ""
+
+    @rx.event
+    def toggle_edit_exam_param(self, param_id: str):
+        self.edit_exam_params = [
+            ExamParamOption(**{**p.dict(), "is_selected": not p.is_selected})
+            if p.id == param_id and not p.is_required
+            else p
+            for p in self.edit_exam_params
+        ]
+
+    @rx.event
+    def select_all_edit_exam_params(self):
+        self.edit_exam_params = [
+            ExamParamOption(**{**p.dict(), "is_selected": True}) for p in self.edit_exam_params
+        ]
+
+    @rx.event
+    def clear_all_edit_exam_params(self):
+        self.edit_exam_params = [
+            ExamParamOption(**{**p.dict(), "is_selected": p.is_required})
+            for p in self.edit_exam_params
+        ]
+
+    @rx.event
+    async def save_edit_exam_params(self):
+        if not self.program or not self.editing_exam_ref_id:
+            return
+        self.is_saving_exam_params = True
+        try:
+            selected_ids = [p.id for p in self.edit_exam_params if p.is_selected]
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_exam import CampaignExam
+
+                ce = CampaignExam.get_or_none(
+                    (CampaignExam.campaign == self.program.id)
+                    & (CampaignExam.exam_type_ref == self.editing_exam_ref_id)
+                )
+                if ce:
+                    ce.selected_param_ids = selected_ids if selected_ids else None
+                    ce.save()
+            self.edit_exam_params_dialog_open = False
+            self.edit_exam_params = []
+            self.editing_exam_ref_id = ""
+            self.editing_exam_name = ""
+            await self._load_program(preserve_tab=True)
+        except Exception as e:
+            self.error_message = str(e)
+        finally:
+            self.is_saving_exam_params = False
 
     # ── Campaign doctors (campaign-level multi-doctor association) ────────────
 

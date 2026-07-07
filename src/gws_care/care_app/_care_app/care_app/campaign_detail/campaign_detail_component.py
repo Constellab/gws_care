@@ -468,6 +468,18 @@ def _exam_type_row(et: ExamTypeRowDTO) -> rx.Component:
                     rx.hstack(
                         rx.tooltip(
                             rx.icon_button(
+                                rx.icon("sliders-horizontal", size=14),
+                                variant="soft",
+                                size="1",
+                                color_scheme="gray",
+                                on_click=lambda: CampaignDetailState.open_edit_exam_params(
+                                    et.id, et.name
+                                ),
+                            ),
+                            content="Configurer les paramètres",
+                        ),
+                        rx.tooltip(
+                            rx.icon_button(
                                 rx.icon("user-round-plus", size=14),
                                 variant="soft",
                                 size="1",
@@ -1155,6 +1167,38 @@ def _archive_dialog() -> rx.Component:
     )
 
 
+def _param_checkbox_row(p) -> rx.Component:
+    """Reusable param row used in both add and edit exam dialogs."""
+    return rx.hstack(
+        rx.checkbox(
+            checked=p.is_selected,
+            on_change=lambda _: CampaignDetailState.toggle_add_exam_param(p.id),
+            size="2",
+            disabled=p.is_required,
+        ),
+        rx.text(p.name, size="2"),
+        rx.cond(
+            p.unit != "",
+            rx.badge(p.unit, variant="soft", color_scheme="gray", size="1"),
+            rx.fragment(),
+        ),
+        rx.cond(
+            p.is_required,
+            rx.badge("requis", variant="soft", color_scheme="blue", size="1"),
+            rx.fragment(),
+        ),
+        spacing="2",
+        align="center",
+        width="100%",
+        padding="0.3rem 0.5rem",
+        border_radius="var(--radius-1)",
+        background=rx.cond(p.is_selected, "var(--accent-3)", "transparent"),
+        _hover={"background": rx.cond(p.is_selected, "var(--accent-4)", "var(--gray-2)")},
+        cursor=rx.cond(p.is_required, "default", "pointer"),
+        on_click=CampaignDetailState.toggle_add_exam_param(p.id),
+    )
+
+
 def _add_exam_type_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
@@ -1170,6 +1214,61 @@ def _add_exam_type_dialog() -> rx.Component:
                     ),
                     value=CampaignDetailState.selected_exam_type_id,
                     on_change=CampaignDetailState.set_selected_exam_type,
+                ),
+                # Param selection — shown once an exam type is selected
+                rx.cond(
+                    CampaignDetailState.add_exam_is_loading_params,
+                    rx.hstack(
+                        rx.spinner(size="2"),
+                        rx.text("Chargement des tests…", size="2", color="var(--gray-9)"),
+                        spacing="2",
+                        align="center",
+                    ),
+                    rx.cond(
+                        CampaignDetailState.add_exam_params.length() > 0,
+                        rx.vstack(
+                            rx.hstack(
+                                rx.text("Tests inclus", size="2", weight="medium"),
+                                rx.spacer(),
+                                rx.badge(
+                                    CampaignDetailState.add_exam_selected_param_count.to_string()
+                                    + " / "
+                                    + CampaignDetailState.add_exam_params.length().to_string(),
+                                    color_scheme="blue",
+                                    size="1",
+                                ),
+                                rx.button(
+                                    "Tout sélectionner",
+                                    variant="ghost",
+                                    size="1",
+                                    on_click=CampaignDetailState.select_all_add_exam_params,
+                                ),
+                                rx.button(
+                                    "Désélectionner",
+                                    variant="ghost",
+                                    size="1",
+                                    color_scheme="gray",
+                                    on_click=CampaignDetailState.clear_all_add_exam_params,
+                                ),
+                                width="100%",
+                                align="center",
+                            ),
+                            rx.box(
+                                rx.foreach(
+                                    CampaignDetailState.add_exam_params, _param_checkbox_row
+                                ),
+                                max_height="220px",
+                                overflow_y="auto",
+                                border="1px solid var(--gray-4)",
+                                border_radius="var(--radius-2)",
+                                padding="0.25rem",
+                                width="100%",
+                            ),
+                            spacing="2",
+                            width="100%",
+                        ),
+                        rx.fragment(),
+                    ),
                 ),
                 rx.cond(
                     CampaignDetailState.error_message != "",
@@ -1203,9 +1302,142 @@ def _add_exam_type_dialog() -> rx.Component:
                 width="100%",
             ),
             on_escape_key_down=CampaignDetailState.close_add_exam_type_dialog,
-            max_width="440px",
+            on_interact_outside=CampaignDetailState.close_add_exam_type_dialog,
+            max_width="520px",
         ),
         open=CampaignDetailState.add_exam_type_dialog_open,
+    )
+
+
+def _edit_exam_params_row(p) -> rx.Component:
+    return rx.hstack(
+        rx.checkbox(
+            checked=p.is_selected,
+            on_change=lambda _: CampaignDetailState.toggle_edit_exam_param(p.id),
+            size="2",
+            disabled=p.is_required,
+        ),
+        rx.text(p.name, size="2"),
+        rx.cond(
+            p.unit != "",
+            rx.badge(p.unit, variant="soft", color_scheme="gray", size="1"),
+            rx.fragment(),
+        ),
+        rx.cond(
+            p.is_required,
+            rx.badge("requis", variant="soft", color_scheme="blue", size="1"),
+            rx.fragment(),
+        ),
+        spacing="2",
+        align="center",
+        width="100%",
+        padding="0.3rem 0.5rem",
+        border_radius="var(--radius-1)",
+        background=rx.cond(p.is_selected, "var(--accent-3)", "transparent"),
+        _hover={"background": rx.cond(p.is_selected, "var(--accent-4)", "var(--gray-2)")},
+        cursor=rx.cond(p.is_required, "default", "pointer"),
+        on_click=CampaignDetailState.toggle_edit_exam_param(p.id),
+    )
+
+
+def _edit_exam_params_dialog() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(
+                rx.hstack(
+                    rx.icon("sliders-horizontal", size=16, color="var(--accent-9)"),
+                    rx.text("Paramètres — "),
+                    rx.text(CampaignDetailState.editing_exam_name, weight="bold"),
+                    spacing="2",
+                    align="center",
+                )
+            ),
+            rx.vstack(
+                rx.cond(
+                    CampaignDetailState.edit_exam_is_loading,
+                    rx.hstack(
+                        rx.spinner(size="2"),
+                        rx.text("Chargement…", size="2", color="var(--gray-9)"),
+                        spacing="2",
+                        align="center",
+                    ),
+                    rx.cond(
+                        CampaignDetailState.edit_exam_params.length() > 0,
+                        rx.vstack(
+                            rx.hstack(
+                                rx.text("Tests inclus", size="2", weight="medium"),
+                                rx.spacer(),
+                                rx.badge(
+                                    CampaignDetailState.edit_exam_selected_param_count.to_string()
+                                    + " / "
+                                    + CampaignDetailState.edit_exam_params.length().to_string(),
+                                    color_scheme="blue",
+                                    size="1",
+                                ),
+                                rx.button(
+                                    "Tout sélectionner",
+                                    variant="ghost",
+                                    size="1",
+                                    on_click=CampaignDetailState.select_all_edit_exam_params,
+                                ),
+                                rx.button(
+                                    "Désélectionner",
+                                    variant="ghost",
+                                    size="1",
+                                    color_scheme="gray",
+                                    on_click=CampaignDetailState.clear_all_edit_exam_params,
+                                ),
+                                width="100%",
+                                align="center",
+                            ),
+                            rx.box(
+                                rx.foreach(
+                                    CampaignDetailState.edit_exam_params,
+                                    _edit_exam_params_row,
+                                ),
+                                max_height="280px",
+                                overflow_y="auto",
+                                border="1px solid var(--gray-4)",
+                                border_radius="var(--radius-2)",
+                                padding="0.25rem",
+                                width="100%",
+                            ),
+                            spacing="2",
+                            width="100%",
+                        ),
+                        rx.callout(
+                            "Aucun paramètre défini pour cet examen.",
+                            icon="info",
+                            color_scheme="gray",
+                            size="1",
+                        ),
+                    ),
+                ),
+                rx.hstack(
+                    rx.button(
+                        "Annuler",
+                        variant="soft",
+                        color_scheme="gray",
+                        on_click=CampaignDetailState.close_edit_exam_params,
+                    ),
+                    rx.button(
+                        "Enregistrer",
+                        on_click=CampaignDetailState.save_edit_exam_params,
+                        loading=CampaignDetailState.is_saving_exam_params,
+                        disabled=CampaignDetailState.edit_exam_params.length() == 0,
+                    ),
+                    spacing="2",
+                    justify="end",
+                    width="100%",
+                ),
+                spacing="4",
+                width="100%",
+            ),
+            on_escape_key_down=CampaignDetailState.close_edit_exam_params,
+            on_interact_outside=CampaignDetailState.close_edit_exam_params,
+            max_width="480px",
+        ),
+        open=CampaignDetailState.edit_exam_params_dialog_open,
     )
 
 
@@ -1688,6 +1920,7 @@ def campaign_detail_page() -> rx.Component:
             _assign_doctor_dialog(),
             _add_patient_dialog(),
             _add_exam_type_dialog(),
+            _edit_exam_params_dialog(),
             _archive_dialog(),
         )
     )

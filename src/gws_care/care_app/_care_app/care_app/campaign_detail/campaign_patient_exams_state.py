@@ -16,6 +16,16 @@ from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
 
 
+class AddParamOption(BaseModel):
+    """A parameter option shown in the 'add missed test' dialog."""
+
+    id: str
+    name: str
+    unit: str = ""
+    value_type: str = "NUMERIC"
+    is_selected: bool = False
+
+
 class ExamParamEntry(BaseModel):
     """One parameter row in the result entry form."""
 
@@ -34,6 +44,12 @@ class ExamParamEntry(BaseModel):
     critical_high_raw: str = ""
     # Computed status: "" | "normal" | "low" | "high" | "critical_low" | "critical_high"
     value_status: str = ""
+    # Interpretation labels from ExamParameter (empty = not defined)
+    label_normal: str = ""
+    label_low: str = ""
+    label_high: str = ""
+    label_critical_low: str = ""
+    label_critical_high: str = ""
     # Whether this param is included in the saved results (default True = all selected)
     is_selected: bool = True
     # Computed parameter support
@@ -170,6 +186,12 @@ class CampaignPatientExamsState(ReflexMainState):
     section_attached_files: list[SectionFileVM] = []
     is_uploading_file: bool = False
 
+    # Add missed param dialog
+    show_add_param_dialog: bool = False
+    add_param_options: list[AddParamOption] = []
+    add_param_error: str = ""
+    is_saving_add_params: bool = False
+
     # ── Computed vars (always in sync with self.sections) ─────────────────
 
     @rx.var
@@ -240,6 +262,10 @@ class CampaignPatientExamsState(ReflexMainState):
     def patient_is_on_terrain(self) -> bool:
         """True when patient presence has been declared (visit not pending)."""
         return self.visit_status != "pending"
+
+    @rx.var
+    def add_param_selected_count(self) -> int:
+        return sum(1 for p in self.add_param_options if p.is_selected)
 
     # ── Patient navigation ────────────────────────────────────────────────
 
@@ -914,6 +940,97 @@ class CampaignPatientExamsState(ReflexMainState):
         self.error = ""
         self.success = ""
 
+    # ── Add missed param ──────────────────────────────────────────────────────
+
+    @rx.event
+    async def open_add_param_dialog(self):
+        """Load params not yet selected for the active section."""
+        section_id = self.active_section_id
+        campaign_id = self.cp_campaign_id
+        self.add_param_options = []
+        self.add_param_error = ""
+        self.show_add_param_dialog = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_exam import CampaignExam
+                from gws_care.exam_type_ref.exam_parameter import ExamParameter
+
+                ce = CampaignExam.get_or_none(
+                    (CampaignExam.campaign == campaign_id)
+                    & (CampaignExam.exam_type_ref == section_id)
+                )
+                already: set[str] = set()
+                if ce and ce.selected_param_ids:
+                    already = {str(pid) for pid in ce.selected_param_ids}
+
+                all_params = list(
+                    ExamParameter.select()
+                    .where(ExamParameter.exam_type_ref == section_id)
+                    .order_by(ExamParameter.display_order)
+                )
+                available = [p for p in all_params if str(p.id) not in already]
+                self.add_param_options = [
+                    AddParamOption(
+                        id=str(p.id),
+                        name=p.name,
+                        unit=p.unit or "",
+                        value_type=p.value_type,
+                        is_selected=False,
+                    )
+                    for p in available
+                ]
+                if not self.add_param_options:
+                    self.add_param_error = "Tous les tests de cet examen sont déjà ajoutés."
+        except Exception as e:
+            self.add_param_error = str(e)
+
+    @rx.event
+    def close_add_param_dialog(self):
+        self.show_add_param_dialog = False
+        self.add_param_options = []
+        self.add_param_error = ""
+
+    @rx.event
+    def toggle_add_param_option(self, param_id: str):
+        self.add_param_options = [
+            AddParamOption(**{**p.dict(), "is_selected": not p.is_selected})
+            if p.id == param_id
+            else p
+            for p in self.add_param_options
+        ]
+
+    @rx.event
+    async def save_add_params(self):
+        """Append selected params to CampaignExam.selected_param_ids and reload."""
+        section_id = self.active_section_id
+        campaign_id = self.cp_campaign_id
+        selected = [p for p in self.add_param_options if p.is_selected]
+        if not selected:
+            self.add_param_error = "Sélectionnez au moins un test."
+            return
+        self.is_saving_add_params = True
+        self.add_param_error = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.campaign.campaign_exam import CampaignExam
+
+                ce = CampaignExam.get_or_none(
+                    (CampaignExam.campaign == campaign_id)
+                    & (CampaignExam.exam_type_ref == section_id)
+                )
+                if ce:
+                    current = list(ce.selected_param_ids or [])
+                    current += [p.id for p in selected]
+                    ce.selected_param_ids = current
+                    ce.save()
+            self.show_add_param_dialog = False
+            self.add_param_options = []
+            await self._load_active_params(section_id)
+        except Exception as e:
+            self.add_param_error = str(e)
+        finally:
+            self.is_saving_add_params = False
+
     # ── PSC doctor interpretation ─────────────────────────────────────────
 
     @rx.event
@@ -1161,7 +1278,7 @@ class CampaignPatientExamsState(ReflexMainState):
                 campaign_exams = list(
                     CampaignExam.select()
                     .where(CampaignExam.campaign == campaign_id)
-                    .order_by(CampaignExam.id)
+                    .order_by(CampaignExam.created_at)
                 )
 
                 # Fallback: if no CampaignExam entries exist the campaign was configured
@@ -1373,6 +1490,11 @@ class CampaignPatientExamsState(ReflexMainState):
                             is_computed=bool(p.is_computed),
                             formula=p.formula or "",
                             code=p.code or "",
+                            label_normal=p.label_normal or "",
+                            label_low=p.label_low or "",
+                            label_high=p.label_high or "",
+                            label_critical_low=p.label_critical_low or "",
+                            label_critical_high=p.label_critical_high or "",
                         )
                     )
                 # Initial pass: compute formula-based params from saved non-computed values
