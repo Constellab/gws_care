@@ -1,10 +1,12 @@
-"""Settings page component — tabs for Import, User Roles, and Notifications config."""
+"""Settings page component — tabs for Import, User Roles, Notifications config, and Exam Types."""
 
 import reflex as rx
 from gws_reflex_main import main_component
 
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
+from ..exam_types.exam_types_component import exam_types_tab_content
+from ..exam_types.exam_types_state import ExamTypesState
 from ..notifications.notifications_state import NotificationsState
 from .admin_state import AdminState, EntityOption, UserRoleRowDTO
 from .database_state import FLUSH_CONFIRM_PHRASE, DatabaseState
@@ -29,6 +31,7 @@ _ROLE_COLORS = {
 
 
 # ── User Roles tab ─────────────────────────────────────────────────────────────
+
 
 def _role_toggle(user: UserRoleRowDTO, role: str) -> rx.Component:
     """A toggle badge/button for a single role on a user row."""
@@ -139,12 +142,19 @@ def _account_admin_section(user: UserRoleRowDTO) -> rx.Component:
                         rx.hstack(
                             rx.text(opt.label, size="1"),
                             rx.icon(
-                                "x", size=10, cursor="pointer",
-                                on_click=lambda: AdminState.remove_account_link(user.id, "ACCOUNT_ADMIN", opt.id),
+                                "x",
+                                size=10,
+                                cursor="pointer",
+                                on_click=lambda: AdminState.remove_account_link(
+                                    user.id, "ACCOUNT_ADMIN", opt.id
+                                ),
                             ),
-                            spacing="1", align="center",
+                            spacing="1",
+                            align="center",
                         ),
-                        color_scheme="orange", variant="soft", size="1",
+                        color_scheme="orange",
+                        variant="soft",
+                        size="1",
                     ),
                 ),
                 wrap="wrap",
@@ -289,6 +299,7 @@ def _user_roles_tab() -> rx.Component:
 
 # ── Import tab ─────────────────────────────────────────────────────────────────
 
+
 def _import_tab() -> rx.Component:
     return rx.vstack(
         rx.card(
@@ -347,6 +358,7 @@ def _import_tab() -> rx.Component:
 
 
 # ── General tab ───────────────────────────────────────────────────────────────
+
 
 def _general_tab() -> rx.Component:
     return rx.vstack(
@@ -427,11 +439,17 @@ def _general_tab() -> rx.Component:
                     ),
                     rx.cond(
                         GeneralSettingsState.save_page_size_success != "",
-                        rx.badge(GeneralSettingsState.save_page_size_success, color_scheme="green", size="1"),
+                        rx.badge(
+                            GeneralSettingsState.save_page_size_success,
+                            color_scheme="green",
+                            size="1",
+                        ),
                     ),
                     rx.cond(
                         GeneralSettingsState.save_page_size_error != "",
-                        rx.badge(GeneralSettingsState.save_page_size_error, color_scheme="red", size="1"),
+                        rx.badge(
+                            GeneralSettingsState.save_page_size_error, color_scheme="red", size="1"
+                        ),
                     ),
                     spacing="3",
                     align="center",
@@ -470,9 +488,13 @@ def _general_tab() -> rx.Component:
                                     "none",
                                 ),
                             ),
-                            rx.text(LanguageState.tr["theme_green"], size="1", weight=rx.cond(
-                                GeneralSettingsState.color_theme == "green", "bold", "regular"
-                            )),
+                            rx.text(
+                                LanguageState.tr["theme_green"],
+                                size="1",
+                                weight=rx.cond(
+                                    GeneralSettingsState.color_theme == "green", "bold", "regular"
+                                ),
+                            ),
                             align="center",
                             spacing="1",
                         ),
@@ -494,9 +516,13 @@ def _general_tab() -> rx.Component:
                                     "none",
                                 ),
                             ),
-                            rx.text(LanguageState.tr["theme_pink"], size="1", weight=rx.cond(
-                                GeneralSettingsState.color_theme == "pink", "bold", "regular"
-                            )),
+                            rx.text(
+                                LanguageState.tr["theme_pink"],
+                                size="1",
+                                weight=rx.cond(
+                                    GeneralSettingsState.color_theme == "pink", "bold", "regular"
+                                ),
+                            ),
                             align="center",
                             spacing="1",
                         ),
@@ -518,9 +544,13 @@ def _general_tab() -> rx.Component:
                                     "none",
                                 ),
                             ),
-                            rx.text(LanguageState.tr["theme_purple"], size="1", weight=rx.cond(
-                                GeneralSettingsState.color_theme == "purple", "bold", "regular"
-                            )),
+                            rx.text(
+                                LanguageState.tr["theme_purple"],
+                                size="1",
+                                weight=rx.cond(
+                                    GeneralSettingsState.color_theme == "purple", "bold", "regular"
+                                ),
+                            ),
                             align="center",
                             spacing="1",
                         ),
@@ -533,7 +563,9 @@ def _general_tab() -> rx.Component:
                 ),
                 rx.cond(
                     GeneralSettingsState.save_theme_success != "",
-                    rx.badge(GeneralSettingsState.save_theme_success, color_scheme="green", size="1"),
+                    rx.badge(
+                        GeneralSettingsState.save_theme_success, color_scheme="green", size="1"
+                    ),
                 ),
                 rx.cond(
                     GeneralSettingsState.save_theme_error != "",
@@ -547,6 +579,7 @@ def _general_tab() -> rx.Component:
         width="100%",
         spacing="4",
     )
+
 
 def _day_chip(day: int) -> rx.Component:
     return rx.badge(
@@ -569,6 +602,7 @@ def _day_chip(day: int) -> rx.Component:
 
 
 # ── Notifications config tab ───────────────────────────────────────────────────
+
 
 def _notifications_tab() -> rx.Component:
     return rx.vstack(
@@ -593,7 +627,9 @@ def _notifications_tab() -> rx.Component:
                     align="center",
                 ),
                 rx.vstack(
-                    rx.text("Remind patients N days before appointment:", size="2", weight="medium"),
+                    rx.text(
+                        "Remind patients N days before appointment:", size="2", weight="medium"
+                    ),
                     rx.hstack(
                         rx.foreach(NotificationsState.pref_days, _day_chip),
                         wrap="wrap",
@@ -624,11 +660,21 @@ def _notifications_tab() -> rx.Component:
                 ),
                 rx.cond(
                     NotificationsState.pref_error != "",
-                    rx.callout(NotificationsState.pref_error, icon="triangle-alert", color_scheme="red", size="1"),
+                    rx.callout(
+                        NotificationsState.pref_error,
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
+                    ),
                 ),
                 rx.cond(
                     NotificationsState.pref_success != "",
-                    rx.callout(NotificationsState.pref_success, icon="check", color_scheme="green", size="1"),
+                    rx.callout(
+                        NotificationsState.pref_success,
+                        icon="check",
+                        color_scheme="green",
+                        size="1",
+                    ),
                 ),
                 rx.hstack(
                     rx.button(
@@ -764,18 +810,38 @@ def _notifications_tab() -> rx.Component:
                 # Feedback
                 rx.cond(
                     NotificationsState.smtp_error != "",
-                    rx.callout(NotificationsState.smtp_error, icon="triangle-alert", color_scheme="red", size="1"),
+                    rx.callout(
+                        NotificationsState.smtp_error,
+                        icon="triangle-alert",
+                        color_scheme="red",
+                        size="1",
+                    ),
                 ),
                 rx.cond(
                     NotificationsState.smtp_success != "",
-                    rx.callout(NotificationsState.smtp_success, icon="check", color_scheme="green", size="1"),
+                    rx.callout(
+                        NotificationsState.smtp_success,
+                        icon="check",
+                        color_scheme="green",
+                        size="1",
+                    ),
                 ),
                 rx.cond(
                     NotificationsState.smtp_test_result.contains("successful"),
-                    rx.callout(NotificationsState.smtp_test_result, icon="circle-check", color_scheme="green", size="1"),
+                    rx.callout(
+                        NotificationsState.smtp_test_result,
+                        icon="circle-check",
+                        color_scheme="green",
+                        size="1",
+                    ),
                     rx.cond(
                         NotificationsState.smtp_test_result != "",
-                        rx.callout(NotificationsState.smtp_test_result, icon="triangle-alert", color_scheme="red", size="1"),
+                        rx.callout(
+                            NotificationsState.smtp_test_result,
+                            icon="triangle-alert",
+                            color_scheme="red",
+                            size="1",
+                        ),
                     ),
                 ),
                 # Buttons
@@ -823,7 +889,9 @@ def _notifications_tab() -> rx.Component:
                     ),
                     rx.cond(
                         NotificationsState.reminder_result != "",
-                        rx.text(NotificationsState.reminder_result, size="2", color="var(--gray-10)"),
+                        rx.text(
+                            NotificationsState.reminder_result, size="2", color="var(--gray-10)"
+                        ),
                     ),
                     spacing="3",
                     align="center",
@@ -839,6 +907,7 @@ def _notifications_tab() -> rx.Component:
 
 
 # ── Database tab (dev mode only) ───────────────────────────────────────────────
+
 
 def _flush_dialog() -> rx.Component:
     return rx.dialog.root(
@@ -894,11 +963,22 @@ def _flush_dialog() -> rx.Component:
                     rx.button(
                         rx.cond(
                             DatabaseState.db_flush_is_flushing,
-                            rx.hstack(rx.spinner(size="2"), rx.text("Flushing…"), spacing="2", align="center"),
-                            rx.hstack(rx.icon("trash-2", size=14), rx.text("Flush database"), spacing="2", align="center"),
+                            rx.hstack(
+                                rx.spinner(size="2"),
+                                rx.text("Flushing…"),
+                                spacing="2",
+                                align="center",
+                            ),
+                            rx.hstack(
+                                rx.icon("trash-2", size=14),
+                                rx.text("Flush database"),
+                                spacing="2",
+                                align="center",
+                            ),
                         ),
                         on_click=DatabaseState.flush_database,
-                        disabled=~DatabaseState.flush_confirm_valid | DatabaseState.db_flush_is_flushing,
+                        disabled=~DatabaseState.flush_confirm_valid
+                        | DatabaseState.db_flush_is_flushing,
                         color_scheme="red",
                         size="2",
                     ),
@@ -971,6 +1051,7 @@ def _database_tab() -> rx.Component:
 
 
 # ── Page ───────────────────────────────────────────────────────────────────────
+
 
 def _settings_header_admin() -> rx.Component:
     return rx.hstack(
@@ -1047,6 +1128,15 @@ def settings_page() -> rx.Component:
                                 ),
                                 value="notifications",
                             ),
+                            rx.tabs.trigger(
+                                rx.hstack(
+                                    rx.icon("flask-conical", size=15),
+                                    rx.text("Référentiel examens"),
+                                    spacing="1",
+                                    align="center",
+                                ),
+                                value="referentiel",
+                            ),
                             rx.cond(
                                 DatabaseState.is_dev_mode,
                                 rx.tabs.trigger(
@@ -1064,7 +1154,12 @@ def settings_page() -> rx.Component:
                         rx.tabs.content(_general_tab(), value="general", padding_top="1rem"),
                         rx.tabs.content(_import_tab(), value="import", padding_top="1rem"),
                         rx.tabs.content(_user_roles_tab(), value="roles", padding_top="1rem"),
-                        rx.tabs.content(_notifications_tab(), value="notifications", padding_top="1rem"),
+                        rx.tabs.content(
+                            _notifications_tab(), value="notifications", padding_top="1rem"
+                        ),
+                        rx.tabs.content(
+                            exam_types_tab_content(), value="referentiel", padding_top="1rem"
+                        ),
                         rx.cond(
                             DatabaseState.is_dev_mode,
                             rx.tabs.content(_database_tab(), value="database", padding_top="1rem"),

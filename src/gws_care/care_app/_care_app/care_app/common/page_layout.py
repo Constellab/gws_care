@@ -332,7 +332,6 @@ def _sidebar_content() -> rx.Component:
                         "/campaign-visits",
                         additional_active_route_prefixes=["/visit/"],
                     ),
-                    _nav_item("flask-conical", LanguageState.tr["nav_exam_types"], "/exam-types"),
                     # Only doctors see "my assigned exams"
                     rx.cond(
                         RoleState.is_doctor,
