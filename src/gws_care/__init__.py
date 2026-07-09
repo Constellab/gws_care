@@ -88,6 +88,7 @@ from gws_care.core.migration_58 import Migration580
 from gws_care.core.migration_59 import Migration590
 from gws_care.core.migration_60 import Migration600
 from gws_care.core.migration_61 import Migration610
+from gws_care.core.migration_62 import Migration620
 
 # Dashboard
 from gws_care.dashboard.dashboard_snapshot import DashboardSnapshot
@@ -111,6 +112,7 @@ from gws_care.exam.exam_parameter_result import ExamParameterResult
 from gws_care.exam.exam_result import ExamResult
 from gws_care.exam.exam_type_model import ExamTypeModel
 from gws_care.exam_type_ref.exam_parameter import ExamParameter
+from gws_care.exam_type_ref.exam_param_age_range import ExamParameterAgeRange
 
 # Exam type referential (configurable exam types + parameters)
 from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef

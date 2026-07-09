@@ -32,16 +32,17 @@ def _preview_row(row: ImportRowResultDTO) -> rx.Component:
 
 def _format_requirements() -> rx.Component:
     """Show column requirements specific to the current import type."""
+    tr = LanguageState.tr
     return rx.cond(
         ImportState.import_type == "patients",
         rx.callout(
             rx.vstack(
-                rx.text("Colonnes obligatoires :", size="2", weight="medium"),
+                rx.text(tr["required_cols_label"], size="2", weight="medium"),
                 rx.code(
-                    "last_name, first_name, date_of_birth (YYYY-MM-DD), gender (M / F / Other)",
+                    "last_name, first_name, date_of_birth (YYYY-MM-DD), gender (M / F)",
                     size="1",
                 ),
-                rx.text("Colonnes optionnelles :", size="2", weight="medium"),
+                rx.text(tr["optional_cols_label"], size="2", weight="medium"),
                 rx.code(
                     "birth_name, address, address_complement, postal_code, city, country, "
                     "phone, email, social_security_number",
@@ -58,9 +59,9 @@ def _format_requirements() -> rx.Component:
             ImportState.import_type == "doctors",
             rx.callout(
                 rx.vstack(
-                    rx.text("Colonnes obligatoires :", size="2", weight="medium"),
+                    rx.text(tr["required_cols_label"], size="2", weight="medium"),
                     rx.code("last_name, first_name", size="1"),
-                    rx.text("Colonnes optionnelles :", size="2", weight="medium"),
+                    rx.text(tr["optional_cols_label"], size="2", weight="medium"),
                     rx.code(
                         "specialization, phone, email, rpps_number",
                         size="1",
@@ -76,9 +77,9 @@ def _format_requirements() -> rx.Component:
                 ImportState.import_type == "accounts_individual",
                 rx.callout(
                     rx.vstack(
-                        rx.text("Colonnes obligatoires :", size="2", weight="medium"),
+                        rx.text(tr["required_cols_label"], size="2", weight="medium"),
                         rx.code("contact_last_name, contact_first_name", size="1"),
-                        rx.text("Colonnes optionnelles :", size="2", weight="medium"),
+                        rx.text(tr["optional_cols_label"], size="2", weight="medium"),
                         rx.code(
                             "address, postal_code, city, phone, email",
                             size="1",
@@ -94,23 +95,24 @@ def _format_requirements() -> rx.Component:
                     ImportState.import_type == "exam_types",
                     rx.callout(
                         rx.vstack(
-                            rx.text("Colonnes obligatoires :", size="2", weight="medium"),
+                            rx.text(tr["required_cols_label"], size="2", weight="medium"),
                             rx.code(
-                                "type_examen, categorie (BIOLOGY/URINE/CLINICAL/IMAGING/ECG/ORL/OTHER)",
+                                "exam_type, category (BIOLOGY/URINE/CLINICAL/IMAGING/ECG/ORL/OTHER)",
                                 size="1",
                             ),
-                            rx.text("Colonnes optionnelles :", size="2", weight="medium"),
+                            rx.text(tr["optional_cols_label"], size="2", weight="medium"),
                             rx.code(
-                                "departement, description, parametre, code, type_valeur (NUMERIC/TEXT/BOOLEAN), unite, "
-                                "ref_basse, ref_haute, critique_bas, critique_haut, "
-                                "ref_basse_H, ref_haute_H, critique_bas_H, critique_haut_H, "
-                                "ref_basse_F, ref_haute_F, critique_bas_F, critique_haut_F, "
-                                "label_normal, label_bas, label_haut, label_critique_bas, label_critique_haut",
+                                "department, description, parameter, code, value_type (NUMERIC/TEXT/BOOLEAN), unit, "
+                                "is_computed (true/false), formula, "
+                                "age_min, age_max, age_gender (ALL/M/F), "
+                                "ref_low, ref_high, critical_low, critical_high, "
+                                "label_normal, label_low, label_high, label_critical_low, label_critical_high",
                                 size="1",
                             ),
                             rx.text(
-                                "Chaque ligne = un paramètre. Plusieurs lignes avec le même type_examen "
-                                "créent les paramètres d'un même examen. Laisser parametre vide = créer l'examen sans paramètre.",
+                                "Two row types: (1) Parameter row — fill exam_type, category, parameter, code, value_type, unit. "
+                                "(2) Age range row — repeat exam_type + parameter, fill age_min/age_max/age_gender and ref/critical/label values. "
+                                "One age range row per age bracket or gender. Leave parameter blank to create the exam type only.",
                                 size="1",
                                 color="var(--gray-9)",
                             ),
@@ -123,9 +125,9 @@ def _format_requirements() -> rx.Component:
                     ),
                     rx.callout(
                         rx.vstack(
-                            rx.text("Colonnes obligatoires :", size="2", weight="medium"),
+                            rx.text(tr["required_cols_label"], size="2", weight="medium"),
                             rx.code("name", size="1"),
-                            rx.text("Colonnes optionnelles :", size="2", weight="medium"),
+                            rx.text(tr["optional_cols_label"], size="2", weight="medium"),
                             rx.code(
                                 "registration_number, address, postal_code, city, "
                                 "contact_first_name, contact_last_name, phone, email",
@@ -265,23 +267,24 @@ def _import_summary() -> rx.Component:
 
 def import_dialog() -> rx.Component:
     """Controlled dialog for bulk CSV import (patients or accounts)."""
+    tr = LanguageState.tr
     return rx.dialog.root(
         rx.dialog.content(
             # Title
             rx.dialog.title(
                 rx.cond(
                     ImportState.import_type == "patients",
-                    "Importer des patients depuis un CSV",
+                    tr["import_patients_csv_title"],
                     rx.cond(
                         ImportState.import_type == "doctors",
-                        "Importer des médecins depuis un CSV",
+                        tr["import_doctors_csv_title"],
                         rx.cond(
                             ImportState.import_type == "accounts_individual",
-                            "Importer des comptes particuliers depuis un CSV",
+                            tr["import_accounts_individual_csv_title"],
                             rx.cond(
                                 ImportState.import_type == "exam_types",
-                                "Importer le référentiel examens depuis un CSV",
-                                "Importer des comptes entreprises depuis un CSV",
+                                tr["import_exam_types_csv_title"],
+                                tr["import_accounts_company_csv_title"],
                             ),
                         ),
                     ),
@@ -290,17 +293,17 @@ def import_dialog() -> rx.Component:
             rx.dialog.description(
                 rx.cond(
                     ImportState.import_type == "patients",
-                    "Créez plusieurs dossiers patients en une seule importation CSV.",
+                    tr["import_patients_csv_desc"],
                     rx.cond(
                         ImportState.import_type == "doctors",
-                        "Enregistrez plusieurs médecins en une seule importation CSV.",
+                        tr["import_doctors_csv_desc"],
                         rx.cond(
                             ImportState.import_type == "accounts_individual",
-                            "Créez plusieurs comptes particuliers en une seule importation CSV.",
+                            tr["import_accounts_individual_csv_desc"],
                             rx.cond(
                                 ImportState.import_type == "exam_types",
-                                "Créez ou complétez les types d'examens et leurs paramètres en une seule importation CSV.",
-                                "Créez plusieurs comptes entreprises en une seule importation CSV.",
+                                tr["import_exam_types_csv_desc"],
+                                tr["import_accounts_company_csv_desc"],
                             ),
                         ),
                     ),
@@ -349,7 +352,7 @@ def import_dialog() -> rx.Component:
             # Footer buttons
             rx.hstack(
                 rx.button(
-                    "Close",
+                    tr["close_btn"],
                     on_click=ImportState.close_import_dialog,
                     variant="soft",
                     color_scheme="gray",
@@ -373,20 +376,20 @@ def import_dialog() -> rx.Component:
                             ImportState.is_importing,
                             rx.hstack(
                                 rx.spinner(size="2"),
-                                rx.text(LanguageState.tr["importing_text"]),
+                                rx.text(tr["importing_text"]),
                                 spacing="2",
                                 align="center",
                             ),
                             rx.hstack(
                                 rx.icon("upload", size=14),
-                                rx.text(LanguageState.tr["import_btn"]),
+                                rx.text(tr["import_btn"]),
                                 rx.badge(
                                     ImportState.valid_row_count,
                                     color_scheme="blue",
                                     variant="soft",
                                     size="1",
                                 ),
-                                rx.text(LanguageState.tr["rows_suffix"]),
+                                rx.text(tr["rows_suffix"]),
                                 spacing="2",
                                 align="center",
                             ),

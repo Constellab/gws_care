@@ -45,8 +45,10 @@ class ExamFormulaEngine:
         Raises:
             FormulaEvaluationError
         """
+        # Accept ^ as power operator (alias for **)
+        normalized = formula.strip().replace("^", "**")
         try:
-            tree = ast.parse(formula.strip(), mode="eval")
+            tree = ast.parse(normalized, mode="eval")
         except SyntaxError as e:
             raise FormulaEvaluationError(f"Formule invalide : {e}") from e
         return float(cls._eval(tree.body, context))
@@ -102,8 +104,9 @@ class ExamFormulaEngine:
         if not formula.strip():
             return "La formule ne peut pas être vide."
 
+        normalized = formula.strip().replace("^", "**")
         try:
-            tree = ast.parse(formula.strip(), mode="eval")
+            tree = ast.parse(normalized, mode="eval")
         except SyntaxError as e:
             return f"Syntaxe invalide : {e}"
 

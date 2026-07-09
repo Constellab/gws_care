@@ -35,10 +35,10 @@ from .consultation_detail_state import (
 def _visit_status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
-        ("scheduled", rx.badge("Planifiée", color_scheme="blue", variant="soft", size="1")),
+        ("scheduled", rx.badge("Scheduled", color_scheme="blue", variant="soft", size="1")),
         ("in_progress", rx.badge("En cours", color_scheme="amber", variant="soft", size="1")),
-        ("done", rx.badge("Terminée", color_scheme="green", variant="soft", size="1")),
-        ("cancelled", rx.badge("Annulée", color_scheme="red", variant="soft", size="1")),
+        ("done", rx.badge("Completed", color_scheme="green", variant="soft", size="1")),
+        ("cancelled", rx.badge("Cancelled", color_scheme="red", variant="soft", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -102,13 +102,14 @@ def _exam_status_dot(status: str) -> rx.Component:
 
 
 def _param_status_badge(p: ExamParamRowVM) -> rx.Component:
+    # Use configured labels when available, fall back to default labels
     label = rx.match(
         p.status,
-        ("NORMAL", p.label_normal),
-        ("LOW", p.label_low),
-        ("HIGH", p.label_high),
-        ("CRITICAL_LOW", p.label_critical_low),
-        ("CRITICAL_HIGH", p.label_critical_high),
+        ("NORMAL", rx.cond(p.label_normal != "", p.label_normal, "Normal")),
+        ("LOW", rx.cond(p.label_low != "", p.label_low, "Bas")),
+        ("HIGH", rx.cond(p.label_high != "", p.label_high, "Élevé")),
+        ("CRITICAL_LOW", rx.cond(p.label_critical_low != "", p.label_critical_low, "Critique bas")),
+        ("CRITICAL_HIGH", rx.cond(p.label_critical_high != "", p.label_critical_high, "Critique haut")),
         "",
     )
     variant = rx.match(
@@ -158,7 +159,7 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                             c.status == "scheduled",
                             rx.button(
                                 rx.icon("play", size=14),
-                                "Démarrer",
+                                "Start",
                                 on_click=ConsultationDetailState.start_consultation,
                                 loading=ConsultationDetailState.is_starting,
                                 size="2",
@@ -170,7 +171,7 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                             (c.status == "scheduled") | (c.status == "in_progress"),
                             rx.button(
                                 rx.icon("check", size=14),
-                                "Clôturer",
+                                "Close",
                                 on_click=ConsultationDetailState.open_close_dialog,
                                 size="2",
                                 color_scheme="green",
@@ -182,7 +183,7 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                             (c.status == "scheduled") | (c.status == "in_progress"),
                             rx.button(
                                 rx.icon("x", size=14),
-                                "Annuler",
+                                "Cancel",
                                 on_click=ConsultationDetailState.open_cancel_dialog,
                                 size="2",
                                 color_scheme="red",
@@ -203,10 +204,10 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                     rx.callout.icon(rx.icon("ban", size=16)),
                     rx.callout.text(
                         rx.vstack(
-                            rx.text("Rendez-vous annulé", weight="bold", size="2"),
+                            rx.text("Appointment cancelled", weight="bold", size="2"),
                             rx.cond(
                                 c.cancellation_reason != "",
-                                rx.text("Motif : " + c.cancellation_reason, size="2"),
+                                rx.text("Reason: " + c.cancellation_reason, size="2"),
                                 rx.fragment(),
                             ),
                             spacing="0",
@@ -237,7 +238,7 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                     ),
                 ),
                 _info_card(
-                    "Date prévue",
+                    "Scheduled date",
                     rx.cond(
                         c.scheduled_at != "",
                         rx.text(c.scheduled_at[:10], size="2"),
@@ -254,7 +255,7 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                 c.is_campaign,
                 rx.hstack(
                     _info_card(
-                        "Médecin clinique",
+                        "Clinical doctor",
                         rx.hstack(
                             rx.cond(
                                 c.clinic_doctor_name != "",
@@ -276,7 +277,7 @@ def _consultation_header(c: ConsultationDTO) -> rx.Component:
                         ),
                     ),
                     _info_card(
-                        "Médecin du travail",
+                        "Occupational doctor",
                         rx.hstack(
                             rx.cond(
                                 c.work_doctor_name != "",
@@ -407,20 +408,20 @@ def _tab_bar() -> rx.Component:
 def _exam_summary_status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
-        ("todo", rx.badge("En attente", color_scheme="gray", variant="soft", size="1")),
+        ("todo", rx.badge("Pending", color_scheme="gray", variant="soft", size="1")),
         (
             "in_progress_results",
-            rx.badge("Saisie en cours", color_scheme="orange", variant="soft", size="1"),
+            rx.badge("Entry in progress", color_scheme="orange", variant="soft", size="1"),
         ),
         (
             "transmitted_to_lab",
-            rx.badge("Transmis au labo", color_scheme="amber", variant="soft", size="1"),
+            rx.badge("Sent to lab", color_scheme="amber", variant="soft", size="1"),
         ),
         (
             "in_progress_interpretation",
-            rx.badge("Interprétation", color_scheme="blue", variant="soft", size="1"),
+            rx.badge("Interpretation", color_scheme="blue", variant="soft", size="1"),
         ),
-        ("done", rx.badge("Terminé", color_scheme="green", variant="soft", size="1")),
+        ("done", rx.badge("Completed", color_scheme="green", variant="soft", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -432,7 +433,7 @@ def _exam_summary_row(exam: ExamRowDTO) -> rx.Component:
         rx.table.cell(_exam_summary_status_badge(exam.status)),
         rx.table.cell(
             rx.link(
-                "Voir",
+                "View",
                 on_click=lambda: ConsultationDetailState.set_active_tab(exam.id),
                 size="2",
                 cursor="pointer",
@@ -455,7 +456,7 @@ def _prescription_row(p: PrescriptionRowDTO) -> rx.Component:
         rx.table.cell(rx.text(p.prescribed_by_name, size="2")),
         rx.table.cell(
             rx.link(
-                "Voir",
+                "View",
                 on_click=lambda: rx.redirect(f"/prescription/{p.id}"),
                 size="2",
                 cursor="pointer",
@@ -508,7 +509,7 @@ def _tab_informations() -> rx.Component:
                     value=ConsultationDetailState.form_reason,
                     on_change=ConsultationDetailState.set_form_reason,
                     on_blur=ConsultationDetailState.auto_save_info,
-                    placeholder="Décrivez le motif de la consultation…",
+                    placeholder="Describe the reason for the consultation…",
                     size="2",
                     width="100%",
                     rows="3",
@@ -532,7 +533,7 @@ def _tab_informations() -> rx.Component:
         rx.vstack(
             rx.hstack(
                 rx.icon("history", size=16, color="var(--accent-9)"),
-                rx.heading("Antécédents médicaux", size="4"),
+                rx.heading("Medical history", size="4"),
                 spacing="2",
                 align="center",
             ),
@@ -543,7 +544,7 @@ def _tab_informations() -> rx.Component:
                     value=ConsultationDetailState.form_history,
                     on_change=ConsultationDetailState.set_form_history,
                     on_blur=ConsultationDetailState.auto_save_info,
-                    placeholder="Antécédents médicaux, traitements en cours, allergies…",
+                    placeholder="Medical history, current treatments, allergies…",
                     size="2",
                     width="100%",
                     rows="4",
@@ -607,13 +608,13 @@ def _tab_informations() -> rx.Component:
             ),
             rx.cond(
                 ConsultationDetailState.exams.length() == 0,
-                rx.text("Aucun examen lié à cette consultation.", size="2", color="var(--gray-8)"),
+                rx.text("No exam linked to this consultation.", size="2", color="var(--gray-8)"),
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
                             rx.table.column_header_cell(rx.text("Date", size="2")),
-                            rx.table.column_header_cell(rx.text("Type d'examen", size="2")),
-                            rx.table.column_header_cell(rx.text("Statut", size="2")),
+                            rx.table.column_header_cell(rx.text("Exam type", size="2")),
+                            rx.table.column_header_cell(rx.text("Status", size="2")),
                             rx.table.column_header_cell(rx.text("", size="2")),
                         )
                     ),
@@ -630,14 +631,14 @@ def _tab_informations() -> rx.Component:
         rx.vstack(
             rx.hstack(
                 rx.icon("pill", size=16, color="var(--accent-9)"),
-                rx.heading("Ordonnances", size="4"),
+                rx.heading("Prescriptions", size="4"),
                 rx.spacer(),
                 rx.cond(
                     (~ConsultationDetailState.is_patient_user)
                     & (ConsultationDetailState.consultation.status == "in_progress"),
                     rx.button(
                         rx.icon("plus", size=14),
-                        "Ajouter",
+                        "Add",
                         on_click=ConsultationDetailState.open_new_prescription_dialog,
                         size="1",
                         variant="soft",
@@ -650,14 +651,14 @@ def _tab_informations() -> rx.Component:
             rx.cond(
                 ConsultationDetailState.prescriptions.length() == 0,
                 rx.text(
-                    "Aucune ordonnance liée à cette consultation.", size="2", color="var(--gray-8)"
+                    "No prescription linked to this consultation.", size="2", color="var(--gray-8)"
                 ),
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
                             rx.table.column_header_cell(rx.text("Date", size="2")),
-                            rx.table.column_header_cell(rx.text("Diagnostic", size="2")),
-                            rx.table.column_header_cell(rx.text("Médecin", size="2")),
+                            rx.table.column_header_cell(rx.text("Diagnosis", size="2")),
+                            rx.table.column_header_cell(rx.text("Doctor", size="2")),
                             rx.table.column_header_cell(rx.text("", size="2")),
                         )
                     ),
@@ -675,14 +676,14 @@ def _tab_informations() -> rx.Component:
         rx.vstack(
             rx.hstack(
                 rx.icon("file-check", size=16, color="var(--accent-9)"),
-                rx.heading("Certificats médicaux", size="4"),
+                rx.heading("Medical certificates", size="4"),
                 rx.spacer(),
                 rx.cond(
                     (~ConsultationDetailState.is_patient_user)
                     & (ConsultationDetailState.consultation.status == "in_progress"),
                     rx.button(
                         rx.icon("plus", size=14),
-                        "Émettre",
+                        "Issue",
                         on_click=ConsultationDetailState.open_new_certificate_dialog,
                         size="1",
                         variant="soft",
@@ -695,14 +696,14 @@ def _tab_informations() -> rx.Component:
             rx.cond(
                 ConsultationDetailState.certificates.length() == 0,
                 rx.text(
-                    "Aucun certificat lié à cette consultation.", size="2", color="var(--gray-8)"
+                    "No certificate linked to this consultation.", size="2", color="var(--gray-8)"
                 ),
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
                             rx.table.column_header_cell(rx.text("Date", size="2")),
-                            rx.table.column_header_cell(rx.text("Aptitude", size="2")),
-                            rx.table.column_header_cell(rx.text("Émis par", size="2")),
+                            rx.table.column_header_cell(rx.text("Fitness", size="2")),
+                            rx.table.column_header_cell(rx.text("Issued by", size="2")),
                             rx.table.column_header_cell(rx.text("", size="2")),
                         )
                     ),
@@ -733,7 +734,7 @@ def _exam_status_banner(status: str) -> rx.Component:
         (
             "todo",
             rx.callout(
-                "Examen en attente de saisie. Renseignez les résultats ci-dessous.",
+                "Exam pending entry. Enter the results below.",
                 icon="info",
                 color_scheme="gray",
                 size="1",
@@ -742,7 +743,7 @@ def _exam_status_banner(status: str) -> rx.Component:
         (
             "in_progress_results",
             rx.callout(
-                "Saisie des résultats en cours.",
+                "Results entry in progress.",
                 icon="flask-conical",
                 color_scheme="orange",
                 size="1",
@@ -751,7 +752,7 @@ def _exam_status_banner(status: str) -> rx.Component:
         (
             "transmitted_to_lab",
             rx.callout(
-                "Examen transmis au laboratoire — en attente des résultats.",
+                "Exam sent to the laboratory — awaiting results.",
                 icon="flask-conical",
                 color_scheme="amber",
                 size="1",
@@ -760,7 +761,7 @@ def _exam_status_banner(status: str) -> rx.Component:
         (
             "in_progress_interpretation",
             rx.callout(
-                "Résultats transmis — en attente d'interprétation médicale.",
+                "Results transmitted — awaiting medical interpretation.",
                 icon="clock",
                 color_scheme="blue",
                 size="1",
@@ -769,7 +770,7 @@ def _exam_status_banner(status: str) -> rx.Component:
         (
             "done",
             rx.callout(
-                "Examen terminé et interprété.",
+                "Exam completed and interpreted.",
                 icon="circle-check",
                 color_scheme="green",
                 size="1",
@@ -796,8 +797,8 @@ def _param_input_cell(p: ExamParamRowVM) -> rx.Component:
                 rx.select.root(
                     rx.select.trigger(placeholder="—", size="1", width="90px"),
                     rx.select.content(
-                        rx.select.item("Positif", value="true"),
-                        rx.select.item("Négatif", value="false"),
+                        rx.select.item("Positive", value="true"),
+                        rx.select.item("Negative", value="false"),
                     ),
                     value=p.value_boolean,
                     on_change=lambda v: ConsultationDetailState.set_param_boolean(p.param_id, v),
@@ -989,7 +990,7 @@ def _tab_exam_params() -> rx.Component:
                 # Delete exam button
                 rx.button(
                     rx.icon("trash-2", size=14),
-                    "Supprimer",
+                    "Delete",
                     on_click=ConsultationDetailState.open_delete_exam_dialog,
                     size="1",
                     variant="soft",
@@ -1013,10 +1014,10 @@ def _tab_exam_params() -> rx.Component:
                         rx.table.root(
                             rx.table.header(
                                 rx.table.row(
-                                    rx.table.column_header_cell(rx.text("Paramètre", size="2")),
-                                    rx.table.column_header_cell(rx.text("Valeur", size="2")),
-                                    rx.table.column_header_cell(rx.text("Unité", size="2")),
-                                    rx.table.column_header_cell(rx.text("Référence", size="2")),
+                                    rx.table.column_header_cell(rx.text("Parameter", size="2")),
+                                    rx.table.column_header_cell(rx.text("Value", size="2")),
+                                    rx.table.column_header_cell(rx.text("Unit", size="2")),
+                                    rx.table.column_header_cell(rx.text("Reference", size="2")),
                                     rx.table.column_header_cell(rx.text("Statut", size="2")),
                                     rx.table.column_header_cell(""),
                                 )
@@ -1039,7 +1040,7 @@ def _tab_exam_params() -> rx.Component:
                         rx.vstack(
                             rx.hstack(
                                 rx.text(
-                                    "* paramètre requis",
+                                    "* required parameter",
                                     size="1",
                                     color="var(--gray-8)",
                                     style={"font_style": "italic"},
@@ -1047,7 +1048,7 @@ def _tab_exam_params() -> rx.Component:
                                 rx.spacer(),
                                 rx.select.root(
                                     rx.select.trigger(
-                                        placeholder="Choisir une action…", width="260px"
+                                        placeholder="Choose an action…", width="260px"
                                     ),
                                     rx.select.content(
                                         rx.foreach(
@@ -1066,7 +1067,7 @@ def _tab_exam_params() -> rx.Component:
                                         rx.spinner(size="2"),
                                         rx.icon("check", size=14),
                                     ),
-                                    "Valider",
+                                    "Validate",
                                     on_click=ConsultationDetailState.confirm_exam_action,
                                     loading=(
                                         ConsultationDetailState.is_saving_params
@@ -1079,8 +1080,8 @@ def _tab_exam_params() -> rx.Component:
                                 spacing="2",
                             ),
                             rx.text(
-                                "« Enregistrer » sauvegarde sans transmettre — vous pourrez transmettre plus tard. "
-                                "Les autres actions enregistrent et envoient en une seule fois.",
+                                "\"Save\" stores without sending — you can send later. "
+                                "Other actions save and send in one step.",
                                 size="1",
                                 color="var(--gray-8)",
                                 style={"font_style": "italic"},
@@ -1099,14 +1100,14 @@ def _tab_exam_params() -> rx.Component:
                             rx.separator(width="100%"),
                             rx.hstack(
                                 rx.icon("stethoscope", size=16, color="var(--accent-9)"),
-                                rx.heading("Interprétation médicale", size="4"),
+                                rx.heading("Medical interpretation", size="4"),
                                 spacing="2",
                                 align="center",
                             ),
                             rx.text_area(
                                 value=ConsultationDetailState.active_exam_interpretation,
                                 on_change=ConsultationDetailState.set_active_exam_interpretation,
-                                placeholder="Rédigez votre interprétation clinique…",
+                                placeholder="Write your clinical interpretation…",
                                 size="2",
                                 width="100%",
                                 rows="4",
@@ -1115,7 +1116,7 @@ def _tab_exam_params() -> rx.Component:
                                 rx.spacer(),
                                 rx.button(
                                     rx.icon("save", size=14),
-                                    "Enregistrer",
+                                    "Save",
                                     on_click=ConsultationDetailState.save_interpretation,
                                     loading=ConsultationDetailState.is_saving_interpretation,
                                     size="2",
@@ -1125,7 +1126,7 @@ def _tab_exam_params() -> rx.Component:
                                     ConsultationDetailState.consultation.is_campaign,
                                     rx.button(
                                         rx.icon("send", size=14),
-                                        "Transmettre au médecin du travail",
+                                        "Send to occupational doctor",
                                         on_click=ConsultationDetailState.transmit_to_work_doctor,
                                         loading=ConsultationDetailState.is_transmitting,
                                         size="2",
@@ -1136,7 +1137,7 @@ def _tab_exam_params() -> rx.Component:
                                         ConsultationDetailState.active_exam_status == "in_progress_interpretation",
                                         rx.button(
                                             rx.icon("check-circle", size=14),
-                                            "Terminer l'examen",
+                                            "Finish exam",
                                             on_click=ConsultationDetailState.finish_exam_locally,
                                             loading=ConsultationDetailState.is_transmitting,
                                             size="2",
@@ -1163,7 +1164,7 @@ def _tab_exam_params() -> rx.Component:
                                 rx.separator(width="100%"),
                                 rx.hstack(
                                     rx.icon("stethoscope", size=16, color="var(--accent-9)"),
-                                    rx.heading("Interprétation médicale", size="4"),
+                                    rx.heading("Medical interpretation", size="4"),
                                     spacing="2",
                                     align="center",
                                 ),
@@ -1184,7 +1185,7 @@ def _tab_exam_params() -> rx.Component:
                                 ConsultationDetailState.active_exam_status
                                 == "in_progress_interpretation",
                                 rx.callout(
-                                    "Résultats transmis — en attente d'interprétation par le médecin.",
+                                    "Results transmitted — awaiting interpretation by the doctor.",
                                     icon="clock",
                                     color_scheme="blue",
                                     size="1",
@@ -1202,7 +1203,7 @@ def _tab_exam_params() -> rx.Component:
                             rx.separator(width="100%"),
                             rx.hstack(
                                 rx.icon("building-2", size=16, color="var(--purple-9)"),
-                                rx.heading("Interprétation médecin du travail", size="4"),
+                                rx.heading("Occupational doctor interpretation", size="4"),
                                 spacing="2",
                                 align="center",
                             ),
@@ -1213,7 +1214,7 @@ def _tab_exam_params() -> rx.Component:
                                     rx.text_area(
                                         value=ConsultationDetailState.active_exam_work_doctor_interpretation,
                                         on_change=ConsultationDetailState.set_active_exam_work_doctor_interpretation,
-                                        placeholder="Rédigez votre interprétation en tant que médecin du travail…",
+                                        placeholder="Write your interpretation as an occupational doctor…",
                                         size="2",
                                         width="100%",
                                         rows="4",
@@ -1222,7 +1223,7 @@ def _tab_exam_params() -> rx.Component:
                                         rx.spacer(),
                                         rx.button(
                                             rx.icon("save", size=14),
-                                            "Enregistrer",
+                                            "Save",
                                             on_click=ConsultationDetailState.save_work_doctor_interpretation,
                                             loading=ConsultationDetailState.is_saving_interpretation,
                                             size="2",
@@ -1251,7 +1252,7 @@ def _tab_exam_params() -> rx.Component:
                                         width="100%",
                                     ),
                                     rx.text(
-                                        "En attente de l'interprétation du médecin du travail.",
+                                        "Awaiting occupational doctor interpretation.",
                                         size="2",
                                         color="var(--gray-8)",
                                         style={"font_style": "italic"},
@@ -1272,7 +1273,7 @@ def _tab_exam_params() -> rx.Component:
                     rx.vstack(
                         rx.icon("flask-conical", size=32, color="var(--gray-5)"),
                         rx.text(
-                            "Aucun paramètre défini pour cet examen.",
+                            "No parameters defined for this exam.",
                             size="2",
                             color="var(--gray-7)",
                         ),
@@ -1300,17 +1301,17 @@ def _tab_exam_params() -> rx.Component:
 def _clinic_doctor_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Médecin clinique (PS Consulting)"),
+            rx.dialog.title("Clinical doctor (PS Consulting)"),
             rx.dialog.description(
-                "Choisissez le médecin clinique responsable de cette visite.",
+                "Choose the clinical doctor responsible for this visit.",
                 size="2",
                 color="var(--gray-11)",
             ),
             rx.vstack(
                 rx.select.root(
-                    rx.select.trigger(placeholder="Sélectionner un médecin…", width="100%"),
+                    rx.select.trigger(placeholder="Select a doctor…", width="100%"),
                     rx.select.content(
-                        rx.select.item("— Aucun —", value="__none__"),
+                        rx.select.item("— None —", value="__none__"),
                         rx.foreach(
                             ConsultationDetailState.clinic_doctor_options,
                             lambda d: rx.select.item(d.label, value=d.id),
@@ -1324,12 +1325,12 @@ def _clinic_doctor_dialog() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.button(
-                        "Annuler",
+                        "Cancel",
                         variant="outline",
                         on_click=ConsultationDetailState.close_clinic_doctor_dialog,
                     ),
                     rx.button(
-                        "Valider",
+                        "Confirm",
                         on_click=ConsultationDetailState.save_clinic_doctor,
                         loading=ConsultationDetailState.is_saving_clinic_doctor,
                     ),
@@ -1351,9 +1352,9 @@ def _clinic_doctor_dialog() -> rx.Component:
 def _work_doctor_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Médecin du travail"),
+            rx.dialog.title("Occupational doctor"),
             rx.dialog.description(
-                "Choisissez le médecin du travail à notifier pour cette visite.",
+                "Choose the occupational doctor to notify for this visit.",
                 size="2",
                 color="var(--gray-11)",
             ),
@@ -1361,9 +1362,9 @@ def _work_doctor_dialog() -> rx.Component:
                 rx.cond(
                     ConsultationDetailState.work_doctor_options.length() > 0,
                     rx.select.root(
-                        rx.select.trigger(placeholder="Sélectionner un médecin…", width="100%"),
+                        rx.select.trigger(placeholder="Select a doctor…", width="100%"),
                         rx.select.content(
-                            rx.select.item("— Aucun —", value="__none__"),
+                            rx.select.item("— None —", value="__none__"),
                             rx.foreach(
                                 ConsultationDetailState.work_doctor_options,
                                 lambda d: rx.select.item(d.label, value=d.id),
@@ -1375,7 +1376,7 @@ def _work_doctor_dialog() -> rx.Component:
                         width="100%",
                     ),
                     rx.callout(
-                        "Aucun utilisateur avec le rôle « Médecin entreprise » trouvé.",
+                        "No user with the 'Company Doctor' role found.",
                         icon="info",
                         color_scheme="orange",
                         size="1",
@@ -1384,12 +1385,12 @@ def _work_doctor_dialog() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.button(
-                        "Annuler",
+                        "Cancel",
                         variant="outline",
                         on_click=ConsultationDetailState.close_work_doctor_dialog,
                     ),
                     rx.button(
-                        "Valider",
+                        "Confirm",
                         on_click=ConsultationDetailState.save_work_doctor,
                         loading=ConsultationDetailState.is_saving_work_doctor,
                     ),
@@ -1411,17 +1412,17 @@ def _work_doctor_dialog() -> rx.Component:
 def _cancel_consultation_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Annuler le rendez-vous"),
+            rx.dialog.title("Cancel appointment"),
             rx.vstack(
                 rx.text(
-                    "Veuillez indiquer le motif d'annulation. Cette action est irréversible.",
+                    "Please indicate the cancellation reason. This action is irreversible.",
                     size="2",
                     color="var(--gray-11)",
                 ),
                 rx.vstack(
-                    rx.text("Motif d'annulation *", size="2", weight="medium"),
+                    rx.text("Cancellation reason *", size="2", weight="medium"),
                     rx.text_area(
-                        placeholder="Ex : Patient absent, demande du patient, problème médical…",
+                        placeholder="Ex: Patient absent, patient request, medical issue…",
                         value=ConsultationDetailState.cancel_reason,
                         on_change=ConsultationDetailState.set_cancel_reason,
                         rows="3",
@@ -1443,13 +1444,13 @@ def _cancel_consultation_dialog() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.button(
-                        "Retour",
+                        "Back",
                         variant="soft",
                         color_scheme="gray",
                         on_click=ConsultationDetailState.close_cancel_dialog,
                     ),
                     rx.button(
-                        "Confirmer l'annulation",
+                        "Confirm cancellation",
                         color_scheme="red",
                         on_click=ConsultationDetailState.confirm_cancel_consultation,
                         loading=ConsultationDetailState.is_cancelling,
@@ -1472,17 +1473,17 @@ def _cancel_consultation_dialog() -> rx.Component:
 def _close_consultation_dialog() -> rx.Component:
     return rx.alert_dialog.root(
         rx.alert_dialog.content(
-            rx.alert_dialog.title("Clôturer la consultation"),
+            rx.alert_dialog.title("Close consultation"),
             rx.alert_dialog.description(
-                "Confirmer la clôture de cette consultation ? Elle passera au statut « Clôturée »."
+                "Confirm closing this consultation? It will move to the 'Closed' status."
             ),
             rx.hstack(
                 rx.alert_dialog.cancel(
-                    rx.button("Annuler", variant="soft", color_scheme="gray", size="2"),
+                    rx.button("Cancel", variant="soft", color_scheme="gray", size="2"),
                 ),
                 rx.alert_dialog.action(
                     rx.button(
-                        "Confirmer",
+                        "Confirm",
                         on_click=ConsultationDetailState.confirm_close_consultation,
                         loading=ConsultationDetailState.is_closing,
                         size="2",
@@ -1533,7 +1534,7 @@ def _new_exam_param_item(param: ExamParamOption) -> rx.Component:
                 ),
                 rx.cond(
                     param.is_required,
-                    rx.badge("Requis", size="1", color_scheme="red", variant="soft"),
+                    rx.badge("Required", size="1", color_scheme="red", variant="soft"),
                     rx.fragment(),
                 ),
                 spacing="2",
@@ -1565,15 +1566,15 @@ def _new_exam_param_item(param: ExamParamOption) -> rx.Component:
 def _new_exam_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Ajouter un examen"),
+            rx.dialog.title("Add an exam"),
             rx.vstack(
                 rx.vstack(
-                    rx.text("Type d'examen", size="2", weight="medium"),
+                    rx.text("Exam type", size="2", weight="medium"),
                     rx.cond(
                         ConsultationDetailState.new_exam_is_loading_types,
                         rx.hstack(
                             rx.spinner(size="1"),
-                            rx.text("Chargement du référentiel…", size="2", color="var(--gray-9)"),
+                            rx.text("Loading reference data…", size="2", color="var(--gray-9)"),
                             spacing="2",
                             align="center",
                         ),
@@ -1581,7 +1582,7 @@ def _new_exam_dialog() -> rx.Component:
                             ConsultationDetailState.new_exam_ref_options.length() > 0,
                             rx.select.root(
                                 rx.select.trigger(
-                                    placeholder="Sélectionner un type d'examen…",
+                                    placeholder="Select an exam type…",
                                     width="100%",
                                 ),
                                 rx.select.content(
@@ -1596,7 +1597,7 @@ def _new_exam_dialog() -> rx.Component:
                                 width="100%",
                             ),
                             rx.callout(
-                                "Aucun type d'examen disponible. Créez-en dans l'onglet Référentiel des examens.",
+                                "No exam type available. Create one in the Exam Reference tab.",
                                 icon="info",
                                 color_scheme="orange",
                                 size="1",
@@ -1610,26 +1611,26 @@ def _new_exam_dialog() -> rx.Component:
                     ConsultationDetailState.new_exam_type != "",
                     rx.vstack(
                         rx.hstack(
-                            rx.text("Tests inclus", size="2", weight="bold"),
+                            rx.text("Included tests", size="2", weight="bold"),
                             rx.spacer(),
                             rx.hstack(
                                 rx.text(
                                     ConsultationDetailState.new_exam_selected_param_count.to(str),
                                     " / ",
                                     ConsultationDetailState.new_exam_params.length().to(str),
-                                    " sélectionné(s)",
+                                    " selected",
                                     size="1",
                                     color="var(--gray-9)",
                                 ),
                                 rx.button(
-                                    "Tout cocher",
+                                    "Select all",
                                     on_click=ConsultationDetailState.select_all_new_exam_params,
                                     variant="ghost",
                                     size="1",
                                     type="button",
                                 ),
                                 rx.button(
-                                    "Tout décocher",
+                                    "Deselect all",
                                     on_click=ConsultationDetailState.clear_all_new_exam_params,
                                     variant="ghost",
                                     size="1",
@@ -1659,7 +1660,7 @@ def _new_exam_dialog() -> rx.Component:
                             ),
                             rx.center(
                                 rx.text(
-                                    "Aucun test défini pour ce type d'examen.",
+                                    "No test defined for this exam type.",
                                     size="2",
                                     color="var(--gray-9)",
                                 ),
@@ -1675,7 +1676,7 @@ def _new_exam_dialog() -> rx.Component:
                     rx.fragment(),
                 ),
                 rx.vstack(
-                    rx.text("Date de l'examen", size="2", weight="medium"),
+                    rx.text("Exam date", size="2", weight="medium"),
                     rx.input(
                         type="date",
                         value=ConsultationDetailState.new_exam_date,
@@ -1698,12 +1699,12 @@ def _new_exam_dialog() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.button(
-                        "Annuler",
+                        "Cancel",
                         variant="outline",
                         on_click=ConsultationDetailState.close_new_exam_dialog,
                     ),
                     rx.button(
-                        "Ajouter l'examen",
+                        "Add exam",
                         on_click=ConsultationDetailState.save_new_exam,
                         loading=ConsultationDetailState.new_exam_is_saving,
                         disabled=(ConsultationDetailState.new_exam_type == ""),
@@ -1726,7 +1727,7 @@ def _new_exam_dialog() -> rx.Component:
 def _drug_row(drug: DrugLineDTO, index: int) -> rx.Component:
     return rx.hstack(
         rx.input(
-            placeholder="Médicament",
+            placeholder="Medication",
             value=drug.name,
             on_change=lambda v: ConsultationDetailState.presc_set_drug_name(index, v),
             size="2",
@@ -1740,14 +1741,14 @@ def _drug_row(drug: DrugLineDTO, index: int) -> rx.Component:
             flex="1",
         ),
         rx.input(
-            placeholder="Fréquence",
+            placeholder="Frequency",
             value=drug.frequency,
             on_change=lambda v: ConsultationDetailState.presc_set_drug_frequency(index, v),
             size="2",
             flex="1",
         ),
         rx.input(
-            placeholder="Durée",
+            placeholder="Duration",
             value=drug.duration,
             on_change=lambda v: ConsultationDetailState.presc_set_drug_duration(index, v),
             size="2",
@@ -1769,7 +1770,7 @@ def _drug_row(drug: DrugLineDTO, index: int) -> rx.Component:
 def _new_prescription_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Nouvelle ordonnance"),
+            rx.dialog.title("New prescription"),
             rx.vstack(
                 rx.vstack(
                     rx.text("Date", size="2", weight="medium"),
@@ -1784,9 +1785,9 @@ def _new_prescription_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.vstack(
-                    rx.text("Diagnostic", size="2", weight="medium"),
+                    rx.text("Diagnosis", size="2", weight="medium"),
                     rx.input(
-                        placeholder="Diagnostic (optionnel)",
+                        placeholder="Diagnosis (optional)",
                         value=ConsultationDetailState.presc_form_diagnosis,
                         on_change=ConsultationDetailState.set_presc_form_diagnosis,
                         size="2",
@@ -1797,11 +1798,11 @@ def _new_prescription_dialog() -> rx.Component:
                 ),
                 rx.vstack(
                     rx.hstack(
-                        rx.text("Médicaments", size="2", weight="medium"),
+                        rx.text("Medications", size="2", weight="medium"),
                         rx.spacer(),
                         rx.button(
                             rx.icon("plus", size=13),
-                            "Ajouter",
+                            "Add",
                             on_click=ConsultationDetailState.presc_add_drug,
                             size="1",
                             variant="ghost",
@@ -1825,12 +1826,12 @@ def _new_prescription_dialog() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.button(
-                        "Annuler",
+                        "Cancel",
                         variant="outline",
                         on_click=ConsultationDetailState.close_new_prescription_dialog,
                     ),
                     rx.button(
-                        "Créer l'ordonnance",
+                        "Create prescription",
                         on_click=ConsultationDetailState.save_new_prescription,
                         loading=ConsultationDetailState.is_saving_prescription,
                     ),
@@ -1852,10 +1853,10 @@ def _new_prescription_dialog() -> rx.Component:
 def _new_certificate_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Émettre un certificat médical"),
+            rx.dialog.title("Issue a medical certificate"),
             rx.vstack(
                 rx.vstack(
-                    rx.text("Date d'émission", size="2", weight="medium"),
+                    rx.text("Issue date", size="2", weight="medium"),
                     rx.input(
                         type="date",
                         value=ConsultationDetailState.cert_form_issue_date,
@@ -1867,13 +1868,13 @@ def _new_certificate_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.vstack(
-                    rx.text("Aptitude", size="2", weight="medium"),
+                    rx.text("Fitness", size="2", weight="medium"),
                     rx.radio_group.root(
                         rx.hstack(
                             rx.radio_group.item(value="true"),
-                            rx.text("Apte", size="2"),
+                            rx.text("Fit", size="2"),
                             rx.radio_group.item(value="false"),
-                            rx.text("Inapte", size="2"),
+                            rx.text("Unfit", size="2"),
                             spacing="2",
                             align="center",
                         ),
@@ -1893,7 +1894,7 @@ def _new_certificate_dialog() -> rx.Component:
                     rx.vstack(
                         rx.hstack(
                             rx.vstack(
-                                rx.text("Début d'inaptitude *", size="2", weight="medium"),
+                                rx.text("Unfitness start *", size="2", weight="medium"),
                                 rx.input(
                                     type="date",
                                     value=ConsultationDetailState.cert_form_unfitness_start,
@@ -1905,7 +1906,7 @@ def _new_certificate_dialog() -> rx.Component:
                                 width="100%",
                             ),
                             rx.vstack(
-                                rx.text("Fin d'inaptitude *", size="2", weight="medium"),
+                                rx.text("Unfitness end *", size="2", weight="medium"),
                                 rx.input(
                                     type="date",
                                     value=ConsultationDetailState.cert_form_unfitness_end,
@@ -1927,7 +1928,7 @@ def _new_certificate_dialog() -> rx.Component:
                 rx.vstack(
                     rx.text("Conclusion", size="2", weight="medium"),
                     rx.text_area(
-                        placeholder="Conclusion médicale…",
+                        placeholder="Medical conclusion…",
                         value=ConsultationDetailState.cert_form_conclusion,
                         on_change=ConsultationDetailState.set_cert_form_conclusion,
                         size="2",
@@ -1949,12 +1950,12 @@ def _new_certificate_dialog() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.button(
-                        "Annuler",
+                        "Cancel",
                         variant="outline",
                         on_click=ConsultationDetailState.close_new_certificate_dialog,
                     ),
                     rx.button(
-                        "Émettre le certificat",
+                        "Issue certificate",
                         on_click=ConsultationDetailState.save_new_certificate,
                         loading=ConsultationDetailState.is_saving_certificate,
                         disabled=(ConsultationDetailState.cert_form_conclusion == ""),
@@ -1977,21 +1978,21 @@ def _new_certificate_dialog() -> rx.Component:
 def _edit_reason_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Motif de modification"),
+            rx.dialog.title("Reason for modification"),
             rx.vstack(
                 rx.callout(
-                    "Des résultats ont déjà été enregistrés pour cet examen. "
-                    "Veuillez indiquer le motif de la modification pour la traçabilité.",
+                    "Results have already been saved for this exam. "
+                    "Please indicate the reason for the modification for traceability.",
                     icon="pencil",
                     color_scheme="orange",
                     size="1",
                 ),
                 rx.vstack(
-                    rx.text("Motif *", size="2", weight="medium"),
+                    rx.text("Reason *", size="2", weight="medium"),
                     rx.text_area(
                         value=ConsultationDetailState.edit_reason,
                         on_change=ConsultationDetailState.set_edit_reason,
-                        placeholder="Ex : erreur de saisie, résultat corrigé par le laboratoire…",
+                        placeholder="Ex: data entry error, result corrected by the laboratory…",
                         size="2",
                         width="100%",
                         rows="3",
@@ -2012,13 +2013,13 @@ def _edit_reason_dialog() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.button(
-                        "Annuler",
+                        "Cancel",
                         variant="soft",
                         color_scheme="gray",
                         on_click=ConsultationDetailState.close_edit_reason_dialog,
                     ),
                     rx.button(
-                        "Enregistrer la modification",
+                        "Save modification",
                         on_click=ConsultationDetailState.confirm_edit_save,
                         loading=ConsultationDetailState.is_saving_params,
                     ),
@@ -2040,20 +2041,20 @@ def _edit_reason_dialog() -> rx.Component:
 def _delete_exam_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Supprimer l'examen"),
+            rx.dialog.title("Delete exam"),
             rx.vstack(
                 rx.callout(
-                    "Cet examen sera marqué comme annulé. Le motif sera consigné.",
+                    "This exam will be marked as cancelled. The reason will be recorded.",
                     icon="triangle-alert",
                     color_scheme="orange",
                     size="1",
                 ),
                 rx.vstack(
-                    rx.text("Motif de suppression *", size="2", weight="medium"),
+                    rx.text("Deletion reason *", size="2", weight="medium"),
                     rx.text_area(
                         value=ConsultationDetailState.delete_exam_reason,
                         on_change=ConsultationDetailState.set_delete_exam_reason,
-                        placeholder="Ex : examen prescrit par erreur, doublon, patient refus…",
+                        placeholder="Ex: exam prescribed in error, duplicate, patient refusal…",
                         size="2",
                         width="100%",
                         rows="3",
@@ -2074,13 +2075,13 @@ def _delete_exam_dialog() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.button(
-                        "Annuler",
+                        "Cancel",
                         variant="soft",
                         color_scheme="gray",
                         on_click=ConsultationDetailState.close_delete_exam_dialog,
                     ),
                     rx.button(
-                        "Confirmer la suppression",
+                        "Confirm deletion",
                         color_scheme="red",
                         on_click=ConsultationDetailState.confirm_delete_exam,
                         loading=ConsultationDetailState.is_deleting_exam,
@@ -2129,7 +2130,7 @@ def _add_param_item(p: ExamParamOption) -> rx.Component:
                 rx.text(p.name, size="2", weight=rx.cond(p.is_selected, "medium", "regular")),
                 rx.cond(
                     p.is_required,
-                    rx.badge("Requis", size="1", color_scheme="red", variant="soft"),
+                    rx.badge("Required", size="1", color_scheme="red", variant="soft"),
                     rx.fragment(),
                 ),
                 spacing="2",
@@ -2159,9 +2160,9 @@ def _add_param_item(p: ExamParamOption) -> rx.Component:
 def _add_param_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Ajouter des tests"),
+            rx.dialog.title("Add tests"),
             rx.dialog.description(
-                "Sélectionnez les tests à ajouter à cet examen.",
+                "Select the tests to add to this exam.",
                 size="2",
                 color="var(--gray-11)",
             ),
@@ -2182,7 +2183,7 @@ def _add_param_dialog() -> rx.Component:
                                     ConsultationDetailState.add_param_selected_count.to(str),
                                     " / ",
                                     ConsultationDetailState.add_param_options.length().to(str),
-                                    " sélectionné(s)",
+                                    " selected",
                                     size="1",
                                     color="var(--gray-9)",
                                 ),
@@ -2211,11 +2212,11 @@ def _add_param_dialog() -> rx.Component:
                 rx.cond(
                     ConsultationDetailState.add_param_options.length() > 0,
                     rx.vstack(
-                        rx.text("Motif de l'ajout *", size="2", weight="medium"),
+                        rx.text("Addition reason *", size="2", weight="medium"),
                         rx.text_area(
                             value=ConsultationDetailState.add_param_reason,
                             on_change=ConsultationDetailState.set_add_param_reason,
-                            placeholder="Pourquoi ajoutez-vous ce(s) test(s) ? (oubli, paramètre nécessaire au calcul d'une constante…)",
+                            placeholder="Why are you adding this test? (omission, parameter needed for a calculation…)",
                             size="2",
                             width="100%",
                             rows="3",
@@ -2237,12 +2238,12 @@ def _add_param_dialog() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.button(
-                        "Annuler",
+                        "Cancel",
                         variant="outline",
                         on_click=ConsultationDetailState.close_add_param_dialog,
                     ),
                     rx.button(
-                        "Ajouter les tests",
+                        "Add tests",
                         on_click=ConsultationDetailState.save_add_params,
                         loading=ConsultationDetailState.is_saving_add_params,
                         disabled=(
@@ -2268,23 +2269,23 @@ def _add_param_dialog() -> rx.Component:
 def _delete_param_dialog() -> rx.Component:
     return rx.alert_dialog.root(
         rx.alert_dialog.content(
-            rx.alert_dialog.title("Supprimer ce test"),
+            rx.alert_dialog.title("Delete this test"),
             rx.alert_dialog.description(
                 rx.hstack(
-                    rx.text("Supprimer le test"),
+                    rx.text("Delete the test"),
                     rx.text(ConsultationDetailState.delete_param_name, weight="bold"),
-                    rx.text("? Le résultat associé sera également supprimé."),
+                    rx.text("? The associated result will also be deleted."),
                     spacing="1",
                     wrap="wrap",
                 ),
                 size="2",
             ),
             rx.vstack(
-                rx.text("Motif de la suppression *", size="2", weight="medium"),
+                rx.text("Deletion reason *", size="2", weight="medium"),
                 rx.text_area(
                     value=ConsultationDetailState.delete_param_reason,
                     on_change=ConsultationDetailState.set_delete_param_reason,
-                    placeholder="Pourquoi ce test est-il retiré de l'examen ?",
+                    placeholder="Why is this test being removed from the exam?",
                     size="2",
                     width="100%",
                     rows="3",
@@ -2305,11 +2306,11 @@ def _delete_param_dialog() -> rx.Component:
             rx.hstack(
                 rx.spacer(),
                 rx.alert_dialog.cancel(
-                    rx.button("Annuler", variant="soft", color_scheme="gray"),
+                    rx.button("Cancel", variant="soft", color_scheme="gray"),
                 ),
                 rx.button(
                     rx.icon("trash-2", size=14),
-                    "Supprimer",
+                    "Delete",
                     color_scheme="red",
                     on_click=ConsultationDetailState.confirm_delete_param,
                     loading=ConsultationDetailState.is_deleting_param,

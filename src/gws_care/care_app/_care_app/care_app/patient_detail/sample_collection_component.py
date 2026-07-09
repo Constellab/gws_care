@@ -66,7 +66,7 @@ w.document.write('<!DOCTYPE html><html><head><style>@page{size:60mm 30mm;margin:
 w.document.close(); })();"""
                         ),
                     ),
-                    content="Imprimer l'étiquette",
+                    content="Print label",
                 ),
                 spacing="1",
                 align="center",
@@ -120,7 +120,7 @@ w.document.close(); })();"""
                             color_scheme="green",
                             on_click=SampleCollectionState.mark_collected(t.id),
                         ),
-                        content="Marquer prélevé",
+                        content="Mark as collected",
                     ),
                     rx.fragment(),
                 ),
@@ -135,7 +135,7 @@ w.document.close(); })();"""
                             color_scheme="red",
                             on_click=SampleCollectionState.open_cancel_dialog(t.id),
                         ),
-                        content="Annuler ce tube",
+                        content="Cancel this tube",
                     ),
                     rx.fragment(),
                 ),
@@ -150,9 +150,9 @@ def _create_dialog() -> rx.Component:
     """Dialog to generate a new tube for a patient."""
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Nouveau prélèvement"),
+            rx.dialog.title("New sample"),
             rx.dialog.description(
-                "Générez un code-barres flacon et renseignez les informations de prélèvement.",
+                "Generate a tube barcode and enter the sample information.",
                 size="2",
                 color="var(--gray-9)",
                 margin_bottom="1rem",
@@ -161,9 +161,9 @@ def _create_dialog() -> rx.Component:
             rx.vstack(
                 # Exam type
                 rx.vstack(
-                    rx.text("Type d'examen *", size="2", weight="medium"),
+                    rx.text("Exam type *", size="2", weight="medium"),
                     rx.select.root(
-                        rx.select.trigger(placeholder="Sélectionner l'examen…", width="100%"),
+                        rx.select.trigger(placeholder="Select exam…", width="100%"),
                         rx.select.content(
                             rx.foreach(
                                 SampleCollectionState.exam_type_options,
@@ -181,9 +181,9 @@ def _create_dialog() -> rx.Component:
 
                 # Sample type
                 rx.vstack(
-                    rx.text("Type de prélèvement *", size="2", weight="medium"),
+                    rx.text("Sample type *", size="2", weight="medium"),
                     rx.select.root(
-                        rx.select.trigger(placeholder="Nature du prélèvement…", width="100%"),
+                        rx.select.trigger(placeholder="Sample nature…", width="100%"),
                         rx.select.content(
                             *[
                                 rx.select.item(label, value=value)
@@ -199,9 +199,9 @@ def _create_dialog() -> rx.Component:
 
                 # Volume
                 rx.vstack(
-                    rx.text("Volume prélevé (mL)", size="2", weight="medium"),
+                    rx.text("Collected volume (mL)", size="2", weight="medium"),
                     rx.input(
-                        placeholder="Ex. 5",
+                        placeholder="E.g. 5",
                         type="number",
                         value=SampleCollectionState.create_volume_ml,
                         on_change=SampleCollectionState.set_create_volume_ml,
@@ -212,9 +212,9 @@ def _create_dialog() -> rx.Component:
 
                 # Notes
                 rx.vstack(
-                    rx.text("Notes du préleveur", size="2", weight="medium"),
+                    rx.text("Collector notes", size="2", weight="medium"),
                     rx.text_area(
-                        placeholder="Difficulté de ponction, hémolyse, remarque…",
+                        placeholder="Puncture difficulty, hemolysis, note…",
                         value=SampleCollectionState.create_notes,
                         on_change=SampleCollectionState.set_create_notes,
                         rows="3",
@@ -240,7 +240,7 @@ def _create_dialog() -> rx.Component:
             rx.hstack(
                 rx.dialog.close(
                     rx.button(
-                        "Annuler",
+                        "Cancel",
                         variant="soft",
                         color_scheme="gray",
                         on_click=SampleCollectionState.close_create_dialog,
@@ -252,7 +252,7 @@ def _create_dialog() -> rx.Component:
                         rx.spinner(size="2"),
                         rx.icon("tag", size=14),
                     ),
-                    "Générer l'étiquette",
+                    "Generate label",
                     on_click=SampleCollectionState.submit_create,
                     disabled=SampleCollectionState.is_creating,
                     color_scheme="blue",
@@ -272,11 +272,11 @@ def _cancel_dialog() -> rx.Component:
     """Confirmation dialog for tube cancellation."""
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Annuler ce tube", color_scheme="red"),
+            rx.dialog.title("Cancel this tube", color_scheme="red"),
             rx.vstack(
-                rx.text("Motif d'annulation *", size="2", weight="medium"),
+                rx.text("Cancellation reason *", size="2", weight="medium"),
                 rx.text_area(
-                    placeholder="Ex. hémolyse, mauvais tube, patient refus…",
+                    placeholder="E.g. hemolysis, wrong tube, patient refusal…",
                     value=SampleCollectionState.cancel_reason,
                     on_change=SampleCollectionState.set_cancel_reason,
                     rows="3",
@@ -296,14 +296,14 @@ def _cancel_dialog() -> rx.Component:
             rx.hstack(
                 rx.dialog.close(
                     rx.button(
-                        "Retour",
+                        "Back",
                         variant="soft",
                         color_scheme="gray",
                         on_click=SampleCollectionState.close_cancel_dialog,
                     )
                 ),
                 rx.button(
-                    "Confirmer l'annulation",
+                    "Confirm cancellation",
                     on_click=SampleCollectionState.confirm_cancel,
                     color_scheme="red",
                 ),
@@ -328,14 +328,14 @@ def sample_collection_panel(show_campaign_column: bool = True) -> rx.Component:
         rx.hstack(
             rx.hstack(
                 rx.icon("flask-conical", size=18, color="var(--accent-9)"),
-                rx.heading("Prélèvements", size="4"),
+                rx.heading("Samples", size="4"),
                 spacing="2",
                 align="center",
             ),
             rx.spacer(),
             rx.button(
                 rx.icon("plus", size=14),
-                "Nouveau tube",
+                "New tube",
                 size="2",
                 variant="soft",
                 on_click=SampleCollectionState.open_create_dialog(""),
@@ -365,12 +365,12 @@ def sample_collection_panel(show_campaign_column: bool = True) -> rx.Component:
                     rx.table.root(
                         rx.table.header(
                             rx.table.row(
-                                rx.table.column_header_cell("Code flacon"),
-                                rx.table.column_header_cell("Statut"),
-                                rx.table.column_header_cell("Examen"),
-                                rx.table.column_header_cell("Prélèvement"),
+                                rx.table.column_header_cell("Tube code"),
+                                rx.table.column_header_cell("Status"),
+                                rx.table.column_header_cell("Exam"),
+                                rx.table.column_header_cell("Sample"),
                                 rx.table.column_header_cell("Volume"),
-                                rx.table.column_header_cell("Campagne"),
+                                rx.table.column_header_cell("Campaign"),
                                 rx.table.column_header_cell("Date"),
                                 rx.table.column_header_cell(""),
                             )
@@ -388,12 +388,12 @@ def sample_collection_panel(show_campaign_column: bool = True) -> rx.Component:
                     rx.vstack(
                         rx.icon("flask-conical", size=32, color="var(--gray-6)"),
                         rx.text(
-                            "Aucun prélèvement enregistré pour ce patient.",
+                            "No sample recorded for this patient.",
                             size="2",
                             color="var(--gray-7)",
                         ),
                         rx.text(
-                            "Cliquez sur « Nouveau tube » pour générer un code-barres flacon.",
+                            "Click on 'New tube' to generate a tube barcode.",
                             size="1",
                             color="var(--gray-6)",
                         ),

@@ -5,9 +5,9 @@ import reflex as rx
 from ..common.language_state import LanguageState
 from .patient_detail_state import DrugLineDTO, PatientDetailState
 
-_DOSAGE_UNITS = ["mg", "g", "µg", "ml", "UI", "gouttes", "comprimé(s)", "sachet(s)", "ampoule(s)"]
-_FREQUENCY_UNITS = ["fois/jour", "fois/semaine", "fois/mois", "le matin", "le soir", "matin et soir", "si besoin"]
-_DURATION_UNITS = ["jours", "semaines", "mois", "jusqu'à amélioration"]
+_DOSAGE_UNITS = ["mg", "g", "µg", "ml", "IU", "drops", "tablet(s)", "packet(s)", "vial(s)"]
+_FREQUENCY_UNITS = ["times/day", "times/week", "times/month", "in the morning", "in the evening", "morning and evening", "as needed"]
+_DURATION_UNITS = ["days", "weeks", "months", "until improvement"]
 
 
 def _unit_select(

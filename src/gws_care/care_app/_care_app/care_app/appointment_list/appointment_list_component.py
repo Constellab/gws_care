@@ -110,8 +110,8 @@ def _appointment_row(appt: AppointmentRowDTO) -> rx.Component:
                         ),
                         content=rx.cond(
                             appt.linked_exam_id != "",
-                            "Voir la fiche examen",
-                            "Créer la fiche examen",
+                            "View exam file",
+                            "Create exam file",
                         ),
                     ),
                 ),
@@ -308,7 +308,7 @@ def appointment_list_page() -> rx.Component:
                         variant="soft", size="2", color_scheme="gray",
                         on_click=rx.redirect("/schedule"),
                     ),
-                    content="Voir les disponibilités des médecins",
+                    content="View doctor availability",
                 ),
                 rx.segmented_control.root(
                     rx.segmented_control.item(rx.icon("list", size=15), value="list"),

@@ -34,7 +34,7 @@ def _prebilling_row(p: PrebillingRowVM) -> rx.Component:
                             rx.icon("check", size=14), variant="ghost", size="1", color_scheme="blue",
                             on_click=lambda: PrebillingState.validate_prebilling(p.id),
                         ),
-                        content="Valider la préfacturation",
+                        content="Validate pre-billing",
                     ),
                 ),
                 rx.cond(
@@ -44,7 +44,7 @@ def _prebilling_row(p: PrebillingRowVM) -> rx.Component:
                             rx.icon("file-text", size=14), variant="ghost", size="1", color_scheme="green",
                             on_click=lambda: PrebillingState.generate_invoice(p.id),
                         ),
-                        content="Générer la facture définitive",
+                        content="Generate final invoice",
                     ),
                 ),
                 spacing="1",
@@ -56,16 +56,16 @@ def _prebilling_row(p: PrebillingRowVM) -> rx.Component:
 def _gen_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Générer une préfacturation"),
+            rx.dialog.title("Generate pre-billing"),
             rx.dialog.description(
-                "La préfacturation est calculée sur la base des patients présents dans la campagne sélectionnée.",
+                "Pre-billing is calculated based on the patients present in the selected campaign.",
                 size="2", color="var(--gray-9)",
             ),
             rx.vstack(
                 rx.vstack(
-                    rx.text("Campagne *", size="2", weight="medium"),
+                    rx.text("Campaign *", size="2", weight="medium"),
                     rx.select.root(
-                        rx.select.trigger(placeholder="Sélectionner une campagne", width="100%"),
+                        rx.select.trigger(placeholder="Select a campaign", width="100%"),
                         rx.select.content(
                             rx.foreach(
                                 PrebillingState.campaign_options,
@@ -78,7 +78,7 @@ def _gen_dialog() -> rx.Component:
                     spacing="1", width="100%",
                 ),
                 rx.vstack(
-                    rx.text("Prix unitaire (€)", size="2", weight="medium"),
+                    rx.text("Unit price (€)", size="2", weight="medium"),
                     rx.input(
                         type="number",
                         value=PrebillingState.gen_unit_price,
@@ -94,9 +94,9 @@ def _gen_dialog() -> rx.Component:
                 spacing="3", width="100%", margin_top="1rem",
             ),
             rx.hstack(
-                rx.dialog.close(rx.button("Annuler", variant="soft", color_scheme="gray",
+                rx.dialog.close(rx.button("Cancel", variant="soft", color_scheme="gray",
                                           on_click=PrebillingState.close_gen_dialog)),
-                rx.button("Générer", on_click=PrebillingState.generate_prebilling,
+                rx.button("Generate", on_click=PrebillingState.generate_prebilling,
                           loading=PrebillingState.is_generating),
                 spacing="2", justify="end", margin_top="1rem", width="100%",
             ),
@@ -113,12 +113,12 @@ def prebilling_page() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.vstack(
-                        rx.heading("Préfacturation", size="6"),
-                        rx.text("Gestion des préfacturations et factures", size="2", color="var(--gray-9)"),
+                        rx.heading("Pre-billing", size="6"),
+                        rx.text("Pre-billing and invoice management", size="2", color="var(--gray-9)"),
                         spacing="0",
                     ),
                     rx.spacer(),
-                    rx.button(rx.icon("plus", size=16), "Générer",
+                    rx.button(rx.icon("plus", size=16), "Generate",
                               on_click=PrebillingState.open_gen_dialog),
                     width="100%", align="end",
                 ),
@@ -140,11 +140,11 @@ def prebilling_page() -> rx.Component:
                         rx.table.root(
                             rx.table.header(
                                 rx.table.row(
-                                    rx.table.column_header_cell("Compte"),
-                                    rx.table.column_header_cell("Campagne"),
-                                    rx.table.column_header_cell("Période"),
-                                    rx.table.column_header_cell("Montant"),
-                                    rx.table.column_header_cell("Statut"),
+                                    rx.table.column_header_cell("Account"),
+                                    rx.table.column_header_cell("Campaign"),
+                                    rx.table.column_header_cell("Period"),
+                                    rx.table.column_header_cell("Amount"),
+                                    rx.table.column_header_cell("Status"),
                                     rx.table.column_header_cell(""),
                                 )
                             ),
@@ -152,7 +152,7 @@ def prebilling_page() -> rx.Component:
                             width="100%", variant="surface",
                         ),
                         rx.center(
-                            rx.text("Aucune préfacturation.", size="2", color="var(--gray-9)"),
+                            rx.text("No pre-billing.", size="2", color="var(--gray-9)"),
                             padding="4rem",
                         ),
                     ),

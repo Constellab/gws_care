@@ -28,9 +28,9 @@ _PREDEFINED_GROUPS: list[tuple[str, list[str]]] = [
     ("Iron & Vitamins", ["Iron", "Transferrin", "Saturation (%)", "Vitamin B12", "Folate", "Vitamin D"]),
     ("Hormones", ["Testosterone", "FSH", "LH", "Estradiol", "Prolactin"]),
     ("Urinalysis", ["Glucose (urine)", "Protein (urine)", "Blood (urine)", "pH (urine)", "Creatinine (urine)"]),
-    ("Radiology", ["ICT", "Silhouette médiastinale", "Parenchyme pulmonaire", "Plèvres"]),
+    ("Radiology", ["ICT", "Mediastinal silhouette", "Lung parenchyma", "Pleura"]),
     ("Spirometry / EFR", ["CVF (FVC)", "VEMS (FEV1)", "VEMS/CVF (Tiffeneau)", "DEP (PEF)", "DEM 25-75%"]),
-    ("ECG", ["Rythme", "FC (bpm)", "PR", "QRS", "QTc", "Axe électrique"]),
+    ("ECG", ["Rhythm", "HR (bpm)", "PR", "QRS", "QTc", "Electrical axis"]),
     ("Ophthalmology", ["AV OD (sc)", "AV OG (sc)", "AV ODG (ac)", "Tonus OD", "Tonus OG", "Vision couleurs", "Champ visuel"]),
     ("ORL / Audiometry OD", ["Seuil OD 500Hz", "Seuil OD 1kHz", "Seuil OD 2kHz", "Seuil OD 4kHz", "Seuil OD 8kHz"]),
     ("ORL / Audiometry OG", ["Seuil OG 500Hz", "Seuil OG 1kHz", "Seuil OG 2kHz", "Seuil OG 4kHz", "Seuil OG 8kHz"]),
@@ -448,27 +448,27 @@ def _delete_file_confirm_dialog() -> rx.Component:
 def _delete_exam_dialog() -> rx.Component:
     return rx.alert_dialog.root(
         rx.alert_dialog.content(
-            rx.alert_dialog.title("Supprimer l'examen"),
+            rx.alert_dialog.title("Delete exam"),
             rx.alert_dialog.description(
-                "Cette action est irréversible. Veuillez saisir un commentaire obligatoire avant de confirmer.",
+                "This action is irreversible. Please enter a mandatory comment before confirming.",
                 size="2",
             ),
             rx.vstack(
                 rx.text_area(
                     value=ExamDetailState.delete_exam_comment,
                     on_change=ExamDetailState.set_delete_exam_comment,
-                    placeholder="Motif de suppression (obligatoire)...",
+                    placeholder="Deletion reason (required)...",
                     size="2", width="100%", rows="3",
                 ),
                 rx.flex(
                     rx.button(
-                        "Annuler",
+                        "Cancel",
                         variant="soft", color_scheme="gray", size="2",
                         on_click=ExamDetailState.close_delete_exam_dialog,
                     ),
                     rx.button(
                         rx.icon("trash-2", size=14),
-                        "Supprimer l'examen",
+                        "Delete exam",
                         color_scheme="red", size="2",
                         on_click=ExamDetailState.confirm_delete_exam,
                         disabled=ExamDetailState.delete_exam_comment.length() == 0,
@@ -485,27 +485,27 @@ def _delete_exam_dialog() -> rx.Component:
 def _delete_lab_row_dialog() -> rx.Component:
     return rx.alert_dialog.root(
         rx.alert_dialog.content(
-            rx.alert_dialog.title("Supprimer le résultat"),
+            rx.alert_dialog.title("Delete result"),
             rx.alert_dialog.description(
-                "Veuillez saisir un commentaire obligatoire avant de supprimer ce résultat.",
+                "Please enter a mandatory comment before deleting this result.",
                 size="2",
             ),
             rx.vstack(
                 rx.text_area(
                     value=ExamDetailState.delete_lab_comment,
                     on_change=ExamDetailState.set_delete_lab_comment,
-                    placeholder="Motif de suppression (obligatoire)...",
+                    placeholder="Deletion reason (required)...",
                     size="2", width="100%", rows="3",
                 ),
                 rx.flex(
                     rx.button(
-                        "Annuler",
+                        "Cancel",
                         variant="soft", color_scheme="gray", size="2",
                         on_click=ExamDetailState.close_delete_lab_row_dialog,
                     ),
                     rx.button(
                         rx.icon("trash-2", size=14),
-                        "Supprimer",
+                        "Delete",
                         color_scheme="red", size="2",
                         on_click=ExamDetailState.confirm_delete_lab_row,
                         disabled=ExamDetailState.delete_lab_comment.length() == 0,

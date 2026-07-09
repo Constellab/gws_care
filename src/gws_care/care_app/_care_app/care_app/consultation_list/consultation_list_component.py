@@ -19,8 +19,8 @@ def _status_badge(status: str) -> rx.Component:
     return rx.match(
         status,
         ("pending", rx.badge("En attente", color_scheme="gray", variant="soft", size="1")),
-        ("cancelled", rx.badge("Annulée", color_scheme="red", variant="soft", size="1")),
-        ("visit_done", rx.badge("Clôturée", color_scheme="green", variant="soft", size="1")),
+        ("cancelled", rx.badge("Cancelled", color_scheme="red", variant="soft", size="1")),
+        ("visit_done", rx.badge("Closed", color_scheme="green", variant="soft", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -89,7 +89,7 @@ def _new_consultation_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.vstack(
-                    rx.text("Date prévue", size="2", weight="medium"),
+                    rx.text("Scheduled date", size="2", weight="medium"),
                     rx.input(
                         type="date",
                         value=ConsultationListState.new_scheduled_at,
@@ -103,9 +103,9 @@ def _new_consultation_dialog() -> rx.Component:
                 rx.cond(
                     ConsultationListState.new_patient_accounts.length() > 0,
                     rx.vstack(
-                        rx.text("Compte de facturation", size="2", weight="medium"),
+                        rx.text("Billing account", size="2", weight="medium"),
                         rx.select.root(
-                            rx.select.trigger(placeholder="Sélectionner un compte"),
+                            rx.select.trigger(placeholder="Select an account"),
                             rx.select.content(
                                 rx.foreach(
                                     ConsultationListState.new_patient_accounts,
@@ -132,10 +132,10 @@ def _new_consultation_dialog() -> rx.Component:
                 ),
                 rx.hstack(
                     rx.dialog.close(
-                        rx.button("Annuler", variant="soft", color_scheme="gray", size="2"),
+                        rx.button("Cancel", variant="soft", color_scheme="gray", size="2"),
                     ),
                     rx.button(
-                        "Créer",
+                        "Create",
                         on_click=ConsultationListState.save_new_consultation,
                         loading=ConsultationListState.new_is_saving,
                         size="2",
@@ -165,12 +165,12 @@ def _filters_bar() -> rx.Component:
             width="220px",
         ),
         rx.select.root(
-            rx.select.trigger(placeholder="Statut"),
+            rx.select.trigger(placeholder="Status"),
             rx.select.content(
-                rx.select.item("Tous les statuts", value="ALL"),
-                rx.select.item("En attente", value="pending"),
-                rx.select.item("Clôturée", value="visit_done"),
-                rx.select.item("Annulée", value="cancelled"),
+                rx.select.item("All statuses", value="ALL"),
+                rx.select.item("Pending", value="pending"),
+                rx.select.item("Closed", value="visit_done"),
+                rx.select.item("Cancelled", value="cancelled"),
             ),
             value=ConsultationListState.filter_status,
             on_change=ConsultationListState.set_filter_status,
@@ -190,7 +190,7 @@ def _filters_bar() -> rx.Component:
         ),
         rx.button(
             rx.icon("x", size=14),
-            "Réinitialiser",
+            "Reset",
             variant="ghost",
             color_scheme="gray",
             size="2",
@@ -216,16 +216,16 @@ def _consultations_table() -> rx.Component:
             ),
             rx.cond(
                 ConsultationListState.consultations.length() == 0,
-                empty_state("stethoscope", "Aucune consultation trouvée."),
+                empty_state("stethoscope", "No consultation found."),
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
-                            rx.table.column_header_cell(rx.text("N° Visite", size="2")),
+                            rx.table.column_header_cell(rx.text("Visit #", size="2")),
                             rx.table.column_header_cell(rx.text("Patient", size="2")),
-                            rx.table.column_header_cell(rx.text("Compte", size="2")),
-                            rx.table.column_header_cell(rx.text("Date prévue", size="2")),
-                            rx.table.column_header_cell(rx.text("Statut", size="2")),
-                            rx.table.column_header_cell(rx.text("Examens", size="2")),
+                            rx.table.column_header_cell(rx.text("Account", size="2")),
+                            rx.table.column_header_cell(rx.text("Scheduled date", size="2")),
+                            rx.table.column_header_cell(rx.text("Status", size="2")),
+                            rx.table.column_header_cell(rx.text("Exams", size="2")),
                         )
                     ),
                     rx.table.body(

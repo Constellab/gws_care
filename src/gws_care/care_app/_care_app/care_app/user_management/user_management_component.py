@@ -9,13 +9,13 @@ from .user_management_state import AccountOptionDTO, UserManagementState, UserRo
 _PSC_ROLES = [
     ("SUPER_ADMIN_PSC", "Super Admin PSC"),
     ("ADMIN_PSC", "Admin PSC"),
-    ("OPERATEUR_TERRAIN", "Opérateur terrain"),
-    ("OPERATEUR_LABO", "Opérateur labo"),
-    ("MEDECIN_PSC", "Médecin PSC"),
+    ("OPERATEUR_TERRAIN", "Field operator"),
+    ("OPERATEUR_LABO", "Lab operator"),
+    ("MEDECIN_PSC", "PSC Doctor"),
 ]
 _ENTERPRISE_ROLES = [
-    ("MEDECIN_ENTREPRISE", "Médecin entreprise"),
-    ("RH_ENTREPRISE", "RH entreprise"),
+    ("MEDECIN_ENTREPRISE", "Company doctor"),
+    ("RH_ENTREPRISE", "Company HR"),
 ]
 _PATIENT_ROLES = [
     ("PATIENT", "Patient"),
@@ -30,8 +30,8 @@ def _role_badge(label: str) -> rx.Component:
 def _status_badge(is_active: bool) -> rx.Component:
     return rx.cond(
         is_active,
-        rx.badge("Actif", color_scheme="green", size="1", variant="soft"),
-        rx.badge("Suspendu", color_scheme="red", size="1", variant="soft"),
+        rx.badge("Active", color_scheme="green", size="1", variant="soft"),
+        rx.badge("Suspended", color_scheme="red", size="1", variant="soft"),
     )
 
 
@@ -71,7 +71,7 @@ def _user_row(u: UserRowDTO) -> rx.Component:
                         color_scheme="blue",
                         on_click=UserManagementState.preview_user(u.id),
                     ),
-                    content="Prévisualiser la navigation de cet utilisateur",
+                    content="Preview this user's navigation",
                 ),
                 rx.tooltip(
                     rx.icon_button(
@@ -81,7 +81,7 @@ def _user_row(u: UserRowDTO) -> rx.Component:
                         color_scheme="gray",
                         on_click=UserManagementState.open_edit_dialog(u.id),
                     ),
-                    content="Modifier la spécialité / le rôle",
+                    content="Edit specialty / role",
                 ),
                 rx.tooltip(
                     rx.icon_button(
@@ -91,7 +91,7 @@ def _user_row(u: UserRowDTO) -> rx.Component:
                         color_scheme=rx.cond(u.is_active, "red", "green"),
                         on_click=lambda: UserManagementState.toggle_active(u.id),
                     ),
-                    content=rx.cond(u.is_active, "Suspendre", "Réactiver"),
+                    content=rx.cond(u.is_active, "Suspend", "Reactivate"),
                 ),
                 rx.tooltip(
                     rx.icon_button(
@@ -101,7 +101,7 @@ def _user_row(u: UserRowDTO) -> rx.Component:
                         color_scheme="red",
                         on_click=UserManagementState.open_confirm_revoke(u.id, u.email),
                     ),
-                    content="Révoquer tous les rôles",
+                    content="Revoke all roles",
                 ),
                 spacing="1",
             )
@@ -115,13 +115,13 @@ def _user_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
             rx.dialog.title(
-                rx.cond(UserManagementState.is_editing, "Modifier l'utilisateur", "Ajouter un utilisateur")
+                rx.cond(UserManagementState.is_editing, "Edit user", "Add user")
             ),
             rx.dialog.description(
                 rx.cond(
                     UserManagementState.is_editing,
-                    "Modifiez la spécialité, le rôle ou le compte lié.",
-                    "Saisissez l'adresse email de la personne et son rôle. L'utilisateur sera créé automatiquement.",
+                    "Edit the specialty, role, or linked account.",
+                    "Enter the person's email address and role. The user will be created automatically.",
                 ),
                 size="2",
                 color="var(--gray-9)",
@@ -129,9 +129,9 @@ def _user_dialog() -> rx.Component:
             rx.vstack(
                 rx.grid(
                     rx.vstack(
-                        rx.text("Prénom *", size="2", weight="medium"),
+                        rx.text("First name *", size="2", weight="medium"),
                         rx.input(
-                            placeholder="Prénom",
+                            placeholder="First name",
                             value=UserManagementState.form.first_name,
                             on_change=UserManagementState.set_first_name,
                             width="100%",
@@ -139,9 +139,9 @@ def _user_dialog() -> rx.Component:
                         spacing="1",
                     ),
                     rx.vstack(
-                        rx.text("Nom *", size="2", weight="medium"),
+                        rx.text("Last name *", size="2", weight="medium"),
                         rx.input(
-                            placeholder="Nom",
+                            placeholder="Last name",
                             value=UserManagementState.form.last_name,
                             on_change=UserManagementState.set_last_name,
                             width="100%",
@@ -165,9 +165,9 @@ def _user_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.vstack(
-                    rx.text("Rôle *", size="2", weight="medium"),
+                    rx.text("Role *", size="2", weight="medium"),
                     rx.select.root(
-                        rx.select.trigger(placeholder="Sélectionner un rôle", width="100%"),
+                        rx.select.trigger(placeholder="Select a role", width="100%"),
                         rx.select.content(
                             rx.select.group(
                                 rx.select.label("PSC"),
@@ -175,12 +175,12 @@ def _user_dialog() -> rx.Component:
                             ),
                             rx.select.separator(),
                             rx.select.group(
-                                rx.select.label("Entreprise"),
+                                rx.select.label("Company"),
                                 *[rx.select.item(label, value=val) for val, label in _ENTERPRISE_ROLES],
                             ),
                             rx.select.separator(),
                             rx.select.group(
-                                rx.select.label("Espace patient"),
+                                rx.select.label("Patient portal"),
                                 *[rx.select.item(label, value=val) for val, label in _PATIENT_ROLES],
                             ),
                         ),
@@ -191,11 +191,11 @@ def _user_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.vstack(
-                    rx.text("Compte de facturation", size="2", weight="medium"),
+                    rx.text("Billing account", size="2", weight="medium"),
                     rx.select.root(
-                        rx.select.trigger(placeholder="Optionnel — pour les rôles entreprise", width="100%"),
+                        rx.select.trigger(placeholder="Optional — for company roles", width="100%"),
                         rx.select.content(
-                            rx.select.item("— Aucun —", value="_none_"),
+                            rx.select.item("— None —", value="_none_"),
                             rx.foreach(
                                 UserManagementState.account_options,
                                 lambda a: rx.select.item(a.name, value=a.id),
@@ -212,13 +212,13 @@ def _user_dialog() -> rx.Component:
                     (UserManagementState.form.role == "MEDECIN_PSC")
                     | (UserManagementState.form.role == "MEDECIN_ENTREPRISE"),
                     rx.vstack(
-                        rx.text("Spécialité", size="2", weight="medium"),
+                        rx.text("Specialty", size="2", weight="medium"),
                         # Quick-pick from existing specialties
                         rx.cond(
                             UserManagementState.specialty_suggestions.length() > 0,
                             rx.select.root(
                                 rx.select.trigger(
-                                    placeholder="Choisir une spécialité existante…",
+                                    placeholder="Choose an existing specialty…",
                                     width="100%",
                                 ),
                                 rx.select.content(
@@ -232,13 +232,13 @@ def _user_dialog() -> rx.Component:
                             ),
                         ),
                         rx.input(
-                            placeholder="Ou saisir librement : Médecine du travail, Cardiologie…",
+                            placeholder="Or type freely: Occupational medicine, Cardiology…",
                             value=UserManagementState.form.specialty,
                             on_change=UserManagementState.set_specialty,
                             width="100%",
                         ),
                         rx.text(
-                            "Permet au patient de filtrer par spécialité lors d'une prise de RDV.",
+                            "Allows the patient to filter by specialty when booking an appointment.",
                             size="1",
                             color="var(--gray-9)",
                         ),
@@ -247,7 +247,7 @@ def _user_dialog() -> rx.Component:
                     ),
                 ),
                 rx.hstack(
-                    rx.text("Statut actif", size="2"),
+                    rx.text("Active status", size="2"),
                     rx.switch(
                         checked=UserManagementState.form.is_active,
                         on_change=UserManagementState.set_is_active,
@@ -270,10 +270,10 @@ def _user_dialog() -> rx.Component:
             ),
             rx.hstack(
                 rx.dialog.close(
-                    rx.button("Annuler", variant="soft", color_scheme="gray"),
+                    rx.button("Cancel", variant="soft", color_scheme="gray"),
                 ),
                 rx.button(
-                    "Enregistrer",
+                    "Save",
                     on_click=UserManagementState.save_user,
                     loading=UserManagementState.is_saving,
                 ),
@@ -295,11 +295,11 @@ def _users_table(users: list[UserRowDTO]) -> rx.Component:
         rx.table.root(
             rx.table.header(
                 rx.table.row(
-                    rx.table.column_header_cell("Nom"),
+                    rx.table.column_header_cell("Name"),
                     rx.table.column_header_cell("Email"),
-                    rx.table.column_header_cell("Rôles"),
-                    rx.table.column_header_cell("Compte lié"),
-                    rx.table.column_header_cell("Statut"),
+                    rx.table.column_header_cell("Roles"),
+                    rx.table.column_header_cell("Linked account"),
+                    rx.table.column_header_cell("Status"),
                     rx.table.column_header_cell(""),
                 )
             ),
@@ -308,7 +308,7 @@ def _users_table(users: list[UserRowDTO]) -> rx.Component:
             variant="surface",
         ),
         rx.center(
-            rx.text("Aucun utilisateur trouvé.", size="2", color="var(--gray-9)"),
+            rx.text("No user found.", size="2", color="var(--gray-9)"),
             padding="2rem",
         ),
     )
@@ -323,14 +323,14 @@ def user_management_page() -> rx.Component:
                 # Header
                 rx.hstack(
                     rx.vstack(
-                        rx.heading("Gestion des utilisateurs", size="6"),
-                        rx.text("Utilisateurs PSC et entreprise de Constellab Care", size="2", color="var(--gray-9)"),
+                        rx.heading("User management", size="6"),
+                        rx.text("PSC and company users in Constellab Care", size="2", color="var(--gray-9)"),
                         spacing="0",
                     ),
                     rx.spacer(),
                     rx.button(
                         rx.icon("user-plus", size=16),
-                        "Ajouter",
+                        "Add",
                         on_click=UserManagementState.open_create_dialog,
                         variant="solid",
                     ),
@@ -345,11 +345,11 @@ def user_management_page() -> rx.Component:
                 rx.callout(
                     rx.hstack(
                         rx.text(
-                            "Cette page gère les comptes, rôles et prévisualisations. "
-                            "Pour consulter l'annuaire visuel groupé par poste, voir ",
+                            "This page manages accounts, roles, and user previews. "
+                            "To view the visual directory grouped by position, see ",
                             size="2",
                         ),
-                        rx.link("l'Annuaire du personnel →", href="/staff", size="2"),
+                        rx.link("Staff directory →", href="/staff", size="2"),
                         spacing="1",
                         align="center",
                         flex_wrap="wrap",
@@ -365,11 +365,11 @@ def user_management_page() -> rx.Component:
                     rx.tabs.root(
                     rx.tabs.list(
                         rx.tabs.trigger(
-                            rx.hstack(rx.icon("shield", size=14), rx.text("Équipe PSC"), spacing="1"),
+                            rx.hstack(rx.icon("shield", size=14), rx.text("PSC Team"), spacing="1"),
                             value="psc",
                         ),
                         rx.tabs.trigger(
-                            rx.hstack(rx.icon("building-2", size=14), rx.text("Entreprises"), spacing="1"),
+                            rx.hstack(rx.icon("building-2", size=14), rx.text("Companies"), spacing="1"),
                             value="enterprise",
                         ),
                     ),
@@ -380,12 +380,12 @@ def user_management_page() -> rx.Component:
                             rx.table.root(
                                 rx.table.header(
                                     rx.table.row(
-                                        rx.table.column_header_cell("Nom"),
+                                        rx.table.column_header_cell("Name"),
                                         rx.table.column_header_cell("Email"),
-                                        rx.table.column_header_cell("Rôles"),
-                                        rx.table.column_header_cell("Spécialité"),
-                                        rx.table.column_header_cell("Compte lié"),
-                                        rx.table.column_header_cell("Statut"),
+                                        rx.table.column_header_cell("Roles"),
+                                        rx.table.column_header_cell("Specialty"),
+                                        rx.table.column_header_cell("Linked account"),
+                                        rx.table.column_header_cell("Status"),
                                         rx.table.column_header_cell(""),
                                     )
                                 ),
@@ -396,7 +396,7 @@ def user_management_page() -> rx.Component:
                                 variant="surface",
                             ),
                             rx.center(
-                                rx.text("Aucun utilisateur PSC trouvé.", size="2", color="var(--gray-9)"),
+                                rx.text("No PSC user found.", size="2", color="var(--gray-9)"),
                                 padding="2rem",
                             ),
                         ),
@@ -409,12 +409,12 @@ def user_management_page() -> rx.Component:
                             rx.table.root(
                                 rx.table.header(
                                     rx.table.row(
-                                        rx.table.column_header_cell("Nom"),
+                                        rx.table.column_header_cell("Name"),
                                         rx.table.column_header_cell("Email"),
-                                        rx.table.column_header_cell("Rôles"),
-                                        rx.table.column_header_cell("Spécialité"),
-                                        rx.table.column_header_cell("Compte lié"),
-                                        rx.table.column_header_cell("Statut"),
+                                        rx.table.column_header_cell("Roles"),
+                                        rx.table.column_header_cell("Specialty"),
+                                        rx.table.column_header_cell("Linked account"),
+                                        rx.table.column_header_cell("Status"),
                                         rx.table.column_header_cell(""),
                                     )
                                 ),
@@ -425,7 +425,7 @@ def user_management_page() -> rx.Component:
                                 variant="surface",
                             ),
                             rx.center(
-                                rx.text("Aucun utilisateur entreprise trouvé.", size="2", color="var(--gray-9)"),
+                                rx.text("No company user found.", size="2", color="var(--gray-9)"),
                                 padding="2rem",
                             ),
                         ),
@@ -444,26 +444,26 @@ def user_management_page() -> rx.Component:
                 rx.dialog.content(
                     rx.dialog.title(
                         rx.hstack(rx.icon("user-x", size=18, color="var(--red-9)"),
-                                  rx.text("Supprimer l'utilisateur ?"), spacing="2"),
+                                  rx.text("Delete user?"), spacing="2"),
                     ),
                     rx.vstack(
                         rx.text(
-                            "Vous allez révoquer tous les rôles de ",
+                            "You are about to revoke all roles for ",
                             rx.text.strong(UserManagementState.confirm_revoke_user_email),
-                            ". Cette action est irréversible.",
+                            ". This action is irreversible.",
                             size="2",
                         ),
                         rx.vstack(
-                            rx.text("Motif *", size="2", weight="medium"),
+                            rx.text("Reason *", size="2", weight="medium"),
                             rx.text_area(
-                                placeholder="Indiquez le motif (départ, faute, erreur de saisie…)",
+                                placeholder="State the reason (departure, misconduct, data entry error…)",
                                 value=UserManagementState.confirm_revoke_motif,
                                 on_change=UserManagementState.set_confirm_revoke_motif,
                                 rows="3",
                                 width="100%",
                             ),
                             rx.text(
-                                "Le motif est obligatoire et sera enregistré dans les logs.",
+                                "The reason is mandatory and will be recorded in the logs.",
                                 size="1",
                                 color="var(--gray-9)",
                             ),
@@ -472,11 +472,11 @@ def user_management_page() -> rx.Component:
                         ),
                         rx.hstack(
                             rx.dialog.close(
-                                rx.button("Annuler", variant="soft", color_scheme="gray",
+                                rx.button("Cancel", variant="soft", color_scheme="gray",
                                           on_click=UserManagementState.dismiss_confirm_revoke),
                             ),
                             rx.button(
-                                "Supprimer",
+                                "Delete",
                                 color_scheme="red",
                                 disabled=UserManagementState.confirm_revoke_motif.strip() == "",
                                 on_click=UserManagementState.confirmed_revoke,

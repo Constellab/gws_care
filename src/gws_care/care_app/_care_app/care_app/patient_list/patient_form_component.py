@@ -49,7 +49,7 @@ def _account_picker_section() -> rx.Component:
             rx.hstack(
                 rx.icon("link", size=14, color="var(--accent-9)"),
                 rx.text(LanguageState.tr["section_link_account"], size="2", weight="bold", color="var(--gray-9)"),
-                rx.badge("Requis", color_scheme="red", variant="soft", size="1"),
+                rx.badge("Required", color_scheme="red", variant="soft", size="1"),
                 rx.spacer(),
                 rx.cond(
                     PatientFormState.form_account_id != "",
@@ -77,7 +77,7 @@ def _account_picker_section() -> rx.Component:
                 ),
                 rx.button(
                     rx.icon("plus", size=13),
-                    "Créer un compte",
+                    "Create account",
                     on_click=PatientFormState.trigger_account_create,
                     type="button",
                     variant="soft",
@@ -170,8 +170,8 @@ def _account_picker_section() -> rx.Component:
                                 rx.table.root(
                                     rx.table.header(
                                         rx.table.row(
-                                            rx.table.column_header_cell(rx.text("Compte", size="1")),
-                                            rx.table.column_header_cell(rx.text("Ville", size="1")),
+                                            rx.table.column_header_cell(rx.text("Account", size="1")),
+                                            rx.table.column_header_cell(rx.text("City", size="1")),
                                         )
                                     ),
                                     rx.table.body(rx.foreach(PatientFormState.account_options, _account_row)),
@@ -248,13 +248,12 @@ def _form_fields() -> rx.Component:
                 ),
             ),
             _field(
-                LanguageState.tr["field_gender"],
+                LanguageState.tr["field_gender"] + " *",
                 rx.select.root(
                     rx.select.trigger(placeholder=LanguageState.tr["select_gender_placeholder"]),
                     rx.select.content(
                         rx.select.item(LanguageState.tr["gender_male"], value="M"),
                         rx.select.item(LanguageState.tr["gender_female"], value="F"),
-                        rx.select.item(LanguageState.tr["gender_other"], value="Other"),
                     ),
                     value=PatientFormState.form_gender,
                     on_change=PatientFormState.set_form_gender,
@@ -292,7 +291,7 @@ def _form_fields() -> rx.Component:
                 placeholder=rx.cond(
                     PatientFormState.form_country == "France",
                     "1 85 07 75 123 456 78",
-                    "Numéro de sécurité sociale",
+                    "Social security number",
                 ),
                 size="2", width="100%",
             ),
@@ -316,8 +315,8 @@ def _form_fields() -> rx.Component:
             PatientFormState.is_create_mode,
             rx.hstack(
                 rx.icon("save", size=14, color="var(--orange-9)"),
-                rx.text("Sauvegarder en brouillon", size="2", color="var(--orange-11)"),
-                rx.text("(données partielles acceptées)", size="1", color="var(--gray-9)"),
+                rx.text("Save as draft", size="2", color="var(--orange-11)"),
+                rx.text("(partial data accepted)", size="1", color="var(--gray-9)"),
                 spacing="2",
                 align="center",
                 padding="0.5rem 0.75rem",
@@ -366,7 +365,7 @@ def patient_form_dialog() -> rx.Component:
                     _form_fields(),
                     rx.hstack(
                         rx.button(
-                            "Annuler",
+                            LanguageState.tr["cancel_btn"],
                             type="button",
                             variant="soft",
                             color_scheme="gray",
@@ -377,8 +376,8 @@ def patient_form_dialog() -> rx.Component:
                             rx.spinner(loading=PatientFormState.is_loading),
                             rx.cond(
                                 PatientFormState.is_create_mode,
-                                "Créer",
-                                "Sauvegarder",
+                                LanguageState.tr["create_btn"],
+                                LanguageState.tr["save_btn"],
                             ),
                             type="submit",
                             disabled=PatientFormState.is_loading,

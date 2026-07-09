@@ -332,11 +332,6 @@ def _sidebar_content() -> rx.Component:
                         "/campaign-visits",
                         additional_active_route_prefixes=["/visit/"],
                     ),
-                    # Only doctors see "my assigned exams"
-                    rx.cond(
-                        RoleState.is_doctor,
-                        _nav_item("stethoscope", "Mes examens assignés", "/my-assigned-exams"),
-                    ),
                     width="100%",
                     spacing="1",
                     align_items="start",
@@ -361,17 +356,32 @@ def _sidebar_content() -> rx.Component:
                 | RoleState.is_account_admin,
                 rx.vstack(
                     _nav_group_label(LanguageState.tr["nav_group_administration"]),
-                    _nav_item(
-                        "building-2",
-                        LanguageState.tr["nav_accounts"],
-                        "/accounts",
-                        additional_active_route_prefixes=["/account"],
+                    rx.cond(
+                        RoleState.is_operator | RoleState.is_admin | RoleState.is_account_admin,
+                        _nav_item(
+                            "building-2",
+                            LanguageState.tr["nav_accounts"],
+                            "/accounts",
+                            additional_active_route_prefixes=["/account"],
+                        ),
                     ),
-                    _nav_item("user-round-check", LanguageState.tr["nav_doctors"], "/doctors"),
-                    _nav_item(
-                        "calendar-clock",
-                        LanguageState.tr["nav_doctor_schedule"],
-                        "/doctor-schedule",
+                    rx.cond(
+                        RoleState.is_operator | RoleState.is_admin | RoleState.is_account_admin,
+                        _nav_item(
+                            "user-round-check", LanguageState.tr["nav_doctors"], "/doctors"
+                        ),
+                    ),
+                    rx.cond(
+                        RoleState.is_operator | RoleState.is_admin | RoleState.is_account_admin,
+                        _nav_item(
+                            "calendar-clock",
+                            LanguageState.tr["nav_doctor_schedule"],
+                            "/doctor-schedule",
+                        ),
+                    ),
+                    rx.cond(
+                        RoleState.is_doctor,
+                        _nav_item("stethoscope", "Mes examens assignés", "/my-assigned-exams"),
                     ),
                     width="100%",
                     spacing="1",

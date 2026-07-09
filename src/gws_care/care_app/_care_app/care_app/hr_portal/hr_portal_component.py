@@ -45,11 +45,11 @@ def _patient_row(p: HRPatientDTO) -> rx.Component:
         rx.table.cell(
             rx.cond(
                 p.result_published,
-                rx.badge("Résultat disponible", color_scheme="green", size="1", variant="soft"),
+                rx.badge("Result available", color_scheme="green", size="1", variant="soft"),
                 rx.cond(
                     p.exam_done,
-                    rx.badge("Examen réalisé", color_scheme="blue", size="1", variant="soft"),
-                    rx.badge("En attente", color_scheme="gray", size="1", variant="soft"),
+                    rx.badge("Exam done", color_scheme="blue", size="1", variant="soft"),
+                    rx.badge("Pending", color_scheme="gray", size="1", variant="soft"),
                 ),
             )
         ),
@@ -62,17 +62,17 @@ def hr_portal_page() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.vstack(
-                        rx.heading("Espace RH Entreprise", size="6"),
-                        rx.text("Suivi administratif des campagnes — données médicales non accessibles", size="2", color="var(--gray-9)"),
+                        rx.heading("Company HR Space", size="6"),
+                        rx.text("Administrative monitoring of campaigns — no individual medical data displayed", size="2", color="var(--gray-9)"),
                         spacing="0",
                     ),
                     rx.spacer(),
-                    rx.button(rx.icon("refresh-cw", size=14), "Actualiser",
+                    rx.button(rx.icon("refresh-cw", size=14), "Refresh",
                               variant="soft", size="2", on_click=HRPortalState.on_load),
                     width="100%", align="end",
                 ),
                 rx.callout(
-                    "Espace RH — aucune donnée médicale individuelle n'est affichée dans cet espace.",
+                    "HR Space — no individual medical data is displayed in this space.",
                     icon="shield",
                     color_scheme="blue",
                     size="2",
@@ -86,16 +86,16 @@ def hr_portal_page() -> rx.Component:
                     rx.center(rx.spinner(size="3"), padding="4rem"),
                     rx.vstack(
                         # Campaigns table
-                        rx.heading("Campagnes", size="4"),
+                        rx.heading("Campaigns", size="4"),
                         rx.table.root(
                             rx.table.header(
                                 rx.table.row(
-                                    rx.table.column_header_cell("Nom"),
-                                    rx.table.column_header_cell("Statut"),
-                                    rx.table.column_header_cell("Début"),
-                                    rx.table.column_header_cell("Lieu"),
-                                    rx.table.column_header_cell("Nb patients"),
-                                    rx.table.column_header_cell("Présents / Absents / En attente"),
+                                    rx.table.column_header_cell("Name"),
+                                    rx.table.column_header_cell("Status"),
+                                    rx.table.column_header_cell("Start"),
+                                    rx.table.column_header_cell("Location"),
+                                    rx.table.column_header_cell("No. patients"),
+                                    rx.table.column_header_cell("Present / Absent / Pending"),
                                     rx.table.column_header_cell(""),
                                 )
                             ),
@@ -123,11 +123,11 @@ def hr_portal_page() -> rx.Component:
                                     rx.table.root(
                                         rx.table.header(
                                             rx.table.row(
-                                                rx.table.column_header_cell("N° dossier"),
-                                                rx.table.column_header_cell("Nom"),
-                                                rx.table.column_header_cell("Téléphone"),
-                                                rx.table.column_header_cell("Présence"),
-                                                rx.table.column_header_cell("Statut examen"),
+                                                rx.table.column_header_cell("File #"),
+                                                rx.table.column_header_cell("Name"),
+                                                rx.table.column_header_cell("Phone"),
+                                                rx.table.column_header_cell("Presence"),
+                                                rx.table.column_header_cell("Exam status"),
                                             )
                                         ),
                                         rx.table.body(rx.foreach(HRPortalState.patients, _patient_row)),

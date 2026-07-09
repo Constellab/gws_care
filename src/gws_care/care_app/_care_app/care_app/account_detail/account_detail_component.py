@@ -265,9 +265,9 @@ def _campaign_row(c: CampaignRowDTO) -> rx.Component:
 def _campaign_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Nouvelle campagne"),
+            rx.dialog.title("New Campaign"),
             rx.dialog.description(
-                "Créer une campagne médicale pour ce compte.",
+                "Create a medical campaign for this account.",
                 size="2",
                 margin_bottom="1rem",
             ),
@@ -285,7 +285,7 @@ def _campaign_dialog() -> rx.Component:
                 rx.vstack(
                     rx.text("Nom *", size="2", weight="medium"),
                     rx.input(
-                        placeholder="Ex: Bilan santé annuel 2026",
+                        placeholder="Ex: Annual health checkup 2026",
                         value=AccountDetailState.new_campaign_name,
                         on_change=AccountDetailState.set_new_campaign_name,
                         width="100%",
@@ -295,7 +295,7 @@ def _campaign_dialog() -> rx.Component:
                 ),
                 rx.grid(
                     rx.vstack(
-                        rx.text("Date de début", size="2", weight="medium"),
+                        rx.text("Start Date", size="2", weight="medium"),
                         rx.input(
                             type="date",
                             value=AccountDetailState.new_campaign_start,
@@ -306,7 +306,7 @@ def _campaign_dialog() -> rx.Component:
                         width="100%",
                     ),
                     rx.vstack(
-                        rx.text("Date de fin", size="2", weight="medium"),
+                        rx.text("End Date", size="2", weight="medium"),
                         rx.input(
                             type="date",
                             value=AccountDetailState.new_campaign_end,
@@ -321,9 +321,9 @@ def _campaign_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.vstack(
-                    rx.text("Lieu", size="2", weight="medium"),
+                    rx.text("Location", size="2", weight="medium"),
                     rx.input(
-                        placeholder="Ex: Salle de réunion A",
+                        placeholder="Ex: Meeting Room A",
                         value=AccountDetailState.new_campaign_location,
                         on_change=AccountDetailState.set_new_campaign_location,
                         width="100%",
@@ -336,18 +336,18 @@ def _campaign_dialog() -> rx.Component:
                     rx.vstack(
                         rx.hstack(
                             rx.icon("stethoscope", size=13, color="var(--blue-9)"),
-                            rx.text("Médecin PSC", size="2", weight="medium"),
+                            rx.text("PSC Doctor", size="2", weight="medium"),
                             spacing="1", align="center",
                         ),
                         rx.cond(
                             AccountDetailState.psc_doctor_options.length() > 0,
                             rx.select.root(
                                 rx.select.trigger(
-                                    placeholder="Sélectionner un médecin PSC",
+                                    placeholder="Select a PSC Doctor",
                                     width="100%",
                                 ),
                                 rx.select.content(
-                                    rx.select.item("— Aucun —", value="__none__"),
+                                    rx.select.item("— None —", value="__none__"),
                                     rx.foreach(
                                         AccountDetailState.psc_doctor_options,
                                         lambda d: rx.select.item(d.label, value=d.id),
@@ -358,7 +358,7 @@ def _campaign_dialog() -> rx.Component:
                                 width="100%",
                             ),
                             rx.callout(
-                                "Aucun médecin PSC trouvé. Créez un utilisateur avec le rôle Médecin PSC dans l'administration.",
+                                "No PSC doctor found. Create a user with the PSC Doctor role in administration.",
                                 icon="info",
                                 color_scheme="blue",
                                 size="1",
@@ -370,18 +370,18 @@ def _campaign_dialog() -> rx.Component:
                     rx.vstack(
                         rx.hstack(
                             rx.icon("briefcase-medical", size=13, color="var(--indigo-9)"),
-                            rx.text("Médecin Entreprise", size="2", weight="medium"),
+                            rx.text("Company Doctor", size="2", weight="medium"),
                             spacing="1", align="center",
                         ),
                         rx.cond(
                             AccountDetailState.enterprise_doctor_options.length() > 0,
                             rx.select.root(
                                 rx.select.trigger(
-                                    placeholder="Sélectionner un méd. entreprise",
+                                    placeholder="Select a company doctor",
                                     width="100%",
                                 ),
                                 rx.select.content(
-                                    rx.select.item("— Aucun —", value="__none__"),
+                                    rx.select.item("— None —", value="__none__"),
                                     rx.foreach(
                                         AccountDetailState.enterprise_doctor_options,
                                         lambda d: rx.select.item(d.label, value=d.id),
@@ -392,7 +392,7 @@ def _campaign_dialog() -> rx.Component:
                                 width="100%",
                             ),
                             rx.callout(
-                                "Aucun médecin entreprise trouvé. Créez un utilisateur avec ce rôle.",
+                                "No company doctor found. Create a user with this role.",
                                 icon="info",
                                 color_scheme="amber",
                                 size="1",
@@ -407,7 +407,7 @@ def _campaign_dialog() -> rx.Component:
                 ),
                 rx.hstack(
                     rx.button(
-                        "Annuler",
+                        LanguageState.tr["cancel_btn"],
                         variant="soft",
                         color_scheme="gray",
                         on_click=AccountDetailState.close_campaign_dialog,
@@ -417,7 +417,7 @@ def _campaign_dialog() -> rx.Component:
                         rx.cond(
                             AccountDetailState.is_creating_campaign,
                             rx.spinner(size="2"),
-                            rx.text("Créer la campagne"),
+                            rx.text("Create Campaign"),
                         ),
                         on_click=AccountDetailState.create_campaign,
                         disabled=(AccountDetailState.new_campaign_name == "")
@@ -441,11 +441,11 @@ def _campaign_dialog() -> rx.Component:
 def _campaigns_section() -> rx.Component:
     return rx.vstack(
         rx.hstack(
-            rx.heading("Campagnes", size="4"),
+            rx.heading("Campaigns", size="4"),
             rx.spacer(),
             rx.button(
                 rx.icon("plus", size=14),
-                "Nouvelle campagne",
+                "New Campaign",
                 size="2",
                 on_click=AccountDetailState.open_campaign_dialog,
             ),
@@ -458,12 +458,12 @@ def _campaigns_section() -> rx.Component:
             rx.table.root(
                 rx.table.header(
                     rx.table.row(
-                        rx.table.column_header_cell("Nom"),
-                        rx.table.column_header_cell("Statut"),
+                        rx.table.column_header_cell("Name"),
+                        rx.table.column_header_cell("Status"),
                         rx.table.column_header_cell("Patients"),
-                        rx.table.column_header_cell("Début"),
-                        rx.table.column_header_cell("Fin"),
-                        rx.table.column_header_cell("Lieu"),
+                        rx.table.column_header_cell("Start"),
+                        rx.table.column_header_cell("End"),
+                        rx.table.column_header_cell("Location"),
                         rx.table.column_header_cell(""),
                     )
                 ),
@@ -475,7 +475,7 @@ def _campaigns_section() -> rx.Component:
                 size="1",
             ),
             rx.center(
-                rx.text("Aucune campagne pour ce compte.", size="2", color="var(--gray-9)"),
+                rx.text("No campaigns for this account.", size="2", color="var(--gray-9)"),
                 padding="2rem",
             ),
         ),

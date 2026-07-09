@@ -7,22 +7,22 @@ from ..common.page_layout import page_layout
 from .audit_state import AuditLogRowVM, AuditState
 
 _ACTION_OPTIONS = [
-    ("__all__", "Toutes les actions"),
-    ("LOGIN", "Connexion"),
-    ("VIEW_MEDICAL", "Consultation médicale"),
-    ("CREATE_PATIENT", "Création patient"),
-    ("UPDATE_PATIENT", "Modification patient"),
-    ("IMPORT_EMPLOYEES", "Import employés"),
+    ("__all__", "All actions"),
+    ("LOGIN", "Login"),
+    ("VIEW_MEDICAL", "Medical consultation"),
+    ("CREATE_PATIENT", "Patient creation"),
+    ("UPDATE_PATIENT", "Patient modification"),
+    ("IMPORT_EMPLOYEES", "Employee import"),
     ("VALIDATE", "Validation"),
     ("CORRECTION", "Correction"),
     ("EXPORT", "Export"),
-    ("DOWNLOAD_PDF", "Téléchargement PDF"),
-    ("ACCESS_DENIED", "Accès refusé"),
-    ("GENERATE_CERTIFICATE", "Génération certificat"),
-    ("MODIFY_RIGHTS", "Modification droits"),
-    ("CREATE_CAMPAIGN", "Création campagne"),
-    ("CAMPAIGN_STATUS_CHANGE", "Changement statut campagne"),
-    ("PUBLISH_RESULTS", "Publication résultats"),
+    ("DOWNLOAD_PDF", "PDF download"),
+    ("ACCESS_DENIED", "Access denied"),
+    ("GENERATE_CERTIFICATE", "Certificate generation"),
+    ("MODIFY_RIGHTS", "Rights modification"),
+    ("CREATE_CAMPAIGN", "Campaign creation"),
+    ("CAMPAIGN_STATUS_CHANGE", "Campaign status change"),
+    ("PUBLISH_RESULTS", "Results publication"),
 ]
 
 _ACTION_COLORS = {
@@ -88,8 +88,8 @@ def audit_page() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.vstack(
-                        rx.heading("Journal d'audit", size="6"),
-                        rx.text("Traçabilité des actions sensibles", size="2", color="var(--gray-9)"),
+                        rx.heading("Audit log", size="6"),
+                        rx.text("Traceability of sensitive actions", size="2", color="var(--gray-9)"),
                         spacing="0",
                     ),
                     rx.spacer(),
@@ -117,7 +117,7 @@ def audit_page() -> rx.Component:
                             ),
                             debounce_timeout=400,
                         ),
-                        rx.button("Filtrer", on_click=AuditState.apply_filters, size="2", variant="solid"),
+                        rx.button("Filter", on_click=AuditState.apply_filters, size="2", variant="solid"),
                         spacing="3", width="100%", align="center",
                     ),
                     width="100%",
@@ -136,11 +136,11 @@ def audit_page() -> rx.Component:
                             rx.table.header(
                                 rx.table.row(
                                     rx.table.column_header_cell("Date"),
-                                    rx.table.column_header_cell("Utilisateur"),
+                                    rx.table.column_header_cell("User"),
                                     rx.table.column_header_cell("Action"),
-                                    rx.table.column_header_cell("Ressource"),
+                                    rx.table.column_header_cell("Resource"),
                                     rx.table.column_header_cell("ID"),
-                                    rx.table.column_header_cell("Détails"),
+                                    rx.table.column_header_cell("Details"),
                                     rx.table.column_header_cell("IP"),
                                 )
                             ),
@@ -149,7 +149,7 @@ def audit_page() -> rx.Component:
                             variant="surface",
                         ),
                         rx.center(
-                            rx.text("Aucune entrée dans le journal.", size="2", color="var(--gray-9)"),
+                            rx.text("No entry in the log.", size="2", color="var(--gray-9)"),
                             padding="4rem",
                         ),
                     ),
@@ -160,7 +160,7 @@ def audit_page() -> rx.Component:
                     rx.hstack(
                         rx.text(
                             AuditState.total_count.to(str)
-                            + " entrée(s) — page "
+                            + " entry(ies) — page "
                             + AuditState.page.to(str)
                             + " / "
                             + AuditState.total_pages.to(str),

@@ -107,10 +107,11 @@ class ExamParameterResultService:
         value_boolean: bool | None = None,
         comment: str | None = None,
         patient_gender: str | None = None,
+        patient_age: int | None = None,
     ) -> ExamParameterResult:
         """Create or update a result row and auto-compute its status."""
         param = ExamParameter.get_by_id(parameter_id)
-        status = cls._compute_status(param, value_numeric, value_text, value_boolean, patient_gender)
+        status = cls._compute_status(param, value_numeric, value_text, value_boolean, patient_gender, patient_age)
         result, _ = ExamParameterResult.get_or_create(
             exam_id=exam_id,
             parameter_id=parameter_id,
@@ -124,7 +125,11 @@ class ExamParameterResultService:
         return result
 
     @classmethod
-    def bulk_upsert(cls, exam_id: str, entries: list[dict], patient_gender: str | None = None) -> None:
+    def bulk_upsert(
+        cls, exam_id: str, entries: list[dict],
+        patient_gender: str | None = None,
+        patient_age: int | None = None,
+    ) -> None:
         """Upsert multiple results at once.
 
         Each entry dict: {parameter_id, value_numeric?, value_text?, value_boolean?, comment?}
@@ -138,12 +143,14 @@ class ExamParameterResultService:
                 value_boolean=entry.get("value_boolean"),
                 comment=entry.get("comment"),
                 patient_gender=patient_gender,
+                patient_age=patient_age,
             )
 
     @classmethod
     def bulk_upsert_with_computed(
         cls, exam_id: str, exam_type_ref_id: str, entries: list[dict],
         patient_gender: str | None = None,
+        patient_age: int | None = None,
     ) -> None:
         """Upsert manual entries then evaluate and save computed parameters.
 
@@ -161,7 +168,7 @@ class ExamParameterResultService:
             e for e in entries
             if not ExamParameter.get_by_id(e["parameter_id"]).is_computed
         ]
-        cls.bulk_upsert(exam_id, manual_only, patient_gender=patient_gender)
+        cls.bulk_upsert(exam_id, manual_only, patient_gender=patient_gender, patient_age=patient_age)
 
         # 2. Build code → value context from manual results
         all_params = list(
@@ -190,7 +197,7 @@ class ExamParameterResultService:
             try:
                 value = ExamFormulaEngine.evaluate(param.formula, context)
                 cls.upsert(exam_id=exam_id, parameter_id=str(param.id), value_numeric=value,
-                           patient_gender=patient_gender)
+                           patient_gender=patient_gender, patient_age=patient_age)
                 if param.code:
                     context[param.code] = value
             except FormulaEvaluationError:
@@ -251,6 +258,7 @@ class ExamParameterResultService:
         value_text: str | None,
         value_boolean: bool | None,
         patient_gender: str | None = None,
+        patient_age: int | None = None,
     ) -> ResultStatus:
         if value_boolean is not None:
             return ResultStatus.POSITIVE if value_boolean else ResultStatus.NEGATIVE
@@ -259,22 +267,13 @@ class ExamParameterResultService:
             # Parameter not applicable to this patient's gender
             if target != "ALL" and patient_gender and patient_gender != target:
                 return ResultStatus.PENDING
-            # Pick gender-specific thresholds when available, else fall back to common
-            if patient_gender == "M" and (param.ref_low_m is not None or param.ref_high_m is not None):
-                ref_low = param.ref_low_m
-                ref_high = param.ref_high_m
-                crit_low = param.critical_low_m
-                crit_high = param.critical_high_m
-            elif patient_gender == "F" and (param.ref_low_f is not None or param.ref_high_f is not None):
-                ref_low = param.ref_low_f
-                ref_high = param.ref_high_f
-                crit_low = param.critical_low_f
-                crit_high = param.critical_high_f
-            else:
-                ref_low = param.ref_low
-                ref_high = param.ref_high
-                crit_low = param.critical_low
-                crit_high = param.critical_high
+            # Resolve thresholds: age ranges > gender columns > generic
+            from gws_care.exam_type_ref.exam_param_age_range import resolve_param_thresholds
+            resolved = resolve_param_thresholds(param, patient_age, patient_gender)
+            ref_low = resolved["ref_low"]
+            ref_high = resolved["ref_high"]
+            crit_low = resolved["crit_low"]
+            crit_high = resolved["crit_high"]
             if crit_low is not None and value_numeric <= crit_low:
                 return ResultStatus.CRITICAL_LOW
             if crit_high is not None and value_numeric >= crit_high:

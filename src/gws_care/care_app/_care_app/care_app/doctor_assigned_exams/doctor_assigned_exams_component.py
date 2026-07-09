@@ -53,7 +53,7 @@ def _assignee_badge(row: AssignedExamRowDTO) -> rx.Component:
         row.row_type == "lab",
         rx.badge(
             rx.icon("flask-conical", size=11),
-            "Labo",
+            "Lab",
             color_scheme="amber", variant="soft", size="1",
         ),
         rx.cond(
@@ -131,14 +131,14 @@ def _exam_row(row: AssignedExamRowDTO) -> rx.Component:
                         ),
                         href=row.action_url,
                     ),
-                    content="Saisir / voir les résultats",
+                    content="Enter / view results",
                 ),
                 rx.tooltip(
                     rx.icon_button(
                         rx.icon("external-link", size=14),
                         variant="soft", size="1", color_scheme="gray", disabled=True,
                     ),
-                    content="La campagne n'est pas en phase active",
+                    content="The campaign is not in an active phase",
                 ),
             )
         ),
@@ -156,14 +156,14 @@ def doctor_assigned_exams_page() -> rx.Component:
             # ── Header ────────────────────────────────────────────────────────
             rx.hstack(
                 rx.icon("stethoscope", size=24, color="var(--accent-9)"),
-                rx.heading("Mes examens assignés", size="6"),
+                rx.heading("My assigned exams", size="6"),
                 rx.spacer(),
                 rx.icon_button(
                     rx.icon("refresh-cw", size=16),
                     variant="ghost",
                     size="2",
                     on_click=DoctorAssignedExamsState.on_load,
-                    title="Rafraîchir",
+                    title="Refresh",
                 ),
                 spacing="3",
                 align="center",
@@ -175,12 +175,12 @@ def doctor_assigned_exams_page() -> rx.Component:
                 # Assignee filter (Labo / PSC / doctor name)
                 rx.select.root(
                     rx.select.trigger(
-                        placeholder="Tout afficher",
+                        placeholder="Show all",
                         size="2",
                         width="220px",
                     ),
                     rx.select.content(
-                        rx.select.item("Tout afficher", value="__all__"),
+                        rx.select.item("Show all", value="__all__"),
                         rx.foreach(
                             DoctorAssignedExamsState.available_assignees,
                             _assignee_option,
@@ -193,14 +193,14 @@ def doctor_assigned_exams_page() -> rx.Component:
                 # Source filter (Campagnes / Consultations privées)
                 rx.select.root(
                     rx.select.trigger(
-                        placeholder="Toutes les sources",
+                        placeholder="All sources",
                         size="2",
                         width="220px",
                     ),
                     rx.select.content(
-                        rx.select.item("Toutes les sources",    value="__all__"),
-                        rx.select.item("Campagnes",             value="campaign"),
-                        rx.select.item("Consultations privées", value="private"),
+                        rx.select.item("All sources",          value="__all__"),
+                        rx.select.item("Campaigns",            value="campaign"),
+                        rx.select.item("Private consultations", value="private"),
                     ),
                     value=DoctorAssignedExamsState.filter_source,
                     on_change=DoctorAssignedExamsState.set_filter_source,
@@ -213,14 +213,14 @@ def doctor_assigned_exams_page() -> rx.Component:
                     (
                         "private",
                         rx.select.root(
-                            rx.select.trigger(placeholder="Tous les statuts", size="2", width="220px"),
+                            rx.select.trigger(placeholder="All statuses", size="2", width="220px"),
                             rx.select.content(
-                                rx.select.item("Tous les statuts",              value="__all__"),
-                                rx.select.item("À faire",                       value="todo"),
-                                rx.select.item("En cours — Résultats",          value="in_progress_results"),
-                                rx.select.item("Transmis au labo",              value="transmitted_to_lab"),
-                                rx.select.item("En cours — Interprétation",     value="in_progress_interpretation"),
-                                rx.select.item("Terminé",                       value="done"),
+                                rx.select.item("All statuses",                 value="__all__"),
+                                rx.select.item("To do",                        value="todo"),
+                                rx.select.item("In progress — Results",        value="in_progress_results"),
+                                rx.select.item("Sent to lab",                  value="transmitted_to_lab"),
+                                rx.select.item("In progress — Interpretation", value="in_progress_interpretation"),
+                                rx.select.item("Completed",                    value="done"),
                             ),
                             value=DoctorAssignedExamsState.filter_status,
                             on_change=DoctorAssignedExamsState.set_filter_status,
@@ -229,22 +229,22 @@ def doctor_assigned_exams_page() -> rx.Component:
                     ),
                     # Default (all sources or campaign) → campaign medical statuses
                     rx.select.root(
-                        rx.select.trigger(placeholder="Tous les statuts", size="2", width="220px"),
+                        rx.select.trigger(placeholder="All statuses", size="2", width="220px"),
                         rx.select.content(
-                            rx.select.item("Tous les statuts",           value="__all__"),
-                            rx.select.item("En attente",                 value="PENDING"),
-                            rx.select.item("Résultats saisis",           value="LAB_ENTERED"),
-                            rx.select.item("Résultats validés labo",     value="LAB_VALIDATED"),
-                            rx.select.item("Interprétation PSC",         value="PSC_INTERPRETED"),
-                            rx.select.item("Validé PSC",                 value="PSC_VALIDATED"),
-                            rx.select.item("Transmis médecin traitant",  value="TRANSMITTED_TREATING_DOCTOR"),
-                            rx.select.item("Validé médecin travail",     value="ENTERPRISE_VALIDATED"),
-                            rx.select.item("Dossier terminé",            value="PUBLISHED"),
-                            rx.select.item("À faire",                    value="todo"),
-                            rx.select.item("En cours — Résultats",       value="in_progress_results"),
-                            rx.select.item("Transmis au labo",           value="transmitted_to_lab"),
-                            rx.select.item("En cours — Interprétation",  value="in_progress_interpretation"),
-                            rx.select.item("Terminé",                    value="done"),
+                            rx.select.item("All statuses",              value="__all__"),
+                            rx.select.item("Pending",                   value="PENDING"),
+                            rx.select.item("Results entered",           value="LAB_ENTERED"),
+                            rx.select.item("Lab validated",             value="LAB_VALIDATED"),
+                            rx.select.item("PSC interpretation",        value="PSC_INTERPRETED"),
+                            rx.select.item("PSC validated",             value="PSC_VALIDATED"),
+                            rx.select.item("Sent to treating doctor",   value="TRANSMITTED_TREATING_DOCTOR"),
+                            rx.select.item("Work doctor validated",     value="ENTERPRISE_VALIDATED"),
+                            rx.select.item("Record completed",          value="PUBLISHED"),
+                            rx.select.item("To do",                     value="todo"),
+                            rx.select.item("In progress — Results",     value="in_progress_results"),
+                            rx.select.item("Sent to lab",               value="transmitted_to_lab"),
+                            rx.select.item("In progress — Interpretation", value="in_progress_interpretation"),
+                            rx.select.item("Completed",                 value="done"),
                         ),
                         value=DoctorAssignedExamsState.filter_status,
                         on_change=DoctorAssignedExamsState.set_filter_status,
@@ -253,7 +253,7 @@ def doctor_assigned_exams_page() -> rx.Component:
                 ),
                 # Text search
                 rx.input(
-                    placeholder="Rechercher (patient, examen, campagne…)",
+                    placeholder="Search (patient, exam, campaign…)",
                     value=DoctorAssignedExamsState.filter_search,
                     on_change=DoctorAssignedExamsState.set_filter_search,
                     size="2",
@@ -284,18 +284,18 @@ def doctor_assigned_exams_page() -> rx.Component:
                                     DoctorAssignedExamsState.rows.length() == 0,
                                     rx.vstack(
                                         rx.text(
-                                            "Aucune tâche assignée pour l'instant.",
+                                            "No assigned task for now.",
                                             size="3", color="var(--gray-9)", text_align="center",
                                         ),
                                         rx.text(
-                                            "Les tâches apparaissent ici une fois que des examens sont assignés "
-                                            "dans le détail d'une campagne.",
+                                            "Tasks appear here once exams are assigned "
+                                            "in a campaign's detail page.",
                                             size="2", color="var(--gray-8)", text_align="center",
                                         ),
                                         spacing="2", align="center",
                                     ),
                                     rx.text(
-                                        "Aucun résultat pour ces filtres.",
+                                        "No result for these filters.",
                                         size="3", color="var(--gray-9)", text_align="center",
                                     ),
                                 ),
@@ -310,14 +310,14 @@ def doctor_assigned_exams_page() -> rx.Component:
                             rx.table.root(
                                 rx.table.header(
                                     rx.table.row(
-                                        rx.table.column_header_cell(rx.text("Responsable", size="2")),
+                                        rx.table.column_header_cell(rx.text("Assignee", size="2")),
                                         rx.table.column_header_cell(rx.text("Patient",      size="2")),
-                                        rx.table.column_header_cell(rx.text("Campagne",     size="2")),
-                                        rx.table.column_header_cell(rx.text("Date RDV",     size="2")),
-                                        rx.table.column_header_cell(rx.text("Statut camp.", size="2")),
+                                        rx.table.column_header_cell(rx.text("Campaign",  size="2")),
+                                        rx.table.column_header_cell(rx.text("Appt. date", size="2")),
+                                        rx.table.column_header_cell(rx.text("Camp. status", size="2")),
                                         rx.table.column_header_cell(rx.text("Examen",       size="2")),
-                                        rx.table.column_header_cell(rx.text("Avancement",  size="2")),
-                                        rx.table.column_header_cell(rx.text("À faire",     size="2")),
+                                        rx.table.column_header_cell(rx.text("Progress", size="2")),
+                                        rx.table.column_header_cell(rx.text("To do",    size="2")),
                                         rx.table.column_header_cell(""),
                                     )
                                 ),

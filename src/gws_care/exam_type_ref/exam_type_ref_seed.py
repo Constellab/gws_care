@@ -1,4 +1,7 @@
-"""Seed data — pre-configured exam types with parameters and reference limits.
+"""Seed data — pre-configured exam types with parameters.
+
+Thresholds (ref values, critical values, interpretation labels) are NOT seeded here.
+They are defined per age/sex range through the Age Range manager inside the parameter form.
 
 Usage (run once, idempotent — skips exams that already exist by name):
 
@@ -8,14 +11,15 @@ Usage (run once, idempotent — skips exams that already exist by name):
 
 from gws_care.exam_type_ref.exam_type_ref import ExamTypeRef
 from gws_care.exam_type_ref.exam_parameter import ExamParameter
+from gws_care.exam_type_ref.exam_param_age_range import ExamParameterAgeRange
 from gws_care.exam_type_ref.exam_type_ref_dto import SaveExamTypeRefDTO, SaveExamParameterDTO
 from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
 
-# Each entry: (SaveExamTypeRefDTO, list[SaveExamParameterDTO with name, ...])
+# Each entry: (SaveExamTypeRefDTO, list[SaveExamParameterDTO])
+# NOTE: no ref_low/ref_high/critical/label fields — define those per age/sex range
 _SEED: list[tuple[SaveExamTypeRefDTO, list[SaveExamParameterDTO]]] = [
 
     # ── Constantes vitales ────────────────────────────────────────────────
-    # Taille + Poids → IMC calculé automatiquement ; FC, TA, Temp, SpO2
     (
         SaveExamTypeRefDTO(
             name="Constantes vitales",
@@ -26,19 +30,18 @@ _SEED: list[tuple[SaveExamTypeRefDTO, list[SaveExamParameterDTO]]] = [
             requires_attachment=False,
         ),
         [
-            SaveExamParameterDTO(name="Taille",               code="taille", unit="cm",     value_type="NUMERIC", is_required=True,  display_order=1),
-            SaveExamParameterDTO(name="Poids",                code="poids",  unit="kg",     value_type="NUMERIC", is_required=True,  display_order=2),
+            SaveExamParameterDTO(name="Taille",              code="taille", unit="cm",    value_type="NUMERIC", is_required=True,  display_order=1),
+            SaveExamParameterDTO(name="Poids",               code="poids",  unit="kg",    value_type="NUMERIC", is_required=True,  display_order=2),
             SaveExamParameterDTO(
                 name="IMC", code="imc", unit="kg/m²", value_type="NUMERIC",
                 is_computed=True, formula="poids / (taille / 100) ** 2",
-                ref_low=18.5, ref_high=25.0, critical_low=13.0, critical_high=40.0,
                 is_required=False, display_order=3,
             ),
-            SaveExamParameterDTO(name="Fréquence cardiaque",  code="fc",     unit="bpm",   value_type="NUMERIC", ref_low=50.0,  ref_high=100.0, critical_low=30.0,  critical_high=150.0, is_required=True,  display_order=4),
-            SaveExamParameterDTO(name="Tension systolique",   code="pas",    unit="mmHg",  value_type="NUMERIC", ref_low=90.0,  ref_high=140.0, critical_low=70.0,  critical_high=180.0, is_required=True,  display_order=5),
-            SaveExamParameterDTO(name="Tension diastolique",  code="pad",    unit="mmHg",  value_type="NUMERIC", ref_low=60.0,  ref_high=90.0,  critical_low=40.0,  critical_high=120.0, is_required=True,  display_order=6),
-            SaveExamParameterDTO(name="Température",          code="temp",   unit="°C",    value_type="NUMERIC", ref_low=36.1,  ref_high=37.5,  critical_low=34.0,  critical_high=40.0,  is_required=False, display_order=7),
-            SaveExamParameterDTO(name="SpO2",                 code="spo2",   unit="%",     value_type="NUMERIC", ref_low=95.0,  ref_high=100.0, critical_low=88.0,                       is_required=False, display_order=8),
+            SaveExamParameterDTO(name="Fréquence cardiaque", code="fc",    unit="bpm",   value_type="NUMERIC", is_required=True,  display_order=4),
+            SaveExamParameterDTO(name="Tension systolique",  code="pas",   unit="mmHg",  value_type="NUMERIC", is_required=True,  display_order=5),
+            SaveExamParameterDTO(name="Tension diastolique", code="pad",   unit="mmHg",  value_type="NUMERIC", is_required=True,  display_order=6),
+            SaveExamParameterDTO(name="Température",         code="temp",  unit="°C",    value_type="NUMERIC", is_required=False, display_order=7),
+            SaveExamParameterDTO(name="SpO2",                code="spo2",  unit="%",     value_type="NUMERIC", is_required=False, display_order=8),
         ],
     ),
 
@@ -54,12 +57,12 @@ _SEED: list[tuple[SaveExamTypeRefDTO, list[SaveExamParameterDTO]]] = [
             required_sample_type="Sang total (EDTA)",
         ),
         [
-            SaveExamParameterDTO(name="ASAT",              unit="UI/L",   value_type="NUMERIC", ref_high=37.0,  critical_high=200.0, is_required=True,  display_order=1),
-            SaveExamParameterDTO(name="ALAT",              unit="UI/L",   value_type="NUMERIC", ref_high=41.0,  critical_high=200.0, is_required=True,  display_order=2),
-            SaveExamParameterDTO(name="GGT",               unit="UI/L",   value_type="NUMERIC", ref_high=55.0,  critical_high=300.0, is_required=True,  display_order=3),
-            SaveExamParameterDTO(name="Bilirubine totale", unit="µmol/L", value_type="NUMERIC", ref_low=0.0,  ref_high=17.0, critical_high=60.0, is_required=True, display_order=4),
-            SaveExamParameterDTO(name="Albumine",          unit="g/L",    value_type="NUMERIC", ref_low=35.0, ref_high=50.0, critical_low=20.0,  is_required=True,  display_order=5),
-            SaveExamParameterDTO(name="TP (Taux prothrombine)", unit="%", value_type="NUMERIC", ref_low=70.0, ref_high=100.0, critical_low=40.0, is_required=True,  display_order=6),
+            SaveExamParameterDTO(name="ASAT",                   unit="UI/L",    value_type="NUMERIC", is_required=True,  display_order=1),
+            SaveExamParameterDTO(name="ALAT",                   unit="UI/L",    value_type="NUMERIC", is_required=True,  display_order=2),
+            SaveExamParameterDTO(name="GGT",                    unit="UI/L",    value_type="NUMERIC", is_required=True,  display_order=3),
+            SaveExamParameterDTO(name="Bilirubine totale",      unit="µmol/L",  value_type="NUMERIC", is_required=True,  display_order=4),
+            SaveExamParameterDTO(name="Albumine",               unit="g/L",     value_type="NUMERIC", is_required=True,  display_order=5),
+            SaveExamParameterDTO(name="TP (Taux prothrombine)", unit="%",       value_type="NUMERIC", is_required=True,  display_order=6),
         ],
     ),
 
@@ -75,12 +78,12 @@ _SEED: list[tuple[SaveExamTypeRefDTO, list[SaveExamParameterDTO]]] = [
             required_sample_type="Sang total (EDTA)",
         ),
         [
-            SaveExamParameterDTO(name="LDL",              unit="mmol/L", value_type="NUMERIC", ref_high=3.4,  critical_high=6.0,  is_required=True,  display_order=1),
-            SaveExamParameterDTO(name="HDL",              unit="mmol/L", value_type="NUMERIC", ref_low=1.0,   critical_low=0.5,   is_required=True,  display_order=2),
-            SaveExamParameterDTO(name="Cholestérol total",unit="mmol/L", value_type="NUMERIC", ref_high=5.2,  critical_high=8.0,  is_required=True,  display_order=3),
-            SaveExamParameterDTO(name="Triglycérides",    unit="mmol/L", value_type="NUMERIC", ref_high=1.7,  critical_high=5.0,  is_required=True,  display_order=4),
-            SaveExamParameterDTO(name="Glycémie à jeun",  unit="mmol/L", value_type="NUMERIC", ref_low=3.9, ref_high=6.1, critical_low=2.5, critical_high=25.0, is_required=True, display_order=5),
-            SaveExamParameterDTO(name="HbA1c",            unit="%",      value_type="NUMERIC", ref_high=5.7,  critical_high=14.0, is_required=False, display_order=6),
+            SaveExamParameterDTO(name="LDL",               unit="mmol/L", value_type="NUMERIC", is_required=True,  display_order=1),
+            SaveExamParameterDTO(name="HDL",               unit="mmol/L", value_type="NUMERIC", is_required=True,  display_order=2),
+            SaveExamParameterDTO(name="Cholestérol total", unit="mmol/L", value_type="NUMERIC", is_required=True,  display_order=3),
+            SaveExamParameterDTO(name="Triglycérides",     unit="mmol/L", value_type="NUMERIC", is_required=True,  display_order=4),
+            SaveExamParameterDTO(name="Glycémie à jeun",   unit="mmol/L", value_type="NUMERIC", is_required=True,  display_order=5),
+            SaveExamParameterDTO(name="HbA1c",             unit="%",      value_type="NUMERIC", is_required=False, display_order=6),
         ],
     ),
 
@@ -96,12 +99,12 @@ _SEED: list[tuple[SaveExamTypeRefDTO, list[SaveExamParameterDTO]]] = [
             required_sample_type="Sang total (EDTA)",
         ),
         [
-            SaveExamParameterDTO(name="Globules rouges (GR)", unit="T/L",  value_type="NUMERIC", ref_low=4.5,  ref_high=5.9,  critical_low=3.0,  critical_high=7.0,  is_required=True, display_order=1),
-            SaveExamParameterDTO(name="Hémoglobine",          unit="g/dL", value_type="NUMERIC", ref_low=13.5, ref_high=17.5, critical_low=7.0,  critical_high=20.0, is_required=True, display_order=2),
-            SaveExamParameterDTO(name="Hématocrite",          unit="%",    value_type="NUMERIC", ref_low=40.0, ref_high=52.0, critical_low=20.0, critical_high=60.0, is_required=True, display_order=3),
-            SaveExamParameterDTO(name="Globules blancs (GB)", unit="G/L",  value_type="NUMERIC", ref_low=4.0,  ref_high=10.0, critical_low=2.0,  critical_high=30.0, is_required=True, display_order=4),
-            SaveExamParameterDTO(name="Plaquettes",           unit="G/L",  value_type="NUMERIC", ref_low=150.0,ref_high=400.0,critical_low=50.0, critical_high=800.0,is_required=True, display_order=5),
-            SaveExamParameterDTO(name="VGM",                  unit="fL",   value_type="NUMERIC", ref_low=80.0, ref_high=100.0,                                       is_required=False,display_order=6),
+            SaveExamParameterDTO(name="Globules rouges (GR)", unit="T/L",  value_type="NUMERIC", is_required=True,  display_order=1),
+            SaveExamParameterDTO(name="Hémoglobine",          unit="g/dL", value_type="NUMERIC", is_required=True,  display_order=2),
+            SaveExamParameterDTO(name="Hématocrite",          unit="%",    value_type="NUMERIC", is_required=True,  display_order=3),
+            SaveExamParameterDTO(name="Globules blancs (GB)", unit="G/L",  value_type="NUMERIC", is_required=True,  display_order=4),
+            SaveExamParameterDTO(name="Plaquettes",           unit="G/L",  value_type="NUMERIC", is_required=True,  display_order=5),
+            SaveExamParameterDTO(name="VGM",                  unit="fL",   value_type="NUMERIC", is_required=False, display_order=6),
         ],
     ),
 
@@ -142,7 +145,7 @@ _SEED: list[tuple[SaveExamTypeRefDTO, list[SaveExamParameterDTO]]] = [
             requires_attachment=False,
         ),
         [
-            SaveExamParameterDTO(name="Perte auditive moyenne", unit="dB HL", value_type="NUMERIC", ref_high=25.0, critical_high=70.0, is_required=True, display_order=1),
+            SaveExamParameterDTO(name="Perte auditive moyenne", unit="dB HL", value_type="NUMERIC", is_required=True, display_order=1),
         ],
     ),
 
@@ -157,9 +160,9 @@ _SEED: list[tuple[SaveExamTypeRefDTO, list[SaveExamParameterDTO]]] = [
             requires_attachment=False,
         ),
         [
-            SaveExamParameterDTO(name="VEMS (FEV1)",        unit="%",  value_type="NUMERIC", ref_low=80.0, critical_low=50.0, is_required=True,  display_order=1),
-            SaveExamParameterDTO(name="CVF",                 unit="%",  value_type="NUMERIC", ref_low=80.0, critical_low=50.0, is_required=True,  display_order=2),
-            SaveExamParameterDTO(name="Rapport VEMS/CVF",   unit="%",  value_type="NUMERIC", ref_low=70.0, critical_low=50.0, is_required=True,  display_order=3),
+            SaveExamParameterDTO(name="VEMS (FEV1)",       unit="%", value_type="NUMERIC", is_required=True,  display_order=1),
+            SaveExamParameterDTO(name="CVF",                unit="%", value_type="NUMERIC", is_required=True,  display_order=2),
+            SaveExamParameterDTO(name="Rapport VEMS/CVF",  unit="%", value_type="NUMERIC", is_required=True,  display_order=3),
         ],
     ),
 
@@ -175,11 +178,11 @@ _SEED: list[tuple[SaveExamTypeRefDTO, list[SaveExamParameterDTO]]] = [
             required_sample_type="Urine (flacon stérile)",
         ),
         [
-            SaveExamParameterDTO(name="Cannabis (THC)",       unit=None, value_type="BOOLEAN", is_required=True,  display_order=1),
-            SaveExamParameterDTO(name="Cocaïne",              unit=None, value_type="BOOLEAN", is_required=True,  display_order=2),
-            SaveExamParameterDTO(name="Opiacés",              unit=None, value_type="BOOLEAN", is_required=True,  display_order=3),
-            SaveExamParameterDTO(name="Amphétamines",         unit=None, value_type="BOOLEAN", is_required=True,  display_order=4),
-            SaveExamParameterDTO(name="Benzodiazépines",      unit=None, value_type="BOOLEAN", is_required=False, display_order=5),
+            SaveExamParameterDTO(name="Cannabis (THC)",  unit=None, value_type="BOOLEAN", is_required=True,  display_order=1),
+            SaveExamParameterDTO(name="Cocaïne",         unit=None, value_type="BOOLEAN", is_required=True,  display_order=2),
+            SaveExamParameterDTO(name="Opiacés",         unit=None, value_type="BOOLEAN", is_required=True,  display_order=3),
+            SaveExamParameterDTO(name="Amphétamines",    unit=None, value_type="BOOLEAN", is_required=True,  display_order=4),
+            SaveExamParameterDTO(name="Benzodiazépines", unit=None, value_type="BOOLEAN", is_required=False, display_order=5),
         ],
     ),
 
@@ -195,15 +198,14 @@ _SEED: list[tuple[SaveExamTypeRefDTO, list[SaveExamParameterDTO]]] = [
             required_sample_type="Sang total (EDTA)",
         ),
         [
-            SaveExamParameterDTO(name="Créatinine",        unit="µmol/L", value_type="NUMERIC", ref_low=62.0,  ref_high=106.0, critical_high=500.0, is_required=True,  display_order=1),
-            SaveExamParameterDTO(name="Urée",              unit="mmol/L", value_type="NUMERIC", ref_low=2.5,   ref_high=7.5,   critical_high=30.0,  is_required=True,  display_order=2),
-            SaveExamParameterDTO(name="Acide urique",      unit="µmol/L", value_type="NUMERIC", ref_low=200.0, ref_high=420.0, critical_high=700.0, is_required=False, display_order=3),
-            SaveExamParameterDTO(name="DFG (CKD-EPI)",    unit="mL/min/1.73m²", value_type="NUMERIC", ref_low=60.0, critical_low=15.0, is_required=True, display_order=4),
+            SaveExamParameterDTO(name="Créatinine",      unit="µmol/L",          value_type="NUMERIC", is_required=True,  display_order=1),
+            SaveExamParameterDTO(name="Urée",            unit="mmol/L",          value_type="NUMERIC", is_required=True,  display_order=2),
+            SaveExamParameterDTO(name="Acide urique",    unit="µmol/L",          value_type="NUMERIC", is_required=False, display_order=3),
+            SaveExamParameterDTO(name="DFG (CKD-EPI)",  unit="mL/min/1.73m²",   value_type="NUMERIC", is_required=True,  display_order=4),
         ],
     ),
 
     # ── Bilan ophtalmologique ─────────────────────────────────────────────
-    # Exemple avec paramètres de type TEXT : acuité exprimée en fraction (ex : "10/10")
     (
         SaveExamTypeRefDTO(
             name="Bilan ophtalmologique",
@@ -214,19 +216,18 @@ _SEED: list[tuple[SaveExamTypeRefDTO, list[SaveExamParameterDTO]]] = [
             requires_attachment=False,
         ),
         [
-            SaveExamParameterDTO(name="Acuité visuelle OD (sans correction)", unit=None, value_type="TEXT", is_required=True,  display_order=1),
-            SaveExamParameterDTO(name="Acuité visuelle OG (sans correction)", unit=None, value_type="TEXT", is_required=True,  display_order=2),
-            SaveExamParameterDTO(name="Acuité visuelle OD (avec correction)", unit=None, value_type="TEXT", is_required=False, display_order=3),
-            SaveExamParameterDTO(name="Acuité visuelle OG (avec correction)", unit=None, value_type="TEXT", is_required=False, display_order=4),
-            SaveExamParameterDTO(name="Vision des couleurs",                   unit=None, value_type="TEXT", is_required=False, display_order=5),
-            SaveExamParameterDTO(name="Champ visuel",                          unit=None, value_type="TEXT", is_required=False, display_order=6),
-            SaveExamParameterDTO(name="Tension oculaire OD",                   unit="mmHg", value_type="NUMERIC", ref_low=10.0, ref_high=21.0, critical_high=30.0, is_required=False, display_order=7),
-            SaveExamParameterDTO(name="Tension oculaire OG",                   unit="mmHg", value_type="NUMERIC", ref_low=10.0, ref_high=21.0, critical_high=30.0, is_required=False, display_order=8),
+            SaveExamParameterDTO(name="Acuité visuelle OD (sans correction)", unit=None,   value_type="TEXT",    is_required=True,  display_order=1),
+            SaveExamParameterDTO(name="Acuité visuelle OG (sans correction)", unit=None,   value_type="TEXT",    is_required=True,  display_order=2),
+            SaveExamParameterDTO(name="Acuité visuelle OD (avec correction)", unit=None,   value_type="TEXT",    is_required=False, display_order=3),
+            SaveExamParameterDTO(name="Acuité visuelle OG (avec correction)", unit=None,   value_type="TEXT",    is_required=False, display_order=4),
+            SaveExamParameterDTO(name="Vision des couleurs",                  unit=None,   value_type="TEXT",    is_required=False, display_order=5),
+            SaveExamParameterDTO(name="Champ visuel",                         unit=None,   value_type="TEXT",    is_required=False, display_order=6),
+            SaveExamParameterDTO(name="Tension oculaire OD",                  unit="mmHg", value_type="NUMERIC", is_required=False, display_order=7),
+            SaveExamParameterDTO(name="Tension oculaire OG",                  unit="mmHg", value_type="NUMERIC", is_required=False, display_order=8),
         ],
     ),
 
     # ── Sérologies infectieuses ───────────────────────────────────────────
-    # Exemple avec paramètres de type BOOLEAN (Positif / Négatif)
     (
         SaveExamTypeRefDTO(
             name="Sérologies infectieuses",
@@ -264,3 +265,15 @@ def seed_exam_types() -> dict:
             ExamTypeRefService.add_parameter(ref.id, p)
         created.append(exam_dto.name)
     return {"created": created, "skipped": skipped}
+
+
+def clear_exam_types() -> int:
+    """Delete ALL exam type refs and cascade-delete their parameters and age ranges."""
+    deleted = ExamTypeRef.delete().execute()
+    return deleted
+
+
+def clear_and_reseed() -> dict:
+    """Delete all existing exam types then re-seed from scratch."""
+    clear_exam_types()
+    return seed_exam_types()

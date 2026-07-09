@@ -41,7 +41,7 @@ _PATIENT_REQUIRED_COLS = {"last_name", "first_name", "date_of_birth", "gender"}
 _VALID_GENDERS = {"M", "F", "Other"}
 _DOCTOR_REQUIRED_COLS = {"last_name", "first_name"}
 _ACCOUNT_INDIVIDUAL_REQUIRED_COLS = {"contact_last_name", "contact_first_name"}
-_EXAM_TYPE_REQUIRED_COLS = {"type_examen", "categorie"}
+_EXAM_TYPE_REQUIRED_COLS = {"exam_type", "category"}
 _VALID_VALUE_TYPES = {"NUMERIC", "TEXT", "BOOLEAN"}
 _CATEGORY_NORM = {
     "BIOLOGY": "BIOLOGY", "BIOLOGIE": "BIOLOGY", "BIOCHIMIE": "BIOLOGY",
@@ -421,14 +421,18 @@ class BulkImportService:
     def _validate_exam_type_row(cls, row_num: int, row: dict) -> "RowValidationResult":
         errors: list[str] = []
 
-        if not row.get("type_examen", "").strip():
-            errors.append("type_examen requis")
-        if not row.get("categorie", "").strip():
-            errors.append("categorie requise")
+        if not row.get("exam_type", "").strip():
+            errors.append("exam_type required")
+        if not row.get("category", "").strip():
+            errors.append("category required")
 
-        val_type = row.get("type_valeur", "").strip().upper() or "NUMERIC"
-        if val_type not in _VALID_VALUE_TYPES:
-            errors.append(f"type_valeur invalide '{val_type}' (NUMERIC/TEXT/BOOLEAN)")
+        val_type = row.get("value_type", "").strip().upper() or "NUMERIC"
+        if val_type and val_type not in _VALID_VALUE_TYPES:
+            errors.append(f"value_type invalid '{val_type}' (NUMERIC/TEXT/BOOLEAN)")
+
+        age_gender = row.get("age_gender", "").strip().upper()
+        if age_gender and age_gender not in ("ALL", "M", "F"):
+            errors.append("age_gender must be ALL, M or F")
 
         return RowValidationResult(
             row_num=row_num, row_data=row, is_valid=not errors, errors=errors
@@ -438,8 +442,10 @@ class BulkImportService:
     def import_exam_type_row(cls, row_data: dict) -> None:
         """Create or update one exam type + optional parameter from a validated row.
 
-        Gets or creates the exam type by name, then appends the parameter if a
-        parameter name is provided. Idempotent: skips if param name already exists.
+        Gets or creates the exam type by name, then creates the parameter if it does
+        not exist. If age_min, age_max, or age_gender are set the row is treated as an
+        age-range row: the parameter is found-or-created and an ExamParameterAgeRange
+        record is appended (idempotent on age_min+age_max+age_gender).
         Must be called inside a gws_core auth context.
         """
         from gws_care.exam_type_ref.exam_parameter import ExamParameter
@@ -461,17 +467,24 @@ class BulkImportService:
             v = row_data.get(key, "").strip()
             return v or None
 
-        name = row_data["type_examen"].strip()
-        raw_cat = row_data.get("categorie", "").strip().upper()
+        def _i(key: str) -> "int | None":
+            v = row_data.get(key, "").strip()
+            try:
+                return int(v) if v else None
+            except ValueError:
+                return None
+
+        name = row_data["exam_type"].strip()
+        raw_cat = row_data.get("category", "").strip().upper()
         category = _CATEGORY_NORM.get(raw_cat, "OTHER")
 
-        existing = ExamTypeRef.get_or_none(ExamTypeRef.name == name)
-        if existing is None:
+        existing_ref = ExamTypeRef.get_or_none(ExamTypeRef.name == name)
+        if existing_ref is None:
             ref_dto = ExamTypeRefService.create(
                 SaveExamTypeRefDTO(
                     name=name,
                     category=category,
-                    department=_s("departement"),
+                    department=_s("department"),
                     description=_s("description"),
                     is_active=True,
                     allows_attachment=True,
@@ -480,46 +493,87 @@ class BulkImportService:
             )
             ref_id = ref_dto.id
         else:
-            ref_id = str(existing.id)
+            ref_id = str(existing_ref.id)
 
-        param_name = row_data.get("parametre", "").strip()
+        param_name = row_data.get("parameter", "").strip()
         if not param_name:
             return
 
-        if (
-            ExamParameter.get_or_none(
-                (ExamParameter.exam_type_ref == ref_id) & (ExamParameter.name == param_name)
+        age_min = _i("age_min")
+        age_max = _i("age_max")
+        age_gender_raw = row_data.get("age_gender", "").strip().upper()
+        is_age_range_row = age_min is not None or age_max is not None or bool(age_gender_raw)
+        age_gender = age_gender_raw or "ALL"
+
+        existing_param = ExamParameter.get_or_none(
+            (ExamParameter.exam_type_ref == ref_id) & (ExamParameter.name == param_name)
+        )
+
+        if existing_param is None:
+            val_type = row_data.get("value_type", "").strip().upper() or "NUMERIC"
+            is_computed = row_data.get("is_computed", "").strip().lower() in ("true", "1", "yes")
+            param_dto = ExamTypeRefService.add_parameter(
+                ref_id,
+                SaveExamParameterDTO(
+                    name=param_name,
+                    value_type=val_type,
+                    unit=_s("unit"),
+                    ref_low=_f("ref_low") if not is_age_range_row else None,
+                    ref_high=_f("ref_high") if not is_age_range_row else None,
+                    critical_low=_f("critical_low") if not is_age_range_row else None,
+                    critical_high=_f("critical_high") if not is_age_range_row else None,
+                    ref_low_m=_f("ref_low_m"),
+                    ref_high_m=_f("ref_high_m"),
+                    critical_low_m=_f("critical_low_m"),
+                    critical_high_m=_f("critical_high_m"),
+                    ref_low_f=_f("ref_low_f"),
+                    ref_high_f=_f("ref_high_f"),
+                    critical_low_f=_f("critical_low_f"),
+                    critical_high_f=_f("critical_high_f"),
+                    label_normal=_s("label_normal"),
+                    label_low=_s("label_low"),
+                    label_high=_s("label_high"),
+                    label_critical_low=_s("label_critical_low"),
+                    label_critical_high=_s("label_critical_high"),
+                    code=_s("code"),
+                    is_computed=is_computed,
+                    formula=_s("formula"),
+                    is_required=False,
+                    display_order=0,
+                ),
             )
-            is not None
-        ):
+            param_id = param_dto.id
+        elif not is_age_range_row:
+            return
+        else:
+            param_id = str(existing_param.id)
+
+        if not is_age_range_row:
             return
 
-        val_type = row_data.get("type_valeur", "").strip().upper() or "NUMERIC"
-        ExamTypeRefService.add_parameter(
-            ref_id,
-            SaveExamParameterDTO(
-                name=param_name,
-                value_type=val_type,
-                unit=_s("unite"),
-                ref_low=_f("ref_basse"),
-                ref_high=_f("ref_haute"),
-                critical_low=_f("critique_bas"),
-                critical_high=_f("critique_haut"),
-                ref_low_m=_f("ref_basse_H"),
-                ref_high_m=_f("ref_haute_H"),
-                critical_low_m=_f("critique_bas_H"),
-                critical_high_m=_f("critique_haut_H"),
-                ref_low_f=_f("ref_basse_F"),
-                ref_high_f=_f("ref_haute_F"),
-                critical_low_f=_f("critique_bas_F"),
-                critical_high_f=_f("critique_haut_F"),
-                label_normal=_s("label_normal"),
-                label_low=_s("label_bas"),
-                label_high=_s("label_haut"),
-                label_critical_low=_s("label_critique_bas"),
-                label_critical_high=_s("label_critique_haut"),
-                code=_s("code"),
-                is_required=False,
-                display_order=0,
-            ),
+        from gws_care.exam_type_ref.exam_param_age_range import ExamParameterAgeRange
+
+        already = ExamParameterAgeRange.get_or_none(
+            (ExamParameterAgeRange.exam_parameter == param_id)
+            & (ExamParameterAgeRange.age_min == age_min)
+            & (ExamParameterAgeRange.age_max == age_max)
+            & (ExamParameterAgeRange.gender == age_gender)
+        )
+        if already is not None:
+            return
+
+        ExamParameterAgeRange.create(
+            exam_parameter=param_id,
+            age_min=age_min,
+            age_max=age_max,
+            gender=age_gender,
+            ref_low=_f("ref_low"),
+            ref_high=_f("ref_high"),
+            critical_low=_f("critical_low"),
+            critical_high=_f("critical_high"),
+            label_normal=_s("label_normal"),
+            label_low=_s("label_low"),
+            label_high=_s("label_high"),
+            label_critical_low=_s("label_critical_low"),
+            label_critical_high=_s("label_critical_high"),
         )

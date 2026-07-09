@@ -8,11 +8,11 @@ from .doctor_psc_state import ClinicConsultationRowDTO, DossierRowDTO, Independe
 from ..doctor_enterprise.doctor_enterprise_state import DoctorEnterpriseState, EntDossierRowDTO
 
 _STATUS_FILTER_OPTIONS = [
-    ("ALL",             "Tous les dossiers actifs"),
-    ("LAB_ENTERED",     "📋 Résultats saisis — à interpréter"),
-    ("LAB_VALIDATED",   "✅ Labo validé — à interpréter"),
-    ("PSC_INTERPRETED", "🩺 Interprété PSC — à valider"),
-    ("PSC_VALIDATED",   "🔒 Validé PSC"),
+    ("ALL",             "All active records"),
+    ("LAB_ENTERED",     "📋 Results entered — to interpret"),
+    ("LAB_VALIDATED",   "✅ Lab validated — to interpret"),
+    ("PSC_INTERPRETED", "🩺 PSC interpreted — to validate"),
+    ("PSC_VALIDATED",   "🔒 PSC validated"),
 ]
 
 
@@ -26,9 +26,9 @@ def _filter_bar() -> rx.Component:
     return rx.card(
         rx.hstack(
             rx.vstack(
-                rx.text("Statut", size="1", weight="medium", color="var(--gray-9)"),
+                rx.text("Status", size="1", weight="medium", color="var(--gray-9)"),
                 rx.select.root(
-                    rx.select.trigger(placeholder="Tous les statuts", min_width="240px"),
+                    rx.select.trigger(placeholder="All statuses", min_width="240px"),
                     rx.select.content(
                         *[rx.select.item(label, value=val) for val, label in _STATUS_FILTER_OPTIONS]
                     ),
@@ -38,11 +38,11 @@ def _filter_bar() -> rx.Component:
                 spacing="1",
             ),
             rx.vstack(
-                rx.text("Campagne", size="1", weight="medium", color="var(--gray-9)"),
+                rx.text("Campaign", size="1", weight="medium", color="var(--gray-9)"),
                 rx.select.root(
-                    rx.select.trigger(placeholder="Toutes les campagnes", min_width="220px"),
+                    rx.select.trigger(placeholder="All campaigns", min_width="220px"),
                     rx.select.content(
-                        rx.select.item("Toutes les campagnes", value="__all__"),
+                        rx.select.item("All campaigns", value="__all__"),
                         rx.foreach(DoctorPscState.campaigns_for_filter, _campaign_option),
                     ),
                     value=DoctorPscState.filter_campaign_id,
@@ -52,7 +52,7 @@ def _filter_bar() -> rx.Component:
             ),
             rx.spacer(),
             rx.button(
-                rx.icon("refresh-cw", size=14), "Actualiser",
+                rx.icon("refresh-cw", size=14), "Refresh",
                 variant="soft", size="2", on_click=DoctorPscState.on_load,
                 align_self="end",
             ),
@@ -102,7 +102,7 @@ def _dossier_row(d: DossierRowDTO) -> rx.Component:
                         variant="ghost", size="1", color_scheme="gray",
                         on_click=rx.redirect("/campaign-patient/" + d.campaign_id + "/" + d.patient_id),
                     ),
-                    content="Voir les résultats saisis",
+                    content="View entered results",
                 ),
                 rx.tooltip(
                     rx.icon_button(
@@ -112,7 +112,7 @@ def _dossier_row(d: DossierRowDTO) -> rx.Component:
                             d.campaign_id, d.patient_id, d.patient_name, d.psc_notes, d.medical_status
                         ),
                     ),
-                    content="Saisir / modifier l'interprétation",
+                    content="Enter / edit interpretation",
                 ),
                 rx.tooltip(
                     rx.icon_button(
@@ -121,7 +121,7 @@ def _dossier_row(d: DossierRowDTO) -> rx.Component:
                         on_click=lambda: DoctorPscState.validate_patient(d.campaign_id, d.patient_id),
                         disabled=d.medical_status != "PSC_INTERPRETED",
                     ),
-                    content="Valider le dossier PSC",
+                    content="Validate PSC record",
                 ),
                 spacing="1",
             )
@@ -146,11 +146,11 @@ def _independent_exam_row(exam: IndependentExamRowDTO) -> rx.Component:
         rx.table.cell(
             rx.cond(
                 exam.is_draft,
-                rx.badge("Brouillon", color_scheme="gray", size="1", variant="soft"),
+                rx.badge("Draft", color_scheme="gray", size="1", variant="soft"),
                 rx.cond(
                     exam.has_lab_results,
-                    rx.badge("Résultats saisis", color_scheme="blue", size="1", variant="soft"),
-                    rx.badge("En attente labo", color_scheme="orange", size="1", variant="soft"),
+                    rx.badge("Results entered", color_scheme="blue", size="1", variant="soft"),
+                    rx.badge("Awaiting lab", color_scheme="orange", size="1", variant="soft"),
                 ),
             )
         ),
@@ -161,7 +161,7 @@ def _independent_exam_row(exam: IndependentExamRowDTO) -> rx.Component:
                     variant="ghost", size="1", color_scheme="blue",
                     on_click=rx.redirect("/exam/" + exam.exam_id),
                 ),
-                content="Voir l'examen et les résultats",
+                content="View exam and results",
             )
         ),
         style={":hover": {"background_color": "var(--gray-2)"}},
@@ -197,8 +197,8 @@ def _clinic_consult_row(c: ClinicConsultationRowDTO) -> rx.Component:
         rx.table.cell(
             rx.cond(
                 c.nb_exams > 0,
-                rx.badge(c.nb_exams.to_string() + " examen(s)", color_scheme="blue", size="1", variant="surface"),
-                rx.text("Aucun examen", size="1", color="var(--gray-7)"),
+                rx.badge(c.nb_exams.to_string() + " exam(s)", color_scheme="blue", size="1", variant="surface"),
+                rx.text("No exam", size="1", color="var(--gray-7)"),
             )
         ),
         rx.table.cell(
@@ -208,7 +208,7 @@ def _clinic_consult_row(c: ClinicConsultationRowDTO) -> rx.Component:
                     variant="ghost", size="1", color_scheme="violet",
                     on_click=rx.redirect("/patient/" + c.patient_id),
                 ),
-                content="Voir le dossier patient et les examens",
+                content="View patient record and exams",
             )
         ),
         style={":hover": {"background_color": "var(--gray-2)"}},
@@ -223,19 +223,19 @@ def _interp_dialog() -> rx.Component:
             rx.dialog.title(
                 rx.hstack(
                     rx.icon("stethoscope", size=16, color="var(--blue-9)"),
-                    rx.text("Interprétation PSC —"),
+                    rx.text("PSC Interpretation —"),
                     rx.text(DoctorPscState.interp_patient_name, weight="bold"),
                     spacing="1",
                 )
             ),
             rx.vstack(
-                rx.text("Commentaire / Interprétation médicale", size="2", weight="medium"),
+                rx.text("Comment / Medical interpretation", size="2", weight="medium"),
                 rx.text(
-                    "Enregistrer sauvegarde en brouillon. Interpréter et transmettre finalise et envoie au médecin entreprise.",
+                    "Save stores as draft. Interpret and send finalizes and forwards to the occupational doctor.",
                     size="1", color="var(--gray-8)",
                 ),
                 rx.text_area(
-                    placeholder="Saisir l'interprétation médicale…",
+                    placeholder="Enter medical interpretation…",
                     value=DoctorPscState.interp_notes,
                     on_change=DoctorPscState.set_interp_notes,
                     width="100%",
@@ -245,13 +245,13 @@ def _interp_dialog() -> rx.Component:
             ),
             rx.hstack(
                 rx.dialog.close(
-                    rx.button("Annuler", variant="soft", color_scheme="gray",
+                    rx.button("Cancel", variant="soft", color_scheme="gray",
                               on_click=DoctorPscState.close_interp_dialog)
                 ),
                 rx.spacer(),
                 rx.button(
                     rx.icon("save", size=14),
-                    "Enregistrer (brouillon)",
+                    "Save (draft)",
                     variant="soft",
                     color_scheme="gray",
                     on_click=DoctorPscState.save_notes_only,
@@ -259,7 +259,7 @@ def _interp_dialog() -> rx.Component:
                 ),
                 rx.button(
                     rx.icon("send", size=14),
-                    "Interpréter et transmettre",
+                    "Interpret and send",
                     color_scheme="blue",
                     on_click=DoctorPscState.save_interpretation,
                     loading=DoctorPscState.is_saving,
@@ -317,7 +317,7 @@ def _enterprise_dossier_row(d: EntDossierRowDTO) -> rx.Component:
                             d.enterprise_notes, d.patient_message
                         ),
                     ),
-                    content="Ajouter / modifier l'interprétation",
+                    content="Add / edit interpretation",
                 ),
                 rx.tooltip(
                     rx.icon_button(
@@ -326,7 +326,7 @@ def _enterprise_dossier_row(d: EntDossierRowDTO) -> rx.Component:
                         on_click=lambda: DoctorEnterpriseState.validate_patient(d.campaign_id, d.patient_id),
                         disabled=d.medical_status != "ENTERPRISE_INTERPRETED",
                     ),
-                    content="Valider l'interprétation entreprise",
+                    content="Validate company interpretation",
                 ),
                 rx.tooltip(
                     rx.icon_button(
@@ -335,7 +335,7 @@ def _enterprise_dossier_row(d: EntDossierRowDTO) -> rx.Component:
                         on_click=lambda: DoctorEnterpriseState.publish_patient(d.campaign_id, d.patient_id),
                         disabled=d.medical_status != "ENTERPRISE_VALIDATED",
                     ),
-                    content="Publier au patient",
+                    content="Publish to patient",
                 ),
                 spacing="1",
             )
@@ -349,26 +349,26 @@ def _enterprise_interpretation_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title(
                 rx.hstack(
-                    rx.text("Interprétation entreprise — "),
+                    rx.text("Company interpretation — "),
                     rx.text(DoctorEnterpriseState.dialog_patient_name, weight="bold"),
                     spacing="1",
                 )
             ),
             rx.vstack(
                 rx.callout(
-                    "Le message patient sera visible par le patient après publication. Ne pas inclure de données médicales brutes.",
+                    "The patient message will be visible to the patient after publication. Do not include raw medical data.",
                     icon="info", color_scheme="blue", size="1",
                 ),
-                rx.text("Commentaire interne", size="2", weight="medium"),
+                rx.text("Internal comment", size="2", weight="medium"),
                 rx.text_area(
-                    placeholder="Notes internes (non visibles par le patient)…",
+                    placeholder="Internal notes (not visible to patient)…",
                     value=DoctorEnterpriseState.enterprise_notes_input,
                     on_change=DoctorEnterpriseState.set_enterprise_notes,
                     width="100%", rows="3",
                 ),
-                rx.text("Message destiné au patient *", size="2", weight="medium"),
+                rx.text("Message for the patient *", size="2", weight="medium"),
                 rx.text_area(
-                    placeholder="Message qui sera affiché dans l'espace patient…",
+                    placeholder="Message displayed in the patient portal…",
                     value=DoctorEnterpriseState.patient_message_input,
                     on_change=DoctorEnterpriseState.set_patient_message,
                     width="100%", rows="4",
@@ -381,9 +381,9 @@ def _enterprise_interpretation_dialog() -> rx.Component:
                 spacing="3", width="100%", margin_top="1rem",
             ),
             rx.hstack(
-                rx.dialog.close(rx.button("Annuler", variant="soft", color_scheme="gray",
+                rx.dialog.close(rx.button("Cancel", variant="soft", color_scheme="gray",
                                           on_click=DoctorEnterpriseState.close_dialog)),
-                rx.button("Enregistrer", on_click=DoctorEnterpriseState.save_interpretation,
+                rx.button("Save", on_click=DoctorEnterpriseState.save_interpretation,
                           loading=DoctorEnterpriseState.is_saving),
                 spacing="2", justify="end", margin_top="1rem", width="100%",
             ),
@@ -410,7 +410,7 @@ def _enterprise_tab() -> rx.Component:
         rx.cond(
             DoctorEnterpriseState.dossiers_truncated,
             rx.callout(
-                "Résultats limités à 500 dossiers.",
+                "Results limited to 500 records.",
                 icon="triangle-alert", color_scheme="orange", size="1",
             ),
             rx.fragment(),
@@ -424,10 +424,10 @@ def _enterprise_tab() -> rx.Component:
                     rx.table.header(
                         rx.table.row(
                             rx.table.column_header_cell("Patient"),
-                            rx.table.column_header_cell("Campagne"),
-                            rx.table.column_header_cell("Statut"),
-                            rx.table.column_header_cell("Interprétation PSC"),
-                            rx.table.column_header_cell("Message patient"),
+                            rx.table.column_header_cell("Campaign"),
+                            rx.table.column_header_cell("Status"),
+                            rx.table.column_header_cell("PSC Interpretation"),
+                            rx.table.column_header_cell("Patient message"),
                             rx.table.column_header_cell("Actions"),
                         )
                     ),
@@ -437,7 +437,7 @@ def _enterprise_tab() -> rx.Component:
                 rx.center(
                     rx.vstack(
                         rx.icon("check", size=32, color="var(--green-9)"),
-                        rx.text("Aucun dossier disponible.", size="2", color="var(--gray-9)"),
+                        rx.text("No record available.", size="2", color="var(--gray-9)"),
                         align="center", spacing="2",
                     ),
                     padding="4rem",
@@ -464,10 +464,10 @@ def _campaigns_tab() -> rx.Component:
                     rx.table.header(
                         rx.table.row(
                             rx.table.column_header_cell("Patient"),
-                            rx.table.column_header_cell("Campagne"),
-                            rx.table.column_header_cell("Entreprise"),
-                            rx.table.column_header_cell("Statut médical"),
-                            rx.table.column_header_cell("Notes PSC"),
+                            rx.table.column_header_cell("Campaign"),
+                            rx.table.column_header_cell("Company"),
+                            rx.table.column_header_cell("Medical status"),
+                            rx.table.column_header_cell("PSC notes"),
                             rx.table.column_header_cell("Actions"),
                         )
                     ),
@@ -478,7 +478,7 @@ def _campaigns_tab() -> rx.Component:
                 rx.center(
                     rx.vstack(
                         rx.icon("check", size=32, color="var(--green-9)"),
-                        rx.text("Aucun dossier pour ce filtre.", size="2", color="var(--gray-9)"),
+                        rx.text("No record for this filter.", size="2", color="var(--gray-9)"),
                         align="center", spacing="2",
                     ),
                     padding="4rem",
@@ -497,7 +497,7 @@ def _clinique_tab() -> rx.Component:
         rx.vstack(
             rx.hstack(
                 rx.icon("stethoscope", size=15, color="var(--violet-9)"),
-                rx.heading("Consultations cliniques", size="4"),
+                rx.heading("Clinical consultations", size="4"),
                 rx.badge(
                     DoctorPscState.clinic_consultations.length().to_string(),
                     color_scheme="violet", variant="soft", size="1",
@@ -515,8 +515,8 @@ def _clinique_tab() -> rx.Component:
                                 rx.table.column_header_cell("Patient"),
                                 rx.table.column_header_cell("Date"),
                                 rx.table.column_header_cell("Type"),
-                                rx.table.column_header_cell("Motif"),
-                                rx.table.column_header_cell("Examens"),
+                                rx.table.column_header_cell("Reason"),
+                                rx.table.column_header_cell("Exams"),
                                 rx.table.column_header_cell(""),
                             )
                         ),
@@ -529,7 +529,7 @@ def _clinique_tab() -> rx.Component:
                     rx.center(
                         rx.vstack(
                             rx.icon("stethoscope", size=28, color="var(--gray-5)"),
-                            rx.text("Aucune consultation clinique enregistrée.", size="2", color="var(--gray-7)"),
+                            rx.text("No clinical consultation recorded.", size="2", color="var(--gray-7)"),
                             align="center", spacing="2",
                         ),
                         padding="2rem",
@@ -544,7 +544,7 @@ def _clinique_tab() -> rx.Component:
         rx.vstack(
             rx.hstack(
                 rx.icon("flask-conical", size=15, color="var(--blue-9)"),
-                rx.heading("Examens prescrits (hors consultation)", size="4"),
+                rx.heading("Prescribed exams (outside consultation)", size="4"),
                 rx.badge(
                     DoctorPscState.independent_exams.length().to_string(),
                     color_scheme="blue", variant="soft", size="1",
@@ -552,8 +552,8 @@ def _clinique_tab() -> rx.Component:
                 spacing="2", align="center",
             ),
             rx.callout(
-                "Ces examens ont été prescrits directement ou créés depuis un rendez-vous, "
-                "hors du circuit des consultations cliniques.",
+                "These exams were prescribed directly or created from an appointment, "
+                "outside the clinical consultation workflow.",
                 icon="info",
                 color_scheme="blue",
                 size="1",
@@ -568,7 +568,7 @@ def _clinique_tab() -> rx.Component:
                             rx.table.row(
                                 rx.table.column_header_cell("Patient"),
                                 rx.table.column_header_cell("Date"),
-                                rx.table.column_header_cell("Type d'examen"),
+                                rx.table.column_header_cell("Exam type"),
                                 rx.table.column_header_cell("Statut"),
                                 rx.table.column_header_cell(""),
                             )
@@ -582,7 +582,7 @@ def _clinique_tab() -> rx.Component:
                     rx.center(
                         rx.vstack(
                             rx.icon("check", size=28, color="var(--green-8)"),
-                            rx.text("Aucun examen prescrit en attente.", size="2", color="var(--gray-7)"),
+                            rx.text("No prescribed exam pending.", size="2", color="var(--gray-7)"),
                             align="center", spacing="2",
                         ),
                         padding="2rem",
@@ -605,9 +605,9 @@ def doctor_psc_page() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.vstack(
-                        rx.heading("Dossiers médicaux", size="6"),
+                        rx.heading("Medical records", size="6"),
                         rx.text(
-                            "Interprétation PSC · Validation entreprise · Publication patient",
+                            "PSC interpretation · Company validation · Patient publication",
                             size="2", color="var(--gray-9)",
                         ),
                         spacing="0",
@@ -627,7 +627,7 @@ def doctor_psc_page() -> rx.Component:
                 rx.cond(
                     DoctorPscState.dossiers_truncated,
                     rx.callout(
-                        "Résultats limités à 500 dossiers. Utilisez les filtres Campagne ou Statut pour affiner la sélection.",
+                        "Results limited to 500 records. Use the Campaign or Status filters to narrow the selection.",
                         icon="triangle-alert",
                         color_scheme="orange",
                         size="1",
@@ -639,7 +639,7 @@ def doctor_psc_page() -> rx.Component:
                         rx.tabs.trigger(
                             rx.hstack(
                                 rx.icon("users", size=14),
-                                rx.text("Dossiers campagnes"),
+                                rx.text("Campaign records"),
                                 rx.badge(
                                     DoctorPscState.dossiers.length().to_string(),
                                     color_scheme="blue", variant="soft", size="1",
@@ -651,7 +651,7 @@ def doctor_psc_page() -> rx.Component:
                         rx.tabs.trigger(
                             rx.hstack(
                                 rx.icon("stethoscope", size=14),
-                                rx.text("Consultations cliniques"),
+                                rx.text("Clinical consultations"),
                                 rx.badge(
                                     (DoctorPscState.clinic_consultations.length() + DoctorPscState.independent_exams.length()).to_string(),
                                     color_scheme="violet", variant="soft", size="1",
@@ -663,7 +663,7 @@ def doctor_psc_page() -> rx.Component:
                         rx.tabs.trigger(
                             rx.hstack(
                                 rx.icon("building-2", size=14),
-                                rx.text("Interprétation entreprise"),
+                                rx.text("Company interpretation"),
                                 rx.badge(
                                     DoctorEnterpriseState.dossiers.length().to_string(),
                                     color_scheme="indigo", variant="soft", size="1",

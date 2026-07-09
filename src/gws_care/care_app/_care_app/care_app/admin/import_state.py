@@ -77,54 +77,162 @@ _DOCTOR_TEMPLATE = (
     "COULIBALY,Seydou,Médecine générale,+2250707110001,seydou.coulibaly@medecin.ci,\n"
 )
 
+def _exam_row(
+    exam_type: str,
+    category: str,
+    department: str = "",
+    description: str = "",
+    parameter: str = "",
+    code: str = "",
+    value_type: str = "NUMERIC",
+    unit: str = "",
+    is_computed: str = "false",
+    formula: str = "",
+    age_min: str = "",
+    age_max: str = "",
+    age_gender: str = "",
+    ref_low: str = "",
+    ref_high: str = "",
+    critical_low: str = "",
+    critical_high: str = "",
+    label_normal: str = "",
+    label_low: str = "",
+    label_high: str = "",
+    label_critical_low: str = "",
+    label_critical_high: str = "",
+) -> str:
+    """Return one CSV row with exactly 22 columns."""
+    return ",".join([
+        exam_type, category, department, description, parameter, code, value_type, unit,
+        is_computed, formula,
+        age_min, age_max, age_gender,
+        ref_low, ref_high, critical_low, critical_high,
+        label_normal, label_low, label_high, label_critical_low, label_critical_high,
+    ]) + "\n"
+
+
+# Columns (22 total — indices 0-21):
+#  0  exam_type     : exam type name (required)
+#  1  category      : BIOLOGY | CLINICAL | IMAGING | ECG | ORL | URINE | OTHER (required)
+#  2  department    : free text
+#  3  description   : free text
+#  4  parameter     : parameter name (leave blank to create the exam type only)
+#  5  code          : short identifier (lowercase)
+#  6  value_type    : NUMERIC | TEXT | BOOLEAN
+#  7  unit          : unit of measure
+#  8  is_computed   : true | false  — computed from formula, not entered manually
+#  9  formula       : e.g. poids/(taille/100)^2  (used when is_computed=true, codes in lowercase)
+# 10  age_min       : minimum age inclusive (blank = no lower bound)
+# 11  age_max       : maximum age inclusive (blank = no upper bound)
+# 12  age_gender    : ALL | M | F  — leave blank if no threshold for this parameter
+# 13  ref_low       : lower reference bound
+# 14  ref_high      : upper reference bound
+# 15  critical_low  : critical lower bound
+# 16  critical_high : critical upper bound
+# 17  label_normal  : label when value is in normal range
+# 18  label_low     : label when value is below ref_low
+# 19  label_high    : label when value is above ref_high
+# 20  label_critical_low  : label when below critical_low
+# 21  label_critical_high : label when above critical_high
+#
+# Pattern: une ligne par paramètre × tranche age/genre.
+#   • Pas de seuils          : laisser age_gender vide → une seule ligne
+#   • Seuils identiques M/F  : age_gender=ALL → une seule ligne
+#   • Seuils différents M/F  : une ligne avec age_gender=M + une ligne avec age_gender=F
+#   • Tranches d'âge         : une ligne par tranche (age_min/age_max + age_gender)
+#   Les colonnes 0-9 (définition) se répètent sur chaque ligne du même paramètre.
 _EXAM_TYPE_TEMPLATE = (
-    "type_examen,categorie,departement,description,parametre,code,type_valeur,unite,"
-    "ref_basse,ref_haute,critique_bas,critique_haut,"
-    "ref_basse_H,ref_haute_H,critique_bas_H,critique_haut_H,"
-    "ref_basse_F,ref_haute_F,critique_bas_F,critique_haut_F,"
-    "label_normal,label_bas,label_haut,label_critique_bas,label_critique_haut\n"
-    # ── Bilan lipidique ──────────────────────────────────────────────────────
-    "Bilan lipidique,Biochimie,Biologie,,Triglycérides,,NUMERIC,g/L,,1.5,,,,,,,,,,,,,,,\n"
-    "Bilan lipidique,Biochimie,Biologie,,LDL,,NUMERIC,g/L,,,,,,,,,,,,,,,,,\n"
-    "Bilan lipidique,Biochimie,Biologie,,HDL,,NUMERIC,g/L,,,,,0.4,,,,0.5,,,,,,,,\n"
-    "Bilan lipidique,Biochimie,Biologie,,Cholestérol total,,NUMERIC,g/L,,2.0,,,,,,,,,,,,,,,\n"
-    # ── Sérologies infectieuses ──────────────────────────────────────────────
-    "Sérologies infectieuses,Biologie,Biologie,,TPHA (Syphilis),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
-    "Sérologies infectieuses,Biologie,Biologie,,Ac anti-HBs (Hépatite B — anticorps),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
-    "Sérologies infectieuses,Biologie,Biologie,,Sérologie VIH (Ag/Ac combinés),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
-    "Sérologies infectieuses,Biologie,Biologie,,VDRL (Syphilis — activité),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
-    "Sérologies infectieuses,Biologie,Biologie,,Ac anti-HBc (Hépatite B — core),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
-    "Sérologies infectieuses,Biologie,Biologie,,Ac anti-VHC (Hépatite C),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
-    "Sérologies infectieuses,Biologie,Biologie,,AgHBs (Hépatite B — antigène surface),,BOOLEAN,,,,,,,,,,,,,,,,,,\n"
-    # ── Bilan ophtalmologique ────────────────────────────────────────────────
-    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Acuité visuelle OG (sans correction),,TEXT,,,,,,,,,,,,,,,,,,\n"
-    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Acuité visuelle OD (avec correction),,TEXT,,,,,,,,,,,,,,,,,,\n"
-    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Tension oculaire OD,,NUMERIC,mmHg,10.0,21.0,,30.0,,,,,,,,,,,,,\n"
-    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Acuité visuelle OD (sans correction),,TEXT,,,,,,,,,,,,,,,,,,\n"
-    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Vision des couleurs,,TEXT,,,,,,,,,,,,,,,,,,\n"
-    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Acuité visuelle OG (avec correction),,TEXT,,,,,,,,,,,,,,,,,,\n"
-    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Tension oculaire OG,,NUMERIC,,10.0,21.0,,30.0,,,,,,,,,,,,,\n"
-    "Bilan ophtalmologique,CLINICAL,Ophtalmologie,,Champ visuel,,TEXT,,,,,,,,,,,,,,,,,,\n"
-    # ── Constantes vitales ───────────────────────────────────────────────────
-    "Constantes vitales,CLINICAL,Médecine du travail,,IMC,,NUMERIC,kg/cm²,18.5,25.0,13.0,40.0,,,,,,,,,Corpulence normale,Insuffisance pondérale,Surpoids / Obésité,Dénutrition sévère,Obésité morbide\n"
-    "Constantes vitales,CLINICAL,Médecine du travail,,SpO2,,NUMERIC,%,95.0,100.0,88.0,,,,,,,,,,,,,,\n"
-    "Constantes vitales,CLINICAL,Médecine du travail,,Taille,,NUMERIC,m,,,,,,,,,,,,,,,,,\n"
-    "Constantes vitales,CLINICAL,Médecine du travail,,Tension systolique,,NUMERIC,mmHg,90.0,140.0,70.0,180.0,,,,,,,,,,,,,\n"
-    "Constantes vitales,CLINICAL,Médecine du travail,,Poids,,NUMERIC,kg,,,,,,,,,,,,,,,,,\n"
-    "Constantes vitales,CLINICAL,Médecine du travail,,Fréquence cardiaque,,NUMERIC,bpm,50.0,100.0,30.0,150.0,,,,,,,,,,,,,\n"
-    "Constantes vitales,CLINICAL,Médecine du travail,,Température,,NUMERIC,°C,36.1,37.5,34.0,40.0,,,,,,,,,,,,,\n"
-    # ── NFS — Numération Formule Sanguine ────────────────────────────────────
-    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Neutrophiles %,,NUMERIC,%,40.0,75.0,,,,,,,,,,,,,,,\n"
-    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,CCMH,,NUMERIC,g/dL,32.0,36.0,,,,,,,,,,,,,,,\n"
-    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Globules blancs,,NUMERIC,10³/mm³,4.0,10.0,2.0,30.0,,,,,,,,,Numération leucocytaire normale,Leucopénie,Hyperleucocytose,Agranulocytose,Hyperleucocytose sévère\n"
-    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Monocytes %,,NUMERIC,%,2.0,10.0,,,,,,,,,,,,,,,\n"
-    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Globules rouges,,NUMERIC,10⁶/mm³,4.2,5.9,2.0,7.0,,,,,,,,,,,,,\n"
-    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Lymphocytes %,,NUMERIC,%,20.0,45.0,,,,,,,,,,,,,,,\n"
-    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Hémoglobine,,NUMERIC,g/dL,12.0,17.5,7.0,20.0,13.0,17.5,7.0,20.0,12.0,16.0,7.0,20.0,Hémoglobine normale,Anémie,Polyglobulie,Anémie sévère,Polyglobulie majeure\n"
-    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,Plaquettes,,NUMERIC,10³/mm³,150.0,400.0,50.0,1000.0,,,,,,,,,,,,,\n"
-    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,VGM,,NUMERIC,fL,80.0,100.0,,,,,,,,,,,,,,,\n"
-    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,hematocrite,,NUMERIC,%,38.0,54.0,20.0,60.0,,,,,,,,,,,,,\n"
-    "NFS — Numération Formule Sanguine,Hématologie,Biologie,,TCMH,,NUMERIC,pg,27.0,32.0,,,,,,,,,,,,,,,\n"
+    "exam_type,category,department,description,parameter,code,value_type,unit,"
+    "is_computed,formula,"
+    "age_min,age_max,age_gender,"
+    "ref_low,ref_high,critical_low,critical_high,"
+    "label_normal,label_low,label_high,label_critical_low,label_critical_high\n"
+    # ── Bilan lipidique ───────────────────────────────────────────────────────
+    + _exam_row("Bilan lipidique", "BIOLOGY", "Biologie", parameter="Triglycerides", code="tg", unit="g/L",
+                age_gender="ALL", ref_high="1.5")
+    + _exam_row("Bilan lipidique", "BIOLOGY", "Biologie", parameter="LDL", code="ldl", unit="g/L")
+    + _exam_row("Bilan lipidique", "BIOLOGY", "Biologie", parameter="HDL", code="hdl", unit="g/L",
+                age_gender="M", ref_low="0.4")
+    + _exam_row("Bilan lipidique", "BIOLOGY", "Biologie", parameter="HDL", code="hdl", unit="g/L",
+                age_gender="F", ref_low="0.5")
+    + _exam_row("Bilan lipidique", "BIOLOGY", "Biologie", parameter="Cholesterol total", code="chol", unit="g/L",
+                age_gender="ALL", ref_high="2.0")
+    # ── Serologies infectieuses ───────────────────────────────────────────────
+    + _exam_row("Serologies infectieuses", "BIOLOGY", "Biologie", parameter="TPHA (Syphilis)", code="tpha", value_type="BOOLEAN")
+    + _exam_row("Serologies infectieuses", "BIOLOGY", "Biologie", parameter="Ac anti-HBs (Hepatite B - anticorps)", code="achbs", value_type="BOOLEAN")
+    + _exam_row("Serologies infectieuses", "BIOLOGY", "Biologie", parameter="Serologie VIH (Ag/Ac combines)", code="vih", value_type="BOOLEAN")
+    + _exam_row("Serologies infectieuses", "BIOLOGY", "Biologie", parameter="Ac anti-HBc (Hepatite B - core)", code="achbc", value_type="BOOLEAN")
+    + _exam_row("Serologies infectieuses", "BIOLOGY", "Biologie", parameter="Ac anti-VHC (Hepatite C)", code="acvhc", value_type="BOOLEAN")
+    + _exam_row("Serologies infectieuses", "BIOLOGY", "Biologie", parameter="AgHBs (Hepatite B - antigene surface)", code="aghbs", value_type="BOOLEAN")
+    # ── Bilan ophtalmologique ─────────────────────────────────────────────────
+    + _exam_row("Bilan ophtalmologique", "CLINICAL", "Ophtalmologie", parameter="Acuite visuelle OD (sans correction)", code="avod_sc", value_type="TEXT")
+    + _exam_row("Bilan ophtalmologique", "CLINICAL", "Ophtalmologie", parameter="Acuite visuelle OG (sans correction)", code="avog_sc", value_type="TEXT")
+    + _exam_row("Bilan ophtalmologique", "CLINICAL", "Ophtalmologie", parameter="Acuite visuelle OD (avec correction)", code="avod_ac", value_type="TEXT")
+    + _exam_row("Bilan ophtalmologique", "CLINICAL", "Ophtalmologie", parameter="Acuite visuelle OG (avec correction)", code="avog_ac", value_type="TEXT")
+    + _exam_row("Bilan ophtalmologique", "CLINICAL", "Ophtalmologie", parameter="Vision des couleurs", code="vdc", value_type="TEXT")
+    + _exam_row("Bilan ophtalmologique", "CLINICAL", "Ophtalmologie", parameter="Champ visuel", code="champvis", value_type="TEXT")
+    + _exam_row("Bilan ophtalmologique", "CLINICAL", "Ophtalmologie", parameter="Tension oculaire OD", code="tiod", unit="mmHg",
+                age_gender="ALL", ref_low="10.0", ref_high="21.0", critical_high="30.0")
+    + _exam_row("Bilan ophtalmologique", "CLINICAL", "Ophtalmologie", parameter="Tension oculaire OG", code="tiog", unit="mmHg",
+                age_gender="ALL", ref_low="10.0", ref_high="21.0", critical_high="30.0")
+    # ── Constantes vitales ────────────────────────────────────────────────────
+    + _exam_row("Constantes vitales", "CLINICAL", "Medecine du travail", parameter="Taille", code="taille", unit="cm")
+    + _exam_row("Constantes vitales", "CLINICAL", "Medecine du travail", parameter="Poids", code="poids", unit="kg")
+    + _exam_row("Constantes vitales", "CLINICAL", "Medecine du travail", parameter="IMC", code="imc", unit="kg/m2",
+                is_computed="true", formula="poids/(taille/100)^2",
+                age_min="0", age_max="17", age_gender="ALL",
+                ref_low="14.0", ref_high="25.0", critical_low="10.0", critical_high="35.0",
+                label_normal="Poids normal", label_low="Insuffisance ponderale", label_high="Surpoids",
+                label_critical_low="Denutrition severe", label_critical_high="Obesite severe")
+    + _exam_row("Constantes vitales", "CLINICAL", "Medecine du travail", parameter="IMC", code="imc", unit="kg/m2",
+                is_computed="true", formula="poids/(taille/100)^2",
+                age_min="18", age_gender="ALL",
+                ref_low="18.5", ref_high="25.0", critical_low="13.0", critical_high="40.0",
+                label_normal="Poids normal", label_low="Insuffisance ponderale", label_high="Surpoids",
+                label_critical_low="Denutrition severe", label_critical_high="Obesite morbide")
+    + _exam_row("Constantes vitales", "CLINICAL", "Medecine du travail", parameter="Frequence cardiaque", code="fc", unit="bpm",
+                age_gender="ALL", ref_low="50.0", ref_high="100.0", critical_low="30.0", critical_high="150.0")
+    + _exam_row("Constantes vitales", "CLINICAL", "Medecine du travail", parameter="Tension systolique", code="pas", unit="mmHg",
+                age_gender="ALL", ref_low="90.0", ref_high="140.0", critical_low="70.0", critical_high="180.0")
+    + _exam_row("Constantes vitales", "CLINICAL", "Medecine du travail", parameter="SpO2", code="spo2", unit="%",
+                age_gender="ALL", ref_low="95.0", ref_high="100.0", critical_low="88.0")
+    + _exam_row("Constantes vitales", "CLINICAL", "Medecine du travail", parameter="Temperature", code="temp", unit="C",
+                age_gender="ALL", ref_low="36.1", ref_high="37.5", critical_low="34.0", critical_high="40.0")
+    # ── NFS Hemogramme ────────────────────────────────────────────────────────
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="Globules blancs (GB)", code="gb", unit="G/L",
+                age_gender="ALL", ref_low="4.0", ref_high="10.0", critical_low="2.0", critical_high="30.0",
+                label_normal="GB normal", label_low="Leucopenie", label_high="Leucocytose",
+                label_critical_low="Agranulocytose", label_critical_high="Leucocytose severe")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="Globules rouges (GR)", code="gr", unit="T/L",
+                age_gender="M", ref_low="4.5", ref_high="5.9", critical_low="2.0", critical_high="7.0")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="Globules rouges (GR)", code="gr", unit="T/L",
+                age_gender="F", ref_low="4.0", ref_high="5.2", critical_low="2.0", critical_high="7.0")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="Hemoglobine", code="hgb", unit="g/dL",
+                age_gender="M", ref_low="13.0", ref_high="17.5", critical_low="7.0", critical_high="20.0",
+                label_normal="Hemoglobine normale", label_low="Anemie", label_high="Polyglobulie",
+                label_critical_low="Anemie severe", label_critical_high="Polyglobulie severe")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="Hemoglobine", code="hgb", unit="g/dL",
+                age_gender="F", ref_low="12.0", ref_high="16.0", critical_low="7.0", critical_high="20.0",
+                label_normal="Hemoglobine normale", label_low="Anemie", label_high="Polyglobulie",
+                label_critical_low="Anemie severe", label_critical_high="Polyglobulie severe")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="Hematocrite", code="hct", unit="%",
+                age_gender="M", ref_low="40.0", ref_high="54.0", critical_low="20.0", critical_high="60.0")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="Hematocrite", code="hct", unit="%",
+                age_gender="F", ref_low="36.0", ref_high="48.0", critical_low="20.0", critical_high="60.0")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="Plaquettes", code="plq", unit="G/L",
+                age_gender="ALL", ref_low="150.0", ref_high="400.0", critical_low="50.0", critical_high="1000.0")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="VGM", code="vgm", unit="fL",
+                age_gender="ALL", ref_low="80.0", ref_high="100.0")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="TCMH", code="tcmh", unit="pg",
+                age_gender="ALL", ref_low="27.0", ref_high="32.0")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="CCMH", code="ccmh", unit="g/dL",
+                age_gender="ALL", ref_low="32.0", ref_high="36.0")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="Neutrophiles %", code="neutro", unit="%",
+                age_gender="ALL", ref_low="40.0", ref_high="75.0")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="Lymphocytes %", code="lympho", unit="%",
+                age_gender="ALL", ref_low="20.0", ref_high="45.0")
+    + _exam_row("NFS Hemogramme", "BIOLOGY", "Biologie", parameter="Monocytes %", code="mono", unit="%",
+                age_gender="ALL", ref_low="2.0", ref_high="10.0")
 )
 
 
@@ -405,9 +513,9 @@ class ImportState(ReflexMainState):
             elif self.import_type == "exam_types":
                 cells = [
                     str(r.row_num),
-                    r.row_data.get("type_examen", ""),
-                    r.row_data.get("categorie", ""),
-                    r.row_data.get("parametre", "") or "—",
+                    r.row_data.get("exam_type", ""),
+                    r.row_data.get("category", ""),
+                    r.row_data.get("parameter", "") or "—",
                     status_text,
                 ]
             else:

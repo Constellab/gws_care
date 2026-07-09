@@ -19,7 +19,7 @@ def _review_btn(row: CorrectionRowDTO) -> rx.Component:
                 variant="soft", size="1", color_scheme="blue",
                 on_click=CorrectionsState.open_review_dialog(row.id),
             ),
-            content="Examiner cette demande",
+            content="Review this request",
         ),
         rx.fragment(),
     )
@@ -54,12 +54,12 @@ def _correction_row(row: CorrectionRowDTO) -> rx.Component:
         rx.table.cell(
             rx.vstack(
                 rx.hstack(
-                    rx.text("Avant :", size="1", color="var(--gray-9)"),
+                    rx.text("Before:", size="1", color="var(--gray-9)"),
                     rx.text(row.old_value, size="2", color="var(--red-11)"),
                     spacing="1",
                 ),
                 rx.hstack(
-                    rx.text("Après :", size="1", color="var(--gray-9)"),
+                    rx.text("After:", size="1", color="var(--gray-9)"),
                     rx.text(row.new_value, size="2", color="var(--green-11)"),
                     spacing="1",
                 ),
@@ -90,12 +90,12 @@ def _corrections_table() -> rx.Component:
             rx.table.header(
                 rx.table.row(
                     rx.table.column_header_cell("Date"),
-                    rx.table.column_header_cell("Patient / Campagne"),
-                    rx.table.column_header_cell("Champ"),
-                    rx.table.column_header_cell("Valeurs"),
-                    rx.table.column_header_cell("Motif"),
-                    rx.table.column_header_cell("Statut"),
-                    rx.table.column_header_cell("Demandé par"),
+                    rx.table.column_header_cell("Patient / Campaign"),
+                    rx.table.column_header_cell("Field"),
+                    rx.table.column_header_cell("Values"),
+                    rx.table.column_header_cell("Reason"),
+                    rx.table.column_header_cell("Status"),
+                    rx.table.column_header_cell("Requested by"),
                     rx.table.column_header_cell(""),
                 )
             ),
@@ -109,9 +109,9 @@ def _corrections_table() -> rx.Component:
         rx.center(
             rx.vstack(
                 rx.icon("pencil-ruler", size=40, color="var(--gray-7)"),
-                rx.text("Aucune demande de correction", size="3", color="var(--gray-9)"),
+                rx.text("No correction request", size="3", color="var(--gray-9)"),
                 rx.text(
-                    "Les demandes de correction de données validées apparaîtront ici.",
+                    "Validated data correction requests will appear here.",
                     size="2", color="var(--gray-7)", text_align="center",
                 ),
                 align="center", spacing="2",
@@ -124,23 +124,23 @@ def _corrections_table() -> rx.Component:
 def _review_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Examiner la demande de correction"),
+            rx.dialog.title("Review correction request"),
             rx.vstack(
-                rx.text("Décision *", size="2", weight="medium"),
+                rx.text("Decision *", size="2", weight="medium"),
                 rx.select.root(
                     rx.select.trigger(width="100%"),
                     rx.select.content(
-                        rx.select.item("Accepter la correction", value="ACCEPTED"),
-                        rx.select.item("Refuser la correction", value="REFUSED"),
-                        rx.select.item("Appliquer et clore", value="APPLIED"),
+                        rx.select.item("Accept correction", value="ACCEPTED"),
+                        rx.select.item("Refuse correction", value="REFUSED"),
+                        rx.select.item("Apply and close", value="APPLIED"),
                     ),
                     value=CorrectionsState.review_decision,
                     on_change=CorrectionsState.set_review_decision,
                     width="100%",
                 ),
-                rx.text("Commentaire (optionnel)", size="2", weight="medium"),
+                rx.text("Comment (optional)", size="2", weight="medium"),
                 rx.text_area(
-                    placeholder="Raison de votre décision...",
+                    placeholder="Reason for your decision...",
                     value=CorrectionsState.review_reason_text,
                     on_change=CorrectionsState.set_review_reason,
                     width="100%",
@@ -150,10 +150,10 @@ def _review_dialog() -> rx.Component:
             ),
             rx.hstack(
                 rx.dialog.close(
-                    rx.button("Annuler", variant="soft", color_scheme="gray"),
+                    rx.button("Cancel", variant="soft", color_scheme="gray"),
                 ),
                 rx.button(
-                    "Valider la décision",
+                    "Submit decision",
                     on_click=CorrectionsState.submit_review,
                     color_scheme="blue",
                 ),
@@ -183,13 +183,13 @@ def corrections_page() -> rx.Component:
         rx.hstack(
             rx.hstack(
                 rx.icon("pencil-ruler", size=22, color="var(--accent-9)"),
-                rx.heading("Demandes de correction", size="6"),
+                rx.heading("Correction requests", size="6"),
                 spacing="2", align="center",
             ),
             rx.spacer(),
             rx.badge(
                 CorrectionsState.total_count.to(str),
-                " résultat(s)",
+                " result(s)",
                 color_scheme="gray", variant="soft", size="2",
             ),
             width="100%", align="center",
@@ -197,7 +197,7 @@ def corrections_page() -> rx.Component:
         rx.hstack(
             rx.debounce_input(
                 rx.input(
-                    placeholder="Rechercher patient, champ, motif...",
+                    placeholder="Search patient, field, reason...",
                     value=CorrectionsState.search_query,
                     on_change=CorrectionsState.set_search,
                     width="280px",
@@ -206,11 +206,11 @@ def corrections_page() -> rx.Component:
                 debounce_timeout=350,
             ),
             rx.separator(orientation="vertical", height="28px"),
-            _filter_btn("En attente", "PENDING"),
-            _filter_btn("Acceptées", "ACCEPTED"),
-            _filter_btn("Refusées", "REFUSED"),
-            _filter_btn("Appliquées", "APPLIED"),
-            _filter_btn("Toutes", "ALL"),
+            _filter_btn("Pending", "PENDING"),
+            _filter_btn("Accepted", "ACCEPTED"),
+            _filter_btn("Refused", "REFUSED"),
+            _filter_btn("Applied", "APPLIED"),
+            _filter_btn("All", "ALL"),
             spacing="2", align="center", flex_wrap="wrap",
         ),
         rx.cond(

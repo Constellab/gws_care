@@ -699,6 +699,8 @@ class PatientFormState(FormDialogState, rx.State):
             raise _FormValidationError("Prénom requis")
         if not self.form_date_of_birth:
             raise _FormValidationError("Date de naissance requise")
+        if self.form_gender not in ("M", "F"):
+            raise _FormValidationError("Le sexe est obligatoire (Masculin ou Féminin)")
         if self.form_email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", self.form_email.strip()):
             raise _FormValidationError("Format d'e-mail incorrect — vérifiez le champ « E-mail »")
         nir_error = self._validate_nir(self.form_social_security_number, self.form_country)
@@ -762,6 +764,8 @@ class PatientFormState(FormDialogState, rx.State):
             raise _FormValidationError("Prénom requis")
         if not self.form_date_of_birth:
             raise _FormValidationError("Date de naissance requise")
+        if self.form_gender not in ("M", "F"):
+            raise _FormValidationError("Le sexe est obligatoire (Masculin ou Féminin)")
         if self.form_email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", self.form_email.strip()):
             raise _FormValidationError("Format d'e-mail incorrect — vérifiez le champ « E-mail »")
         nir_error = self._validate_nir(self.form_social_security_number, self.form_country)

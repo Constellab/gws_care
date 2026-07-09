@@ -13,7 +13,7 @@ class LanguageState(ReflexMainState):
     can access as ``LanguageState.tr["key"]``.
     """
 
-    language: str = "fr"
+    language: str = "en"
 
     @rx.event
     async def on_load(self):

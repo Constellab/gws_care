@@ -17,12 +17,12 @@ from .campaign_detail_state import (
 )
 
 _LOCATION_OPTIONS = [
-    ("", "— Non défini —", "circle-dashed"),
-    ("at_work", "Sur site (entreprise)", "building-2"),
-    ("hospital", "Hôpital / Clinique", "hospital"),
-    ("at_home", "À domicile", "house"),
-    ("visio", "Visioconférence", "video"),
-    ("address", "Autre adresse", "map-pin"),
+    ("", "— Undefined —", "circle-dashed"),
+    ("at_work", "On-site (company)", "building-2"),
+    ("hospital", "Hospital / Clinic", "hospital"),
+    ("at_home", "At home", "house"),
+    ("visio", "Video conference", "video"),
+    ("address", "Other address", "map-pin"),
 ]
 
 _LOCATION_ICON: dict[str, str] = {v: icon for v, _, icon in _LOCATION_OPTIONS if v}
@@ -42,11 +42,11 @@ def _location_badge(mode: str) -> rx.Component:
     )
     label = rx.match(
         mode,
-        ("at_work", "Sur site"),
-        ("hospital", "Hôpital"),
-        ("at_home", "Domicile"),
-        ("visio", "Visio"),
-        ("address", "Adresse"),
+        ("at_work", "On-site"),
+        ("hospital", "Hospital"),
+        ("at_home", "Home"),
+        ("visio", "Video"),
+        ("address", "Address"),
         "—",
     )
     return rx.hstack(
@@ -127,12 +127,12 @@ def _prog_lifeline_step(step_idx: int, value: str, label: str, color: str) -> rx
 
 def _workflow_lifeline_program() -> rx.Component:
     steps = [
-        (0, "draft", "Brouillon", "gray"),
-        (1, "validated", "Validée", "blue"),
-        (2, "terrain_exam", "Terrain", "amber"),
-        (3, "sample_analysis", "Analyse", "orange"),
-        (4, "closed", "Clôturée", "green"),
-        (5, "archived", "Archivée", "gray"),
+        (0, "draft", "Draft", "gray"),
+        (1, "validated", "Validated", "blue"),
+        (2, "terrain_exam", "Field", "amber"),
+        (3, "sample_analysis", "Analysis", "orange"),
+        (4, "closed", "Closed", "green"),
+        (5, "archived", "Archived", "gray"),
     ]
     nodes = []
     for i, (idx, value, label, color) in enumerate(steps):
@@ -190,7 +190,7 @@ def _workflow_buttons() -> rx.Component:
             rx.link(
                 rx.button(
                     rx.icon("map-pin", size=16),
-                    "Terrain",
+                    "Field",
                     variant="soft",
                     color_scheme="amber",
                     size="2",
@@ -238,7 +238,7 @@ def _workflow_buttons() -> rx.Component:
             | (CampaignDetailState.program.status == "archived"),
             rx.button(
                 rx.icon("file-bar-chart", size=16),
-                "Rapport PDF",
+                "PDF Report",
                 on_click=CampaignDetailState.download_campaign_report_pdf,
                 variant="soft",
                 color_scheme="gray",
@@ -285,7 +285,7 @@ def _patient_row(patient: PatientRowDTO) -> rx.Component:
                         ),
                         href="/campaign-patient/" + CampaignDetailState.program.id + "/" + patient.id,
                     ),
-                    content="Saisir / voir les résultats",
+                    content="Enter / view results",
                 ),
                 rx.cond(
                     CampaignDetailState.program.is_individual
@@ -438,17 +438,17 @@ def _exam_type_row(et: ExamTypeRowDTO) -> rx.Component:
                 ),
                 rx.select.root(
                     rx.select.trigger(
-                        placeholder="Non défini",
+                        placeholder="Undefined",
                         width="160px",
                     ),
                     rx.select.content(
-                        rx.select.item("— Non défini —", value="_none_"),
+                        rx.select.item("— Undefined —", value="_none_"),
                         rx.select.separator(),
-                        rx.select.item("Sur site (entreprise)", value="at_work"),
-                        rx.select.item("Hôpital / Clinique", value="hospital"),
-                        rx.select.item("À domicile", value="at_home"),
-                        rx.select.item("Visioconférence", value="visio"),
-                        rx.select.item("Autre adresse", value="address"),
+                        rx.select.item("On-site (company)", value="at_work"),
+                        rx.select.item("Hospital / Clinic", value="hospital"),
+                        rx.select.item("At home", value="at_home"),
+                        rx.select.item("Video conference", value="visio"),
+                        rx.select.item("Other address", value="address"),
                     ),
                     value=rx.cond(et.location_mode != "", et.location_mode, "_none_"),
                     on_change=lambda mode: CampaignDetailState.set_exam_location_mode(et.id, mode),
@@ -476,7 +476,7 @@ def _exam_type_row(et: ExamTypeRowDTO) -> rx.Component:
                                     et.id, et.name
                                 ),
                             ),
-                            content="Configurer les paramètres",
+                            content="Configure parameters",
                         ),
                         rx.tooltip(
                             rx.icon_button(
@@ -488,7 +488,7 @@ def _exam_type_row(et: ExamTypeRowDTO) -> rx.Component:
                                     et.id
                                 ),
                             ),
-                            content="Assigner un médecin",
+                            content="Assign a doctor",
                         ),
                         rx.tooltip(
                             rx.icon_button(
@@ -573,10 +573,10 @@ def _tab_exam_types() -> rx.Component:
                             cursor="pointer",
                         ),
                         rx.table.column_header_cell(
-                            rx.text("Médecin assigné", size="2"),
+                            rx.text("Assigned Doctor", size="2"),
                         ),
                         rx.table.column_header_cell(
-                            rx.text("Lieu / Mode", size="2"),
+                            rx.text("Location / Mode", size="2"),
                         ),
                         rx.table.column_header_cell(""),
                     )
@@ -636,7 +636,7 @@ def _visit_row(visit: VisitRowDTO) -> rx.Component:
                         & (visit.campaign_visit_status != "pending"),
                         rx.button(
                             rx.icon("pencil", size=13),
-                            "Saisir résultats",
+                            "Enter results",
                             variant="soft",
                             size="1",
                             color_scheme="blue",
@@ -647,7 +647,7 @@ def _visit_row(visit: VisitRowDTO) -> rx.Component:
                         rx.tooltip(
                             rx.button(
                                 rx.icon("lock", size=13),
-                                "Saisir résultats",
+                                "Enter results",
                                 variant="soft",
                                 size="1",
                                 color_scheme="gray",
@@ -656,8 +656,8 @@ def _visit_row(visit: VisitRowDTO) -> rx.Component:
                             content=rx.cond(
                                 (CampaignDetailState.program.status == "draft")
                                 | (CampaignDetailState.program.status == "validated"),
-                                "Démarrez la campagne pour accéder à la saisie des résultats",
-                                "Déclarez la présence du patient sur le terrain pour accéder à la saisie",
+                                "Start the campaign to access result entry",
+                                "Declare the patient's presence on-site to access result entry",
                             ),
                         ),
                     ),
@@ -678,7 +678,7 @@ def _visit_row(visit: VisitRowDTO) -> rx.Component:
                     ),
                     content=rx.cond(
                         visit.campaign_visit_status == "pending",
-                        "Marquez d'abord le patient comme présent sur le terrain",
+                        "Mark the patient as present on-site first",
                         LanguageState.tr["tooltip_view_visit"],
                     ),
                 ),
@@ -762,7 +762,7 @@ def _tab_visits() -> rx.Component:
             CampaignDetailState.filtered_visits.length().to_string()
             + " / "
             + CampaignDetailState.visits.length().to_string()
-            + " visite(s)",
+            + " visit(s)",
             size="1",
             color="var(--gray-9)",
         ),
@@ -869,14 +869,14 @@ def _tab_doctors() -> rx.Component:
     return rx.vstack(
         rx.hstack(
             rx.text(
-                "Médecins assignés à cette campagne",
+                "Doctors assigned to this campaign",
                 size="2",
                 color="var(--gray-11)",
             ),
             rx.spacer(),
             rx.button(
                 rx.icon("plus", size=14),
-                "Ajouter un médecin",
+                "Add a doctor",
                 size="2",
                 on_click=CampaignDetailState.open_add_campaign_doctor_dialog,
             ),
@@ -889,7 +889,7 @@ def _tab_doctors() -> rx.Component:
                 rx.table.root(
                     rx.table.header(
                         rx.table.row(
-                            rx.table.column_header_cell("Médecin — Spécialité"),
+                            rx.table.column_header_cell("Doctor — Specialty"),
                             rx.table.column_header_cell(""),
                         )
                     ),
@@ -904,7 +904,7 @@ def _tab_doctors() -> rx.Component:
             ),
             rx.box(
                 rx.text(
-                    "Aucun médecin associé à cette campagne.",
+                    "No doctor assigned to this campaign.",
                     size="2",
                     color="var(--gray-9)",
                 ),
@@ -925,14 +925,14 @@ def _add_campaign_doctor_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
             rx.vstack(
-                rx.dialog.title("Ajouter un médecin à la campagne"),
+                rx.dialog.title("Add a doctor to the campaign"),
                 rx.hstack(
                     rx.cond(
                         CampaignDetailState.add_campaign_doctor_specialty_options.length() > 0,
                         rx.select.root(
-                            rx.select.trigger(placeholder="Toutes spécialités", width="180px"),
+                            rx.select.trigger(placeholder="All specialties", width="180px"),
                             rx.select.content(
-                                rx.select.item("Toutes les spécialités", value="_all_"),
+                                rx.select.item("All specialties", value="_all_"),
                                 rx.foreach(
                                     CampaignDetailState.add_campaign_doctor_specialty_options,
                                     lambda s: rx.select.item(s, value=s),
@@ -946,7 +946,7 @@ def _add_campaign_doctor_dialog() -> rx.Component:
                     ),
                     rx.input(
                         rx.input.slot(rx.icon("search", size=13)),
-                        placeholder="Rechercher un médecin…",
+                        placeholder="Search for a doctor…",
                         value=CampaignDetailState.add_campaign_doctor_search,
                         on_change=CampaignDetailState.set_add_campaign_doctor_search,
                         size="2",
@@ -956,7 +956,7 @@ def _add_campaign_doctor_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.select.root(
-                    rx.select.trigger(placeholder="Sélectionner un médecin…", width="100%"),
+                    rx.select.trigger(placeholder="Select a doctor…", width="100%"),
                     rx.select.content(
                         rx.foreach(
                             CampaignDetailState.add_campaign_doctor_options,
@@ -971,13 +971,13 @@ def _add_campaign_doctor_dialog() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.button(
-                        "Annuler",
+                        LanguageState.tr["cancel_btn"],
                         variant="outline",
                         color_scheme="gray",
                         on_click=CampaignDetailState.close_add_campaign_doctor_dialog,
                     ),
                     rx.button(
-                        "Ajouter",
+                        LanguageState.tr["add_btn"],
                         loading=CampaignDetailState.is_adding_campaign_doctor,
                         disabled=CampaignDetailState.add_campaign_doctor_selected_id == "",
                         on_click=CampaignDetailState.confirm_add_campaign_doctor,
@@ -1020,16 +1020,16 @@ def _add_patient_dialog() -> rx.Component:
 
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Ajouter des patients à la campagne"),
+            rx.dialog.title("Add patients to the campaign"),
             rx.dialog.description(
-                "Patients affiliés au compte de cette campagne non encore inscrits.",
+                "Patients affiliated with this campaign's account who have not yet been enrolled.",
                 size="2",
                 color="var(--gray-9)",
             ),
             rx.vstack(
                 rx.hstack(
                     rx.input(
-                        placeholder="Filtrer par nom, prénom ou n° dossier…",
+                        placeholder="Filter by name, first name or case number…",
                         value=CampaignDetailState.patient_search,
                         on_change=CampaignDetailState.search_patients,
                         width="100%",
@@ -1039,7 +1039,7 @@ def _add_patient_dialog() -> rx.Component:
                         CampaignDetailState.selected_patient_ids.length() > 0,
                         rx.badge(
                             CampaignDetailState.selected_patient_ids.length(),
-                            " sélectionné(s)",
+                            " selected",
                             color_scheme="blue",
                             size="2",
                         ),
@@ -1060,7 +1060,7 @@ def _add_patient_dialog() -> rx.Component:
                         width="100%",
                     ),
                     rx.callout(
-                        "Aucun patient disponible — vérifiez que des employés sont affiliés à ce compte entreprise.",
+                        "No patients available — make sure employees are affiliated with this company account.",
                         icon="info",
                         color_scheme="orange",
                         size="1",
@@ -1079,10 +1079,10 @@ def _add_patient_dialog() -> rx.Component:
                         rx.icon("user-plus", size=14),
                         rx.cond(
                             CampaignDetailState.selected_patient_ids.length() > 0,
-                            "Ajouter ("
+                            "Add ("
                             + CampaignDetailState.selected_patient_ids.length().to_string()
                             + ")",
-                            "Ajouter",
+                            "Add",
                         ),
                         on_click=CampaignDetailState.confirm_add_patient,
                         loading=CampaignDetailState.is_adding_patient,
@@ -1107,17 +1107,17 @@ def _add_patient_dialog() -> rx.Component:
 def _archive_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Archiver la campagne"),
+            rx.dialog.title("Archive Campaign"),
             rx.dialog.description(
-                "Cette action est irréversible. Saisissez un motif obligatoire.",
+                "This action is irreversible. A mandatory reason is required.",
                 size="2",
                 color="var(--gray-9)",
             ),
             rx.vstack(
                 rx.vstack(
-                    rx.text("Motif d'archivage *", size="2", weight="medium"),
+                    rx.text("Archive reason *", size="2", weight="medium"),
                     rx.text_area(
-                        placeholder="Ex : campagne terminée, données traitées…",
+                        placeholder="Ex: campaign completed, data processed…",
                         value=CampaignDetailState.archive_reason_input,
                         on_change=CampaignDetailState.set_archive_reason_input,
                         rows="3",
@@ -1138,14 +1138,14 @@ def _archive_dialog() -> rx.Component:
                 rx.hstack(
                     rx.dialog.close(
                         rx.button(
-                            "Annuler",
+                            LanguageState.tr["cancel_btn"],
                             variant="ghost",
                             on_click=CampaignDetailState.close_archive_dialog,
                         )
                     ),
                     rx.button(
                         rx.icon("archive", size=14),
-                        "Archiver",
+                        "Archive",
                         color_scheme="red",
                         on_click=CampaignDetailState.archive_campaign,
                         loading=CampaignDetailState.is_archiving,
@@ -1184,7 +1184,7 @@ def _param_checkbox_row(p) -> rx.Component:
         ),
         rx.cond(
             p.is_required,
-            rx.badge("requis", variant="soft", color_scheme="blue", size="1"),
+            rx.badge("required", variant="soft", color_scheme="blue", size="1"),
             rx.fragment(),
         ),
         spacing="2",
@@ -1220,7 +1220,7 @@ def _add_exam_type_dialog() -> rx.Component:
                     CampaignDetailState.add_exam_is_loading_params,
                     rx.hstack(
                         rx.spinner(size="2"),
-                        rx.text("Chargement des tests…", size="2", color="var(--gray-9)"),
+                        rx.text("Loading tests…", size="2", color="var(--gray-9)"),
                         spacing="2",
                         align="center",
                     ),
@@ -1228,7 +1228,7 @@ def _add_exam_type_dialog() -> rx.Component:
                         CampaignDetailState.add_exam_params.length() > 0,
                         rx.vstack(
                             rx.hstack(
-                                rx.text("Tests inclus", size="2", weight="medium"),
+                                rx.text("Included tests", size="2", weight="medium"),
                                 rx.spacer(),
                                 rx.badge(
                                     CampaignDetailState.add_exam_selected_param_count.to_string()
@@ -1238,13 +1238,13 @@ def _add_exam_type_dialog() -> rx.Component:
                                     size="1",
                                 ),
                                 rx.button(
-                                    "Tout sélectionner",
+                                    "Select all",
                                     variant="ghost",
                                     size="1",
                                     on_click=CampaignDetailState.select_all_add_exam_params,
                                 ),
                                 rx.button(
-                                    "Désélectionner",
+                                    "Deselect all",
                                     variant="ghost",
                                     size="1",
                                     color_scheme="gray",
@@ -1325,7 +1325,7 @@ def _edit_exam_params_row(p) -> rx.Component:
         ),
         rx.cond(
             p.is_required,
-            rx.badge("requis", variant="soft", color_scheme="blue", size="1"),
+            rx.badge("required", variant="soft", color_scheme="blue", size="1"),
             rx.fragment(),
         ),
         spacing="2",
@@ -1346,7 +1346,7 @@ def _edit_exam_params_dialog() -> rx.Component:
             rx.dialog.title(
                 rx.hstack(
                     rx.icon("sliders-horizontal", size=16, color="var(--accent-9)"),
-                    rx.text("Paramètres — "),
+                    rx.text("Parameters — "),
                     rx.text(CampaignDetailState.editing_exam_name, weight="bold"),
                     spacing="2",
                     align="center",
@@ -1357,7 +1357,7 @@ def _edit_exam_params_dialog() -> rx.Component:
                     CampaignDetailState.edit_exam_is_loading,
                     rx.hstack(
                         rx.spinner(size="2"),
-                        rx.text("Chargement…", size="2", color="var(--gray-9)"),
+                        rx.text("Loading…", size="2", color="var(--gray-9)"),
                         spacing="2",
                         align="center",
                     ),
@@ -1365,7 +1365,7 @@ def _edit_exam_params_dialog() -> rx.Component:
                         CampaignDetailState.edit_exam_params.length() > 0,
                         rx.vstack(
                             rx.hstack(
-                                rx.text("Tests inclus", size="2", weight="medium"),
+                                rx.text("Included tests", size="2", weight="medium"),
                                 rx.spacer(),
                                 rx.badge(
                                     CampaignDetailState.edit_exam_selected_param_count.to_string()
@@ -1375,13 +1375,13 @@ def _edit_exam_params_dialog() -> rx.Component:
                                     size="1",
                                 ),
                                 rx.button(
-                                    "Tout sélectionner",
+                                    "Select all",
                                     variant="ghost",
                                     size="1",
                                     on_click=CampaignDetailState.select_all_edit_exam_params,
                                 ),
                                 rx.button(
-                                    "Désélectionner",
+                                    "Deselect all",
                                     variant="ghost",
                                     size="1",
                                     color_scheme="gray",
@@ -1406,7 +1406,7 @@ def _edit_exam_params_dialog() -> rx.Component:
                             width="100%",
                         ),
                         rx.callout(
-                            "Aucun paramètre défini pour cet examen.",
+                            "No parameters defined for this exam.",
                             icon="info",
                             color_scheme="gray",
                             size="1",
@@ -1415,13 +1415,13 @@ def _edit_exam_params_dialog() -> rx.Component:
                 ),
                 rx.hstack(
                     rx.button(
-                        "Annuler",
+                        LanguageState.tr["cancel_btn"],
                         variant="soft",
                         color_scheme="gray",
                         on_click=CampaignDetailState.close_edit_exam_params,
                     ),
                     rx.button(
-                        "Enregistrer",
+                        LanguageState.tr["save_btn"],
                         on_click=CampaignDetailState.save_edit_exam_params,
                         loading=CampaignDetailState.is_saving_exam_params,
                         disabled=CampaignDetailState.edit_exam_params.length() == 0,
@@ -1716,7 +1716,7 @@ def campaign_detail_page() -> rx.Component:
                                     rx.hstack(
                                         rx.icon("list-checks", size=15, color="var(--accent-9)"),
                                         rx.text(
-                                            "Prérequis avant validation", size="2", weight="bold"
+                                            "Prerequisites before validation", size="2", weight="bold"
                                         ),
                                         spacing="2",
                                         align="center",
@@ -1729,7 +1729,7 @@ def campaign_detail_page() -> rx.Component:
                                             ),
                                             rx.icon("circle", size=14, color="var(--gray-7)"),
                                         ),
-                                        rx.text("Rendez-vous (dates de campagne)", size="2"),
+                                        rx.text("Appointment (campaign dates)", size="2"),
                                         spacing="2",
                                         align="center",
                                     ),
@@ -1745,8 +1745,8 @@ def campaign_detail_page() -> rx.Component:
                                             rx.cond(
                                                 CampaignDetailState.patients.length() > 0,
                                                 CampaignDetailState.patients.length().to_string()
-                                                + " patient(s) ajouté(s)",
-                                                "Ajouter au moins 1 patient (onglet Patients)",
+                                                + " patient(s) added",
+                                                "Add at least 1 patient (Patients tab)",
                                             ),
                                             size="2",
                                         ),
@@ -1765,8 +1765,8 @@ def campaign_detail_page() -> rx.Component:
                                             rx.cond(
                                                 CampaignDetailState.exam_types.length() > 0,
                                                 CampaignDetailState.exam_types.length().to_string()
-                                                + " examen(s) configuré(s)",
-                                                "Ajouter au moins 1 type d'examen (onglet Examens)",
+                                                + " exam(s) configured",
+                                                "Add at least 1 exam type (Exams tab)",
                                             ),
                                             size="2",
                                         ),
@@ -1784,8 +1784,8 @@ def campaign_detail_page() -> rx.Component:
                                         rx.text(
                                             rx.cond(
                                                 CampaignDetailState.all_exams_have_location,
-                                                "Lieu défini pour chaque examen",
-                                                "Définir le lieu pour chaque examen (onglet Examens)",
+                                                "Location defined for each exam",
+                                                "Set a location for each exam (Exams tab)",
                                             ),
                                             size="2",
                                         ),
@@ -1803,8 +1803,8 @@ def campaign_detail_page() -> rx.Component:
                                         rx.text(
                                             rx.cond(
                                                 CampaignDetailState.has_campaign_doctor,
-                                                "Médecin assigné",
-                                                "Assigner au moins 1 médecin (onglet Médecins ou Examens)",
+                                                "Doctor assigned",
+                                                "Assign at least 1 doctor (Doctors or Exams tab)",
                                             ),
                                             size="2",
                                         ),

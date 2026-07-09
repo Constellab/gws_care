@@ -33,6 +33,7 @@ class ConsultationDTO(BaseModel):
     patient_name: str = ""
     patient_id: str = ""
     patient_gender: str = ""
+    patient_age: int = 0
     account_name: str = ""
     account_id: str = ""
     scheduled_at: str = ""
@@ -105,6 +106,14 @@ class ExamParamRowVM(BaseModel):
     label_high: str = ""
     label_critical_low: str = ""
     label_critical_high: str = ""
+    # Raw thresholds for real-time status computation (empty = not defined)
+    ref_low_raw: str = ""
+    ref_high_raw: str = ""
+    crit_low_raw: str = ""
+    crit_high_raw: str = ""
+    # Formula support for computed parameters
+    formula: str = ""
+    code: str = ""
 
 
 class ExamAuditEntryVM(BaseModel):
@@ -140,6 +149,83 @@ class DrugLineDTO(BaseModel):
     dosage: str = ""
     frequency: str = ""
     duration: str = ""
+
+
+def _compute_live_status(
+    value: str, ref_low: str, ref_high: str, crit_low: str, crit_high: str
+) -> str:
+    """Compute uppercase status for a numeric value against thresholds."""
+    if not value.strip():
+        return "PENDING"
+    try:
+        v = float(value.replace(",", "."))
+        cl = float(crit_low) if crit_low != "" else None
+        ch = float(crit_high) if crit_high != "" else None
+        rl = float(ref_low) if ref_low != "" else None
+        rh = float(ref_high) if ref_high != "" else None
+        if cl is not None and v < cl:
+            return "CRITICAL_LOW"
+        if ch is not None and v > ch:
+            return "CRITICAL_HIGH"
+        if rl is not None and v < rl:
+            return "LOW"
+        if rh is not None and v > rh:
+            return "HIGH"
+        if rl is not None or rh is not None:
+            return "NORMAL"
+    except Exception:
+        pass
+    return "PENDING"
+
+
+def _status_color_for_status(status: str) -> str:
+    return {
+        "NORMAL": "green",
+        "NEGATIVE": "green",
+        "LOW": "orange",
+        "HIGH": "orange",
+        "CRITICAL_LOW": "red",
+        "CRITICAL_HIGH": "red",
+        "POSITIVE": "red",
+    }.get(status, "gray")
+
+
+def _recompute_exam_params(params: list[ExamParamRowVM]) -> list[ExamParamRowVM]:
+    """Re-evaluate all computed parameters from current non-computed NUMERIC values."""
+    from gws_care.exam_type_ref.exam_formula_engine import ExamFormulaEngine
+
+    context: dict[str, float] = {}
+    for p in params:
+        if not p.is_computed and p.code and p.value_numeric.strip() and p.value_type == "NUMERIC":
+            try:
+                context[p.code] = float(p.value_numeric.replace(",", "."))
+            except ValueError:
+                pass
+
+    result = []
+    for p in params:
+        if p.is_computed and p.formula:
+            try:
+                computed = ExamFormulaEngine.evaluate(p.formula, context)
+                val_str = f"{computed:.4g}"
+                new_status = _compute_live_status(
+                    val_str, p.ref_low_raw, p.ref_high_raw, p.crit_low_raw, p.crit_high_raw
+                )
+                result.append(
+                    ExamParamRowVM(
+                        **{
+                            **p.dict(),
+                            "value_numeric": val_str,
+                            "status": new_status,
+                            "status_color": _status_color_for_status(new_status),
+                        }
+                    )
+                )
+            except Exception:
+                result.append(p)
+        else:
+            result.append(p)
+    return result
 
 
 def _status_color(status: str) -> str:
@@ -384,10 +470,25 @@ class ConsultationDetailState(RoleState):
 
     @rx.event
     def set_param_numeric(self, param_id: str, value: str):
-        self.active_exam_params = [
-            ExamParamRowVM(**{**p.dict(), "value_numeric": value}) if p.param_id == param_id else p
-            for p in self.active_exam_params
-        ]
+        updated = []
+        for p in self.active_exam_params:
+            if p.param_id == param_id:
+                new_status = _compute_live_status(
+                    value, p.ref_low_raw, p.ref_high_raw, p.crit_low_raw, p.crit_high_raw
+                )
+                updated.append(
+                    ExamParamRowVM(
+                        **{
+                            **p.dict(),
+                            "value_numeric": value,
+                            "status": new_status,
+                            "status_color": _status_color_for_status(new_status),
+                        }
+                    )
+                )
+            else:
+                updated.append(p)
+        self.active_exam_params = _recompute_exam_params(updated)
         if param_id not in self.modified_param_ids:
             self.modified_param_ids = self.modified_param_ids + [param_id]
 
@@ -517,6 +618,7 @@ class ConsultationDetailState(RoleState):
         self.error_message = ""
         try:
             patient_gender = self.consultation.patient_gender if self.consultation else None
+            patient_age = self.consultation.patient_age if self.consultation else None
 
             entries = []
             for p in self.active_exam_params:
@@ -544,6 +646,7 @@ class ConsultationDetailState(RoleState):
                     exam_type_ref_id=self.active_exam_type_ref_id,
                     entries=entries,
                     patient_gender=patient_gender or None,
+                    patient_age=patient_age if patient_age else None,
                 )
                 # Advance status from todo → in_progress_results on first save
                 exam = Exam.get_by_id(exam_id)
@@ -1697,6 +1800,13 @@ class ConsultationDetailState(RoleState):
                 except Exception:
                     pass
 
+                patient_age = 0
+                try:
+                    if visit.patient_id:
+                        patient_age = visit.patient.get_age()
+                except Exception:
+                    pass
+
                 clinic_doctor_name = ""
                 if visit.doctor_id:
                     try:
@@ -1717,6 +1827,7 @@ class ConsultationDetailState(RoleState):
                     patient_name=visit.patient.get_full_name() if visit.patient_id else "",
                     patient_id=str(visit.patient_id) if visit.patient_id else "",
                     patient_gender=patient_gender,
+                    patient_age=patient_age,
                     account_name=account_name,
                     account_id=str(visit.billing_account_id) if visit.billing_account_id else "",
                     scheduled_at=visit.scheduled_at.isoformat() if visit.scheduled_at else "",
@@ -1938,6 +2049,24 @@ class ConsultationDetailState(RoleState):
                     for r in ExamParameterResult.select().where(ExamParameterResult.exam == exam_id)
                 }
 
+                # Preload all age ranges for these params in one query
+                from gws_care.exam_type_ref.exam_param_age_range import (
+                    ExamParameterAgeRange,
+                    resolve_param_thresholds,
+                )
+                param_ids = [p.id for p in all_params]
+                _all_age_ranges = (
+                    list(
+                        ExamParameterAgeRange.select().where(
+                            ExamParameterAgeRange.exam_parameter.in_(param_ids)
+                        )
+                    )
+                    if param_ids
+                    else []
+                )
+                _patient_age = self.consultation.patient_age if self.consultation else None
+                _patient_gender = self.consultation.patient_gender if self.consultation else None
+
                 # Auto-fix: if results already exist in DB but status is still TODO,
                 # advance status so the UI reflects reality
                 if exam.status == _ExamStatus.TODO and existing:
@@ -1946,9 +2075,7 @@ class ConsultationDetailState(RoleState):
 
                 self.active_exam_status = exam.status.value
 
-                def _ref_label(param) -> str:
-                    rl = param.ref_low
-                    rh = param.ref_high
+                def _ref_label_from_thresholds(rl, rh) -> str:
                     if rl is not None and rh is not None:
                         return f"{rl} – {rh}"
                     if rl is not None:
@@ -1972,6 +2099,13 @@ class ConsultationDetailState(RoleState):
                 for param in all_params:
                     result = existing.get(str(param.id))
                     status = result.status if result else "PENDING"
+                    resolved = resolve_param_thresholds(
+                        param, _patient_age, _patient_gender, _all_age_ranges
+                    )
+                    r_lo = str(resolved["ref_low"]) if resolved["ref_low"] is not None else ""
+                    r_hi = str(resolved["ref_high"]) if resolved["ref_high"] is not None else ""
+                    c_lo = str(resolved["crit_low"]) if resolved["crit_low"] is not None else ""
+                    c_hi = str(resolved["crit_high"]) if resolved["crit_high"] is not None else ""
                     rows.append(
                         ExamParamRowVM(
                             result_id=str(result.id) if result else "",
@@ -1994,12 +2128,20 @@ class ConsultationDetailState(RoleState):
                             ),
                             status=status,
                             status_color=_status_color_from_status(status),
-                            ref_range_label=_ref_label(param),
-                            label_normal=param.label_normal or "",
-                            label_low=param.label_low or "",
-                            label_high=param.label_high or "",
-                            label_critical_low=param.label_critical_low or "",
-                            label_critical_high=param.label_critical_high or "",
+                            ref_range_label=_ref_label_from_thresholds(
+                                resolved["ref_low"], resolved["ref_high"]
+                            ),
+                            label_normal=resolved["label_normal"],
+                            label_low=resolved["label_low"],
+                            label_high=resolved["label_high"],
+                            label_critical_low=resolved["label_crit_low"],
+                            label_critical_high=resolved["label_crit_high"],
+                            ref_low_raw=r_lo,
+                            ref_high_raw=r_hi,
+                            crit_low_raw=c_lo,
+                            crit_high_raw=c_hi,
+                            formula=param.formula or "",
+                            code=param.code or "",
                         )
                     )
 

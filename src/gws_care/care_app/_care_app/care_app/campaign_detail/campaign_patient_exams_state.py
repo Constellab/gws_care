@@ -151,6 +151,8 @@ class CampaignPatientExamsState(ReflexMainState):
     campaign_name: str = ""
     patient_name: str = ""
     patient_number: str = ""
+    patient_gender: str = ""
+    patient_age: int = 0
     medical_status: str = "PENDING"
 
     # All exam type sections of the campaign
@@ -1203,6 +1205,11 @@ class CampaignPatientExamsState(ReflexMainState):
                 patient = Patient.get_by_id_and_check(patient_id)
                 self.patient_name = f"{patient.last_name} {patient.first_name}"
                 self.patient_number = patient.patient_number
+                self.patient_gender = getattr(patient, "gender", "") or ""
+                try:
+                    self.patient_age = patient.get_age()
+                except Exception:
+                    self.patient_age = 0
                 patient_id = str(patient.id)
 
                 # Load ordered patient list for navigation
@@ -1442,10 +1449,30 @@ class CampaignPatientExamsState(ReflexMainState):
                     allowed_ids = set(str(pid) for pid in ce.selected_param_ids)
                 if allowed_ids is not None:
                     params = [p for p in params if str(p.id) in allowed_ids or p.is_required]
+
+                # Preload age ranges for all params in one query
+                from gws_care.exam_type_ref.exam_param_age_range import (
+                    ExamParameterAgeRange,
+                    resolve_param_thresholds,
+                )
+                _param_ids = [p.id for p in params]
+                _age_ranges = (
+                    list(
+                        ExamParameterAgeRange.select().where(
+                            ExamParameterAgeRange.exam_parameter.in_(_param_ids)
+                        )
+                    )
+                    if _param_ids
+                    else []
+                )
+                _pt_age = self.patient_age if self.patient_age else None
+                _pt_gender = self.patient_gender or None
+
                 entries: list[ExamParamEntry] = []
                 for p in params:
-                    r_lo = str(p.ref_low) if p.ref_low is not None else ""
-                    r_hi = str(p.ref_high) if p.ref_high is not None else ""
+                    resolved = resolve_param_thresholds(p, _pt_age, _pt_gender, _age_ranges)
+                    r_lo = str(resolved["ref_low"]) if resolved["ref_low"] is not None else ""
+                    r_hi = str(resolved["ref_high"]) if resolved["ref_high"] is not None else ""
                     if r_lo and r_hi:
                         ref_range = f"{r_lo} – {r_hi}"
                     elif r_lo:
@@ -1455,8 +1482,8 @@ class CampaignPatientExamsState(ReflexMainState):
                     else:
                         ref_range = ""
 
-                    c_lo = str(p.critical_low) if p.critical_low is not None else ""
-                    c_hi = str(p.critical_high) if p.critical_high is not None else ""
+                    c_lo = str(resolved["crit_low"]) if resolved["crit_low"] is not None else ""
+                    c_hi = str(resolved["crit_high"]) if resolved["crit_high"] is not None else ""
                     crit_range = f"{c_lo or '—'} / {c_hi or '—'}" if (c_lo or c_hi) else ""
 
                     entries.append(
@@ -1490,11 +1517,11 @@ class CampaignPatientExamsState(ReflexMainState):
                             is_computed=bool(p.is_computed),
                             formula=p.formula or "",
                             code=p.code or "",
-                            label_normal=p.label_normal or "",
-                            label_low=p.label_low or "",
-                            label_high=p.label_high or "",
-                            label_critical_low=p.label_critical_low or "",
-                            label_critical_high=p.label_critical_high or "",
+                            label_normal=resolved["label_normal"],
+                            label_low=resolved["label_low"],
+                            label_high=resolved["label_high"],
+                            label_critical_low=resolved["label_crit_low"],
+                            label_critical_high=resolved["label_crit_high"],
                         )
                     )
                 # Initial pass: compute formula-based params from saved non-computed values

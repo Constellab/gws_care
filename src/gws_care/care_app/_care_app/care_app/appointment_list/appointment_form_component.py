@@ -53,11 +53,11 @@ def _step_breadcrumb() -> rx.Component:
         )
 
     return rx.hstack(
-        _crumb(1, "Spécialité"),
+        _crumb(1, "Specialty"),
         rx.icon("chevron-right", size=12, color="var(--gray-6)"),
-        _crumb(2, "Médecin"),
+        _crumb(2, "Doctor"),
         rx.icon("chevron-right", size=12, color="var(--gray-6)"),
-        _crumb(3, "Créneau"),
+        _crumb(3, "Time Slot"),
         spacing="1", align="center",
     )
 
@@ -92,11 +92,11 @@ def _specialty_option_row(s: str) -> rx.Component:
 
 def _step_specialty() -> rx.Component:
     return rx.vstack(
-        rx.text("Choisissez une spécialité médicale", size="3", weight="medium"),
+        rx.text("Choose a medical specialty", size="3", weight="medium"),
         rx.separator(width="100%"),
         rx.vstack(
             rx.input(
-                placeholder="Rechercher une spécialité…",
+                placeholder="Search for a specialty…",
                 value=AppointmentFormState.specialty_search,
                 on_change=AppointmentFormState.set_specialty_search,
                 size="2",
@@ -109,7 +109,7 @@ def _step_specialty() -> rx.Component:
                     rx.box(
                         rx.hstack(
                             rx.icon("users", size=14, color="var(--gray-9)"),
-                            rx.text("Tous les médecins", size="2", color="var(--gray-11)"),
+                            rx.text("All doctors", size="2", color="var(--gray-11)"),
                             spacing="2", align="center",
                         ),
                         padding="0.4rem 0.75rem",
@@ -122,7 +122,7 @@ def _step_specialty() -> rx.Component:
                         AppointmentFormState.filtered_specialty_options.length() > 0,
                         rx.foreach(AppointmentFormState.filtered_specialty_options, _specialty_option_row),
                         rx.box(
-                            rx.text("Aucune spécialité trouvée.", size="2", color="var(--gray-9)"),
+                            rx.text("No specialty found.", size="2", color="var(--gray-9)"),
                             padding="0.5rem 0.75rem",
                         ),
                     ),
@@ -134,7 +134,7 @@ def _step_specialty() -> rx.Component:
                     overflow_y="auto",
                 ),
                 rx.callout(
-                    "Aucune spécialité enregistrée. Créez des médecins avec une spécialité dans l'onglet Médecins.",
+                    "No specialty registered. Create doctors with a specialty in the Doctors tab.",
                     icon="info", color_scheme="orange", size="1", width="100%",
                 ),
             ),
@@ -190,14 +190,14 @@ def _step_doctors() -> rx.Component:
             rx.cond(
                 AppointmentFormState.specialty_filter != "",
                 rx.hstack(
-                    rx.text("Médecins —", size="3", weight="medium"),
+                    rx.text("Doctors —", size="3", weight="medium"),
                     rx.badge(
                         AppointmentFormState.specialty_filter,
                         color_scheme="blue", variant="soft", size="2",
                     ),
                     spacing="2", align="center",
                 ),
-                rx.text("Tous les médecins", size="3", weight="medium"),
+                rx.text("All doctors", size="3", weight="medium"),
             ),
             spacing="2", align="center", width="100%",
         ),
@@ -212,7 +212,7 @@ def _step_doctors() -> rx.Component:
                 overflow_y="auto",
             ),
             rx.callout(
-                "Aucun médecin disponible pour cette spécialité.",
+                "No doctors available for this specialty.",
                 icon="info", color_scheme="orange", size="1", width="100%",
             ),
         ),
@@ -260,7 +260,7 @@ def _step_slot() -> rx.Component:
             rx.hstack(
                 rx.icon("calendar-check", size=13, color="var(--green-9)"),
                 rx.text(
-                    "Disponible : " + AppointmentFormState.form_doctor_days_str,
+                    "Available: " + AppointmentFormState.form_doctor_days_str,
                     size="1", color="var(--green-11)",
                 ),
                 spacing="1", align="center",
@@ -270,7 +270,7 @@ def _step_slot() -> rx.Component:
         rx.separator(width="100%"),
         # Date picker
         _field(
-            "Date du rendez-vous *",
+            "Appointment date *",
             rx.input(
                 type="date",
                 value=AppointmentFormState.form_booking_date,
@@ -284,7 +284,7 @@ def _step_slot() -> rx.Component:
             AppointmentFormState.form_booking_date != "",
             rx.vstack(
                 rx.hstack(
-                    rx.text("Créneaux disponibles *", size="2", weight="medium"),
+                    rx.text("Available slots *", size="2", weight="medium"),
                     rx.cond(
                         AppointmentFormState.form_slots_loading,
                         rx.spinner(size="1"),
@@ -307,12 +307,12 @@ def _step_slot() -> rx.Component:
                         rx.cond(
                             AppointmentFormState.form_doctor_days_str != "",
                             rx.callout(
-                                "Aucun créneau disponible pour cette date. Ce médecin est disponible les : "
+                                "No slots available for this date. This doctor is available on: "
                                 + AppointmentFormState.form_doctor_days_str,
                                 icon="calendar-x", color_scheme="orange", variant="soft", size="1",
                             ),
                             rx.callout(
-                                "Aucun créneau disponible. Ce médecin n'a pas encore déclaré de disponibilités.",
+                                "No slots available. This doctor has not declared their availability yet.",
                                 icon="calendar-x", color_scheme="red", variant="soft", size="1",
                             ),
                         ),
@@ -324,7 +324,7 @@ def _step_slot() -> rx.Component:
                         rx.icon("circle-check", size=14, color="var(--green-9)"),
                         rx.text(
                             AppointmentFormState.form_scheduled_at[0:10]
-                            + " à "
+                            + " at "
                             + AppointmentFormState.form_scheduled_at[11:16],
                             size="1", color="var(--green-11)", weight="medium",
                         ),
@@ -336,15 +336,15 @@ def _step_slot() -> rx.Component:
             ),
             rx.fragment(),
         ),
-        # Mode selector (visio / hôpital / au travail)
+        # Consultation mode selector
         rx.vstack(
-            rx.text("Mode de consultation *", size="2", weight="medium"),
+            rx.text("Consultation mode *", size="2", weight="medium"),
             rx.radio_group.root(
                 rx.hstack(
                     rx.radio_group.item(value="visio"),
                     rx.hstack(
                         rx.icon("video", size=13, color="var(--purple-9)"),
-                        rx.text("Visio", size="2"),
+                        rx.text("Video", size="2"),
                         spacing="1", align="center",
                     ),
                     spacing="2", align="center",
@@ -353,7 +353,7 @@ def _step_slot() -> rx.Component:
                     rx.radio_group.item(value="hospital"),
                     rx.hstack(
                         rx.icon("building-2", size=13, color="var(--teal-9)"),
-                        rx.text("Hôpital", size="2"),
+                        rx.text("Hospital", size="2"),
                         spacing="1", align="center",
                     ),
                     spacing="2", align="center",
@@ -362,7 +362,7 @@ def _step_slot() -> rx.Component:
                     rx.radio_group.item(value="at_work"),
                     rx.hstack(
                         rx.icon("briefcase", size=13, color="var(--blue-9)"),
-                        rx.text("Au travail", size="2"),
+                        rx.text("At work", size="2"),
                         spacing="1", align="center",
                     ),
                     spacing="2", align="center",
@@ -378,11 +378,11 @@ def _step_slot() -> rx.Component:
             ~RoleState.is_patient_user,
             rx.grid(
                 _field(
-                    "Cabinet / salle",
+                    "Office / room",
                     rx.input(
                         value=AppointmentFormState.form_room,
                         on_change=AppointmentFormState.set_form_room,
-                        placeholder="Ex : Cabinet 3",
+                        placeholder="Ex: Room 3",
                         size="2", width="100%",
                     ),
                 ),
@@ -391,7 +391,7 @@ def _step_slot() -> rx.Component:
                     rx.input(
                         value=AppointmentFormState.form_notes,
                         on_change=AppointmentFormState.set_form_notes,
-                        placeholder="Motif, informations…",
+                        placeholder="Reason, notes…",
                         size="2", width="100%",
                     ),
                 ),
@@ -413,7 +413,7 @@ def _step_slot() -> rx.Component:
     )
 
 
-# ── Edit mode flat form (legacy) ──────────────────────────────────────────────
+# ── Edit mode flat form ───────────────────────────────────────────────────────
 
 def _edit_flat_form() -> rx.Component:
     """Flat form used when editing an existing appointment."""
@@ -433,9 +433,9 @@ def _edit_flat_form() -> rx.Component:
         ),
         # Doctor
         _field(
-            "Médecin *",
+            "Doctor *",
             rx.select.root(
-                rx.select.trigger(width="100%", placeholder="Sélectionner un médecin…"),
+                rx.select.trigger(width="100%", placeholder="Select a doctor…"),
                 rx.select.content(
                     rx.foreach(
                         AppointmentFormState.doctor_options,
@@ -452,7 +452,7 @@ def _edit_flat_form() -> rx.Component:
         ),
         # Date picker
         _field(
-            "Date du rendez-vous *",
+            "Appointment date *",
             rx.input(
                 type="date",
                 value=AppointmentFormState.form_booking_date,
@@ -465,7 +465,7 @@ def _edit_flat_form() -> rx.Component:
             AppointmentFormState.form_doctor_id != "",
             rx.vstack(
                 rx.hstack(
-                    rx.text("Créneau *", size="2", weight="medium"),
+                    rx.text("Time slot *", size="2", weight="medium"),
                     rx.cond(AppointmentFormState.form_slots_loading, rx.spinner(size="1"), rx.fragment()),
                     spacing="2", align="center",
                 ),
@@ -478,10 +478,10 @@ def _edit_flat_form() -> rx.Component:
                     rx.cond(
                         AppointmentFormState.form_booking_date != "",
                         rx.callout(
-                            "Aucun créneau disponible. Choisissez une autre date.",
+                            "No slots available. Choose another date.",
                             icon="calendar-x", color_scheme="orange", variant="soft", size="1",
                         ),
-                        rx.text("Sélectionnez une date pour voir les créneaux.", size="1", color="var(--gray-9)"),
+                        rx.text("Select a date to see available slots.", size="1", color="var(--gray-9)"),
                     ),
                 ),
                 rx.cond(
@@ -490,7 +490,7 @@ def _edit_flat_form() -> rx.Component:
                         rx.icon("circle-check", size=14, color="var(--green-9)"),
                         rx.text(
                             AppointmentFormState.form_scheduled_at[0:10]
-                            + " à "
+                            + " at "
                             + AppointmentFormState.form_scheduled_at[11:16],
                             size="1", color="var(--green-11)", weight="medium",
                         ),
@@ -505,11 +505,11 @@ def _edit_flat_form() -> rx.Component:
         # Notes + room
         rx.grid(
             _field(
-                "Cabinet / salle",
+                "Office / room",
                 rx.input(
                     value=AppointmentFormState.form_room,
                     on_change=AppointmentFormState.set_form_room,
-                    placeholder="Ex : Cabinet 3",
+                    placeholder="Ex: Room 3",
                     size="2", width="100%",
                 ),
             ),
@@ -518,7 +518,7 @@ def _edit_flat_form() -> rx.Component:
                 rx.input(
                     value=AppointmentFormState.form_notes,
                     on_change=AppointmentFormState.set_form_notes,
-                    placeholder="Motif, informations…",
+                    placeholder="Reason, notes…",
                     size="2", width="100%",
                 ),
             ),
@@ -545,7 +545,7 @@ def _wizard_content() -> rx.Component:
             rx.hstack(
                 rx.icon("user-round", size=14, color="var(--accent-9)"),
                 rx.text(
-                    "Patient : " + AppointmentFormState.form_patient_label,
+                    "Patient: " + AppointmentFormState.form_patient_label,
                     size="2", color="var(--accent-11)", weight="medium",
                 ),
                 spacing="2", align="center",
@@ -563,7 +563,7 @@ def _wizard_content() -> rx.Component:
             _field(
                 "Patient *",
                 rx.select.root(
-                    rx.select.trigger(placeholder="Rechercher un patient…", width="100%"),
+                    rx.select.trigger(placeholder="Search for a patient…", width="100%"),
                     rx.select.content(
                         rx.foreach(
                             AppointmentFormState.patient_options,
@@ -635,7 +635,7 @@ def appointment_form_dialog() -> rx.Component:
                 rx.cond(
                     AppointmentFormState.is_update_mode,
                     rx.button(
-                        "Enregistrer",
+                        LanguageState.tr["save_btn"],
                         on_click=AppointmentFormState.confirm_booking,
                         loading=AppointmentFormState.is_loading,
                     ),
@@ -643,7 +643,7 @@ def appointment_form_dialog() -> rx.Component:
                         AppointmentFormState.booking_step == 3,
                         rx.button(
                             rx.icon("calendar-check", size=14),
-                            "Confirmer le rendez-vous",
+                            "Confirm appointment",
                             on_click=AppointmentFormState.confirm_booking,
                             loading=AppointmentFormState.is_loading,
                             disabled=(AppointmentFormState.form_scheduled_at == "")

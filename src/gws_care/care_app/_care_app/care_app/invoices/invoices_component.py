@@ -50,7 +50,7 @@ def _invoice_row(row: InvoiceRowDTO) -> rx.Component:
         ),
         rx.table.cell(
             rx.badge(
-                row.line_count.to_string(), " acte(s)",
+                row.line_count.to_string(), " procedure(s)",
                 color_scheme="gray", variant="soft", size="1",
             )
         ),
@@ -64,14 +64,14 @@ def _invoices_table() -> rx.Component:
         rx.table.root(
             rx.table.header(
                 rx.table.row(
-                    rx.table.column_header_cell("N° Facture"),
+                    rx.table.column_header_cell("Invoice #"),
                     rx.table.column_header_cell("Patient"),
                     rx.table.column_header_cell("Date"),
-                    rx.table.column_header_cell("Statut"),
-                    rx.table.column_header_cell("Total TTC / HT"),
-                    rx.table.column_header_cell("Médecin"),
-                    rx.table.column_header_cell("Compte"),
-                    rx.table.column_header_cell("Actes"),
+                    rx.table.column_header_cell("Status"),
+                    rx.table.column_header_cell("Total incl. / excl. tax"),
+                    rx.table.column_header_cell("Doctor"),
+                    rx.table.column_header_cell("Account"),
+                    rx.table.column_header_cell("Procedures"),
                 )
             ),
             rx.table.body(
@@ -84,9 +84,9 @@ def _invoices_table() -> rx.Component:
         rx.center(
             rx.vstack(
                 rx.icon("receipt", size=40, color="var(--gray-7)"),
-                rx.text("Aucune facture trouvée", size="3", color="var(--gray-9)"),
+                rx.text("No invoice found", size="3", color="var(--gray-9)"),
                 rx.text(
-                    "Les factures patient générées lors des consultations apparaîtront ici.",
+                    "Patient invoices generated during consultations will appear here.",
                     size="2", color="var(--gray-7)", text_align="center",
                 ),
                 align="center", spacing="2",
@@ -116,13 +116,13 @@ def invoices_page() -> rx.Component:
         rx.hstack(
             rx.hstack(
                 rx.icon("receipt", size=22, color="var(--accent-9)"),
-                rx.heading("Factures patients", size="6"),
+                rx.heading("Patient invoices", size="6"),
                 spacing="2", align="center",
             ),
             rx.spacer(),
             rx.badge(
                 InvoicesState.total_count.to(str),
-                " résultat(s)",
+                " result(s)",
                 color_scheme="gray", variant="soft", size="2",
             ),
             width="100%", align="center",
@@ -132,7 +132,7 @@ def invoices_page() -> rx.Component:
             rx.hstack(
                 rx.debounce_input(
                     rx.input(
-                        placeholder="Rechercher patient, N° facture…",
+                        placeholder="Search patient, invoice #…",
                         value=InvoicesState.search_query,
                         on_change=InvoicesState.set_search,
                         width="260px",
@@ -141,9 +141,9 @@ def invoices_page() -> rx.Component:
                     debounce_timeout=350,
                 ),
                 rx.select.root(
-                    rx.select.trigger(placeholder="Tous les comptes"),
+                    rx.select.trigger(placeholder="All accounts"),
                     rx.select.content(
-                        rx.select.item("Tous les comptes", value="ALL"),
+                        rx.select.item("All accounts", value="ALL"),
                         rx.foreach(InvoicesState.account_options, _account_filter_option),
                     ),
                     value=InvoicesState.filter_account_id,
@@ -151,16 +151,16 @@ def invoices_page() -> rx.Component:
                     size="2",
                 ),
                 rx.separator(orientation="vertical", height="28px"),
-                _filter_btn("Toutes", "ALL"),
-                _filter_btn("Brouillon", "DRAFT"),
-                _filter_btn("Validées", "VALIDATED"),
-                _filter_btn("Envoyées", "SENT"),
-                _filter_btn("Payées", "PAID"),
-                _filter_btn("Annulées", "CANCELLED"),
+                _filter_btn("All", "ALL"),
+                _filter_btn("Draft", "DRAFT"),
+                _filter_btn("Validated", "VALIDATED"),
+                _filter_btn("Sent", "SENT"),
+                _filter_btn("Paid", "PAID"),
+                _filter_btn("Cancelled", "CANCELLED"),
                 spacing="2", align="center", flex_wrap="wrap",
             ),
             rx.hstack(
-                rx.text("Période :", size="2", color="var(--gray-9)", white_space="nowrap"),
+                rx.text("Period:", size="2", color="var(--gray-9)", white_space="nowrap"),
                 rx.input(
                     type="date",
                     value=InvoicesState.date_from,
@@ -177,7 +177,7 @@ def invoices_page() -> rx.Component:
                 rx.spacer(),
                 rx.button(
                     rx.icon("x", size=14),
-                    "Réinitialiser",
+                    "Reset",
                     on_click=InvoicesState.clear_filters,
                     variant="outline",
                     size="2",
@@ -205,7 +205,7 @@ def invoices_page() -> rx.Component:
                 rx.hstack(
                     rx.text(
                         InvoicesState.total_count.to(str),
-                        " facture(s) — page ",
+                        " invoice(s) — page ",
                         InvoicesState.page.to(str),
                         " / ",
                         InvoicesState.total_pages.to(str),

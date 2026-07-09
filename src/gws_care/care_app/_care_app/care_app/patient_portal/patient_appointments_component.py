@@ -250,11 +250,11 @@ def _booking_step_breadcrumb() -> rx.Component:
             spacing="1", align="center",
         )
     return rx.hstack(
-        _crumb(1, "Spécialité"),
+        _crumb(1, "Specialty"),
         rx.icon("chevron-right", size=12, color="var(--gray-6)"),
-        _crumb(2, "Médecin"),
+        _crumb(2, "Doctor"),
         rx.icon("chevron-right", size=12, color="var(--gray-6)"),
-        _crumb(3, "Créneau"),
+        _crumb(3, "Slot"),
         spacing="1", align="center",
     )
 
@@ -313,11 +313,11 @@ def _booking_slot_btn(slot: str) -> rx.Component:
 
 def _booking_step1() -> rx.Component:
     return rx.vstack(
-        rx.text("Choisissez une spécialité médicale", size="3", weight="medium"),
+        rx.text("Choose a medical specialty", size="3", weight="medium"),
         rx.separator(width="100%"),
         rx.vstack(
             rx.input(
-                placeholder="Rechercher une spécialité…",
+                placeholder="Search for a specialty…",
                 value=PatientAppointmentsState.booking_specialty_search,
                 on_change=PatientAppointmentsState.set_booking_specialty_search,
                 size="2",
@@ -329,7 +329,7 @@ def _booking_step1() -> rx.Component:
                     rx.box(
                         rx.hstack(
                             rx.icon("users", size=14, color="var(--gray-9)"),
-                            rx.text("Tous les médecins", size="2", color="var(--gray-11)"),
+                            rx.text("All doctors", size="2", color="var(--gray-11)"),
                             spacing="2", align="center",
                         ),
                         padding="0.4rem 0.75rem",
@@ -342,7 +342,7 @@ def _booking_step1() -> rx.Component:
                         PatientAppointmentsState.filtered_booking_specialties.length() > 0,
                         rx.foreach(PatientAppointmentsState.filtered_booking_specialties, _booking_specialty_row),
                         rx.box(
-                            rx.text("Aucune spécialité trouvée.", size="2", color="var(--gray-9)"),
+                            rx.text("No specialty found.", size="2", color="var(--gray-9)"),
                             padding="0.5rem 0.75rem",
                         ),
                     ),
@@ -354,7 +354,7 @@ def _booking_step1() -> rx.Component:
                     overflow_y="auto",
                 ),
                 rx.callout(
-                    "Aucun médecin disponible pour l'instant.",
+                    "No doctor available at the moment.",
                     icon="info", color_scheme="orange", size="1", width="100%",
                 ),
             ),
@@ -375,11 +375,11 @@ def _booking_step2() -> rx.Component:
             rx.cond(
                 PatientAppointmentsState.booking_specialty != "",
                 rx.hstack(
-                    rx.text("Médecins —", size="3", weight="medium"),
+                    rx.text("Doctors —", size="3", weight="medium"),
                     rx.badge(PatientAppointmentsState.booking_specialty, color_scheme="blue", variant="soft", size="2"),
                     spacing="2", align="center",
                 ),
-                rx.text("Tous les médecins", size="3", weight="medium"),
+                rx.text("All doctors", size="3", weight="medium"),
             ),
             spacing="2", align="center", width="100%",
         ),
@@ -390,7 +390,7 @@ def _booking_step2() -> rx.Component:
                 rx.foreach(PatientAppointmentsState.filtered_booking_doctors, _booking_doctor_card),
                 width="100%", spacing="2", max_height="300px", overflow_y="auto",
             ),
-            rx.callout("Aucun médecin disponible.", icon="info", color_scheme="orange", size="1"),
+            rx.callout("No doctor available.", icon="info", color_scheme="orange", size="1"),
         ),
         width="100%", spacing="3", padding_top="0.5rem",
     )
@@ -441,7 +441,7 @@ def _booking_step3() -> rx.Component:
             PatientAppointmentsState.booking_date != "",
             rx.vstack(
                 rx.hstack(
-                    rx.text("Créneaux disponibles *", size="2", weight="medium"),
+                    rx.text("Available slots *", size="2", weight="medium"),
                     rx.cond(PatientAppointmentsState.booking_slots_loading, rx.spinner(size="1"), rx.fragment()),
                     spacing="2", align="center",
                 ),
@@ -460,12 +460,12 @@ def _booking_step3() -> rx.Component:
                         rx.cond(
                             PatientAppointmentsState.booking_doctor_days_str != "",
                             rx.callout(
-                                "Aucun créneau disponible pour cette date. Ce médecin est disponible les : "
+                                "No slot available for this date. This doctor is available on: "
                                 + PatientAppointmentsState.booking_doctor_days_str,
                                 icon="calendar-x", color_scheme="orange", variant="soft", size="1",
                             ),
                             rx.callout(
-                                "Aucun créneau disponible. Ce médecin n'a pas encore déclaré de disponibilités.",
+                                "No slot available. This doctor has not yet declared any availability.",
                                 icon="calendar-x", color_scheme="red", variant="soft", size="1",
                             ),
                         ),
@@ -477,7 +477,7 @@ def _booking_step3() -> rx.Component:
                         rx.icon("circle-check", size=14, color="var(--green-9)"),
                         rx.text(
                             PatientAppointmentsState.booking_scheduled_at[0:10]
-                            + " à "
+                            + " at "
                             + PatientAppointmentsState.booking_scheduled_at[11:16],
                             size="1", color="var(--green-11)", weight="medium",
                         ),
@@ -506,7 +506,7 @@ def _booking_step3() -> rx.Component:
                     rx.radio_group.item(value="hospital"),
                     rx.hstack(
                         rx.icon("building-2", size=13, color="var(--teal-9)"),
-                        rx.text("Hôpital", size="2"),
+                        rx.text("Hospital", size="2"),
                         spacing="1", align="center",
                     ),
                     spacing="2", align="center",

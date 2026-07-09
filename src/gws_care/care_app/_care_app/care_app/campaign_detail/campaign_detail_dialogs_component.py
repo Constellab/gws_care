@@ -5,17 +5,18 @@ Dialogs: refuse, add_patient, add_exam_type, psc, enterprise, edit.
 
 import reflex as rx
 
+from ..common.language_state import LanguageState
 from .campaign_detail_state import CampaignDetailState
 
 
 def _refuse_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Refus de validation médicale"),
+            rx.dialog.title("Medical validation refusal"),
             rx.vstack(
-                rx.text("Motif de refus *", size="2", weight="medium"),
+                rx.text("Refusal reason *", size="2", weight="medium"),
                 rx.text_area(
-                    placeholder="Expliquez la raison du refus…",
+                    placeholder="Explain the reason for refusal…",
                     value=CampaignDetailState.refuse_reason,
                     on_change=CampaignDetailState.set_refuse_reason,
                     width="100%",
@@ -35,9 +36,9 @@ def _refuse_dialog() -> rx.Component:
                 margin_top="1rem",
             ),
             rx.hstack(
-                rx.dialog.close(rx.button("Annuler", variant="soft", color_scheme="gray")),
+                rx.dialog.close(rx.button(LanguageState.tr["cancel_btn"], variant="soft", color_scheme="gray")),
                 rx.button(
-                    "Confirmer le refus",
+                    "Confirm refusal",
                     color_scheme="red",
                     on_click=CampaignDetailState.confirm_refuse_medical,
                 ),
@@ -76,16 +77,16 @@ def _add_patient_dialog() -> rx.Component:
 
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Ajouter des patients à la campagne"),
+            rx.dialog.title("Add patients to the campaign"),
             rx.dialog.description(
-                "Patients actifs affiliés au compte de l'entreprise de cette campagne.",
+                "Active patients affiliated with this campaign's company account.",
                 size="2",
                 color="var(--gray-9)",
             ),
             rx.vstack(
                 rx.hstack(
                     rx.input(
-                        placeholder="Filtrer par nom, prénom ou n° dossier…",
+                        placeholder="Filter by name, first name or case number…",
                         value=CampaignDetailState.patient_search,
                         on_change=CampaignDetailState.search_patients,
                         width="100%",
@@ -95,7 +96,7 @@ def _add_patient_dialog() -> rx.Component:
                         CampaignDetailState.selected_patient_ids.length() > 0,
                         rx.badge(
                             CampaignDetailState.selected_patient_ids.length(),
-                            " sélectionné(s)",
+                            " selected",
                             color_scheme="blue",
                             size="2",
                         ),
@@ -121,8 +122,8 @@ def _add_patient_dialog() -> rx.Component:
                     rx.callout(
                         rx.cond(
                             CampaignDetailState.patient_search != "",
-                            "Aucun résultat pour cette recherche.",
-                            "Aucun patient disponible — vérifiez que des employés sont affiliés à ce compte entreprise.",
+                            "No results for this search.",
+                            "No patients available — make sure employees are affiliated with this company account.",
                         ),
                         icon="info",
                         color_scheme="orange",
@@ -130,7 +131,7 @@ def _add_patient_dialog() -> rx.Component:
                     ),
                 ),
                 rx.text(
-                    "Cliquez sur les patients pour les sélectionner / désélectionner.",
+                    "Click on patients to select / deselect them.",
                     size="1",
                     color="var(--gray-9)",
                 ),
@@ -141,7 +142,7 @@ def _add_patient_dialog() -> rx.Component:
             rx.hstack(
                 rx.dialog.close(
                     rx.button(
-                        "Annuler",
+                        LanguageState.tr["cancel_btn"],
                         variant="soft",
                         color_scheme="gray",
                         on_click=CampaignDetailState.close_add_patient_dialog,
@@ -151,10 +152,10 @@ def _add_patient_dialog() -> rx.Component:
                     rx.icon("user-plus", size=14),
                     rx.cond(
                         CampaignDetailState.selected_patient_ids.length() > 0,
-                        "Ajouter ("
+                        "Add ("
                         + CampaignDetailState.selected_patient_ids.length().to_string()
                         + ")",
-                        "Ajouter",
+                        "Add",
                     ),
                     on_click=CampaignDetailState.confirm_add_patient,
                     loading=CampaignDetailState.is_adding_patient,
@@ -190,7 +191,7 @@ def _add_exam_type_dialog() -> rx.Component:
             ),
             rx.cond(
                 p.is_required,
-                rx.badge("requis", variant="soft", color_scheme="blue", size="1"),
+                rx.badge("required", variant="soft", color_scheme="blue", size="1"),
                 rx.fragment(),
             ),
             spacing="2",
@@ -210,13 +211,13 @@ def _add_exam_type_dialog() -> rx.Component:
 
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Ajouter un type d'examen"),
+            rx.dialog.title("Add an exam type"),
             rx.vstack(
                 rx.cond(
                     CampaignDetailState.exam_type_options.length() > 0,
                     rx.select.root(
                         rx.select.trigger(
-                            placeholder="Sélectionner un type d'examen…", width="100%"
+                            placeholder="Select an exam type…", width="100%"
                         ),
                         rx.select.content(
                             rx.foreach(
@@ -228,7 +229,7 @@ def _add_exam_type_dialog() -> rx.Component:
                         on_change=CampaignDetailState.set_selected_exam_type,
                     ),
                     rx.callout(
-                        "Aucun type d'examen disponible. Créez-en dans l'onglet Référentiel des examens.",
+                        "No exam types available. Create some in the Exam Reference tab.",
                         icon="info",
                         color_scheme="orange",
                         size="1",
@@ -238,7 +239,7 @@ def _add_exam_type_dialog() -> rx.Component:
                     CampaignDetailState.add_exam_is_loading_params,
                     rx.hstack(
                         rx.spinner(size="2"),
-                        rx.text("Chargement des tests…", size="2", color="var(--gray-9)"),
+                        rx.text("Loading tests…", size="2", color="var(--gray-9)"),
                         spacing="2",
                         align="center",
                     ),
@@ -246,7 +247,7 @@ def _add_exam_type_dialog() -> rx.Component:
                         CampaignDetailState.add_exam_params.length() > 0,
                         rx.vstack(
                             rx.hstack(
-                                rx.text("Tests inclus", size="2", weight="medium"),
+                                rx.text("Included tests", size="2", weight="medium"),
                                 rx.spacer(),
                                 rx.badge(
                                     CampaignDetailState.add_exam_selected_param_count.to_string()
@@ -256,13 +257,13 @@ def _add_exam_type_dialog() -> rx.Component:
                                     size="1",
                                 ),
                                 rx.button(
-                                    "Tout sélectionner",
+                                    "Select all",
                                     variant="ghost",
                                     size="1",
                                     on_click=CampaignDetailState.select_all_add_exam_params,
                                 ),
                                 rx.button(
-                                    "Désélectionner",
+                                    "Deselect all",
                                     variant="ghost",
                                     size="1",
                                     on_click=CampaignDetailState.clear_all_add_exam_params,
@@ -292,14 +293,14 @@ def _add_exam_type_dialog() -> rx.Component:
             rx.hstack(
                 rx.dialog.close(
                     rx.button(
-                        "Annuler",
+                        LanguageState.tr["cancel_btn"],
                         variant="soft",
                         color_scheme="gray",
                         on_click=CampaignDetailState.close_add_exam_type_dialog,
                     )
                 ),
                 rx.button(
-                    "Ajouter",
+                    LanguageState.tr["add_btn"],
                     on_click=CampaignDetailState.confirm_add_exam_type,
                     loading=CampaignDetailState.is_adding_exam_type,
                     disabled=CampaignDetailState.selected_exam_type_id == "",
@@ -322,15 +323,15 @@ def _psc_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title(
                 rx.hstack(
-                    rx.text("Interprétation PSC — "),
+                    rx.text("PSC Interpretation — "),
                     rx.text(CampaignDetailState.psc_dialog_patient_name, weight="bold"),
                     spacing="1",
                 )
             ),
             rx.vstack(
-                rx.text("Interprétation / Conclusion *", size="2", weight="medium"),
+                rx.text("Interpretation / Conclusion *", size="2", weight="medium"),
                 rx.text_area(
-                    placeholder="Saisir l'interprétation médicale PSC…",
+                    placeholder="Enter the PSC medical interpretation…",
                     value=CampaignDetailState.psc_notes_input,
                     on_change=CampaignDetailState.set_psc_notes,
                     width="100%",
@@ -343,14 +344,14 @@ def _psc_dialog() -> rx.Component:
             rx.hstack(
                 rx.dialog.close(
                     rx.button(
-                        "Annuler",
+                        LanguageState.tr["cancel_btn"],
                         variant="soft",
                         color_scheme="gray",
                         on_click=CampaignDetailState.close_psc_dialog,
                     )
                 ),
                 rx.button(
-                    "Enregistrer l'interprétation",
+                    "Save interpretation",
                     on_click=CampaignDetailState.save_psc_interpretation,
                 ),
                 spacing="2",
@@ -370,30 +371,30 @@ def _enterprise_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title(
                 rx.hstack(
-                    rx.text("Interprétation entreprise — "),
+                    rx.text("Company Interpretation — "),
                     rx.text(CampaignDetailState.enterprise_dialog_patient_name, weight="bold"),
                     spacing="1",
                 )
             ),
             rx.vstack(
-                rx.text("Commentaire interne", size="2", weight="medium"),
+                rx.text("Internal comment", size="2", weight="medium"),
                 rx.text_area(
-                    placeholder="Notes internes (non visibles par le patient)…",
+                    placeholder="Internal notes (not visible to the patient)…",
                     value=CampaignDetailState.enterprise_notes_input,
                     on_change=CampaignDetailState.set_enterprise_notes,
                     width="100%",
                     rows="3",
                 ),
-                rx.text("Message destiné au patient *", size="2", weight="medium"),
+                rx.text("Message for the patient *", size="2", weight="medium"),
                 rx.text_area(
-                    placeholder="Message qui sera visible par le patient…",
+                    placeholder="Message that will be visible to the patient…",
                     value=CampaignDetailState.patient_message_input,
                     on_change=CampaignDetailState.set_patient_message,
                     width="100%",
                     rows="4",
                 ),
                 rx.callout(
-                    "Ce message sera visible par le patient après publication.",
+                    "This message will be visible to the patient after publication.",
                     icon="info",
                     color_scheme="blue",
                     size="1",
@@ -405,14 +406,14 @@ def _enterprise_dialog() -> rx.Component:
             rx.hstack(
                 rx.dialog.close(
                     rx.button(
-                        "Annuler",
+                        LanguageState.tr["cancel_btn"],
                         variant="soft",
                         color_scheme="gray",
                         on_click=CampaignDetailState.close_enterprise_dialog,
                     )
                 ),
                 rx.button(
-                    "Enregistrer", on_click=CampaignDetailState.save_enterprise_interpretation
+                    LanguageState.tr["save_btn"], on_click=CampaignDetailState.save_enterprise_interpretation
                 ),
                 spacing="2",
                 justify="end",
@@ -429,10 +430,10 @@ def _enterprise_dialog() -> rx.Component:
 def _edit_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Modifier la campagne"),
+            rx.dialog.title("Edit Campaign"),
             rx.vstack(
                 rx.vstack(
-                    rx.text("Nom *", size="2", weight="medium"),
+                    rx.text("Name *", size="2", weight="medium"),
                     rx.input(
                         value=CampaignDetailState.edit_name,
                         on_change=CampaignDetailState.set_edit_name,
@@ -443,7 +444,7 @@ def _edit_dialog() -> rx.Component:
                 ),
                 rx.grid(
                     rx.vstack(
-                        rx.text("Date début", size="2", weight="medium"),
+                        rx.text("Start date", size="2", weight="medium"),
                         rx.input(
                             type="date",
                             value=CampaignDetailState.edit_start,
@@ -453,7 +454,7 @@ def _edit_dialog() -> rx.Component:
                         spacing="1",
                     ),
                     rx.vstack(
-                        rx.text("Date fin", size="2", weight="medium"),
+                        rx.text("End date", size="2", weight="medium"),
                         rx.input(
                             type="date",
                             value=CampaignDetailState.edit_end,
@@ -467,7 +468,7 @@ def _edit_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.vstack(
-                    rx.text("Lieu", size="2", weight="medium"),
+                    rx.text("Location", size="2", weight="medium"),
                     rx.input(
                         value=CampaignDetailState.edit_location,
                         on_change=CampaignDetailState.set_edit_location,
@@ -477,7 +478,7 @@ def _edit_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.hstack(
-                    rx.text("Revue médicale requise", size="2"),
+                    rx.text("Medical review required", size="2"),
                     rx.switch(
                         checked=CampaignDetailState.edit_requires_medical_review,
                         on_change=CampaignDetailState.set_edit_requires_medical_review,
@@ -486,7 +487,7 @@ def _edit_dialog() -> rx.Component:
                     align="center",
                 ),
                 rx.vstack(
-                    rx.text("Notes internes", size="2", weight="medium"),
+                    rx.text("Internal notes", size="2", weight="medium"),
                     rx.text_area(
                         value=CampaignDetailState.edit_notes,
                         on_change=CampaignDetailState.set_edit_notes,
@@ -509,14 +510,14 @@ def _edit_dialog() -> rx.Component:
             rx.hstack(
                 rx.dialog.close(
                     rx.button(
-                        "Annuler",
+                        LanguageState.tr["cancel_btn"],
                         variant="soft",
                         color_scheme="gray",
                         on_click=CampaignDetailState.close_edit_dialog,
                     )
                 ),
                 rx.button(
-                    "Enregistrer",
+                    LanguageState.tr["save_btn"],
                     on_click=CampaignDetailState.save_edit,
                     loading=CampaignDetailState.is_saving_edit,
                 ),
@@ -560,15 +561,15 @@ def _assign_doctor_dialog() -> rx.Component:
             rx.dialog.title(
                 rx.hstack(
                     rx.icon("stethoscope", size=18),
-                    rx.text("Assigner des médecins — "),
+                    rx.text("Assign doctors — "),
                     rx.text(CampaignDetailState.assign_doctor_exam_name, weight="bold"),
                     spacing="1",
                     align="center",
                 )
             ),
             rx.dialog.description(
-                "Les médecins assignés pourront accéder aux résultats de cet examen. "
-                "Ils seront également ajoutés à l'onglet Médecins de la campagne.",
+                "Assigned doctors will have access to this exam's results. "
+                "They will also be added to the Doctors tab of the campaign.",
                 size="2",
                 color="var(--gray-9)",
             ),
@@ -577,11 +578,11 @@ def _assign_doctor_dialog() -> rx.Component:
                 rx.cond(
                     CampaignDetailState.specialty_options_for_assign.length() > 0,
                     rx.vstack(
-                        rx.text("Filtrer par spécialité", size="2", weight="medium"),
+                        rx.text("Filter by specialty", size="2", weight="medium"),
                         rx.select.root(
-                            rx.select.trigger(width="100%", placeholder="Toutes les spécialités"),
+                            rx.select.trigger(width="100%", placeholder="All specialties"),
                             rx.select.content(
-                                rx.select.item("Toutes les spécialités", value="_all_"),
+                                rx.select.item("All specialties", value="_all_"),
                                 rx.foreach(
                                     CampaignDetailState.specialty_options_for_assign,
                                     lambda s: rx.select.item(s, value=s),
@@ -604,7 +605,7 @@ def _assign_doctor_dialog() -> rx.Component:
                 # Doctor checklist
                 rx.vstack(
                     rx.hstack(
-                        rx.text("Médecins", size="2", weight="medium"),
+                        rx.text("Doctors", size="2", weight="medium"),
                         rx.cond(
                             CampaignDetailState.assign_doctor_selected_ids.length() > 0,
                             rx.badge(
@@ -619,7 +620,7 @@ def _assign_doctor_dialog() -> rx.Component:
                     ),
                     rx.cond(
                         CampaignDetailState.doctor_options_for_assign.length() == 0,
-                        rx.text("Chargement…", size="2", color="var(--gray-9)"),
+                        rx.text("Loading…", size="2", color="var(--gray-9)"),
                         rx.scroll_area(
                             rx.vstack(
                                 rx.foreach(
@@ -643,7 +644,7 @@ def _assign_doctor_dialog() -> rx.Component:
             rx.hstack(
                 rx.dialog.close(
                     rx.button(
-                        "Annuler",
+                        LanguageState.tr["cancel_btn"],
                         variant="soft",
                         color_scheme="gray",
                         on_click=CampaignDetailState.close_assign_doctor_dialog,
@@ -651,7 +652,7 @@ def _assign_doctor_dialog() -> rx.Component:
                 ),
                 rx.button(
                     rx.icon("check", size=14),
-                    "Confirmer",
+                    "Confirm",
                     on_click=CampaignDetailState.confirm_assign_doctor,
                     loading=CampaignDetailState.is_assigning_doctor,
                 ),

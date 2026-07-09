@@ -98,7 +98,7 @@ def address_section(state_cls, include_complement: bool = True) -> rx.Component:
             rx.input(
                 value=state_cls.country_filter,
                 on_change=state_cls.set_country_filter,
-                placeholder="Tapez un pays…",
+                placeholder="Type a country…",
                 size="2",
                 width="100%",
             ),
@@ -140,7 +140,7 @@ def address_section(state_cls, include_complement: bool = True) -> rx.Component:
                 state_cls.address_manual_mode,
                 rx.badge(
                     rx.icon("pencil", size=10),
-                    " Saisie manuelle",
+                    " Manual entry",
                     color_scheme="orange",
                     variant="soft",
                     size="1",
@@ -149,7 +149,7 @@ def address_section(state_cls, include_complement: bool = True) -> rx.Component:
                 ),
                 rx.badge(
                     rx.icon("zap", size=10),
-                    " Autocomplétion IGN",
+                    " IGN Autocomplete",
                     color_scheme="blue",
                     variant="soft",
                     size="1",
@@ -268,7 +268,7 @@ def address_section(state_cls, include_complement: bool = True) -> rx.Component:
             rx.input(
                 value=state_cls.form_address_complement,
                 on_change=state_cls.set_form_address_complement,
-                placeholder="Bâtiment A, appartement 12…",
+                placeholder="Building A, apartment 12…",
                 size="2",
                 width="100%",
             ),

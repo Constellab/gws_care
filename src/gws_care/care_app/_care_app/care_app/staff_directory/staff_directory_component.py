@@ -13,11 +13,11 @@ from ..user_management.user_management_state import UserManagementState, UserRow
 # ── Role group configuration ──────────────────────────────────────────────────
 # (icon, label, color_scheme, accent_bg)
 _GROUPS = [
-    ("stethoscope", "Médecins PSC",         "blue",   "var(--blue-2)"),
-    ("heart",       "Médecins Entreprise",   "pink",   "var(--pink-2)"),
+    ("stethoscope", "PSC Doctors",          "blue",   "var(--blue-2)"),
+    ("heart",       "Company Doctors",       "pink",   "var(--pink-2)"),
     ("shield",      "Administration",        "violet", "var(--violet-2)"),
-    ("wrench",      "Opérateurs",            "orange", "var(--orange-2)"),
-    ("briefcase",   "RH Entreprise",         "green",  "var(--green-2)"),
+    ("wrench",      "Operators",             "orange", "var(--orange-2)"),
+    ("briefcase",   "Company HR",            "green",  "var(--green-2)"),
 ]
 
 
@@ -81,7 +81,7 @@ def _person_card(u: UserRowDTO) -> rx.Component:
                             color_scheme="blue",
                             on_click=UserManagementState.preview_user(u.id),
                         ),
-                        content="Prévisualiser la navigation",
+                        content="Preview navigation",
                     ),
                     rx.tooltip(
                         rx.icon_button(
@@ -91,7 +91,7 @@ def _person_card(u: UserRowDTO) -> rx.Component:
                             color_scheme="gray",
                             on_click=UserManagementState.open_edit_dialog(u.id),
                         ),
-                        content="Modifier la spécialité / le rôle",
+                        content="Edit specialty / role",
                     ),
                     rx.tooltip(
                         rx.icon_button(
@@ -101,7 +101,7 @@ def _person_card(u: UserRowDTO) -> rx.Component:
                             color_scheme=rx.cond(u.is_active, "red", "green"),
                             on_click=UserManagementState.toggle_active(u.id),
                         ),
-                        content=rx.cond(u.is_active, "Suspendre", "Réactiver"),
+                        content=rx.cond(u.is_active, "Suspend", "Reactivate"),
                     ),
                     rx.tooltip(
                         rx.icon_button(
@@ -111,7 +111,7 @@ def _person_card(u: UserRowDTO) -> rx.Component:
                             color_scheme="red",
                             on_click=UserManagementState.open_confirm_revoke(u.id, u.email),
                         ),
-                        content="Supprimer l'utilisateur",
+                        content="Delete user",
                     ),
                     spacing="0",
                 ),
@@ -125,7 +125,7 @@ def _person_card(u: UserRowDTO) -> rx.Component:
             rx.cond(
                 u.is_active,
                 rx.fragment(),
-                rx.badge("Suspendu", color_scheme="red", size="1", variant="soft"),
+                rx.badge("Suspended", color_scheme="red", size="1", variant="soft"),
             ),
             rx.cond(
                 u.linked_account_name != "",
@@ -193,7 +193,7 @@ def _group_section(
                     size="2",
                     on_click=UserManagementState.open_create_dialog,
                 ),
-                content=f"Ajouter un membre — {label}",
+                content=f"Add a member — {label}",
             ),
             spacing="2",
             align="center",
@@ -211,7 +211,7 @@ def _group_section(
             ),
             rx.box(
                 rx.text(
-                    f"Aucun {label.lower()} enregistré.",
+                    "No member registered.",
                     size="2",
                     color="var(--gray-8)",
                     font_style="italic",
@@ -235,28 +235,28 @@ def _confirm_revoke_dialog() -> rx.Component:
             rx.dialog.title(
                 rx.hstack(
                     rx.icon("user-x", size=18, color="var(--red-9)"),
-                    rx.text("Supprimer l'utilisateur ?"),
+                    rx.text("Delete user?"),
                     spacing="2",
                 ),
             ),
             rx.vstack(
                 rx.text(
-                    "Vous allez révoquer tous les rôles de ",
+                    "You are about to revoke all roles for ",
                     rx.text.strong(UserManagementState.confirm_revoke_user_email),
-                    ". Cette action est irréversible.",
+                    ". This action is irreversible.",
                     size="2",
                 ),
                 rx.vstack(
-                    rx.text("Motif *", size="2", weight="medium"),
+                    rx.text("Reason *", size="2", weight="medium"),
                     rx.text_area(
-                        placeholder="Indiquez le motif (départ, faute, erreur de saisie…)",
+                        placeholder="State the reason (departure, misconduct, data entry error…)",
                         value=UserManagementState.confirm_revoke_motif,
                         on_change=UserManagementState.set_confirm_revoke_motif,
                         rows="3",
                         width="100%",
                     ),
                     rx.text(
-                        "Le motif est obligatoire et sera enregistré dans les logs.",
+                        "The reason is mandatory and will be recorded in the logs.",
                         size="1",
                         color="var(--gray-9)",
                     ),
@@ -266,14 +266,14 @@ def _confirm_revoke_dialog() -> rx.Component:
                 rx.hstack(
                     rx.dialog.close(
                         rx.button(
-                            "Annuler",
+                            "Cancel",
                             variant="soft",
                             color_scheme="gray",
                             on_click=UserManagementState.dismiss_confirm_revoke,
                         ),
                     ),
                     rx.button(
-                        "Supprimer",
+                        "Delete",
                         color_scheme="red",
                         disabled=UserManagementState.confirm_revoke_motif.strip() == "",
                         on_click=UserManagementState.confirmed_revoke,
@@ -302,10 +302,10 @@ def staff_directory_page() -> rx.Component:
         # Header
         rx.hstack(
             rx.vstack(
-                rx.heading("Annuaire du personnel", size="5"),
+                rx.heading("Staff directory", size="5"),
                 rx.text(
-                    "Gérez tous les membres de l'équipe par rôle. "
-                    "Choisissez un médecin lors de la création d'un dossier patient.",
+                    "Manage all team members by role. "
+                    "Choose a doctor when creating a patient record.",
                     size="2",
                     color="var(--gray-9)",
                 ),
@@ -314,7 +314,7 @@ def staff_directory_page() -> rx.Component:
             rx.spacer(),
             rx.button(
                 rx.icon("user-plus", size=16),
-                "Ajouter un membre",
+                "Add a member",
                 on_click=UserManagementState.open_create_dialog,
                 size="2",
             ),
@@ -327,11 +327,11 @@ def staff_directory_page() -> rx.Component:
             rx.center(rx.spinner(size="3"), padding="4rem"),
             rx.vstack(
                 _group_section(
-                    "stethoscope", "Médecins PSC", "blue", "var(--blue-2)",
+                    "stethoscope", "PSC Doctors", "blue", "var(--blue-2)",
                     UserManagementState.medecin_psc_users,
                 ),
                 _group_section(
-                    "heart", "Médecins Entreprise", "pink", "var(--pink-2)",
+                    "heart", "Company Doctors", "pink", "var(--pink-2)",
                     UserManagementState.medecin_enterprise_users,
                 ),
                 _group_section(
@@ -339,11 +339,11 @@ def staff_directory_page() -> rx.Component:
                     UserManagementState.admin_users,
                 ),
                 _group_section(
-                    "wrench", "Opérateurs terrain & labo", "orange", "var(--orange-2)",
+                    "wrench", "Field & Lab Operators", "orange", "var(--orange-2)",
                     UserManagementState.operator_users,
                 ),
                 _group_section(
-                    "briefcase", "RH Entreprise", "green", "var(--green-2)",
+                    "briefcase", "Company HR", "green", "var(--green-2)",
                     UserManagementState.rh_users,
                 ),
                 spacing="4",

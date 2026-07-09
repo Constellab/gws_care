@@ -47,6 +47,9 @@ class ExamParamVM(BaseModel):
     label_high: str = ""
     label_critical_low: str = ""
     label_critical_high: str = ""
+    age_range_summary: str = ""      # e.g. "18.5 → 25.0" or "3 tranches" when stored in age ranges
+    age_range_crit_summary: str = "" # e.g. "13.0 / 40.0" or "3 tranches"
+    age_range_count: int = 0
 
 
 class ExamTypeFormVM(BaseModel):
@@ -87,6 +90,39 @@ class ExamParamFormVM(BaseModel):
     label_high: str = ""
     label_critical_low: str = ""
     label_critical_high: str = ""
+
+
+class AgeRangeVM(BaseModel):
+    """One age/gender-specific reference range row for display."""
+
+    id: str
+    age_min: str = ""   # empty string if no lower bound
+    age_max: str = ""   # empty string if no upper bound
+    gender: str = "ALL"
+    ref_low: str = ""
+    ref_high: str = ""
+    crit_low: str = ""
+    crit_high: str = ""
+    label_normal: str = ""
+    label_low: str = ""
+    label_high: str = ""
+    label_crit_low: str = ""
+    label_crit_high: str = ""
+
+
+class AgeRangeFormVM(BaseModel):
+    age_min: str = ""
+    age_max: str = ""
+    gender: str = "ALL"
+    ref_low: str = ""
+    ref_high: str = ""
+    crit_low: str = ""
+    crit_high: str = ""
+    label_normal: str = ""
+    label_low: str = ""
+    label_high: str = ""
+    label_crit_low: str = ""
+    label_crit_high: str = ""
 
 
 class ExamTypesState(ReflexMainState):
@@ -143,6 +179,22 @@ class ExamTypesState(ReflexMainState):
     confirm_delete_param_open: bool = False
     confirm_delete_param_id: str = ""
     confirm_delete_param_comment: str = ""
+
+    # Age range manager — per-parameter dialog
+    age_range_manager_open: bool = False
+    age_range_param_id: str = ""
+    age_range_param_name: str = ""
+    age_ranges: list[AgeRangeVM] = []
+    age_range_is_loading: bool = False
+    # Age range form sub-dialog (create / edit)
+    age_range_form_open: bool = False
+    editing_age_range_id: str = ""   # "" = creating new
+    age_range_form: AgeRangeFormVM = AgeRangeFormVM()
+    age_range_form_error: str = ""
+    is_saving_age_range: bool = False
+    # Confirm delete age range
+    confirm_delete_age_range_open: bool = False
+    confirm_delete_age_range_id: str = ""
 
     # Confirm désactivation — type d'examen
     confirm_deactivate_type_open: bool = False
@@ -297,14 +349,19 @@ class ExamTypesState(ReflexMainState):
         self.edit_param_id = ""
         self.param_form_error = ""
         self.available_param_codes = [p.code for p in self.parameters if p.code and p.is_active]
+        self.age_range_param_id = ""
+        self.age_ranges = []
         self.param_dialog_open = True
 
     @rx.event
     def close_param_dialog(self):
         self.param_dialog_open = False
+        self.age_range_param_id = ""
+        self.age_range_param_name = ""
+        self.age_ranges = []
 
     @rx.event
-    def open_edit_param_dialog(self, param_id: str):
+    async def open_edit_param_dialog(self, param_id: str):
         found = next((p for p in self.parameters if p.id == param_id), None)
         if not found:
             return
@@ -345,6 +402,9 @@ class ExamTypesState(ReflexMainState):
             if p.code and p.is_active and p.id != param_id
         ]
         self.param_dialog_open = True
+        self.age_range_param_id = param_id
+        self.age_ranges = []
+        await self._load_age_ranges()
 
     @rx.event
     def set_param_name(self, v: str):
@@ -533,6 +593,8 @@ class ExamTypesState(ReflexMainState):
                 else:
                     ExamTypeRefService.add_parameter(self.selected_type_id, dto)
             self.param_dialog_open = False
+            self.age_range_param_id = ""
+            self.age_ranges = []
             self.success = "Paramètre modifié." if self.is_editing_param else "Paramètre ajouté."
             self.is_editing_param = False
             self.edit_param_id = ""
@@ -758,6 +820,20 @@ class ExamTypesState(ReflexMainState):
         self.error = ""
         self.success = ""
 
+    @rx.event
+    async def reset_and_reseed_exam_types(self):
+        self.is_loading = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_type_ref_seed import clear_and_reseed
+                result = clear_and_reseed()
+            self.success = f"Referential reset. {len(result['created'])} exam type(s) created."
+            await self._load_types()
+        except Exception as e:
+            self.error = str(e)
+        finally:
+            self.is_loading = False
+
     async def _load_types(self):
         if not await self.check_authentication():
             return
@@ -798,10 +874,40 @@ class ExamTypesState(ReflexMainState):
     async def _load_parameters(self, type_id: str):
         try:
             with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_param_age_range import ExamParameterAgeRange
                 from gws_care.exam_type_ref.exam_type_ref_service import ExamTypeRefService
                 detail = ExamTypeRefService.get(type_id)
                 def _f(v):
                     return str(v) if v is not None else ""
+
+                # Preload all age ranges for this exam type's params in one query
+                param_ids = [p.id for p in detail.parameters]
+                all_ranges = (
+                    list(ExamParameterAgeRange.select().where(
+                        ExamParameterAgeRange.exam_parameter.in_(param_ids)
+                    ))
+                    if param_ids else []
+                )
+                ranges_by_param: dict[str, list] = {}
+                for r in all_ranges:
+                    pid = str(r.exam_parameter_id)
+                    ranges_by_param.setdefault(pid, []).append(r)
+
+                def _range_summary(ranges: list) -> tuple[str, str]:
+                    """Return (ref_summary, crit_summary) for a list of age ranges."""
+                    if not ranges:
+                        return "", ""
+                    if len(ranges) == 1:
+                        r = ranges[0]
+                        lo = _f(r.ref_low)
+                        hi = _f(r.ref_high)
+                        cl = _f(r.critical_low)
+                        ch = _f(r.critical_high)
+                        ref = f"{lo or '—'} → {hi or '—'}" if (lo or hi) else ""
+                        crit = f"{cl or '—'} / {ch or '—'}" if (cl or ch) else ""
+                        return ref, crit
+                    n = len(ranges)
+                    return f"{n} tranches", f"{n} tranches"
 
                 self.parameters = [
                     ExamParamVM(
@@ -830,8 +936,251 @@ class ExamTypesState(ReflexMainState):
                         label_high=p.label_high or "",
                         label_critical_low=p.label_critical_low or "",
                         label_critical_high=p.label_critical_high or "",
+                        **dict(zip(
+                            ["age_range_summary", "age_range_crit_summary"],
+                            _range_summary(ranges_by_param.get(str(p.id), [])),
+                        )),
+                        age_range_count=len(ranges_by_param.get(str(p.id), [])),
                     )
                     for p in detail.parameters
                 ]
         except Exception as e:
             self.error = str(e)
+
+    # ── Age range manager ─────────────────────────────────────────────────
+
+    @rx.event
+    async def open_age_range_manager(self, param_id: str, param_name: str):
+        self.age_range_param_id = param_id
+        self.age_range_param_name = param_name
+        self.age_range_manager_open = True
+        self.age_ranges = []
+        await self._load_age_ranges()
+
+    @rx.event
+    def close_age_range_manager(self):
+        self.age_range_manager_open = False
+        self.age_range_param_id = ""
+        self.age_range_param_name = ""
+        self.age_ranges = []
+
+    @rx.event
+    def open_create_age_range(self):
+        self.age_range_form = AgeRangeFormVM()
+        self.editing_age_range_id = ""
+        self.age_range_form_error = ""
+        self.age_range_form_open = True
+
+    @rx.event
+    def open_edit_age_range(self, range_id: str):
+        found = next((r for r in self.age_ranges if r.id == range_id), None)
+        if not found:
+            return
+        self.editing_age_range_id = range_id
+        self.age_range_form = AgeRangeFormVM(
+            age_min=found.age_min,
+            age_max=found.age_max,
+            gender=found.gender,
+            ref_low=found.ref_low,
+            ref_high=found.ref_high,
+            crit_low=found.crit_low,
+            crit_high=found.crit_high,
+            label_normal=found.label_normal,
+            label_low=found.label_low,
+            label_high=found.label_high,
+            label_crit_low=found.label_crit_low,
+            label_crit_high=found.label_crit_high,
+        )
+        self.age_range_form_error = ""
+        self.age_range_form_open = True
+
+    @rx.event
+    def close_age_range_form(self):
+        self.age_range_form_open = False
+
+    @rx.event
+    def duplicate_age_range(self, range_id: str):
+        """Open the create form pre-filled with values from an existing range."""
+        found = next((r for r in self.age_ranges if r.id == range_id), None)
+        if not found:
+            return
+        self.editing_age_range_id = ""   # mode création, pas édition
+        self.age_range_form = AgeRangeFormVM(
+            age_min=found.age_min,
+            age_max=found.age_max,
+            gender=found.gender,
+            ref_low=found.ref_low,
+            ref_high=found.ref_high,
+            crit_low=found.crit_low,
+            crit_high=found.crit_high,
+            label_normal=found.label_normal,
+            label_low=found.label_low,
+            label_high=found.label_high,
+            label_crit_low=found.label_crit_low,
+            label_crit_high=found.label_crit_high,
+        )
+        self.age_range_form_error = ""
+        self.age_range_form_open = True
+
+    @rx.event
+    def set_age_range_age_min(self, v: str):
+        self.age_range_form = AgeRangeFormVM(**{**self.age_range_form.dict(), "age_min": v})
+
+    @rx.event
+    def set_age_range_age_max(self, v: str):
+        self.age_range_form = AgeRangeFormVM(**{**self.age_range_form.dict(), "age_max": v})
+
+    @rx.event
+    def set_age_range_gender(self, v: str):
+        self.age_range_form = AgeRangeFormVM(**{**self.age_range_form.dict(), "gender": v})
+
+    @rx.event
+    def set_age_range_ref_low(self, v: str):
+        self.age_range_form = AgeRangeFormVM(**{**self.age_range_form.dict(), "ref_low": v})
+
+    @rx.event
+    def set_age_range_ref_high(self, v: str):
+        self.age_range_form = AgeRangeFormVM(**{**self.age_range_form.dict(), "ref_high": v})
+
+    @rx.event
+    def set_age_range_crit_low(self, v: str):
+        self.age_range_form = AgeRangeFormVM(**{**self.age_range_form.dict(), "crit_low": v})
+
+    @rx.event
+    def set_age_range_crit_high(self, v: str):
+        self.age_range_form = AgeRangeFormVM(**{**self.age_range_form.dict(), "crit_high": v})
+
+    @rx.event
+    def set_age_range_label_normal(self, v: str):
+        self.age_range_form = AgeRangeFormVM(**{**self.age_range_form.dict(), "label_normal": v})
+
+    @rx.event
+    def set_age_range_label_low(self, v: str):
+        self.age_range_form = AgeRangeFormVM(**{**self.age_range_form.dict(), "label_low": v})
+
+    @rx.event
+    def set_age_range_label_high(self, v: str):
+        self.age_range_form = AgeRangeFormVM(**{**self.age_range_form.dict(), "label_high": v})
+
+    @rx.event
+    def set_age_range_label_crit_low(self, v: str):
+        self.age_range_form = AgeRangeFormVM(**{**self.age_range_form.dict(), "label_crit_low": v})
+
+    @rx.event
+    def set_age_range_label_crit_high(self, v: str):
+        self.age_range_form = AgeRangeFormVM(**{**self.age_range_form.dict(), "label_crit_high": v})
+
+    @rx.event
+    async def save_age_range(self):
+        f = self.age_range_form
+        self.age_range_form_error = ""
+        self.is_saving_age_range = True
+        try:
+            def _to_int(s: str):
+                s = s.strip()
+                return int(s) if s else None
+
+            def _to_float(s: str):
+                s = s.strip().replace(",", ".")
+                return float(s) if s else None
+
+            age_min = _to_int(f.age_min)
+            age_max = _to_int(f.age_max)
+            if age_min is not None and age_max is not None and age_min > age_max:
+                self.age_range_form_error = "L'âge minimum doit être ≤ l'âge maximum."
+                return
+
+            with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_param_age_range import ExamParameterAgeRange
+
+                if self.editing_age_range_id:
+                    r = ExamParameterAgeRange.get_by_id(self.editing_age_range_id)
+                else:
+                    r = ExamParameterAgeRange(exam_parameter_id=self.age_range_param_id)
+                r.age_min = age_min
+                r.age_max = age_max
+                r.gender = f.gender
+                r.ref_low = _to_float(f.ref_low)
+                r.ref_high = _to_float(f.ref_high)
+                r.critical_low = _to_float(f.crit_low)
+                r.critical_high = _to_float(f.crit_high)
+                r.label_normal = f.label_normal.strip() or None
+                r.label_low = f.label_low.strip() or None
+                r.label_high = f.label_high.strip() or None
+                r.label_critical_low = f.label_crit_low.strip() or None
+                r.label_critical_high = f.label_crit_high.strip() or None
+                r.save()
+            self.age_range_form_open = False
+            await self._load_age_ranges()
+        except Exception as e:
+            self.age_range_form_error = str(e)
+        finally:
+            self.is_saving_age_range = False
+
+    @rx.event
+    def open_confirm_delete_age_range(self, range_id: str):
+        self.confirm_delete_age_range_id = range_id
+        self.confirm_delete_age_range_open = True
+
+    @rx.event
+    def close_confirm_delete_age_range(self):
+        self.confirm_delete_age_range_open = False
+        self.confirm_delete_age_range_id = ""
+
+    @rx.event
+    async def delete_age_range(self):
+        range_id = self.confirm_delete_age_range_id
+        self.confirm_delete_age_range_open = False
+        self.confirm_delete_age_range_id = ""
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_param_age_range import ExamParameterAgeRange
+                r = ExamParameterAgeRange.get_by_id(range_id)
+                r.delete_instance()
+            await self._load_age_ranges()
+        except Exception as e:
+            self.error = str(e)
+
+    async def _load_age_ranges(self):
+        param_id = self.age_range_param_id
+        if not param_id:
+            self.age_ranges = []
+            return
+        self.age_range_is_loading = True
+        try:
+            with await self.authenticate_user():
+                from gws_care.exam_type_ref.exam_param_age_range import ExamParameterAgeRange
+
+                def _s(v):
+                    return str(v) if v is not None else ""
+
+                rows = list(
+                    ExamParameterAgeRange.select()
+                    .where(ExamParameterAgeRange.exam_parameter == param_id)
+                    .order_by(
+                        ExamParameterAgeRange.age_min,
+                        ExamParameterAgeRange.gender,
+                    )
+                )
+                self.age_ranges = [
+                    AgeRangeVM(
+                        id=str(r.id),
+                        age_min=_s(r.age_min),
+                        age_max=_s(r.age_max),
+                        gender=r.gender or "ALL",
+                        ref_low=_s(r.ref_low),
+                        ref_high=_s(r.ref_high),
+                        crit_low=_s(r.critical_low),
+                        crit_high=_s(r.critical_high),
+                        label_normal=r.label_normal or "",
+                        label_low=r.label_low or "",
+                        label_high=r.label_high or "",
+                        label_crit_low=r.label_critical_low or "",
+                        label_crit_high=r.label_critical_high or "",
+                    )
+                    for r in rows
+                ]
+        except Exception as e:
+            self.error = str(e)
+        finally:
+            self.age_range_is_loading = False

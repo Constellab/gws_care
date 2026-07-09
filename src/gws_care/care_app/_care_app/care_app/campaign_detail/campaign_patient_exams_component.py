@@ -23,6 +23,7 @@ Layout:
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.language_state import LanguageState
 from ..common.nav_role_state import NavRoleState
 from ..common.page_layout import page_layout
 from .campaign_patient_exams_state import (
@@ -150,7 +151,7 @@ def _exam_tab(s: ExamSectionVM) -> rx.Component:
             rx.text(s.name, size="2", weight=rx.cond(is_active, "bold", "regular")),
             rx.cond(
                 ~s.requires_lab_validation,
-                rx.badge("Sur place", size="1", color_scheme="violet", variant="soft"),
+                rx.badge("On-site", size="1", color_scheme="violet", variant="soft"),
                 rx.fragment(),
             ),
             spacing="1",
@@ -248,7 +249,7 @@ def _attachment_zone() -> rx.Component:
             rx.separator(width="100%"),
             rx.hstack(
                 rx.icon("paperclip", size=14, color="var(--gray-9)"),
-                rx.text("Documents joints", size="2", weight="medium", color="var(--gray-11)"),
+                rx.text("Attached documents", size="2", weight="medium", color="var(--gray-11)"),
                 spacing="2",
                 align="center",
             ),
@@ -259,7 +260,7 @@ def _attachment_zone() -> rx.Component:
                     width="100%",
                     spacing="0",
                 ),
-                rx.text("Aucun document joint.", size="1", color="var(--gray-8)"),
+                rx.text("No attached documents.", size="1", color="var(--gray-8)"),
             ),
             rx.upload(
                 rx.vstack(
@@ -267,14 +268,14 @@ def _attachment_zone() -> rx.Component:
                         CampaignPatientExamsState.is_uploading_file,
                         rx.hstack(
                             rx.spinner(size="2"),
-                            rx.text("Envoi en cours…", size="2", color="var(--gray-9)"),
+                            rx.text("Upload in progress…", size="2", color="var(--gray-9)"),
                             spacing="2",
                             align="center",
                         ),
                         rx.vstack(
                             rx.icon("upload", size=16, color="var(--gray-6)"),
                             rx.text(
-                                "Glisser-déposer ou cliquer pour joindre",
+                                "Drag and drop or click to attach",
                                 size="1",
                                 color="var(--gray-8)",
                             ),
@@ -330,11 +331,11 @@ def _param_row(p: ExamParamEntry) -> rx.Component:
     """One parameter row with a selection checkbox and an input field."""
     status_label = rx.match(
         p.value_status,
-        ("normal", p.label_normal),
-        ("low", p.label_low),
-        ("high", p.label_high),
-        ("critical_low", p.label_critical_low),
-        ("critical_high", p.label_critical_high),
+        ("normal", rx.cond(p.label_normal != "", p.label_normal, "Normal")),
+        ("low", rx.cond(p.label_low != "", p.label_low, "Bas")),
+        ("high", rx.cond(p.label_high != "", p.label_high, "Élevé")),
+        ("critical_low", rx.cond(p.label_critical_low != "", p.label_critical_low, "Critique bas")),
+        ("critical_high", rx.cond(p.label_critical_high != "", p.label_critical_high, "Critique haut")),
         "",
     )
     status_color = rx.match(
@@ -419,7 +420,7 @@ def _param_row(p: ExamParamEntry) -> rx.Component:
                     ),
                     rx.tooltip(
                         rx.icon("calculator", size=13, color="var(--accent-9)"),
-                        content="Calculé automatiquement",
+                        content="Calculated automatically",
                     ),
                     spacing="1",
                     align="center",
@@ -451,8 +452,8 @@ def _param_row(p: ExamParamEntry) -> rx.Component:
                                     width="160px",
                                 ),
                                 rx.select.content(
-                                    rx.select.item("Négatif", value="Négatif"),
-                                    rx.select.item("Positif", value="Positif"),
+                                    rx.select.item("Negative", value="Négatif"),
+                                    rx.select.item("Positive", value="Positif"),
                                 ),
                                 value=p.value,
                                 on_change=CampaignPatientExamsState.set_param_value(p.param_id),
@@ -460,7 +461,7 @@ def _param_row(p: ExamParamEntry) -> rx.Component:
                                 disabled=CampaignPatientExamsState.active_section_is_readonly,
                             ),
                             rx.input(
-                                placeholder="Résultat…",
+                                placeholder="Result…",
                                 value=p.value,
                                 on_change=CampaignPatientExamsState.set_param_value(p.param_id),
                                 width="180px",
@@ -508,7 +509,7 @@ def _param_form() -> rx.Component:
                 ~CampaignPatientExamsState.active_section_is_readonly,
                 rx.button(
                     rx.icon("plus-circle", size=14),
-                    "Ajouter un test",
+                    "Add a test",
                     on_click=CampaignPatientExamsState.open_add_param_dialog,
                     size="1",
                     variant="soft",
@@ -524,10 +525,10 @@ def _param_form() -> rx.Component:
             CampaignPatientExamsState.active_params.length() > 0,
             rx.vstack(
                 rx.hstack(
-                    rx.text("Sélection des paramètres :", size="2", color="var(--gray-9)"),
+                    rx.text("Parameter selection:", size="2", color="var(--gray-9)"),
                     rx.button(
                         rx.icon("check-square", size=13),
-                        "Tout sélectionner",
+                        "Select all",
                         variant="ghost",
                         size="1",
                         color_scheme="blue",
@@ -535,7 +536,7 @@ def _param_form() -> rx.Component:
                     ),
                     rx.button(
                         rx.icon("square", size=13),
-                        "Tout désélectionner",
+                        "Deselect all",
                         variant="ghost",
                         size="1",
                         color_scheme="gray",
@@ -549,12 +550,12 @@ def _param_form() -> rx.Component:
                     rx.table.header(
                         rx.table.row(
                             rx.table.column_header_cell("", width="36px"),
-                            rx.table.column_header_cell("Paramètre"),
-                            rx.table.column_header_cell("Unité"),
-                            rx.table.column_header_cell("Réf."),
-                            rx.table.column_header_cell("Seuil critique"),
-                            rx.table.column_header_cell("Résultat"),
-                            rx.table.column_header_cell("Interprétation"),
+                            rx.table.column_header_cell("Parameter"),
+                            rx.table.column_header_cell("Unit"),
+                            rx.table.column_header_cell("Ref."),
+                            rx.table.column_header_cell("Critical threshold"),
+                            rx.table.column_header_cell("Result"),
+                            rx.table.column_header_cell("Interpretation"),
                         )
                     ),
                     rx.table.body(rx.foreach(CampaignPatientExamsState.active_params, _param_row)),
@@ -569,12 +570,12 @@ def _param_form() -> rx.Component:
                 rx.vstack(
                     rx.icon("circle-check", size=32, color="var(--gray-5)"),
                     rx.text(
-                        "Cet examen n'a pas de paramètres définis.",
+                        "This exam has no defined parameters.",
                         size="2",
                         color="var(--gray-9)",
                     ),
                     rx.text(
-                        "Enregistrez-le comme effectué avec le bouton ci-dessous.",
+                        "Record it as completed with the button below.",
                         size="2",
                         color="var(--gray-9)",
                     ),
@@ -599,13 +600,13 @@ def _param_form() -> rx.Component:
                         rx.hstack(
                             rx.badge(
                                 rx.icon("pencil", size=12),
-                                "Modification en cours",
+                                "Modification in progress",
                                 color_scheme="orange",
                                 variant="soft",
                                 size="1",
                             ),
                             rx.text(
-                                "Sélectionnez une action et cliquez Valider pour re-transmettre.",
+                                "Select an action and click Validate to re-send.",
                                 size="1",
                                 color="var(--gray-9)",
                                 font_style="italic",
@@ -616,16 +617,16 @@ def _param_form() -> rx.Component:
                         rx.hstack(
                             rx.select.root(
                                 rx.select.trigger(
-                                    placeholder="Choisir une action…",
+                                    placeholder="Choose an action…",
                                     size="2",
                                     width="260px",
                                 ),
                                 rx.select.content(
-                                    rx.select.item("Enregistrer sans transmettre", value="save"),
-                                    rx.select.item("Transmettre au labo", value="labo"),
-                                    rx.select.item("Transmettre au médecin PSC", value="psc"),
+                                    rx.select.item("Save without sending", value="save"),
+                                    rx.select.item("Send to lab", value="labo"),
+                                    rx.select.item("Send to PSC doctor", value="psc"),
                                     rx.select.item(
-                                        "Transmettre au médecin de travail", value="travail"
+                                        "Send to occupational doctor", value="travail"
                                     ),
                                 ),
                                 value=CampaignPatientExamsState.section_action,
@@ -634,7 +635,7 @@ def _param_form() -> rx.Component:
                             ),
                             rx.button(
                                 rx.icon("check", size=14),
-                                "Valider",
+                                "Validate",
                                 color_scheme="indigo",
                                 size="2",
                                 loading=CampaignPatientExamsState.is_saving,
@@ -656,7 +657,7 @@ def _param_form() -> rx.Component:
                                 "LABO",
                                 rx.badge(
                                     rx.icon("send", size=13),
-                                    "Transmis au labo",
+                                    "Sent to lab",
                                     color_scheme="orange",
                                     variant="soft",
                                     size="2",
@@ -666,7 +667,7 @@ def _param_form() -> rx.Component:
                                 "PSC",
                                 rx.badge(
                                     rx.icon("send", size=13),
-                                    "Transmis au médecin PSC",
+                                    "Sent to PSC doctor",
                                     color_scheme="teal",
                                     variant="soft",
                                     size="2",
@@ -676,7 +677,7 @@ def _param_form() -> rx.Component:
                                 "TRAVAIL",
                                 rx.badge(
                                     rx.icon("send", size=13),
-                                    "Transmis au médecin de travail",
+                                    "Sent to occupational doctor",
                                     color_scheme="blue",
                                     variant="soft",
                                     size="2",
@@ -684,7 +685,7 @@ def _param_form() -> rx.Component:
                             ),
                             rx.badge(
                                 rx.icon("send", size=13),
-                                "Transmis",
+                                "Sent",
                                 color_scheme="teal",
                                 variant="soft",
                                 size="2",
@@ -692,7 +693,7 @@ def _param_form() -> rx.Component:
                         ),
                         rx.button(
                             rx.icon("pencil", size=13),
-                            "Modifier",
+                            "Edit",
                             variant="ghost",
                             size="2",
                             color_scheme="gray",
@@ -712,11 +713,11 @@ def _param_form() -> rx.Component:
                                 width="260px",
                             ),
                             rx.select.content(
-                                rx.select.item("Enregistrer sans transmettre", value="save"),
-                                rx.select.item("Transmettre au labo", value="labo"),
-                                rx.select.item("Transmettre au médecin PSC", value="psc"),
+                                rx.select.item("Save without sending", value="save"),
+                                rx.select.item("Send to lab", value="labo"),
+                                rx.select.item("Send to PSC doctor", value="psc"),
                                 rx.select.item(
-                                    "Transmettre au médecin de travail", value="travail"
+                                    "Send to occupational doctor", value="travail"
                                 ),
                             ),
                             value=CampaignPatientExamsState.section_action,
@@ -725,7 +726,7 @@ def _param_form() -> rx.Component:
                         ),
                         rx.button(
                             rx.icon("check", size=14),
-                            "Valider",
+                            "Validate",
                             color_scheme="indigo",
                             size="2",
                             loading=CampaignPatientExamsState.is_saving,
@@ -740,13 +741,13 @@ def _param_form() -> rx.Component:
                         rx.hstack(
                             rx.badge(
                                 rx.icon("circle-check", size=12),
-                                "Enregistré",
+                                "Saved",
                                 color_scheme="green",
                                 variant="soft",
                                 size="1",
                             ),
                             rx.text(
-                                "Résultats déjà enregistrés — choisissez une action pour transmettre.",
+                                "Results already saved — choose an action to send.",
                                 size="1",
                                 color="var(--gray-9)",
                                 font_style="italic",
@@ -755,8 +756,8 @@ def _param_form() -> rx.Component:
                             align="center",
                         ),
                         rx.text(
-                            "« Enregistrer sans transmettre » sauvegarde sans envoyer — "
-                            "transmettez plus tard quand vous êtes prêt.",
+                            "\"Save without sending\" saves without sending — "
+                            "send later when you are ready.",
                             size="1",
                             color="var(--gray-8)",
                             font_style="italic",
@@ -803,7 +804,7 @@ def _transmit_panel() -> rx.Component:
                     rx.hstack(
                         rx.icon("send", size=16, color="var(--teal-9)"),
                         rx.text(
-                            "Transférer tous les résultats au médecin PSC", size="3", weight="bold"
+                            "Transfer all results to the PSC doctor", size="3", weight="bold"
                         ),
                         spacing="2",
                         align="center",
@@ -811,12 +812,12 @@ def _transmit_panel() -> rx.Component:
                     rx.cond(
                         CampaignPatientExamsState.all_sections_saved,
                         rx.text(
-                            "Tous les examens sont enregistrés. Cliquez ci-contre pour transférer au médecin PSC.",
+                            "All exams are saved. Click the button to transfer to the PSC doctor.",
                             size="2",
                             color="var(--gray-9)",
                         ),
                         rx.text(
-                            "Enregistrez tous les examens avant de transférer l'ensemble.",
+                            "Save all exams before transferring them all.",
                             size="2",
                             color="var(--orange-9)",
                         ),
@@ -828,14 +829,14 @@ def _transmit_panel() -> rx.Component:
                     all_tx,
                     rx.badge(
                         rx.icon("check", size=13),
-                        "Transféré",
+                        "Transferred",
                         color_scheme="teal",
                         variant="soft",
                         size="2",
                     ),
                     rx.button(
                         rx.icon("send", size=14),
-                        "Transférer au médecin PSC",
+                        "Transfer to PSC doctor",
                         color_scheme="teal",
                         size="3",
                         loading=CampaignPatientExamsState.is_saving,
@@ -859,16 +860,16 @@ def _transmit_panel() -> rx.Component:
                         rx.hstack(
                             rx.icon("flask-conical", size=16, color="var(--amber-9)"),
                             rx.text(
-                                "Validation des résultats de laboratoire", size="3", weight="bold"
+                                "Laboratory results validation", size="3", weight="bold"
                             ),
                             spacing="2",
                             align="center",
                         ),
                         rx.cond(
                             lab_validated,
-                            rx.text("Résultats validés.", size="2", color="var(--green-10)"),
+                            rx.text("Results validated.", size="2", color="var(--green-10)"),
                             rx.text(
-                                "Confirmez que les résultats de laboratoire sont corrects avant interprétation.",
+                                "Confirm that the laboratory results are correct before interpretation.",
                                 size="2",
                                 color="var(--gray-9)",
                             ),
@@ -880,7 +881,7 @@ def _transmit_panel() -> rx.Component:
                         lab_validated,
                         rx.badge(
                             rx.icon("check", size=13),
-                            "Validé labo",
+                            "Lab validated",
                             color_scheme="amber",
                             variant="soft",
                             size="2",
@@ -888,7 +889,7 @@ def _transmit_panel() -> rx.Component:
                         rx.hstack(
                             rx.button(
                                 rx.icon("check-circle", size=14),
-                                "Valider résultats labo",
+                                "Validate lab results",
                                 color_scheme="amber",
                                 size="2",
                                 loading=CampaignPatientExamsState.is_saving,
@@ -898,7 +899,7 @@ def _transmit_panel() -> rx.Component:
                                 CampaignPatientExamsState.next_patient_id != "",
                                 rx.button(
                                     rx.icon("check-circle", size=14),
-                                    "Valider et suivant",
+                                    "Validate and next",
                                     color_scheme="amber",
                                     variant="soft",
                                     size="2",
@@ -945,13 +946,13 @@ def _treating_doctor_panel() -> rx.Component:
                 rx.vstack(
                     rx.hstack(
                         rx.icon("user-round", size=16, color="var(--teal-9)"),
-                        rx.text("Médecin traitant", size="3", weight="bold"),
-                        rx.badge("Optionnel", size="1", color_scheme="gray", variant="soft"),
+                        rx.text("Treating doctor", size="3", weight="bold"),
+                        rx.badge("Optional", size="1", color_scheme="gray", variant="soft"),
                         spacing="2",
                         align="center",
                     ),
                     rx.text(
-                        "Transmettre les résultats au médecin traitant du patient.",
+                        "Send results to the patient's treating doctor.",
                         size="2",
                         color="var(--gray-9)",
                     ),
@@ -962,14 +963,14 @@ def _treating_doctor_panel() -> rx.Component:
                     already_sent,
                     rx.badge(
                         rx.icon("check", size=13),
-                        "Transmis",
+                        "Sent",
                         color_scheme="teal",
                         variant="soft",
                         size="2",
                     ),
                     rx.button(
                         rx.icon("send", size=14),
-                        "Transmettre au médecin traitant",
+                        "Send to treating doctor",
                         color_scheme="teal",
                         variant="soft",
                         size="2",
@@ -1002,13 +1003,13 @@ def _psc_interpretation_panel() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.icon("stethoscope", size=16, color="var(--blue-9)"),
-                    rx.text("Interprétation Médecin PSC", size="3", weight="bold"),
+                    rx.text("PSC Doctor Interpretation", size="3", weight="bold"),
                     rx.spacer(),
                     rx.cond(
                         already_validated,
                         rx.badge(
                             rx.icon("check", size=13),
-                            "Validé PSC",
+                            "PSC validated",
                             color_scheme="blue",
                             variant="soft",
                             size="2",
@@ -1022,7 +1023,7 @@ def _psc_interpretation_panel() -> rx.Component:
                 rx.text_area(
                     value=CampaignPatientExamsState.psc_notes,
                     on_change=CampaignPatientExamsState.set_psc_notes,
-                    placeholder="Saisir votre interprétation médicale ici...",
+                    placeholder="Enter your medical interpretation here...",
                     rows="5",
                     width="100%",
                     read_only=already_validated,
@@ -1033,7 +1034,7 @@ def _psc_interpretation_panel() -> rx.Component:
                         rx.spacer(),
                         rx.button(
                             rx.icon("send", size=14),
-                            "Transférer au médecin de travail",
+                            "Transfer to occupational doctor",
                             color_scheme="blue",
                             size="2",
                             loading=CampaignPatientExamsState.is_saving,
@@ -1087,13 +1088,13 @@ def _enterprise_interpretation_panel() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.icon("building-2", size=16, color="var(--indigo-9)"),
-                    rx.text("Interprétation Médecin Entreprise", size="3", weight="bold"),
+                    rx.text("Company Doctor Interpretation", size="3", weight="bold"),
                     rx.spacer(),
                     rx.cond(
                         already_validated,
                         rx.badge(
                             rx.icon("check", size=13),
-                            "Validé entreprise",
+                            "Company validated",
                             color_scheme="indigo",
                             variant="soft",
                             size="2",
@@ -1107,7 +1108,7 @@ def _enterprise_interpretation_panel() -> rx.Component:
                 rx.cond(
                     ~psc_done,
                     rx.callout(
-                        "En attente de la validation du médecin PSC.",
+                        "Awaiting PSC doctor validation.",
                         icon="clock",
                         color_scheme="gray",
                         size="2",
@@ -1116,7 +1117,7 @@ def _enterprise_interpretation_panel() -> rx.Component:
                         rx.text_area(
                             value=CampaignPatientExamsState.enterprise_notes,
                             on_change=CampaignPatientExamsState.set_enterprise_notes,
-                            placeholder="Interprétation / commentaires pour l'entreprise...",
+                            placeholder="Interpretation / comments for the company...",
                             rows="5",
                             width="100%",
                             read_only=already_validated,
@@ -1127,7 +1128,7 @@ def _enterprise_interpretation_panel() -> rx.Component:
                                 rx.spacer(),
                                 rx.button(
                                     rx.icon("check", size=14),
-                                    "Valider l'interprétation",
+                                    "Validate interpretation",
                                     color_scheme="indigo",
                                     size="2",
                                     loading=CampaignPatientExamsState.is_saving,
@@ -1166,19 +1167,19 @@ def _finish_panel() -> rx.Component:
                 rx.vstack(
                     rx.hstack(
                         rx.icon("archive", size=16, color="var(--green-9)"),
-                        rx.text("Clôture du dossier", size="3", weight="bold"),
+                        rx.text("Close file", size="3", weight="bold"),
                         spacing="2",
                         align="center",
                     ),
                     rx.cond(
                         already_done,
                         rx.text(
-                            "Dossier clôturé et publié.",
+                            "File closed and published.",
                             size="2",
                             color="var(--green-10)",
                         ),
                         rx.text(
-                            "L'interprétation est validée. Clôturez le dossier pour le marquer comme terminé.",
+                            "The interpretation is validated. Close the file to mark it as complete.",
                             size="2",
                             color="var(--gray-9)",
                         ),
@@ -1190,14 +1191,14 @@ def _finish_panel() -> rx.Component:
                     already_done,
                     rx.badge(
                         rx.icon("check", size=13),
-                        "Dossier clôturé",
+                        "File closed",
                         color_scheme="green",
                         variant="soft",
                         size="2",
                     ),
                     rx.button(
                         rx.icon("check-circle", size=14),
-                        "Terminer",
+                        "Finish",
                         color_scheme="green",
                         size="3",
                         loading=CampaignPatientExamsState.is_saving,
@@ -1222,15 +1223,15 @@ def _motif_dialog() -> rx.Component:
     """Dialog asking for a reason when the user modifies saved exam results."""
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Motif de modification"),
+            rx.dialog.title("Reason for modification"),
             rx.dialog.description(
-                "Indiquez la raison pour laquelle vous modifiez les résultats déjà enregistrés.",
+                "Indicate the reason why you are modifying already saved results.",
                 size="2",
                 color="var(--gray-9)",
             ),
             rx.vstack(
                 rx.text_area(
-                    placeholder="Ex. : erreur de saisie, valeur corrigée après analyse complémentaire…",
+                    placeholder="Ex.: entry error, value corrected after additional analysis…",
                     value=CampaignPatientExamsState.modification_motif,
                     on_change=CampaignPatientExamsState.set_modification_motif,
                     rows="3",
@@ -1239,7 +1240,7 @@ def _motif_dialog() -> rx.Component:
                 rx.hstack(
                     rx.dialog.close(
                         rx.button(
-                            "Annuler",
+                            LanguageState.tr["cancel_btn"],
                             variant="ghost",
                             color_scheme="gray",
                             size="2",
@@ -1248,7 +1249,7 @@ def _motif_dialog() -> rx.Component:
                     ),
                     rx.button(
                         rx.icon("check", size=14),
-                        "Confirmer la modification",
+                        "Confirm modification",
                         color_scheme="indigo",
                         size="2",
                         disabled=CampaignPatientExamsState.modification_motif.strip() == "",
@@ -1302,9 +1303,9 @@ def _add_param_item(p: AddParamOption) -> rx.Component:
 def _add_param_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Ajouter des tests"),
+            rx.dialog.title("Add tests"),
             rx.dialog.description(
-                "Sélectionnez les tests à ajouter à cet examen.",
+                "Select the tests to add to this exam.",
                 size="2",
                 color="var(--gray-11)",
             ),
@@ -1325,7 +1326,7 @@ def _add_param_dialog() -> rx.Component:
                                     CampaignPatientExamsState.add_param_selected_count.to(str),
                                     " / ",
                                     CampaignPatientExamsState.add_param_options.length().to(str),
-                                    " sélectionné(s)",
+                                    " selected",
                                     size="1",
                                     color="var(--gray-9)",
                                 ),
@@ -1354,12 +1355,12 @@ def _add_param_dialog() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.button(
-                        "Annuler",
+                        LanguageState.tr["cancel_btn"],
                         variant="outline",
                         on_click=CampaignPatientExamsState.close_add_param_dialog,
                     ),
                     rx.button(
-                        "Ajouter les tests",
+                        "Add tests",
                         on_click=CampaignPatientExamsState.save_add_params,
                         loading=CampaignPatientExamsState.is_saving_add_params,
                         disabled=(CampaignPatientExamsState.add_param_selected_count == 0)
@@ -1390,7 +1391,7 @@ def campaign_patient_exams_page() -> rx.Component:
                 rx.hstack(
                     rx.button(
                         rx.icon("chevron-left", size=14),
-                        "Retour à la campagne",
+                        "Back to campaign",
                         variant="ghost",
                         size="2",
                         on_click=CampaignPatientExamsState.go_back,
@@ -1400,13 +1401,13 @@ def campaign_patient_exams_page() -> rx.Component:
                         rx.tooltip(
                             rx.button(
                                 rx.icon("stethoscope", size=14),
-                                "Interprétation médecin",
+                                "Doctor interpretation",
                                 variant="soft",
                                 color_scheme="blue",
                                 size="2",
                                 on_click=CampaignPatientExamsState.go_to_visit_detail,
                             ),
-                            content="Aller à la page d'interprétation médecin",
+                            content="Go to the doctor interpretation page",
                         ),
                         rx.fragment(),
                     ),
@@ -1473,7 +1474,7 @@ def campaign_patient_exams_page() -> rx.Component:
                                             ),
                                             href="/campaign-patient/" + CampaignPatientExamsState.cp_campaign_id + "/" + CampaignPatientExamsState.prev_patient_id,
                                         ),
-                                        content="Patient précédent",
+                                        content="Previous patient",
                                     ),
                                     rx.icon_button(
                                         rx.icon("chevron-left", size=16),
@@ -1501,7 +1502,7 @@ def campaign_patient_exams_page() -> rx.Component:
                                             ),
                                             href="/campaign-patient/" + CampaignPatientExamsState.cp_campaign_id + "/" + CampaignPatientExamsState.next_patient_id,
                                         ),
-                                        content="Patient suivant",
+                                        content="Next patient",
                                     ),
                                     rx.icon_button(
                                         rx.icon("chevron-right", size=16),
@@ -1550,7 +1551,7 @@ def campaign_patient_exams_page() -> rx.Component:
                                     rx.hstack(
                                         rx.icon("notebook-pen", size=15, color="var(--accent-9)"),
                                         rx.text(
-                                            "Motif / Observations terrain",
+                                            "Reason / Field observations",
                                             size="2",
                                             weight="bold",
                                         ),
@@ -1563,7 +1564,7 @@ def campaign_patient_exams_page() -> rx.Component:
                                         align="center",
                                     ),
                                     rx.text_area(
-                                        placeholder="Motif de consultation, antécédents, observations à la visite…",
+                                        placeholder="Reason for consultation, medical history, visit observations…",
                                         value=CampaignPatientExamsState.terrain_notes,
                                         on_change=CampaignPatientExamsState.set_terrain_notes,
                                         on_blur=CampaignPatientExamsState.save_terrain_notes,
@@ -1580,7 +1581,7 @@ def campaign_patient_exams_page() -> rx.Component:
                             rx.cond(
                                 ~CampaignPatientExamsState.patient_is_on_terrain,
                                 rx.callout(
-                                    "Déclarez d'abord la présence (ou l'absence) du patient pour débloquer la saisie des résultats.",
+                                    "Declare the patient's presence (or absence) first to unlock result entry.",
                                     icon="lock",
                                     color_scheme="orange",
                                     size="2",
@@ -1632,12 +1633,12 @@ def campaign_patient_exams_page() -> rx.Component:
                             rx.vstack(
                                 rx.icon("file", size=36, color="var(--gray-5)"),
                                 rx.text(
-                                    "Aucun type d'examen configuré pour cette campagne.",
+                                    "No exam types configured for this campaign.",
                                     size="2",
                                     color="var(--gray-9)",
                                 ),
                                 rx.text(
-                                    "Allez dans l'onglet « Examens » de la campagne pour en ajouter.",
+                                    "Go to the \"Exams\" tab of the campaign to add some.",
                                     size="2",
                                     color="var(--gray-9)",
                                 ),

@@ -62,7 +62,7 @@ def _doctor_form_dialog() -> rx.Component:
                             on_change=DoctorListState.set_form_specialization,
                             on_focus=DoctorListState.focus_specialty_input,
                             on_blur=DoctorListState.hide_specialty_suggestions,
-                            placeholder="ex. Médecine générale",
+                            placeholder="ex. General Medicine",
                             size="2",
                             width="100%",
                         ),
@@ -106,17 +106,17 @@ def _doctor_form_dialog() -> rx.Component:
                             rx.select.trigger(width="110px"),
                             rx.select.content(
                                 rx.select.item("🇫🇷 +33  France", value="+33"),
-                                rx.select.item("🇲🇦 +212  Maroc", value="+212"),
-                                rx.select.item("🇩🇿 +213  Algérie", value="+213"),
-                                rx.select.item("🇹🇳 +216  Tunisie", value="+216"),
-                                rx.select.item("🇸🇳 +221  Sénégal", value="+221"),
-                                rx.select.item("🇨🇮 +225  Côte d'Ivoire", value="+225"),
-                                rx.select.item("🇧🇪 +32  Belgique", value="+32"),
-                                rx.select.item("🇨🇭 +41  Suisse", value="+41"),
+                                rx.select.item("🇲🇦 +212  Morocco", value="+212"),
+                                rx.select.item("🇩🇿 +213  Algeria", value="+213"),
+                                rx.select.item("🇹🇳 +216  Tunisia", value="+216"),
+                                rx.select.item("🇸🇳 +221  Senegal", value="+221"),
+                                rx.select.item("🇨🇮 +225  Ivory Coast", value="+225"),
+                                rx.select.item("🇧🇪 +32  Belgium", value="+32"),
+                                rx.select.item("🇨🇭 +41  Switzerland", value="+41"),
                                 rx.select.item("🇨🇦 +1  Canada", value="+1"),
-                                rx.select.item("🇩🇪 +49  Allemagne", value="+49"),
-                                rx.select.item("🇬🇧 +44  Royaume-Uni", value="+44"),
-                                rx.select.item("🌐 Autre", value="other"),
+                                rx.select.item("🇩🇪 +49  Germany", value="+49"),
+                                rx.select.item("🇬🇧 +44  United Kingdom", value="+44"),
+                                rx.select.item("🌐 Other", value="other"),
                             ),
                             value=DoctorListState.form_phone_dial_code,
                             on_change=DoctorListState.set_form_phone_dial_code,
@@ -214,9 +214,9 @@ def _action_confirm_dialog() -> rx.Component:
                 rx.cond(
                     DoctorListState.action_confirm_show_reason,
                     rx.vstack(
-                        rx.text("Motif *", size="2", weight="medium"),
+                        rx.text("Reason *", size="2", weight="medium"),
                         rx.text_area(
-                            placeholder="Indiquez le motif de cette action…",
+                            placeholder="Enter the reason for this action…",
                             value=DoctorListState.action_reason,
                             on_change=DoctorListState.set_action_reason,
                             rows="3",
@@ -229,7 +229,7 @@ def _action_confirm_dialog() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.button(
-                        "Annuler",
+                        LanguageState.tr["cancel_btn"],
                         variant="outline",
                         color_scheme="gray",
                         on_click=DoctorListState.close_action_confirm,
@@ -270,7 +270,7 @@ def _doctor_row(doctor: DoctorRowDTO) -> rx.Component:
                     rx.text(doctor.full_name, size="2", weight="medium"),
                     rx.cond(
                         doctor.is_archived,
-                        rx.badge("Archivé", color_scheme="orange", variant="soft", size="1"),
+                        rx.badge(LanguageState.tr["archived_badge"], color_scheme="orange", variant="soft", size="1"),
                         rx.cond(
                             ~doctor.is_active,
                             rx.badge(LanguageState.tr["inactive_badge"], color_scheme="gray", variant="soft", size="1"),
@@ -324,12 +324,12 @@ def _doctor_row(doctor: DoctorRowDTO) -> rx.Component:
                     ),
                     rx.dropdown_menu.content(
                         rx.dropdown_menu.item(
-                            rx.icon("circle-check", size=14), "Réactiver",
+                            rx.icon("circle-check", size=14), LanguageState.tr["reactivate_tooltip"],
                             on_click=lambda: DoctorListState.open_action_confirm(doctor.id, doctor.full_name, "reactivate"),
                         ),
                         rx.dropdown_menu.separator(),
                         rx.dropdown_menu.item(
-                            rx.icon("trash-2", size=14), "Supprimer",
+                            rx.icon("trash-2", size=14), LanguageState.tr["delete_btn"],
                             color_scheme="red",
                             on_click=lambda: DoctorListState.open_action_confirm(doctor.id, doctor.full_name, "delete"),
                         ),
@@ -349,21 +349,21 @@ def _doctor_row(doctor: DoctorRowDTO) -> rx.Component:
                         rx.cond(
                             doctor.is_active,
                             rx.dropdown_menu.item(
-                                rx.icon("user-x", size=14), "Désactiver",
+                                rx.icon("user-x", size=14), LanguageState.tr["deactivate_tooltip"],
                                 on_click=lambda: DoctorListState.open_action_confirm(doctor.id, doctor.full_name, "deactivate"),
                             ),
                             rx.dropdown_menu.item(
-                                rx.icon("circle-check", size=14), "Réactiver",
+                                rx.icon("circle-check", size=14), LanguageState.tr["reactivate_tooltip"],
                                 on_click=lambda: DoctorListState.open_action_confirm(doctor.id, doctor.full_name, "reactivate"),
                             ),
                         ),
                         rx.dropdown_menu.item(
-                            rx.icon("archive", size=14), "Archiver",
+                            rx.icon("archive", size=14), LanguageState.tr["archive_btn"],
                             on_click=lambda: DoctorListState.open_action_confirm(doctor.id, doctor.full_name, "archive"),
                         ),
                         rx.dropdown_menu.separator(),
                         rx.dropdown_menu.item(
-                            rx.icon("trash-2", size=14), "Supprimer",
+                            rx.icon("trash-2", size=14), LanguageState.tr["delete_btn"],
                             color_scheme="red",
                             on_click=lambda: DoctorListState.open_action_confirm(doctor.id, doctor.full_name, "delete"),
                         ),

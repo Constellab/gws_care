@@ -22,7 +22,7 @@ def _queue_row(row: LabQueueRowDTO) -> rx.Component:
             "consultation",
             rx.button(
                 rx.icon("flask-conical", size=13),
-                "Saisir les résultats",
+                "Enter results",
                 on_click=rx.redirect("/exam/" + row.exam_id),
                 size="2",
                 color_scheme="blue",
@@ -46,7 +46,7 @@ def _queue_row(row: LabQueueRowDTO) -> rx.Component:
                 row.exam_id != "",
                 rx.button(
                     rx.icon("flask-conical", size=13),
-                    "Saisir les résultats",
+                    "Enter results",
                     on_click=rx.redirect("/exam/" + row.exam_id),
                     size="2",
                     color_scheme="teal",
@@ -158,9 +158,9 @@ def _queue_table() -> rx.Component:
         ),
         rx.vstack(
             rx.icon("flask-conical", size=40, color="var(--gray-5)"),
-            rx.text("Aucune analyse dans cette catégorie", size="3", weight="medium", color="var(--gray-9)"),
+            rx.text("No analysis in this category", size="3", weight="medium", color="var(--gray-9)"),
             rx.text(
-                "Les analyses prescrites (consultations, campagnes et rendez-vous) apparaîtront ici.",
+                "Prescribed analyses (consultations, campaigns and appointments) will appear here.",
                 size="2",
                 color="var(--gray-8)",
             ),
@@ -179,9 +179,9 @@ def lab_queue_page() -> rx.Component:
                 # Header
                 rx.hstack(
                     rx.vstack(
-                        rx.heading("File d'attente laboratoire", size="6"),
+                        rx.heading("Laboratory queue", size="6"),
                         rx.text(
-                            "Analyses prescrites (consultations + campagnes + rendez-vous) en attente de résultats",
+                            "Prescribed analyses (consultations + campaigns + appointments) awaiting results",
                             size="2",
                             color="var(--gray-9)",
                         ),
@@ -201,11 +201,11 @@ def lab_queue_page() -> rx.Component:
                 rx.divider(),
                 # ── Status filter ─────────────────────────────────────────
                 rx.hstack(
-                    rx.text("Afficher :", size="2", color="var(--gray-9)"),
+                    rx.text("Show:", size="2", color="var(--gray-9)"),
                     rx.segmented_control.root(
-                        rx.segmented_control.item("En attente", value="pending"),
-                        rx.segmented_control.item("Complètes", value="done"),
-                        rx.segmented_control.item("Toutes", value="all"),
+                        rx.segmented_control.item("Pending", value="pending"),
+                        rx.segmented_control.item("Complete", value="done"),
+                        rx.segmented_control.item("All", value="all"),
                         value=LabQueueState.status_filter,
                         on_change=LabQueueState.set_status_filter,
                         size="1",
