@@ -197,10 +197,12 @@ def certificate_detail_page() -> rx.Component:
                                             min_width="180px",
                                             flex_shrink="0",
                                         ),
-                                        rx.cond(
-                                            CertificateDetailState.certificate.is_fit_for_work,
+                                        rx.match(
+                                            CertificateDetailState.certificate.fitness_decision,
+                                            ("FIT", rx.badge(LanguageState.tr["cert_fit_yes"], color_scheme="green", variant="soft", size="1")),
+                                            ("UNFIT", rx.badge(LanguageState.tr["cert_fit_no"], color_scheme="red", variant="soft", size="1")),
+                                            ("PERMANENTLY_UNFIT", rx.badge("Inapte définitif", color_scheme="red", size="1")),
                                             rx.badge(LanguageState.tr["cert_fit_yes"], color_scheme="green", variant="soft", size="1"),
-                                            rx.badge(LanguageState.tr["cert_fit_no"], color_scheme="red", variant="soft", size="1"),
                                         ),
                                         spacing="4",
                                         align="center",

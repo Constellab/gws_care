@@ -109,6 +109,7 @@ class CertificateRowDTO(BaseModel):
     certificate_type_label: str = ""
     conclusion: str = ""
     is_fit_for_work: bool = True
+    fitness_decision: str = "FIT"
     issued_by_name: str = ""
     is_archived: bool = False
 
@@ -178,7 +179,7 @@ class PatientDetailState(ReflexMainState):
     cert_form_type: str = "APTITUDE"
     cert_form_date: str = ""
     cert_form_conclusion: str = ""
-    cert_form_is_fit_for_work: bool = True
+    cert_form_fitness_decision: str = "FIT"
     cert_form_restrictions: str = ""
     # Work stoppage
     cert_form_start_date: str = ""
@@ -1150,7 +1151,7 @@ class PatientDetailState(ReflexMainState):
         self.cert_form_type = "APTITUDE"
         self.cert_form_date = ""
         self.cert_form_conclusion = ""
-        self.cert_form_is_fit_for_work = True
+        self.cert_form_fitness_decision = "FIT"
         self.cert_form_restrictions = ""
         self.cert_form_start_date = ""
         self.cert_form_end_date = ""
@@ -1172,7 +1173,7 @@ class PatientDetailState(ReflexMainState):
         self.cert_form_type = "APTITUDE"
         self.cert_form_date = ""
         self.cert_form_conclusion = ""
-        self.cert_form_is_fit_for_work = True
+        self.cert_form_fitness_decision = "FIT"
         self.cert_form_restrictions = ""
         self.cert_form_start_date = ""
         self.cert_form_end_date = ""
@@ -1200,8 +1201,8 @@ class PatientDetailState(ReflexMainState):
         self.cert_form_conclusion = value
 
     @rx.event
-    def set_cert_form_is_fit_for_work(self, value: bool):
-        self.cert_form_is_fit_for_work = value
+    def set_cert_form_fitness_decision(self, value: str):
+        self.cert_form_fitness_decision = value
 
     @rx.event
     def set_cert_form_restrictions(self, value: str):
@@ -1271,7 +1272,7 @@ class PatientDetailState(ReflexMainState):
                     patient_id=self.patient_id_param,
                     issue_date=date.fromisoformat(self.cert_form_date),
                     conclusion=self.cert_form_conclusion.strip(),
-                    is_fit_for_work=self.cert_form_is_fit_for_work,
+                    fitness_decision=self.cert_form_fitness_decision,
                     restrictions=self.cert_form_restrictions.strip() or None,
                     certificate_type=self.cert_form_type,
                     start_date=self.cert_form_start_date or None,
@@ -1362,6 +1363,7 @@ class PatientDetailState(ReflexMainState):
                         ),
                         conclusion=c.conclusion or "",
                         is_fit_for_work=c.is_fit_for_work,
+                        fitness_decision=c.effective_fitness,
                         issued_by_name=_get_issued_by(c),
                         is_archived=bool(c.is_archived),
                     )

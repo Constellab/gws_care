@@ -14,7 +14,7 @@ class CertificateFormState(FormDialogState, rx.State):
     # Form fields
     form_issue_date: str = ""
     form_conclusion: str = ""
-    form_is_fit_for_work: bool = True
+    form_fitness_decision: str = "FIT"
     form_restrictions: str = ""
     form_error: str = ""
 
@@ -33,8 +33,8 @@ class CertificateFormState(FormDialogState, rx.State):
         self.form_conclusion = value
 
     @rx.event
-    def set_form_is_fit_for_work(self, value: bool):
-        self.form_is_fit_for_work = value
+    def set_form_fitness_decision(self, value: str):
+        self.form_fitness_decision = value
 
     @rx.event
     def set_form_restrictions(self, value: str):
@@ -49,7 +49,7 @@ class CertificateFormState(FormDialogState, rx.State):
         self._exam_id = exam_id
         self.form_issue_date = date.today().isoformat()
         self.form_conclusion = ""
-        self.form_is_fit_for_work = True
+        self.form_fitness_decision = "FIT"
         self.form_restrictions = ""
         self.is_update_mode = False
         self.dialog_opened = True
@@ -59,7 +59,7 @@ class CertificateFormState(FormDialogState, rx.State):
     async def _clear_form_state(self) -> None:
         self.form_issue_date = ""
         self.form_conclusion = ""
-        self.form_is_fit_for_work = True
+        self.form_fitness_decision = "FIT"
         self.form_restrictions = ""
         self._patient_id = ""
         self._exam_id = ""
@@ -90,7 +90,7 @@ class CertificateFormState(FormDialogState, rx.State):
                 exam_id=self._exam_id or None,
                 issue_date=self.form_issue_date,
                 conclusion=self.form_conclusion,
-                is_fit_for_work=self.form_is_fit_for_work,
+                fitness_decision=self.form_fitness_decision,
                 restrictions=self.form_restrictions or None,
             )
             MedicalCertificateService.create_certificate(dto, doctor)

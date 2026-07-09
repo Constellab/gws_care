@@ -52,20 +52,28 @@ def _textarea_input(value_var, on_change) -> rx.Component:
 
 # ── Type-specific field panels ────────────────────────────────────────────────
 
+def _fitness_radio() -> rx.Component:
+    return rx.radio_group.root(
+        rx.hstack(
+            rx.hstack(rx.radio_group.item(value="FIT"), rx.text("Apte", size="2"), spacing="1", align="center"),
+            rx.hstack(rx.radio_group.item(value="UNFIT"), rx.text("Inapte", size="2"), spacing="1", align="center"),
+            rx.hstack(rx.radio_group.item(value="PERMANENTLY_UNFIT"), rx.text("Inapte définitif", size="2"), spacing="1", align="center"),
+            spacing="4",
+        ),
+        value=PatientDetailState.cert_form_fitness_decision,
+        on_change=PatientDetailState.set_cert_form_fitness_decision,
+    )
+
+
 def _aptitude_fields() -> rx.Component:
     return rx.vstack(
-        rx.hstack(
-            rx.checkbox(
-                checked=PatientDetailState.cert_form_is_fit_for_work,
-                on_change=PatientDetailState.set_cert_form_is_fit_for_work,
+        _fitness_radio(),
+        rx.cond(
+            PatientDetailState.cert_form_fitness_decision == "UNFIT",
+            _field(
+                "cert_form_restrictions_label",
+                _textarea_input(PatientDetailState.cert_form_restrictions, PatientDetailState.set_cert_form_restrictions),
             ),
-            rx.text(LanguageState.tr["cert_form_fit_label"], size="2"),
-            spacing="2",
-            align="center",
-        ),
-        _field(
-            "cert_form_restrictions_label",
-            _textarea_input(PatientDetailState.cert_form_restrictions, PatientDetailState.set_cert_form_restrictions),
         ),
         spacing="3",
         width="100%",
@@ -86,18 +94,13 @@ def _visit_fields() -> rx.Component:
     """Shared fields for pre-employment and periodic visits."""
     return rx.vstack(
         _field("cert_form_visit_subtype_label", _text_input(PatientDetailState.cert_form_visit_subtype, PatientDetailState.set_cert_form_visit_subtype)),
-        rx.hstack(
-            rx.checkbox(
-                checked=PatientDetailState.cert_form_is_fit_for_work,
-                on_change=PatientDetailState.set_cert_form_is_fit_for_work,
+        _fitness_radio(),
+        rx.cond(
+            PatientDetailState.cert_form_fitness_decision == "UNFIT",
+            _field(
+                "cert_form_restrictions_label",
+                _textarea_input(PatientDetailState.cert_form_restrictions, PatientDetailState.set_cert_form_restrictions),
             ),
-            rx.text(LanguageState.tr["cert_form_fit_label"], size="2"),
-            spacing="2",
-            align="center",
-        ),
-        _field(
-            "cert_form_restrictions_label",
-            _textarea_input(PatientDetailState.cert_form_restrictions, PatientDetailState.set_cert_form_restrictions),
         ),
         spacing="3",
         width="100%",
@@ -116,15 +119,7 @@ def _work_accident_fields() -> rx.Component:
 def _sir_fields() -> rx.Component:
     return rx.vstack(
         _field("cert_form_exposure_type_label", _text_input(PatientDetailState.cert_form_exposure_type, PatientDetailState.set_cert_form_exposure_type)),
-        rx.hstack(
-            rx.checkbox(
-                checked=PatientDetailState.cert_form_is_fit_for_work,
-                on_change=PatientDetailState.set_cert_form_is_fit_for_work,
-            ),
-            rx.text(LanguageState.tr["cert_form_fit_label"], size="2"),
-            spacing="2",
-            align="center",
-        ),
+        _fitness_radio(),
         spacing="3",
         width="100%",
     )

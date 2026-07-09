@@ -82,7 +82,7 @@ class VisitDetailState(RoleState):
     cert_dialog_open: bool = False
     cert_form_issue_date: str = ""
     cert_form_conclusion: str = ""
-    cert_form_is_fit_for_work: bool = True
+    cert_form_fitness_decision: str = "FIT"
     cert_form_restrictions: str = ""
     is_issuing_certificate: bool = False
 
@@ -309,8 +309,8 @@ class VisitDetailState(RoleState):
         self.cert_form_conclusion = value
 
     @rx.event
-    def set_cert_form_is_fit_for_work(self, value: bool):
-        self.cert_form_is_fit_for_work = value
+    def set_cert_form_fitness_decision(self, value: str):
+        self.cert_form_fitness_decision = value
 
     @rx.event
     def set_cert_form_restrictions(self, value: str):
@@ -322,7 +322,7 @@ class VisitDetailState(RoleState):
 
         self.cert_form_issue_date = date.today().isoformat()
         self.cert_form_conclusion = ""
-        self.cert_form_is_fit_for_work = True
+        self.cert_form_fitness_decision = "FIT"
         self.cert_form_restrictions = ""
         self.cert_dialog_open = True
 
@@ -353,7 +353,7 @@ class VisitDetailState(RoleState):
                     exam_id=None,
                     issue_date=self.cert_form_issue_date,
                     conclusion=self.cert_form_conclusion,
-                    is_fit_for_work=self.cert_form_is_fit_for_work,
+                    fitness_decision=self.cert_form_fitness_decision,
                     restrictions=self.cert_form_restrictions or None,
                 )
                 MedicalCertificateService.create_certificate(dto, doctor)

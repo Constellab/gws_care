@@ -333,29 +333,33 @@ def _certificate_dialog() -> rx.Component:
                 ),
                 rx.vstack(
                     rx.text(LanguageState.tr["cert_aptitude"], size="2", weight="medium"),
-                    rx.radio_group(
-                        ["Apte", "Inapte"],
-                        value=rx.cond(VisitDetailState.cert_form_is_fit_for_work, "Apte", "Inapte"),
-                        on_change=lambda v: VisitDetailState.set_cert_form_is_fit_for_work(
-                            v == "Apte"
+                    rx.radio_group.root(
+                        rx.hstack(
+                            rx.hstack(rx.radio_group.item(value="FIT"), rx.text("Apte", size="2"), spacing="1", align="center"),
+                            rx.hstack(rx.radio_group.item(value="UNFIT"), rx.text("Inapte", size="2"), spacing="1", align="center"),
+                            rx.hstack(rx.radio_group.item(value="PERMANENTLY_UNFIT"), rx.text("Inapte définitif", size="2"), spacing="1", align="center"),
+                            spacing="4",
                         ),
-                        direction="row",
-                        spacing="4",
+                        value=VisitDetailState.cert_form_fitness_decision,
+                        on_change=VisitDetailState.set_cert_form_fitness_decision,
                     ),
                     spacing="1",
                     width="100%",
                 ),
-                rx.vstack(
-                    rx.text(LanguageState.tr["cert_restrictions"], size="2", weight="medium"),
-                    rx.text_area(
-                        placeholder=LanguageState.tr["cert_restrictions"] + "…",
-                        value=VisitDetailState.cert_form_restrictions,
-                        on_change=VisitDetailState.set_cert_form_restrictions,
-                        rows="2",
+                rx.cond(
+                    VisitDetailState.cert_form_fitness_decision == "UNFIT",
+                    rx.vstack(
+                        rx.text(LanguageState.tr["cert_restrictions"], size="2", weight="medium"),
+                        rx.text_area(
+                            placeholder=LanguageState.tr["cert_restrictions"] + "…",
+                            value=VisitDetailState.cert_form_restrictions,
+                            on_change=VisitDetailState.set_cert_form_restrictions,
+                            rows="2",
+                            width="100%",
+                        ),
+                        spacing="1",
                         width="100%",
                     ),
-                    spacing="1",
-                    width="100%",
                 ),
                 rx.hstack(
                     rx.dialog.close(

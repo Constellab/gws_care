@@ -1868,29 +1868,23 @@ def _new_certificate_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.vstack(
-                    rx.text("Fitness", size="2", weight="medium"),
+                    rx.text("Aptitude", size="2", weight="medium"),
                     rx.radio_group.root(
                         rx.hstack(
-                            rx.radio_group.item(value="true"),
-                            rx.text("Fit", size="2"),
-                            rx.radio_group.item(value="false"),
-                            rx.text("Unfit", size="2"),
-                            spacing="2",
-                            align="center",
+                            rx.hstack(rx.radio_group.item(value="FIT"), rx.text("Apte", size="2"), spacing="1", align="center"),
+                            rx.hstack(rx.radio_group.item(value="UNFIT"), rx.text("Inapte", size="2"), spacing="1", align="center"),
+                            rx.hstack(rx.radio_group.item(value="PERMANENTLY_UNFIT"), rx.text("Inapte définitif", size="2"), spacing="1", align="center"),
+                            spacing="4",
                         ),
-                        value=rx.cond(
-                            ConsultationDetailState.cert_form_is_fit_for_work, "true", "false"
-                        ),
-                        on_change=lambda v: ConsultationDetailState.set_cert_form_is_fit_for_work(
-                            v == "true"
-                        ),
+                        value=ConsultationDetailState.cert_form_fitness_decision,
+                        on_change=ConsultationDetailState.set_cert_form_fitness_decision,
                     ),
                     spacing="1",
                     width="100%",
                 ),
-                # Dates d'inaptitude — visibles seulement si Inapte
+                # Dates d'inaptitude — visibles seulement si Inapte temporaire
                 rx.cond(
-                    ~ConsultationDetailState.cert_form_is_fit_for_work,
+                    ConsultationDetailState.cert_form_fitness_decision == "UNFIT",
                     rx.vstack(
                         rx.hstack(
                             rx.vstack(

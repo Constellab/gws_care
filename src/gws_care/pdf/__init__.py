@@ -159,8 +159,9 @@ def generate_certificate_pdf(certificate_id: str) -> bytes:
         story.append(Paragraph("Conclusion médicale", h2))
         story.append(Paragraph(cert.conclusion or "—", body))
         story.append(Paragraph("Décision d'aptitude", h2))
-        fitness_text = "APTE" if cert.is_fit_for_work else "INAPTE"
-        fitness_color = colors.Color(*_GREEN) if cert.is_fit_for_work else colors.Color(*_RED)
+        _fitness = cert.effective_fitness
+        fitness_text = "APTE" if _fitness == "FIT" else ("INAPTE DÉFINITIF" if _fitness == "PERMANENTLY_UNFIT" else "INAPTE")
+        fitness_color = colors.Color(*_GREEN) if _fitness == "FIT" else colors.Color(*_RED)
         story.append(Paragraph(
             f"<b><font color='{fitness_color.hexval()}'>{fitness_text}</font></b>",
             ParagraphStyle("fitness", parent=styles["Normal"], fontSize=14, spaceAfter=3 * mm),
@@ -186,8 +187,9 @@ def generate_certificate_pdf(certificate_id: str) -> bytes:
         story.append(Paragraph("Conclusion médicale", h2))
         story.append(Paragraph(cert.conclusion or "—", body))
         story.append(Paragraph("Décision d'aptitude", h2))
-        fitness_text = "APTE" if cert.is_fit_for_work else "INAPTE"
-        fitness_color = colors.Color(*_GREEN) if cert.is_fit_for_work else colors.Color(*_RED)
+        _fitness = cert.effective_fitness
+        fitness_text = "APTE" if _fitness == "FIT" else ("INAPTE DÉFINITIF" if _fitness == "PERMANENTLY_UNFIT" else "INAPTE")
+        fitness_color = colors.Color(*_GREEN) if _fitness == "FIT" else colors.Color(*_RED)
         story.append(Paragraph(
             f"<b><font color='{fitness_color.hexval()}'>{fitness_text}</font></b>",
             ParagraphStyle("fitness", parent=styles["Normal"], fontSize=14, spaceAfter=3 * mm),
@@ -213,8 +215,9 @@ def generate_certificate_pdf(certificate_id: str) -> bytes:
         story.append(Paragraph("Conclusion médicale", h2))
         story.append(Paragraph(cert.conclusion or "—", body))
         story.append(Paragraph("Décision d'aptitude", h2))
-        fitness_text = "APTE" if cert.is_fit_for_work else "INAPTE"
-        fitness_color = colors.Color(*_GREEN) if cert.is_fit_for_work else colors.Color(*_RED)
+        _fitness = cert.effective_fitness
+        fitness_text = "APTE" if _fitness == "FIT" else ("INAPTE DÉFINITIF" if _fitness == "PERMANENTLY_UNFIT" else "INAPTE")
+        fitness_color = colors.Color(*_GREEN) if _fitness == "FIT" else colors.Color(*_RED)
         story.append(Paragraph(
             f"<b><font color='{fitness_color.hexval()}'>{fitness_text}</font></b>",
             ParagraphStyle("fitness", parent=styles["Normal"], fontSize=14, spaceAfter=3 * mm),

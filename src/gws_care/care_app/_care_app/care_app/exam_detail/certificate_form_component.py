@@ -37,17 +37,18 @@ def _form_fields() -> rx.Component:
                 rows="4",
             ),
         ),
-        rx.hstack(
-            rx.checkbox(
-                checked=CertificateFormState.form_is_fit_for_work,
-                on_change=CertificateFormState.set_form_is_fit_for_work,
+        rx.radio_group.root(
+            rx.hstack(
+                rx.hstack(rx.radio_group.item(value="FIT"), rx.text("Apte", size="2"), spacing="1", align="center"),
+                rx.hstack(rx.radio_group.item(value="UNFIT"), rx.text("Inapte", size="2"), spacing="1", align="center"),
+                rx.hstack(rx.radio_group.item(value="PERMANENTLY_UNFIT"), rx.text("Inapte définitif", size="2"), spacing="1", align="center"),
+                spacing="4",
             ),
-            rx.text(LanguageState.tr["cert_form_fit_label"], size="2"),
-            spacing="2",
-            align="center",
+            value=CertificateFormState.form_fitness_decision,
+            on_change=CertificateFormState.set_form_fitness_decision,
         ),
         rx.cond(
-            CertificateFormState.form_is_fit_for_work == False,
+            CertificateFormState.form_fitness_decision == "UNFIT",
             _field(
                 LanguageState.tr["cert_form_restrictions_label"],
                 rx.text_area(

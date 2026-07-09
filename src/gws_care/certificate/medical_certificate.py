@@ -54,7 +54,7 @@ class SaveMedicalCertificateDTO(BaseModelDTO):
     exam_id: str | None = None
     issue_date: date
     conclusion: str
-    is_fit_for_work: bool = True
+    fitness_decision: str = "FIT"  # "FIT" | "UNFIT" | "PERMANENTLY_UNFIT"
     restrictions: str | None = None
     # Extended fields (migration 3.0.0)
     certificate_type: str = "APTITUDE"
@@ -84,6 +84,7 @@ class MedicalCertificate(ModelWithUser):
     issue_date: date = DateField(null=False)
     conclusion: str = TextField(null=False)
     is_fit_for_work: bool = BooleanField(default=True, null=False)
+    fitness_decision: str = CharField(max_length=20, null=True)  # "FIT" | "UNFIT" | "PERMANENTLY_UNFIT"
     restrictions: str = TextField(null=True)
     issued_by: User = ForeignKeyField(User, null=True, backref="+")
     is_archived: bool = BooleanField(default=False, null=False)
@@ -103,6 +104,13 @@ class MedicalCertificate(ModelWithUser):
     @property
     def certificate_type_label(self) -> str:
         return CERTIFICATE_TYPES.get(self.certificate_type or "APTITUDE", self.certificate_type)
+
+    @property
+    def effective_fitness(self) -> str:
+        """Three-way fitness decision, backward-compatible with old bool field."""
+        if self.fitness_decision:
+            return self.fitness_decision
+        return "FIT" if self.is_fit_for_work else "UNFIT"
 
     def to_dto(self) -> "MedicalCertificateDTO":
         return MedicalCertificateDTO(
@@ -173,7 +181,8 @@ class MedicalCertificateService:
         cert.exam_id = dto.exam_id
         cert.issue_date = dto.issue_date
         cert.conclusion = dto.conclusion
-        cert.is_fit_for_work = dto.is_fit_for_work
+        cert.fitness_decision = dto.fitness_decision
+        cert.is_fit_for_work = dto.fitness_decision == "FIT"
         cert.restrictions = dto.restrictions
         cert.issued_by = issued_by
         cert.certificate_type = dto.certificate_type or "APTITUDE"

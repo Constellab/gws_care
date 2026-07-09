@@ -360,7 +360,7 @@ class ConsultationDetailState(RoleState):
     show_new_certificate_dialog: bool = False
     cert_form_issue_date: str = ""
     cert_form_conclusion: str = ""
-    cert_form_is_fit_for_work: bool = True
+    cert_form_fitness_decision: str = "FIT"
     cert_form_unfitness_start: str = ""
     cert_form_unfitness_end: str = ""
     cert_form_error: str = ""
@@ -1654,7 +1654,7 @@ class ConsultationDetailState(RoleState):
 
         self.cert_form_issue_date = date.today().isoformat()
         self.cert_form_conclusion = ""
-        self.cert_form_is_fit_for_work = True
+        self.cert_form_fitness_decision = "FIT"
         self.cert_form_unfitness_start = ""
         self.cert_form_unfitness_end = ""
         self.cert_form_error = ""
@@ -1674,8 +1674,8 @@ class ConsultationDetailState(RoleState):
         self.cert_form_conclusion = value
 
     @rx.event
-    def set_cert_form_is_fit_for_work(self, value: bool):
-        self.cert_form_is_fit_for_work = value
+    def set_cert_form_fitness_decision(self, value: str):
+        self.cert_form_fitness_decision = value
 
     @rx.event
     def set_cert_form_unfitness_start(self, value: str):
@@ -1692,7 +1692,7 @@ class ConsultationDetailState(RoleState):
         if not self.cert_form_conclusion.strip():
             self.cert_form_error = "La conclusion est requise."
             return
-        if not self.cert_form_is_fit_for_work:
+        if self.cert_form_fitness_decision == "UNFIT":
             if not self.cert_form_unfitness_start:
                 self.cert_form_error = "La date de début d'inaptitude est requise."
                 return
@@ -1716,9 +1716,9 @@ class ConsultationDetailState(RoleState):
                     exam_id=None,
                     issue_date=self.cert_form_issue_date,
                     conclusion=self.cert_form_conclusion,
-                    is_fit_for_work=self.cert_form_is_fit_for_work,
-                    start_date=self.cert_form_unfitness_start if not self.cert_form_is_fit_for_work else None,
-                    end_date=self.cert_form_unfitness_end if not self.cert_form_is_fit_for_work else None,
+                    fitness_decision=self.cert_form_fitness_decision,
+                    start_date=self.cert_form_unfitness_start if self.cert_form_fitness_decision == "UNFIT" else None,
+                    end_date=self.cert_form_unfitness_end if self.cert_form_fitness_decision == "UNFIT" else None,
                 )
                 cert = MedicalCertificateService.create_certificate(dto, doctor)
                 cert_obj = MedicalCertificate.get_by_id(str(cert.id))

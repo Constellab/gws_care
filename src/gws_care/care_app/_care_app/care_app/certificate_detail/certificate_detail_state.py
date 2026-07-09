@@ -12,6 +12,7 @@ class CertificateDetailDTO(BaseModel):
     certificate_type_label: str = ""
     conclusion: str = ""
     is_fit_for_work: bool = True
+    fitness_decision: str = "FIT"
     restrictions: str = ""
     issued_by_name: str = ""
     patient_id: str = ""
@@ -76,6 +77,7 @@ class CertificateDetailState(ReflexMainState):
                     certificate_type_label=CERTIFICATE_TYPES.get(c.certificate_type or "APTITUDE", c.certificate_type or ""),
                     conclusion=c.conclusion or "",
                     is_fit_for_work=bool(c.is_fit_for_work),
+                    fitness_decision=c.effective_fitness,
                     restrictions=c.restrictions or "",
                     issued_by_name=issued_by,
                     patient_id=str(patient.id),

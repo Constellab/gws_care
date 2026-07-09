@@ -772,10 +772,12 @@ def _certificate_row(cert: CertificateRowDTO) -> rx.Component:
             )
         ),
         rx.table.cell(
-            rx.cond(
-                cert.is_fit_for_work,
+            rx.match(
+                cert.fitness_decision,
+                ("FIT", rx.badge(LanguageState.tr["fit_for_work"], color_scheme="green", variant="soft", size="1")),
+                ("UNFIT", rx.badge(LanguageState.tr["not_fit_for_work"], color_scheme="red", variant="soft", size="1")),
+                ("PERMANENTLY_UNFIT", rx.badge("Inapte définitif", color_scheme="red", size="1")),
                 rx.badge(LanguageState.tr["fit_for_work"], color_scheme="green", variant="soft", size="1"),
-                rx.badge(LanguageState.tr["not_fit_for_work"], color_scheme="red", variant="soft", size="1"),
             )
         ),
         rx.table.cell(rx.text(cert.issued_by_name, size="2", color="var(--gray-9)")),
