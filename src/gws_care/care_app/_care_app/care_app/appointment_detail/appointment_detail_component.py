@@ -253,7 +253,7 @@ def _edit_dialog() -> rx.Component:
                 rx.cond(
                     ~AppointmentDetailState.is_patient_user,
                     rx.vstack(
-                        rx.text("Status", size="2", weight="medium"),
+                        rx.text(LanguageState.tr["col_status"], size="2", weight="medium"),
                         rx.select.root(
                             rx.select.trigger(width="100%"),
                             rx.select.content(
@@ -332,7 +332,7 @@ def _cancel_dialog() -> rx.Component:
             rx.alert_dialog.description(LanguageState.tr["appt_cancel_confirm_desc"]),
             rx.flex(
                 rx.alert_dialog.cancel(
-                    rx.button("Back", variant="soft"),
+                    rx.button(LanguageState.tr["back"], variant="soft"),
                 ),
                 rx.alert_dialog.action(
                     rx.button(
@@ -359,7 +359,7 @@ def _delete_dialog() -> rx.Component:
             rx.alert_dialog.description(LanguageState.tr["appt_delete_confirm_desc"]),
             rx.flex(
                 rx.alert_dialog.cancel(
-                    rx.button("Back", variant="soft"),
+                    rx.button(LanguageState.tr["back"], variant="soft"),
                 ),
                 rx.alert_dialog.action(
                     rx.button(

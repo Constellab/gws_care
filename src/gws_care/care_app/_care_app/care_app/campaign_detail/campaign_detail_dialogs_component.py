@@ -14,9 +14,9 @@ def _refuse_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title("Medical validation refusal"),
             rx.vstack(
-                rx.text("Refusal reason *", size="2", weight="medium"),
+                rx.text(LanguageState.tr["refusal_reason_label"], size="2", weight="medium"),
                 rx.text_area(
-                    placeholder="Explain the reason for refusal…",
+                    placeholder=LanguageState.tr["explain_refusal_placeholder"],
                     value=CampaignDetailState.refuse_reason,
                     on_change=CampaignDetailState.set_refuse_reason,
                     width="100%",
@@ -86,7 +86,7 @@ def _add_patient_dialog() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.input(
-                        placeholder="Filter by name, first name or case number…",
+                        placeholder=LanguageState.tr["filter_name_case_number"],
                         value=CampaignDetailState.patient_search,
                         on_change=CampaignDetailState.search_patients,
                         width="100%",
@@ -239,7 +239,7 @@ def _add_exam_type_dialog() -> rx.Component:
                     CampaignDetailState.add_exam_is_loading_params,
                     rx.hstack(
                         rx.spinner(size="2"),
-                        rx.text("Loading tests…", size="2", color="var(--gray-9)"),
+                        rx.text(LanguageState.tr["loading_tests_text"], size="2", color="var(--gray-9)"),
                         spacing="2",
                         align="center",
                     ),
@@ -247,7 +247,7 @@ def _add_exam_type_dialog() -> rx.Component:
                         CampaignDetailState.add_exam_params.length() > 0,
                         rx.vstack(
                             rx.hstack(
-                                rx.text("Included tests", size="2", weight="medium"),
+                                rx.text(LanguageState.tr["included_tests_label"], size="2", weight="medium"),
                                 rx.spacer(),
                                 rx.badge(
                                     CampaignDetailState.add_exam_selected_param_count.to_string()
@@ -323,7 +323,7 @@ def _psc_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title(
                 rx.hstack(
-                    rx.text("PSC Interpretation — "),
+                    rx.text(LanguageState.tr["psc_interpretation_heading"]),
                     rx.text(CampaignDetailState.psc_dialog_patient_name, weight="bold"),
                     spacing="1",
                 )
@@ -371,13 +371,13 @@ def _enterprise_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title(
                 rx.hstack(
-                    rx.text("Company Interpretation — "),
+                    rx.text(LanguageState.tr["company_interpretation_heading"]),
                     rx.text(CampaignDetailState.enterprise_dialog_patient_name, weight="bold"),
                     spacing="1",
                 )
             ),
             rx.vstack(
-                rx.text("Internal comment", size="2", weight="medium"),
+                rx.text(LanguageState.tr["internal_comment_label"], size="2", weight="medium"),
                 rx.text_area(
                     placeholder="Internal notes (not visible to the patient)…",
                     value=CampaignDetailState.enterprise_notes_input,
@@ -385,7 +385,7 @@ def _enterprise_dialog() -> rx.Component:
                     width="100%",
                     rows="3",
                 ),
-                rx.text("Message for the patient *", size="2", weight="medium"),
+                rx.text(LanguageState.tr["message_for_patient_label"], size="2", weight="medium"),
                 rx.text_area(
                     placeholder="Message that will be visible to the patient…",
                     value=CampaignDetailState.patient_message_input,
@@ -468,7 +468,7 @@ def _edit_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.vstack(
-                    rx.text("Location", size="2", weight="medium"),
+                    rx.text(LanguageState.tr["location_label"], size="2", weight="medium"),
                     rx.input(
                         value=CampaignDetailState.edit_location,
                         on_change=CampaignDetailState.set_edit_location,
@@ -478,7 +478,7 @@ def _edit_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.hstack(
-                    rx.text("Medical review required", size="2"),
+                    rx.text(LanguageState.tr["medical_review_required"], size="2"),
                     rx.switch(
                         checked=CampaignDetailState.edit_requires_medical_review,
                         on_change=CampaignDetailState.set_edit_requires_medical_review,
@@ -487,7 +487,7 @@ def _edit_dialog() -> rx.Component:
                     align="center",
                 ),
                 rx.vstack(
-                    rx.text("Internal notes", size="2", weight="medium"),
+                    rx.text(LanguageState.tr["internal_notes_label"], size="2", weight="medium"),
                     rx.text_area(
                         value=CampaignDetailState.edit_notes,
                         on_change=CampaignDetailState.set_edit_notes,
@@ -561,7 +561,7 @@ def _assign_doctor_dialog() -> rx.Component:
             rx.dialog.title(
                 rx.hstack(
                     rx.icon("stethoscope", size=18),
-                    rx.text("Assign doctors — "),
+                    rx.text(LanguageState.tr["assign_doctors_heading"]),
                     rx.text(CampaignDetailState.assign_doctor_exam_name, weight="bold"),
                     spacing="1",
                     align="center",
@@ -578,9 +578,9 @@ def _assign_doctor_dialog() -> rx.Component:
                 rx.cond(
                     CampaignDetailState.specialty_options_for_assign.length() > 0,
                     rx.vstack(
-                        rx.text("Filter by specialty", size="2", weight="medium"),
+                        rx.text(LanguageState.tr["filter_by_specialty"], size="2", weight="medium"),
                         rx.select.root(
-                            rx.select.trigger(width="100%", placeholder="All specialties"),
+                            rx.select.trigger(width="100%", placeholder=LanguageState.tr["all_specialties_placeholder"]),
                             rx.select.content(
                                 rx.select.item("All specialties", value="_all_"),
                                 rx.foreach(
@@ -620,7 +620,7 @@ def _assign_doctor_dialog() -> rx.Component:
                     ),
                     rx.cond(
                         CampaignDetailState.doctor_options_for_assign.length() == 0,
-                        rx.text("Loading…", size="2", color="var(--gray-9)"),
+                        rx.text(LanguageState.tr["loading_text"], size="2", color="var(--gray-9)"),
                         rx.scroll_area(
                             rx.vstack(
                                 rx.foreach(

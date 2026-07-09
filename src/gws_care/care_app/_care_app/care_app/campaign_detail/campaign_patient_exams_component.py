@@ -151,7 +151,7 @@ def _exam_tab(s: ExamSectionVM) -> rx.Component:
             rx.text(s.name, size="2", weight=rx.cond(is_active, "bold", "regular")),
             rx.cond(
                 ~s.requires_lab_validation,
-                rx.badge("On-site", size="1", color_scheme="violet", variant="soft"),
+                rx.badge(LanguageState.tr["on_site_badge"], size="1", color_scheme="violet", variant="soft"),
                 rx.fragment(),
             ),
             spacing="1",
@@ -249,7 +249,7 @@ def _attachment_zone() -> rx.Component:
             rx.separator(width="100%"),
             rx.hstack(
                 rx.icon("paperclip", size=14, color="var(--gray-9)"),
-                rx.text("Attached documents", size="2", weight="medium", color="var(--gray-11)"),
+                rx.text(LanguageState.tr["attached_documents_label"], size="2", weight="medium", color="var(--gray-11)"),
                 spacing="2",
                 align="center",
             ),
@@ -260,7 +260,7 @@ def _attachment_zone() -> rx.Component:
                     width="100%",
                     spacing="0",
                 ),
-                rx.text("No attached documents.", size="1", color="var(--gray-8)"),
+                rx.text(LanguageState.tr["no_attached_documents"], size="1", color="var(--gray-8)"),
             ),
             rx.upload(
                 rx.vstack(
@@ -268,7 +268,7 @@ def _attachment_zone() -> rx.Component:
                         CampaignPatientExamsState.is_uploading_file,
                         rx.hstack(
                             rx.spinner(size="2"),
-                            rx.text("Upload in progress…", size="2", color="var(--gray-9)"),
+                            rx.text(LanguageState.tr["upload_in_progress"], size="2", color="var(--gray-9)"),
                             spacing="2",
                             align="center",
                         ),
@@ -525,7 +525,7 @@ def _param_form() -> rx.Component:
             CampaignPatientExamsState.active_params.length() > 0,
             rx.vstack(
                 rx.hstack(
-                    rx.text("Parameter selection:", size="2", color="var(--gray-9)"),
+                    rx.text(LanguageState.tr["parameter_selection_label"], size="2", color="var(--gray-9)"),
                     rx.button(
                         rx.icon("check-square", size=13),
                         "Select all",
@@ -617,7 +617,7 @@ def _param_form() -> rx.Component:
                         rx.hstack(
                             rx.select.root(
                                 rx.select.trigger(
-                                    placeholder="Choose an action…",
+                                    placeholder=LanguageState.tr["choose_action_placeholder"],
                                     size="2",
                                     width="260px",
                                 ),
@@ -867,7 +867,7 @@ def _transmit_panel() -> rx.Component:
                         ),
                         rx.cond(
                             lab_validated,
-                            rx.text("Results validated.", size="2", color="var(--green-10)"),
+                            rx.text(LanguageState.tr["results_validated"], size="2", color="var(--green-10)"),
                             rx.text(
                                 "Confirm that the laboratory results are correct before interpretation.",
                                 size="2",
@@ -946,8 +946,8 @@ def _treating_doctor_panel() -> rx.Component:
                 rx.vstack(
                     rx.hstack(
                         rx.icon("user-round", size=16, color="var(--teal-9)"),
-                        rx.text("Treating doctor", size="3", weight="bold"),
-                        rx.badge("Optional", size="1", color_scheme="gray", variant="soft"),
+                        rx.text(LanguageState.tr["treating_doctor_label"], size="3", weight="bold"),
+                        rx.badge(LanguageState.tr["optional_badge"], size="1", color_scheme="gray", variant="soft"),
                         spacing="2",
                         align="center",
                     ),
@@ -1003,7 +1003,7 @@ def _psc_interpretation_panel() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.icon("stethoscope", size=16, color="var(--blue-9)"),
-                    rx.text("PSC Doctor Interpretation", size="3", weight="bold"),
+                    rx.text(LanguageState.tr["psc_doctor_interpretation"], size="3", weight="bold"),
                     rx.spacer(),
                     rx.cond(
                         already_validated,
@@ -1023,7 +1023,7 @@ def _psc_interpretation_panel() -> rx.Component:
                 rx.text_area(
                     value=CampaignPatientExamsState.psc_notes,
                     on_change=CampaignPatientExamsState.set_psc_notes,
-                    placeholder="Enter your medical interpretation here...",
+                    placeholder=LanguageState.tr["interpretation_placeholder"],
                     rows="5",
                     width="100%",
                     read_only=already_validated,
@@ -1088,7 +1088,7 @@ def _enterprise_interpretation_panel() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.icon("building-2", size=16, color="var(--indigo-9)"),
-                    rx.text("Company Doctor Interpretation", size="3", weight="bold"),
+                    rx.text(LanguageState.tr["company_doctor_interpretation"], size="3", weight="bold"),
                     rx.spacer(),
                     rx.cond(
                         already_validated,
@@ -1167,7 +1167,7 @@ def _finish_panel() -> rx.Component:
                 rx.vstack(
                     rx.hstack(
                         rx.icon("archive", size=16, color="var(--green-9)"),
-                        rx.text("Close file", size="3", weight="bold"),
+                        rx.text(LanguageState.tr["close_file_btn"], size="3", weight="bold"),
                         spacing="2",
                         align="center",
                     ),
@@ -1231,7 +1231,7 @@ def _motif_dialog() -> rx.Component:
             ),
             rx.vstack(
                 rx.text_area(
-                    placeholder="Ex.: entry error, value corrected after additional analysis…",
+                    placeholder=LanguageState.tr["correction_entry_placeholder"],
                     value=CampaignPatientExamsState.modification_motif,
                     on_change=CampaignPatientExamsState.set_modification_motif,
                     rows="3",
@@ -1564,7 +1564,7 @@ def campaign_patient_exams_page() -> rx.Component:
                                         align="center",
                                     ),
                                     rx.text_area(
-                                        placeholder="Reason for consultation, medical history, visit observations…",
+                                        placeholder=LanguageState.tr["reason_for_consultation_placeholder"],
                                         value=CampaignPatientExamsState.terrain_notes,
                                         on_change=CampaignPatientExamsState.set_terrain_notes,
                                         on_blur=CampaignPatientExamsState.save_terrain_notes,

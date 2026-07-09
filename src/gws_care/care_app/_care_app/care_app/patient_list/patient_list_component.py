@@ -29,7 +29,7 @@ def _patient_row(patient: PatientRowDTO) -> rx.Component:
                 rx.text(patient.patient_number, size="2", weight="medium"),
                 rx.cond(
                     patient.is_draft,
-                    rx.badge("Brouillon", color_scheme="orange", variant="soft", size="1"),
+                    rx.badge(LanguageState.tr["status_draft"], color_scheme="orange", variant="soft", size="1"),
                     rx.fragment(),
                 ),
                 spacing="2",
@@ -191,7 +191,7 @@ def patient_list_page() -> rx.Component:
                 rx.callout(
                     rx.hstack(
                         rx.icon("stethoscope", size=14),
-                        rx.text("Affichage de vos patients uniquement (rendez-vous assignés)", size="2"),
+                        rx.text(LanguageState.tr["showing_own_patients"], size="2"),
                         spacing="2",
                         align="center",
                     ),
@@ -241,8 +241,8 @@ def patient_list_page() -> rx.Component:
                                 rx.button(
                                     rx.cond(
                                         PatientListState.is_loading_more,
-                                        rx.hstack(rx.spinner(size="2"), rx.text("Loading..."), spacing="2"),
-                                        rx.hstack(rx.icon("chevron-down", size=16), rx.text("Load more"), spacing="2"),
+                                        rx.hstack(rx.spinner(size="2"), rx.text(LanguageState.tr["loading_text"]), spacing="2"),
+                                        rx.hstack(rx.icon("chevron-down", size=16), rx.text(LanguageState.tr["load_more_btn"]), spacing="2"),
                                     ),
                                     variant="soft",
                                     size="2",

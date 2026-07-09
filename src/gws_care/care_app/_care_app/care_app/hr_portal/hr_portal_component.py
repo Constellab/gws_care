@@ -3,6 +3,7 @@
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .hr_portal_state import HRCampaignDTO, HRPatientDTO, HRPortalState
 
@@ -45,10 +46,10 @@ def _patient_row(p: HRPatientDTO) -> rx.Component:
         rx.table.cell(
             rx.cond(
                 p.result_published,
-                rx.badge("Result available", color_scheme="green", size="1", variant="soft"),
+                rx.badge(LanguageState.tr["result_available_badge"], color_scheme="green", size="1", variant="soft"),
                 rx.cond(
                     p.exam_done,
-                    rx.badge("Exam done", color_scheme="blue", size="1", variant="soft"),
+                    rx.badge(LanguageState.tr["exam_done_badge"], color_scheme="blue", size="1", variant="soft"),
                     rx.badge("Pending", color_scheme="gray", size="1", variant="soft"),
                 ),
             )
@@ -62,7 +63,7 @@ def hr_portal_page() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.vstack(
-                        rx.heading("Company HR Space", size="6"),
+                        rx.heading(LanguageState.tr["hr_space_title"], size="6"),
                         rx.text("Administrative monitoring of campaigns — no individual medical data displayed", size="2", color="var(--gray-9)"),
                         spacing="0",
                     ),

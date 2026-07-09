@@ -676,7 +676,7 @@ def _tab_informations() -> rx.Component:
         rx.vstack(
             rx.hstack(
                 rx.icon("file-check", size=16, color="var(--accent-9)"),
-                rx.heading("Medical certificates", size="4"),
+                rx.heading(LanguageState.tr["section_certificates"], size="4"),
                 rx.spacer(),
                 rx.cond(
                     (~ConsultationDetailState.is_patient_user)
@@ -1871,9 +1871,9 @@ def _new_certificate_dialog() -> rx.Component:
                     rx.text("Aptitude", size="2", weight="medium"),
                     rx.radio_group.root(
                         rx.hstack(
-                            rx.hstack(rx.radio_group.item(value="FIT"), rx.text("Apte", size="2"), spacing="1", align="center"),
-                            rx.hstack(rx.radio_group.item(value="UNFIT"), rx.text("Inapte", size="2"), spacing="1", align="center"),
-                            rx.hstack(rx.radio_group.item(value="PERMANENTLY_UNFIT"), rx.text("Inapte définitif", size="2"), spacing="1", align="center"),
+                            rx.hstack(rx.radio_group.item(value="FIT"), rx.text(LanguageState.tr["cert_fit_yes"], size="2"), spacing="1", align="center"),
+                            rx.hstack(rx.radio_group.item(value="UNFIT"), rx.text(LanguageState.tr["cert_fit_no"], size="2"), spacing="1", align="center"),
+                            rx.hstack(rx.radio_group.item(value="PERMANENTLY_UNFIT"), rx.text(LanguageState.tr["cert_fit_permanently_unfit"], size="2"), spacing="1", align="center"),
                             spacing="4",
                         ),
                         value=ConsultationDetailState.cert_form_fitness_decision,
@@ -1888,7 +1888,7 @@ def _new_certificate_dialog() -> rx.Component:
                     rx.vstack(
                         rx.hstack(
                             rx.vstack(
-                                rx.text("Unfitness start *", size="2", weight="medium"),
+                                rx.text(LanguageState.tr["unfitness_start_label"], size="2", weight="medium"),
                                 rx.input(
                                     type="date",
                                     value=ConsultationDetailState.cert_form_unfitness_start,
@@ -1900,7 +1900,7 @@ def _new_certificate_dialog() -> rx.Component:
                                 width="100%",
                             ),
                             rx.vstack(
-                                rx.text("Unfitness end *", size="2", weight="medium"),
+                                rx.text(LanguageState.tr["unfitness_end_label"], size="2", weight="medium"),
                                 rx.input(
                                     type="date",
                                     value=ConsultationDetailState.cert_form_unfitness_end,
@@ -1922,7 +1922,7 @@ def _new_certificate_dialog() -> rx.Component:
                 rx.vstack(
                     rx.text("Conclusion", size="2", weight="medium"),
                     rx.text_area(
-                        placeholder="Medical conclusion…",
+                        placeholder=LanguageState.tr["placeholder_cert_conclusion"],
                         value=ConsultationDetailState.cert_form_conclusion,
                         on_change=ConsultationDetailState.set_cert_form_conclusion,
                         size="2",

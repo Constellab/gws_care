@@ -49,7 +49,7 @@ def _account_picker_section() -> rx.Component:
             rx.hstack(
                 rx.icon("link", size=14, color="var(--accent-9)"),
                 rx.text(LanguageState.tr["section_link_account"], size="2", weight="bold", color="var(--gray-9)"),
-                rx.badge("Required", color_scheme="red", variant="soft", size="1"),
+                rx.badge(LanguageState.tr["required_badge"], color_scheme="red", variant="soft", size="1"),
                 rx.spacer(),
                 rx.cond(
                     PatientFormState.form_account_id != "",
@@ -315,8 +315,8 @@ def _form_fields() -> rx.Component:
             PatientFormState.is_create_mode,
             rx.hstack(
                 rx.icon("save", size=14, color="var(--orange-9)"),
-                rx.text("Save as draft", size="2", color="var(--orange-11)"),
-                rx.text("(partial data accepted)", size="1", color="var(--gray-9)"),
+                rx.text(LanguageState.tr["save_as_draft_btn"], size="2", color="var(--orange-11)"),
+                rx.text(LanguageState.tr["partial_data_hint"], size="1", color="var(--gray-9)"),
                 spacing="2",
                 align="center",
                 padding="0.5rem 0.75rem",

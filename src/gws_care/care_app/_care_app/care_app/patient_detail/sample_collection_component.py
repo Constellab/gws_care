@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import reflex as rx
 
+from ..common.language_state import LanguageState
 from .sample_collection_state import SAMPLE_TYPE_OPTIONS, SampleCollectionState, TubeRowDTO
 
 
@@ -161,9 +162,9 @@ def _create_dialog() -> rx.Component:
             rx.vstack(
                 # Exam type
                 rx.vstack(
-                    rx.text("Exam type *", size="2", weight="medium"),
+                    rx.text(LanguageState.tr["exam_type_required_label"], size="2", weight="medium"),
                     rx.select.root(
-                        rx.select.trigger(placeholder="Select exam…", width="100%"),
+                        rx.select.trigger(placeholder=LanguageState.tr["select_exam_placeholder"], width="100%"),
                         rx.select.content(
                             rx.foreach(
                                 SampleCollectionState.exam_type_options,
@@ -181,9 +182,9 @@ def _create_dialog() -> rx.Component:
 
                 # Sample type
                 rx.vstack(
-                    rx.text("Sample type *", size="2", weight="medium"),
+                    rx.text(LanguageState.tr["sample_type_required_label"], size="2", weight="medium"),
                     rx.select.root(
-                        rx.select.trigger(placeholder="Sample nature…", width="100%"),
+                        rx.select.trigger(placeholder=LanguageState.tr["sample_nature_placeholder"], width="100%"),
                         rx.select.content(
                             *[
                                 rx.select.item(label, value=value)
@@ -199,7 +200,7 @@ def _create_dialog() -> rx.Component:
 
                 # Volume
                 rx.vstack(
-                    rx.text("Collected volume (mL)", size="2", weight="medium"),
+                    rx.text(LanguageState.tr["collected_volume_label"], size="2", weight="medium"),
                     rx.input(
                         placeholder="E.g. 5",
                         type="number",
@@ -212,9 +213,9 @@ def _create_dialog() -> rx.Component:
 
                 # Notes
                 rx.vstack(
-                    rx.text("Collector notes", size="2", weight="medium"),
+                    rx.text(LanguageState.tr["collector_notes_label"], size="2", weight="medium"),
                     rx.text_area(
-                        placeholder="Puncture difficulty, hemolysis, note…",
+                        placeholder=LanguageState.tr["puncture_note_placeholder"],
                         value=SampleCollectionState.create_notes,
                         on_change=SampleCollectionState.set_create_notes,
                         rows="3",
@@ -274,9 +275,9 @@ def _cancel_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title("Cancel this tube", color_scheme="red"),
             rx.vstack(
-                rx.text("Cancellation reason *", size="2", weight="medium"),
+                rx.text(LanguageState.tr["cancellation_reason_label"], size="2", weight="medium"),
                 rx.text_area(
-                    placeholder="E.g. hemolysis, wrong tube, patient refusal…",
+                    placeholder=LanguageState.tr["hemolysis_reason_placeholder"],
                     value=SampleCollectionState.cancel_reason,
                     on_change=SampleCollectionState.set_cancel_reason,
                     rows="3",
@@ -328,7 +329,7 @@ def sample_collection_panel(show_campaign_column: bool = True) -> rx.Component:
         rx.hstack(
             rx.hstack(
                 rx.icon("flask-conical", size=18, color="var(--accent-9)"),
-                rx.heading("Samples", size="4"),
+                rx.heading(LanguageState.tr["section_samples"], size="4"),
                 spacing="2",
                 align="center",
             ),

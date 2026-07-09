@@ -2,6 +2,7 @@
 
 import reflex as rx
 
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .messaging_state import MessageDTO, MessagingState, ThreadRowDTO
 
@@ -98,7 +99,7 @@ def _thread_list_panel() -> rx.Component:
             rx.center(
                 rx.vstack(
                     rx.icon("message-circle", size=36, color="var(--gray-6)"),
-                    rx.text("Aucune conversation", size="2", color="var(--gray-9)"),
+                    rx.text(LanguageState.tr["no_conversation"], size="2", color="var(--gray-9)"),
                     align="center",
                     spacing="2",
                 ),
@@ -165,7 +166,7 @@ def _conversation_panel() -> rx.Component:
                 ),
                 rx.vstack(
                     rx.text(MessagingState.active_patient_name, size="3", weight="medium"),
-                    rx.text("Conversation directe", size="1", color="var(--gray-9)"),
+                    rx.text(LanguageState.tr["direct_conversation"], size="1", color="var(--gray-9)"),
                     spacing="0",
                 ),
                 rx.spacer(),
@@ -200,7 +201,7 @@ def _conversation_panel() -> rx.Component:
             # Compose bar
             rx.hstack(
                 rx.text_area(
-                    placeholder="Écrire un message…",
+                    placeholder=LanguageState.tr["write_message_placeholder"],
                     value=MessagingState.compose_text,
                     on_change=MessagingState.set_compose_text,
                     auto_height=True,
@@ -231,7 +232,7 @@ def _conversation_panel() -> rx.Component:
         rx.center(
             rx.vstack(
                 rx.icon("message-circle-dashed", size=48, color="var(--gray-6)"),
-                rx.text("Sélectionnez une conversation", size="3", color="var(--gray-9)"),
+                rx.text(LanguageState.tr["select_conversation"], size="3", color="var(--gray-9)"),
                 align="center",
                 spacing="2",
             ),

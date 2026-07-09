@@ -20,7 +20,7 @@ def _terrain_status_badge(p: TerrainPatientDTO) -> rx.Component:
         p.visit_status,
         ("pending", rx.badge("En attente", color_scheme="gray", variant="soft", size="1")),
         ("visit_done", rx.badge(rx.icon("user-check", size=11), "Présent(e)", color_scheme="green", variant="solid", size="1")),
-        ("cancelled", rx.badge(rx.icon("user-x", size=11), "Absent(e)", color_scheme="red", variant="solid", size="1")),
+        ("cancelled", rx.badge(rx.icon("user-x", size=11), LanguageState.tr["absent_badge"], color_scheme="red", variant="solid", size="1")),
         ("lab_done", rx.badge(LanguageState.tr["status_lab_done"], color_scheme="blue", variant="soft", size="1")),
         ("doctor_clinic_validated", rx.badge(LanguageState.tr["status_doctor_clinic_validated"], color_scheme="violet", variant="soft", size="1")),
         ("doctor_company_validated", rx.badge(LanguageState.tr["status_doctor_company_validated"], color_scheme="green", variant="soft", size="1")),
@@ -204,7 +204,7 @@ def _patient_card(p: TerrainPatientDTO) -> rx.Component:
                 # Absent: reactivate button
                 rx.hstack(
                     rx.icon("user-x", size=14, color="var(--red-9)"),
-                    rx.text("Patient absent", size="2", color="var(--red-10)", weight="medium"),
+                    rx.text(LanguageState.tr["absent_patient_msg"], size="2", color="var(--red-10)", weight="medium"),
                     rx.spacer(),
                     rx.button(
                         rx.icon("rotate-ccw", size=14),

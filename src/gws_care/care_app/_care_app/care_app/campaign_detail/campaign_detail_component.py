@@ -108,7 +108,7 @@ def _prog_lifeline_step(step_idx: int, value: str, label: str, color: str) -> rx
             ),
         ),
         rx.text(
-            label,
+            LanguageState.tr[label],
             size="1",
             color=rx.cond(
                 idx_var > step_idx,
@@ -127,12 +127,12 @@ def _prog_lifeline_step(step_idx: int, value: str, label: str, color: str) -> rx
 
 def _workflow_lifeline_program() -> rx.Component:
     steps = [
-        (0, "draft", "Draft", "gray"),
-        (1, "validated", "Validated", "blue"),
-        (2, "terrain_exam", "Field", "amber"),
-        (3, "sample_analysis", "Analysis", "orange"),
-        (4, "closed", "Closed", "green"),
-        (5, "archived", "Archived", "gray"),
+        (0, "draft", "status_draft", "gray"),
+        (1, "validated", "status_validated", "blue"),
+        (2, "terrain_exam", "status_terrain_exam", "amber"),
+        (3, "sample_analysis", "status_sample_analysis", "orange"),
+        (4, "closed", "status_closed", "green"),
+        (5, "archived", "status_archived", "gray"),
     ]
     nodes = []
     for i, (idx, value, label, color) in enumerate(steps):
@@ -190,7 +190,7 @@ def _workflow_buttons() -> rx.Component:
             rx.link(
                 rx.button(
                     rx.icon("map-pin", size=16),
-                    "Field",
+                    LanguageState.tr["btn_go_to_terrain"],
                     variant="soft",
                     color_scheme="amber",
                     size="2",
@@ -438,7 +438,7 @@ def _exam_type_row(et: ExamTypeRowDTO) -> rx.Component:
                 ),
                 rx.select.root(
                     rx.select.trigger(
-                        placeholder="Undefined",
+                        placeholder=LanguageState.tr["undefined_placeholder"],
                         width="160px",
                     ),
                     rx.select.content(
@@ -573,10 +573,10 @@ def _tab_exam_types() -> rx.Component:
                             cursor="pointer",
                         ),
                         rx.table.column_header_cell(
-                            rx.text("Assigned Doctor", size="2"),
+                            rx.text(LanguageState.tr["assigned_doctor_label"], size="2"),
                         ),
                         rx.table.column_header_cell(
-                            rx.text("Location / Mode", size="2"),
+                            rx.text(LanguageState.tr["location_mode_label"], size="2"),
                         ),
                         rx.table.column_header_cell(""),
                     )
@@ -930,7 +930,7 @@ def _add_campaign_doctor_dialog() -> rx.Component:
                     rx.cond(
                         CampaignDetailState.add_campaign_doctor_specialty_options.length() > 0,
                         rx.select.root(
-                            rx.select.trigger(placeholder="All specialties", width="180px"),
+                            rx.select.trigger(placeholder=LanguageState.tr["all_specialties_placeholder"], width="180px"),
                             rx.select.content(
                                 rx.select.item("All specialties", value="_all_"),
                                 rx.foreach(
@@ -946,7 +946,7 @@ def _add_campaign_doctor_dialog() -> rx.Component:
                     ),
                     rx.input(
                         rx.input.slot(rx.icon("search", size=13)),
-                        placeholder="Search for a doctor…",
+                        placeholder=LanguageState.tr["search_doctor_placeholder"],
                         value=CampaignDetailState.add_campaign_doctor_search,
                         on_change=CampaignDetailState.set_add_campaign_doctor_search,
                         size="2",
@@ -1029,7 +1029,7 @@ def _add_patient_dialog() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.input(
-                        placeholder="Filter by name, first name or case number…",
+                        placeholder=LanguageState.tr["filter_name_case_number"],
                         value=CampaignDetailState.patient_search,
                         on_change=CampaignDetailState.search_patients,
                         width="100%",
@@ -1220,7 +1220,7 @@ def _add_exam_type_dialog() -> rx.Component:
                     CampaignDetailState.add_exam_is_loading_params,
                     rx.hstack(
                         rx.spinner(size="2"),
-                        rx.text("Loading tests…", size="2", color="var(--gray-9)"),
+                        rx.text(LanguageState.tr["loading_tests_text"], size="2", color="var(--gray-9)"),
                         spacing="2",
                         align="center",
                     ),
@@ -1228,7 +1228,7 @@ def _add_exam_type_dialog() -> rx.Component:
                         CampaignDetailState.add_exam_params.length() > 0,
                         rx.vstack(
                             rx.hstack(
-                                rx.text("Included tests", size="2", weight="medium"),
+                                rx.text(LanguageState.tr["included_tests_label"], size="2", weight="medium"),
                                 rx.spacer(),
                                 rx.badge(
                                     CampaignDetailState.add_exam_selected_param_count.to_string()
@@ -1346,7 +1346,7 @@ def _edit_exam_params_dialog() -> rx.Component:
             rx.dialog.title(
                 rx.hstack(
                     rx.icon("sliders-horizontal", size=16, color="var(--accent-9)"),
-                    rx.text("Parameters — "),
+                    rx.text(LanguageState.tr["parameters_heading"]),
                     rx.text(CampaignDetailState.editing_exam_name, weight="bold"),
                     spacing="2",
                     align="center",
@@ -1357,7 +1357,7 @@ def _edit_exam_params_dialog() -> rx.Component:
                     CampaignDetailState.edit_exam_is_loading,
                     rx.hstack(
                         rx.spinner(size="2"),
-                        rx.text("Loading…", size="2", color="var(--gray-9)"),
+                        rx.text(LanguageState.tr["loading_text"], size="2", color="var(--gray-9)"),
                         spacing="2",
                         align="center",
                     ),
@@ -1365,7 +1365,7 @@ def _edit_exam_params_dialog() -> rx.Component:
                         CampaignDetailState.edit_exam_params.length() > 0,
                         rx.vstack(
                             rx.hstack(
-                                rx.text("Included tests", size="2", weight="medium"),
+                                rx.text(LanguageState.tr["included_tests_label"], size="2", weight="medium"),
                                 rx.spacer(),
                                 rx.badge(
                                     CampaignDetailState.edit_exam_selected_param_count.to_string()
@@ -1729,7 +1729,7 @@ def campaign_detail_page() -> rx.Component:
                                             ),
                                             rx.icon("circle", size=14, color="var(--gray-7)"),
                                         ),
-                                        rx.text("Appointment (campaign dates)", size="2"),
+                                        rx.text(LanguageState.tr["appointment_campaign_dates"], size="2"),
                                         spacing="2",
                                         align="center",
                                     ),

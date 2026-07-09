@@ -55,9 +55,9 @@ def _textarea_input(value_var, on_change) -> rx.Component:
 def _fitness_radio() -> rx.Component:
     return rx.radio_group.root(
         rx.hstack(
-            rx.hstack(rx.radio_group.item(value="FIT"), rx.text("Apte", size="2"), spacing="1", align="center"),
-            rx.hstack(rx.radio_group.item(value="UNFIT"), rx.text("Inapte", size="2"), spacing="1", align="center"),
-            rx.hstack(rx.radio_group.item(value="PERMANENTLY_UNFIT"), rx.text("Inapte définitif", size="2"), spacing="1", align="center"),
+            rx.hstack(rx.radio_group.item(value="FIT"), rx.text(LanguageState.tr["cert_fit_yes"], size="2"), spacing="1", align="center"),
+            rx.hstack(rx.radio_group.item(value="UNFIT"), rx.text(LanguageState.tr["cert_fit_no"], size="2"), spacing="1", align="center"),
+            rx.hstack(rx.radio_group.item(value="PERMANENTLY_UNFIT"), rx.text(LanguageState.tr["cert_fit_permanently_unfit"], size="2"), spacing="1", align="center"),
             spacing="4",
         ),
         value=PatientDetailState.cert_form_fitness_decision,

@@ -313,11 +313,11 @@ def _booking_slot_btn(slot: str) -> rx.Component:
 
 def _booking_step1() -> rx.Component:
     return rx.vstack(
-        rx.text("Choose a medical specialty", size="3", weight="medium"),
+        rx.text(LanguageState.tr["choose_specialty_label"], size="3", weight="medium"),
         rx.separator(width="100%"),
         rx.vstack(
             rx.input(
-                placeholder="Search for a specialty…",
+                placeholder=LanguageState.tr["search_specialty_placeholder"],
                 value=PatientAppointmentsState.booking_specialty_search,
                 on_change=PatientAppointmentsState.set_booking_specialty_search,
                 size="2",
@@ -329,7 +329,7 @@ def _booking_step1() -> rx.Component:
                     rx.box(
                         rx.hstack(
                             rx.icon("users", size=14, color="var(--gray-9)"),
-                            rx.text("All doctors", size="2", color="var(--gray-11)"),
+                            rx.text(LanguageState.tr["all_doctors_option"], size="2", color="var(--gray-11)"),
                             spacing="2", align="center",
                         ),
                         padding="0.4rem 0.75rem",
@@ -342,7 +342,7 @@ def _booking_step1() -> rx.Component:
                         PatientAppointmentsState.filtered_booking_specialties.length() > 0,
                         rx.foreach(PatientAppointmentsState.filtered_booking_specialties, _booking_specialty_row),
                         rx.box(
-                            rx.text("No specialty found.", size="2", color="var(--gray-9)"),
+                            rx.text(LanguageState.tr["no_specialty_found"], size="2", color="var(--gray-9)"),
                             padding="0.5rem 0.75rem",
                         ),
                     ),
@@ -441,7 +441,7 @@ def _booking_step3() -> rx.Component:
             PatientAppointmentsState.booking_date != "",
             rx.vstack(
                 rx.hstack(
-                    rx.text("Available slots *", size="2", weight="medium"),
+                    rx.text(LanguageState.tr["available_slots_label"], size="2", weight="medium"),
                     rx.cond(PatientAppointmentsState.booking_slots_loading, rx.spinner(size="1"), rx.fragment()),
                     spacing="2", align="center",
                 ),
@@ -491,7 +491,7 @@ def _booking_step3() -> rx.Component:
         ),
         # Mode selector (visio / hôpital only for personal bookings)
         rx.vstack(
-            rx.text("Mode de consultation *", size="2", weight="medium"),
+            rx.text(LanguageState.tr["consultation_mode_label"], size="2", weight="medium"),
             rx.radio_group.root(
                 rx.hstack(
                     rx.radio_group.item(value="visio"),

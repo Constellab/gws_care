@@ -168,14 +168,14 @@ def _patient_card(patient: PatientDetailDTO) -> rx.Component:
             patient.is_archived,
             rx.callout(
                 rx.vstack(
-                    rx.hstack(rx.icon("archive", size=14), rx.text("Patient archivé", weight="bold"), spacing="2", align="center"),
+                    rx.hstack(rx.icon("archive", size=14), rx.text(LanguageState.tr["archived_patient_msg"], weight="bold"), spacing="2", align="center"),
                     rx.cond(
                         patient.archived_reason,
-                        rx.text("Motif : " + patient.archived_reason, size="2"),
+                        rx.text(LanguageState.tr["archive_reason_text"] + patient.archived_reason, size="2"),
                     ),
                     rx.cond(
                         patient.archived_at,
-                        rx.text("Date : " + patient.archived_at, size="1", color="var(--gray-9)"),
+                        rx.text(LanguageState.tr["archive_date_text"] + patient.archived_at, size="1", color="var(--gray-9)"),
                     ),
                     spacing="1",
                 ),
@@ -776,7 +776,7 @@ def _certificate_row(cert: CertificateRowDTO) -> rx.Component:
                 cert.fitness_decision,
                 ("FIT", rx.badge(LanguageState.tr["fit_for_work"], color_scheme="green", variant="soft", size="1")),
                 ("UNFIT", rx.badge(LanguageState.tr["not_fit_for_work"], color_scheme="red", variant="soft", size="1")),
-                ("PERMANENTLY_UNFIT", rx.badge("Inapte définitif", color_scheme="red", size="1")),
+                ("PERMANENTLY_UNFIT", rx.badge(LanguageState.tr["cert_fit_permanently_unfit"], color_scheme="red", size="1")),
                 rx.badge(LanguageState.tr["fit_for_work"], color_scheme="green", variant="soft", size="1"),
             )
         ),
@@ -1326,7 +1326,7 @@ def _archive_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
             rx.dialog.title(
-                rx.hstack(rx.icon("archive", size=18, color="var(--orange-9)"), rx.text("Archiver le patient"), spacing="2", align="center"),
+                rx.hstack(rx.icon("archive", size=18, color="var(--orange-9)"), rx.text(LanguageState.tr["archive_patient_btn"]), spacing="2", align="center"),
             ),
             rx.dialog.description(
                 "Le patient sera archivé et masqué des listes actives. Cette action est réversible. Un motif est obligatoire.",
@@ -1383,8 +1383,8 @@ def _delete_dialog() -> rx.Component:
             ),
             rx.dialog.description(
                 rx.vstack(
-                    rx.text("⚠️ Cette action est irréversible.", size="2", weight="bold", color="var(--red-11)"),
-                    rx.text("Toutes les données du patient seront supprimées définitivement. Un motif est obligatoire.", size="2", color="var(--gray-11)"),
+                    rx.text(LanguageState.tr["action_irreversible_warning"], size="2", weight="bold", color="var(--red-11)"),
+                    rx.text(LanguageState.tr["all_data_deleted_warning"], size="2", color="var(--gray-11)"),
                     spacing="1",
                 ),
                 margin_bottom="1rem",

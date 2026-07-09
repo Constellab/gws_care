@@ -92,11 +92,11 @@ def _specialty_option_row(s: str) -> rx.Component:
 
 def _step_specialty() -> rx.Component:
     return rx.vstack(
-        rx.text("Choose a medical specialty", size="3", weight="medium"),
+        rx.text(LanguageState.tr["choose_specialty_label"], size="3", weight="medium"),
         rx.separator(width="100%"),
         rx.vstack(
             rx.input(
-                placeholder="Search for a specialty…",
+                placeholder=LanguageState.tr["search_specialty_placeholder"],
                 value=AppointmentFormState.specialty_search,
                 on_change=AppointmentFormState.set_specialty_search,
                 size="2",
@@ -109,7 +109,7 @@ def _step_specialty() -> rx.Component:
                     rx.box(
                         rx.hstack(
                             rx.icon("users", size=14, color="var(--gray-9)"),
-                            rx.text("All doctors", size="2", color="var(--gray-11)"),
+                            rx.text(LanguageState.tr["all_doctors_option"], size="2", color="var(--gray-11)"),
                             spacing="2", align="center",
                         ),
                         padding="0.4rem 0.75rem",
@@ -122,7 +122,7 @@ def _step_specialty() -> rx.Component:
                         AppointmentFormState.filtered_specialty_options.length() > 0,
                         rx.foreach(AppointmentFormState.filtered_specialty_options, _specialty_option_row),
                         rx.box(
-                            rx.text("No specialty found.", size="2", color="var(--gray-9)"),
+                            rx.text(LanguageState.tr["no_specialty_found"], size="2", color="var(--gray-9)"),
                             padding="0.5rem 0.75rem",
                         ),
                     ),
@@ -197,7 +197,7 @@ def _step_doctors() -> rx.Component:
                     ),
                     spacing="2", align="center",
                 ),
-                rx.text("All doctors", size="3", weight="medium"),
+                rx.text(LanguageState.tr["all_doctors_option"], size="3", weight="medium"),
             ),
             spacing="2", align="center", width="100%",
         ),
@@ -284,7 +284,7 @@ def _step_slot() -> rx.Component:
             AppointmentFormState.form_booking_date != "",
             rx.vstack(
                 rx.hstack(
-                    rx.text("Available slots *", size="2", weight="medium"),
+                    rx.text(LanguageState.tr["available_slots_label"], size="2", weight="medium"),
                     rx.cond(
                         AppointmentFormState.form_slots_loading,
                         rx.spinner(size="1"),
@@ -338,13 +338,13 @@ def _step_slot() -> rx.Component:
         ),
         # Consultation mode selector
         rx.vstack(
-            rx.text("Consultation mode *", size="2", weight="medium"),
+            rx.text(LanguageState.tr["consultation_mode_label"], size="2", weight="medium"),
             rx.radio_group.root(
                 rx.hstack(
                     rx.radio_group.item(value="visio"),
                     rx.hstack(
                         rx.icon("video", size=13, color="var(--purple-9)"),
-                        rx.text("Video", size="2"),
+                        rx.text(LanguageState.tr["video_mode_label"], size="2"),
                         spacing="1", align="center",
                     ),
                     spacing="2", align="center",
@@ -465,7 +465,7 @@ def _edit_flat_form() -> rx.Component:
             AppointmentFormState.form_doctor_id != "",
             rx.vstack(
                 rx.hstack(
-                    rx.text("Time slot *", size="2", weight="medium"),
+                    rx.text(LanguageState.tr["time_slot_label"], size="2", weight="medium"),
                     rx.cond(AppointmentFormState.form_slots_loading, rx.spinner(size="1"), rx.fragment()),
                     spacing="2", align="center",
                 ),
@@ -481,7 +481,7 @@ def _edit_flat_form() -> rx.Component:
                             "No slots available. Choose another date.",
                             icon="calendar-x", color_scheme="orange", variant="soft", size="1",
                         ),
-                        rx.text("Select a date to see available slots.", size="1", color="var(--gray-9)"),
+                        rx.text(LanguageState.tr["select_date_for_slots"], size="1", color="var(--gray-9)"),
                     ),
                 ),
                 rx.cond(

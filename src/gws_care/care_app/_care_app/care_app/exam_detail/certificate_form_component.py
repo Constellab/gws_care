@@ -39,9 +39,9 @@ def _form_fields() -> rx.Component:
         ),
         rx.radio_group.root(
             rx.hstack(
-                rx.hstack(rx.radio_group.item(value="FIT"), rx.text("Apte", size="2"), spacing="1", align="center"),
-                rx.hstack(rx.radio_group.item(value="UNFIT"), rx.text("Inapte", size="2"), spacing="1", align="center"),
-                rx.hstack(rx.radio_group.item(value="PERMANENTLY_UNFIT"), rx.text("Inapte définitif", size="2"), spacing="1", align="center"),
+                rx.hstack(rx.radio_group.item(value="FIT"), rx.text(LanguageState.tr["cert_fit_yes"], size="2"), spacing="1", align="center"),
+                rx.hstack(rx.radio_group.item(value="UNFIT"), rx.text(LanguageState.tr["cert_fit_no"], size="2"), spacing="1", align="center"),
+                rx.hstack(rx.radio_group.item(value="PERMANENTLY_UNFIT"), rx.text(LanguageState.tr["cert_fit_permanently_unfit"], size="2"), spacing="1", align="center"),
                 spacing="4",
             ),
             value=CertificateFormState.form_fitness_decision,

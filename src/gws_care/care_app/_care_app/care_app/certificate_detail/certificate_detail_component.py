@@ -201,7 +201,7 @@ def certificate_detail_page() -> rx.Component:
                                             CertificateDetailState.certificate.fitness_decision,
                                             ("FIT", rx.badge(LanguageState.tr["cert_fit_yes"], color_scheme="green", variant="soft", size="1")),
                                             ("UNFIT", rx.badge(LanguageState.tr["cert_fit_no"], color_scheme="red", variant="soft", size="1")),
-                                            ("PERMANENTLY_UNFIT", rx.badge("Inapte définitif", color_scheme="red", size="1")),
+                                            ("PERMANENTLY_UNFIT", rx.badge(LanguageState.tr["cert_fit_permanently_unfit"], color_scheme="red", size="1")),
                                             rx.badge(LanguageState.tr["cert_fit_yes"], color_scheme="green", variant="soft", size="1"),
                                         ),
                                         spacing="4",
@@ -278,7 +278,7 @@ def certificate_detail_page() -> rx.Component:
                         rx.center(
                             rx.vstack(
                                 rx.icon("file-x", size=40, color="var(--gray-6)"),
-                                rx.text("Certificat introuvable.", color="var(--gray-8)", size="2"),
+                                rx.text(LanguageState.tr["certificate_not_found_msg"], color="var(--gray-8)", size="2"),
                                 align="center",
                                 spacing="2",
                             ),

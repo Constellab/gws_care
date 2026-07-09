@@ -2,6 +2,8 @@
 
 import reflex as rx
 
+from ..common.language_state import LanguageState
+
 
 def not_found_page() -> rx.Component:
     """Fullscreen 404 page with a clear visual and a link back home."""
@@ -30,7 +32,7 @@ def not_found_page() -> rx.Component:
                 rx.badge("404", color_scheme="blue", variant="surface", size="2"),
                 # Heading
                 rx.heading(
-                    "Page Not Found",
+                    LanguageState.tr["not_found_title"],
                     size="6",
                     weight="bold",
                     text_align="center",
@@ -38,7 +40,7 @@ def not_found_page() -> rx.Component:
                 ),
                 # Message
                 rx.text(
-                    "The page you're looking for doesn't exist or has been moved.",
+                    LanguageState.tr["not_found_desc"],
                     size="3",
                     color="var(--gray-11)",
                     text_align="center",
@@ -49,7 +51,7 @@ def not_found_page() -> rx.Component:
                 rx.link(
                     rx.button(
                         rx.icon("house", size=14),
-                        "Back to Home",
+                        LanguageState.tr["back_to_home_btn"],
                         color_scheme="blue",
                         variant="solid",
                         size="3",

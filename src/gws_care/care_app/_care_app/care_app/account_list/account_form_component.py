@@ -196,11 +196,11 @@ def _company_selector() -> rx.Component:
         _field(
             rx.hstack(
                 rx.icon("building-2", size=13, color="var(--accent-9)"),
-                rx.text("Entreprise liée", size="2", weight="medium"),
+                rx.text(LanguageState.tr["linked_company_label"], size="2", weight="medium"),
                 spacing="1", align="center",
             ),
             rx.select.root(
-                rx.select.trigger(placeholder="Sélectionner une entreprise…", width="100%"),
+                rx.select.trigger(placeholder=LanguageState.tr["select_company_placeholder"], width="100%"),
                 rx.select.content(
                     rx.select.item("— Aucune —", value="none"),
                     rx.foreach(

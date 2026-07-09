@@ -300,8 +300,8 @@ def campaign_list_page() -> rx.Component:
                                 rx.button(
                                     rx.cond(
                                         CampaignListState.is_loading_more,
-                                        rx.hstack(rx.spinner(size="2"), rx.text("Loading..."), spacing="2"),
-                                        rx.hstack(rx.icon("chevron-down", size=16), rx.text("Load more"), spacing="2"),
+                                        rx.hstack(rx.spinner(size="2"), rx.text(LanguageState.tr["loading_text"]), spacing="2"),
+                                        rx.hstack(rx.icon("chevron-down", size=16), rx.text(LanguageState.tr["load_more_btn"]), spacing="2"),
                                     ),
                                     variant="soft",
                                     size="2",

@@ -2,6 +2,7 @@
 
 import reflex as rx
 
+from ..common.language_state import LanguageState
 from .consultation_form_state import AccountOption, ConsultationFormState, ExamTypeCheckOption, ParamCheckOption
 
 
@@ -86,7 +87,7 @@ def _exam_type_pill(opt: ExamTypeCheckOption) -> rx.Component:
                 rx.box(
                     rx.vstack(
                         rx.hstack(
-                            rx.text("Tests à réaliser :", size="1", weight="medium", color="var(--gray-10)"),
+                            rx.text(LanguageState.tr["tests_to_perform_label"], size="1", weight="medium", color="var(--gray-10)"),
                             rx.spacer(),
                             rx.button(
                                 "Tout cocher",
@@ -203,7 +204,7 @@ def consultation_form_dialog() -> rx.Component:
             rx.dialog.title(
                 rx.hstack(
                     rx.icon("stethoscope", size=18, color="var(--blue-9)"),
-                    rx.text("Nouvelle consultation"),
+                    rx.text(LanguageState.tr["new_consultation_btn"]),
                     spacing="2",
                     align="center",
                 )
@@ -243,7 +244,7 @@ def consultation_form_dialog() -> rx.Component:
                     # ── Contexte clinique ────────────────────────────────────
                     rx.hstack(
                         rx.icon("clipboard-list", size=15, color="var(--gray-9)"),
-                        rx.text("Contexte clinique", size="3", weight="medium"),
+                        rx.text(LanguageState.tr["clinical_context_label"], size="3", weight="medium"),
                         spacing="2",
                         align="center",
                     ),
@@ -269,12 +270,12 @@ def consultation_form_dialog() -> rx.Component:
                             width="100%",
                         ),
                     ),
-                    rx.text("Biométrie", size="2", weight="medium"),
+                    rx.text(LanguageState.tr["biometrics_section"], size="2", weight="medium"),
                     _biometrics_grid(),
                     _field(
                         "Conclusion / Impression clinique (optionnel)",
                         rx.text_area(
-                            placeholder="Impression clinique générale…",
+                            placeholder=LanguageState.tr["general_impression_placeholder"],
                             value=ConsultationFormState.form_conclusion,
                             on_change=ConsultationFormState.set_form_conclusion,
                             size="2",
@@ -286,7 +287,7 @@ def consultation_form_dialog() -> rx.Component:
                     # ── Examens à prescrire ──────────────────────────────────
                     rx.hstack(
                         rx.icon("flask-conical", size=15, color="var(--blue-9)"),
-                        rx.text("Examens à prescrire", size="3", weight="medium"),
+                        rx.text(LanguageState.tr["exams_to_prescribe_label"], size="3", weight="medium"),
                         rx.text("*", size="3", color="var(--red-9)"),
                         spacing="2",
                         align="center",

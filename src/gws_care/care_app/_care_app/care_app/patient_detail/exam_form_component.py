@@ -27,7 +27,7 @@ def _exam_type_selector() -> rx.Component:
             ExamFormState.is_loading_exam_types,
             rx.hstack(
                 rx.spinner(size="1"),
-                rx.text("Chargement du référentiel…", size="2", color="var(--gray-9)"),
+                rx.text(LanguageState.tr["loading_ref_data_text"], size="2", color="var(--gray-9)"),
                 spacing="2",
                 align="center",
             ),
@@ -138,7 +138,7 @@ def _params_section() -> rx.Component:
             rx.hstack(
                 rx.hstack(
                     rx.icon("flask-conical", size=14, color="var(--accent-9)"),
-                    rx.text("Tests inclus", size="2", weight="bold", color="var(--gray-11)"),
+                    rx.text(LanguageState.tr["included_tests_label"], size="2", weight="bold", color="var(--gray-11)"),
                     spacing="1",
                     align="center",
                 ),

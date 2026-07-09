@@ -438,7 +438,7 @@ def patient_details_page() -> rx.Component:
                     rx.center(
                         rx.vstack(
                             rx.icon("user-x", size=40, color="var(--gray-7)"),
-                            rx.text("No patient profile linked to your account.", size="3", color="var(--gray-9)"),
+                            rx.text(LanguageState.tr["no_patient_profile_linked"], size="3", color="var(--gray-9)"),
                             spacing="3", align="center",
                         ),
                         padding="4rem",

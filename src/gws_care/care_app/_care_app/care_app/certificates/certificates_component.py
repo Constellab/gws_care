@@ -2,6 +2,7 @@
 
 import reflex as rx
 
+from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .certificates_state import CertificateRowDTO, CertificatesState
 
@@ -9,8 +10,8 @@ from .certificates_state import CertificateRowDTO, CertificatesState
 def _fit_badge(row: CertificateRowDTO) -> rx.Component:
     return rx.cond(
         row.is_fit_for_work,
-        rx.badge("Apte", color_scheme="green", variant="soft", size="1"),
-        rx.badge("Inapte", color_scheme="red", variant="solid", size="1"),
+        rx.badge(LanguageState.tr["cert_fit_yes"], color_scheme="green", variant="soft", size="1"),
+        rx.badge(LanguageState.tr["cert_fit_no"], color_scheme="red", variant="solid", size="1"),
     )
 
 
@@ -126,7 +127,7 @@ def certificates_page() -> rx.Component:
         rx.hstack(
             rx.hstack(
                 rx.icon("file-check", size=22, color="var(--accent-9)"),
-                rx.heading("Certificats médicaux", size="6"),
+                rx.heading(LanguageState.tr["section_certificates"], size="6"),
                 spacing="2", align="center",
             ),
             rx.spacer(),
@@ -139,7 +140,7 @@ def certificates_page() -> rx.Component:
         ),
         rx.hstack(
             rx.input(
-                placeholder="Rechercher un patient, médecin...",
+                placeholder=LanguageState.tr["search_cert_patient_placeholder"],
                 value=CertificatesState.search_query,
                 on_change=CertificatesState.set_search,
                 width="280px",

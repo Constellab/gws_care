@@ -22,7 +22,7 @@ def _status_badge(status: str) -> rx.Component:
         ("IN_PROGRESS", rx.badge(LanguageState.tr["status_in_progress"], color_scheme="orange", variant="soft", size="1")),
         ("DONE", rx.badge(LanguageState.tr["status_done"], color_scheme="green", variant="soft", size="1")),
         ("CANCELLED", rx.badge(LanguageState.tr["status_cancelled"], color_scheme="gray", variant="soft", size="1")),
-        ("campaign", rx.badge("Inscrit", color_scheme="blue", variant="surface", size="1")),
+        ("campaign", rx.badge(LanguageState.tr["enrolled_badge"], color_scheme="blue", variant="surface", size="1")),
         rx.badge(status, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -362,7 +362,7 @@ def appointment_list_page() -> rx.Component:
                 rx.callout(
                     rx.hstack(
                         rx.icon("stethoscope", size=14),
-                        rx.text("Affichage de vos rendez-vous uniquement", size="2"),
+                        rx.text(LanguageState.tr["showing_own_appointments"], size="2"),
                         width="100%",
                         align="center",
                         spacing="2",

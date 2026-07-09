@@ -11,9 +11,9 @@ from .lab_queue_state import LabQueueRowDTO, LabQueueState
 def _queue_row(row: LabQueueRowDTO) -> rx.Component:
     source_badge = rx.match(
         row.source,
-        ("consultation", rx.badge("Consultation", color_scheme="blue", variant="soft", size="1")),
-        ("campaign", rx.badge("Campagne", color_scheme="violet", variant="soft", size="1")),
-        ("appointment", rx.badge("Rendez-vous", color_scheme="teal", variant="soft", size="1")),
+        ("consultation", rx.badge(LanguageState.tr["visit_type_consultation"], color_scheme="blue", variant="soft", size="1")),
+        ("campaign", rx.badge(LanguageState.tr["visit_type_campaign"], color_scheme="violet", variant="soft", size="1")),
+        ("appointment", rx.badge(LanguageState.tr["nav_appointments"], color_scheme="teal", variant="soft", size="1")),
         rx.fragment(),
     )
     action_button = rx.match(
@@ -158,7 +158,7 @@ def _queue_table() -> rx.Component:
         ),
         rx.vstack(
             rx.icon("flask-conical", size=40, color="var(--gray-5)"),
-            rx.text("No analysis in this category", size="3", weight="medium", color="var(--gray-9)"),
+            rx.text(LanguageState.tr["no_analysis_in_category"], size="3", weight="medium", color="var(--gray-9)"),
             rx.text(
                 "Prescribed analyses (consultations, campaigns and appointments) will appear here.",
                 size="2",
@@ -179,7 +179,7 @@ def lab_queue_page() -> rx.Component:
                 # Header
                 rx.hstack(
                     rx.vstack(
-                        rx.heading("Laboratory queue", size="6"),
+                        rx.heading(LanguageState.tr["lab_queue_title"], size="6"),
                         rx.text(
                             "Prescribed analyses (consultations + campaigns + appointments) awaiting results",
                             size="2",
@@ -201,7 +201,7 @@ def lab_queue_page() -> rx.Component:
                 rx.divider(),
                 # ── Status filter ─────────────────────────────────────────
                 rx.hstack(
-                    rx.text("Show:", size="2", color="var(--gray-9)"),
+                    rx.text(LanguageState.tr["show_label"], size="2", color="var(--gray-9)"),
                     rx.segmented_control.root(
                         rx.segmented_control.item("Pending", value="pending"),
                         rx.segmented_control.item("Complete", value="done"),

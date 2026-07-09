@@ -283,9 +283,9 @@ def _campaign_dialog() -> rx.Component:
                     rx.fragment(),
                 ),
                 rx.vstack(
-                    rx.text("Nom *", size="2", weight="medium"),
+                    rx.text(LanguageState.tr["name_required_label"], size="2", weight="medium"),
                     rx.input(
-                        placeholder="Ex: Annual health checkup 2026",
+                        placeholder=LanguageState.tr["campaign_placeholder_example"],
                         value=AccountDetailState.new_campaign_name,
                         on_change=AccountDetailState.set_new_campaign_name,
                         width="100%",
@@ -321,7 +321,7 @@ def _campaign_dialog() -> rx.Component:
                     width="100%",
                 ),
                 rx.vstack(
-                    rx.text("Location", size="2", weight="medium"),
+                    rx.text(LanguageState.tr["location_label"], size="2", weight="medium"),
                     rx.input(
                         placeholder="Ex: Meeting Room A",
                         value=AccountDetailState.new_campaign_location,
@@ -336,14 +336,14 @@ def _campaign_dialog() -> rx.Component:
                     rx.vstack(
                         rx.hstack(
                             rx.icon("stethoscope", size=13, color="var(--blue-9)"),
-                            rx.text("PSC Doctor", size="2", weight="medium"),
+                            rx.text(LanguageState.tr["psc_doctor_label"], size="2", weight="medium"),
                             spacing="1", align="center",
                         ),
                         rx.cond(
                             AccountDetailState.psc_doctor_options.length() > 0,
                             rx.select.root(
                                 rx.select.trigger(
-                                    placeholder="Select a PSC Doctor",
+                                    placeholder=LanguageState.tr["psc_doctor_placeholder"],
                                     width="100%",
                                 ),
                                 rx.select.content(
@@ -370,14 +370,14 @@ def _campaign_dialog() -> rx.Component:
                     rx.vstack(
                         rx.hstack(
                             rx.icon("briefcase-medical", size=13, color="var(--indigo-9)"),
-                            rx.text("Company Doctor", size="2", weight="medium"),
+                            rx.text(LanguageState.tr["company_doctor_label"], size="2", weight="medium"),
                             spacing="1", align="center",
                         ),
                         rx.cond(
                             AccountDetailState.enterprise_doctor_options.length() > 0,
                             rx.select.root(
                                 rx.select.trigger(
-                                    placeholder="Select a company doctor",
+                                    placeholder=LanguageState.tr["company_doctor_placeholder"],
                                     width="100%",
                                 ),
                                 rx.select.content(
@@ -441,7 +441,7 @@ def _campaign_dialog() -> rx.Component:
 def _campaigns_section() -> rx.Component:
     return rx.vstack(
         rx.hstack(
-            rx.heading("Campaigns", size="4"),
+            rx.heading(LanguageState.tr["nav_campaigns"], size="4"),
             rx.spacer(),
             rx.button(
                 rx.icon("plus", size=14),
@@ -475,7 +475,7 @@ def _campaigns_section() -> rx.Component:
                 size="1",
             ),
             rx.center(
-                rx.text("No campaigns for this account.", size="2", color="var(--gray-9)"),
+                rx.text(LanguageState.tr["no_campaigns_for_account"], size="2", color="var(--gray-9)"),
                 padding="2rem",
             ),
         ),

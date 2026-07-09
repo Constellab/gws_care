@@ -37,8 +37,8 @@ def _status_badge(status: str) -> rx.Component:
 def _type_badge(visit_type: str) -> rx.Component:
     return rx.match(
         visit_type,
-        ("campaign", rx.badge("Campagne", color_scheme="indigo", variant="soft", size="1")),
-        ("consultation", rx.badge("Consultation", color_scheme="teal", variant="soft", size="1")),
+        ("campaign", rx.badge(LanguageState.tr["visit_type_campaign"], color_scheme="indigo", variant="soft", size="1")),
+        ("consultation", rx.badge(LanguageState.tr["visit_type_consultation"], color_scheme="teal", variant="soft", size="1")),
         rx.badge(visit_type, color_scheme="gray", variant="soft", size="1"),
     )
 
@@ -274,13 +274,13 @@ def _new_visit_dialog() -> rx.Component:
                 rx.cond(
                     ~VisitListState.new_visit_type_locked,
                     rx.vstack(
-                        rx.text("Type de visite", size="2", weight="medium"),
+                        rx.text(LanguageState.tr["visit_type_label"], size="2", weight="medium"),
                         rx.radio_group.root(
                             rx.hstack(
                                 rx.radio_group.item(value="campaign"),
-                                rx.text("Campagne", size="2"),
+                                rx.text(LanguageState.tr["visit_type_campaign"], size="2"),
                                 rx.radio_group.item(value="consultation"),
-                                rx.text("Consultation", size="2"),
+                                rx.text(LanguageState.tr["visit_type_consultation"], size="2"),
                                 spacing="2",
                                 align="center",
                             ),
@@ -577,8 +577,8 @@ def visit_list_page() -> rx.Component:
                                     rx.button(
                                         rx.cond(
                                             VisitListState.is_loading_more,
-                                            rx.hstack(rx.spinner(size="2"), rx.text("Loading..."), spacing="2"),
-                                            rx.hstack(rx.icon("chevron-down", size=16), rx.text("Load more"), spacing="2"),
+                                            rx.hstack(rx.spinner(size="2"), rx.text(LanguageState.tr["loading_text"]), spacing="2"),
+                                            rx.hstack(rx.icon("chevron-down", size=16), rx.text(LanguageState.tr["load_more_btn"]), spacing="2"),
                                         ),
                                         variant="soft",
                                         size="2",
