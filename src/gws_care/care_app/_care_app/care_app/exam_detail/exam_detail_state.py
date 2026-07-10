@@ -30,119 +30,6 @@ class ExamDetailDTO(BaseModel):
     visit_id: str = ""
 
 
-# ── Predefined laboratory parameters ────────────────────────────────────────
-
-PREDEFINED_LAB_PARAMS: list[dict] = [
-    # Complete Blood Count (CBC)
-    {"name": "WBC", "unit": "10³/μL", "reference_range": "4.5–11.0"},
-    {"name": "RBC", "unit": "10⁶/μL", "reference_range": "4.5–5.5"},
-    {"name": "Hemoglobin", "unit": "g/dL", "reference_range": "12.0–17.5"},
-    {"name": "Hematocrit", "unit": "%", "reference_range": "36–50"},
-    {"name": "MCV", "unit": "fL", "reference_range": "80–100"},
-    {"name": "MCH", "unit": "pg", "reference_range": "27–33"},
-    {"name": "MCHC", "unit": "g/dL", "reference_range": "32–36"},
-    {"name": "Platelets", "unit": "10³/μL", "reference_range": "150–400"},
-    # Basic Metabolic Panel
-    {"name": "Glucose", "unit": "mg/dL", "reference_range": "70–100"},
-    {"name": "BUN", "unit": "mg/dL", "reference_range": "7–20"},
-    {"name": "Creatinine", "unit": "mg/dL", "reference_range": "0.6–1.2"},
-    {"name": "eGFR", "unit": "mL/min/1.73m²", "reference_range": ">60"},
-    {"name": "Sodium", "unit": "mmol/L", "reference_range": "136–145"},
-    {"name": "Potassium", "unit": "mmol/L", "reference_range": "3.5–5.1"},
-    {"name": "Chloride", "unit": "mmol/L", "reference_range": "98–107"},
-    {"name": "Bicarbonate", "unit": "mmol/L", "reference_range": "22–29"},
-    {"name": "Calcium", "unit": "mg/dL", "reference_range": "8.5–10.5"},
-    # Liver Function Tests (LFT)
-    {"name": "ALT", "unit": "U/L", "reference_range": "7–56"},
-    {"name": "AST", "unit": "U/L", "reference_range": "10–40"},
-    {"name": "ALP", "unit": "U/L", "reference_range": "44–147"},
-    {"name": "GGT", "unit": "U/L", "reference_range": "9–48"},
-    {"name": "Total Bilirubin", "unit": "mg/dL", "reference_range": "0.1–1.2"},
-    {"name": "Direct Bilirubin", "unit": "mg/dL", "reference_range": "0.0–0.3"},
-    {"name": "Total Protein", "unit": "g/dL", "reference_range": "6.3–8.2"},
-    {"name": "Albumin", "unit": "g/dL", "reference_range": "3.5–5.0"},
-    # Lipid Panel
-    {"name": "Total Cholesterol", "unit": "mg/dL", "reference_range": "<200"},
-    {"name": "LDL", "unit": "mg/dL", "reference_range": "<100"},
-    {"name": "HDL", "unit": "mg/dL", "reference_range": ">40"},
-    {"name": "Triglycerides", "unit": "mg/dL", "reference_range": "<150"},
-    # Diabetes
-    {"name": "HbA1c", "unit": "%", "reference_range": "<5.7"},
-    {"name": "Fasting Glucose", "unit": "mmol/L", "reference_range": "3.9–5.6"},
-    {"name": "Insulin", "unit": "μIU/mL", "reference_range": "2.6–24.9"},
-    # Thyroid
-    {"name": "TSH", "unit": "μIU/mL", "reference_range": "0.4–4.0"},
-    {"name": "fT4", "unit": "ng/dL", "reference_range": "0.8–1.8"},
-    {"name": "fT3", "unit": "pg/mL", "reference_range": "2.3–4.2"},
-    # Inflammation
-    {"name": "CRP", "unit": "mg/L", "reference_range": "<5.0"},
-    {"name": "ESR", "unit": "mm/hr", "reference_range": "0–20"},
-    {"name": "Ferritin", "unit": "ng/mL", "reference_range": "12–300"},
-    # Coagulation
-    {"name": "PT", "unit": "seconds", "reference_range": "11–13"},
-    {"name": "INR", "unit": "—", "reference_range": "0.8–1.2"},
-    {"name": "aPTT", "unit": "seconds", "reference_range": "25–35"},
-    # Iron & Vitamins
-    {"name": "Iron", "unit": "μg/dL", "reference_range": "60–170"},
-    {"name": "Transferrin", "unit": "mg/dL", "reference_range": "200–380"},
-    {"name": "Saturation (%)", "unit": "%", "reference_range": "20–50"},
-    {"name": "Vitamin B12", "unit": "pg/mL", "reference_range": "200–900"},
-    {"name": "Folate", "unit": "ng/mL", "reference_range": "2.7–17.0"},
-    {"name": "Vitamin D", "unit": "ng/mL", "reference_range": "30–100"},
-    # Hormones
-    {"name": "Testosterone", "unit": "ng/dL", "reference_range": "300–1000"},
-    {"name": "FSH", "unit": "mIU/mL", "reference_range": "1.5–12.4"},
-    {"name": "LH", "unit": "mIU/mL", "reference_range": "1.7–8.6"},
-    {"name": "Estradiol", "unit": "pg/mL", "reference_range": "15–350"},
-    {"name": "Prolactin", "unit": "ng/mL", "reference_range": "2–18"},
-    # Urinalysis
-    {"name": "Glucose (urine)", "unit": "mg/dL", "reference_range": "Negative"},
-    {"name": "Protein (urine)", "unit": "mg/dL", "reference_range": "Negative"},
-    {"name": "Blood (urine)", "unit": "", "reference_range": "Negative"},
-    {"name": "pH (urine)", "unit": "", "reference_range": "4.5–8.0"},
-    {"name": "Creatinine (urine)", "unit": "mg/dL", "reference_range": "20–320"},
-    # Radiology — chest X-ray
-    {"name": "ICT", "unit": "ratio", "reference_range": "<0.50"},
-    {"name": "Silhouette médiastinale", "unit": "", "reference_range": "Normale"},
-    {"name": "Parenchyme pulmonaire", "unit": "", "reference_range": "Normal"},
-    {"name": "Plèvres", "unit": "", "reference_range": "Libres"},
-    # Spirometry / EFR
-    {"name": "CVF (FVC)", "unit": "L", "reference_range": ">80% pred."},
-    {"name": "VEMS (FEV1)", "unit": "L", "reference_range": ">80% pred."},
-    {"name": "VEMS/CVF (Tiffeneau)", "unit": "%", "reference_range": ">70%"},
-    {"name": "DEP (PEF)", "unit": "L/min", "reference_range": ">80% pred."},
-    {"name": "DEM 25-75%", "unit": "L/s", "reference_range": ">60% pred."},
-    # ECG
-    {"name": "Rythme", "unit": "", "reference_range": "Sinusal"},
-    {"name": "FC (bpm)", "unit": "bpm", "reference_range": "60–100"},
-    {"name": "PR", "unit": "ms", "reference_range": "120–200"},
-    {"name": "QRS", "unit": "ms", "reference_range": "<120"},
-    {"name": "QTc", "unit": "ms", "reference_range": "<440"},
-    {"name": "Axe électrique", "unit": "°", "reference_range": "-30 à +90"},
-    # Ophthalmology
-    {"name": "AV OD (sc)", "unit": "/10", "reference_range": "10/10"},
-    {"name": "AV OG (sc)", "unit": "/10", "reference_range": "10/10"},
-    {"name": "AV ODG (ac)", "unit": "/10", "reference_range": "10/10"},
-    {"name": "Tonus OD", "unit": "mmHg", "reference_range": "10–21"},
-    {"name": "Tonus OG", "unit": "mmHg", "reference_range": "10–21"},
-    {"name": "Vision couleurs", "unit": "", "reference_range": "Normale"},
-    {"name": "Champ visuel", "unit": "", "reference_range": "Normal"},
-    # ORL / Audiometry
-    {"name": "Seuil OD 500Hz", "unit": "dB", "reference_range": "≤25"},
-    {"name": "Seuil OD 1kHz", "unit": "dB", "reference_range": "≤25"},
-    {"name": "Seuil OD 2kHz", "unit": "dB", "reference_range": "≤25"},
-    {"name": "Seuil OD 4kHz", "unit": "dB", "reference_range": "≤25"},
-    {"name": "Seuil OD 8kHz", "unit": "dB", "reference_range": "≤25"},
-    {"name": "Seuil OG 500Hz", "unit": "dB", "reference_range": "≤25"},
-    {"name": "Seuil OG 1kHz", "unit": "dB", "reference_range": "≤25"},
-    {"name": "Seuil OG 2kHz", "unit": "dB", "reference_range": "≤25"},
-    {"name": "Seuil OG 4kHz", "unit": "dB", "reference_range": "≤25"},
-    {"name": "Seuil OG 8kHz", "unit": "dB", "reference_range": "≤25"},
-]
-
-_PREDEFINED_LAB_PARAMS_DICT: dict[str, dict] = {p["name"]: p for p in PREDEFINED_LAB_PARAMS}
-
-
 class LabResultRowDTO(BaseModel):
     """One row in the lab results table."""
 
@@ -166,6 +53,14 @@ class CertificateRowDTO(BaseModel):
     is_fit_for_work: bool
     restrictions: str | None = None
     issued_by_name: str | None = None
+
+
+class SiblingExamDTO(BaseModel):
+    """Lightweight DTO for exam navigation (other exams in the same visit)."""
+
+    id: str
+    exam_type_label: str
+    status: str
 
 
 class ExamFileRowDTO(BaseModel):
@@ -221,7 +116,6 @@ class ExamDetailState(RoleState):
 
     # Laboratory results
     lab_results: list[LabResultRowDTO] = []
-    new_lab_selected_preset: str = ""
     new_lab_parameter: str = ""
     new_lab_unit: str = ""
     new_lab_value: str = ""
@@ -244,6 +138,9 @@ class ExamDetailState(RoleState):
     delete_lab_confirm_open: bool = False
     delete_lab_row_id: str = ""
     delete_lab_comment: str = ""
+
+    # Sibling exams (other exams from the same visit, for navigation)
+    sibling_exams: list[SiblingExamDTO] = []
 
     # Tab navigation
     active_tab: str = "informations"
@@ -405,6 +302,11 @@ class ExamDetailState(RoleState):
         return rx.call_script("window.history.back()")
 
     @rx.event
+    def navigate_to_sibling(self, exam_id: str):
+        """Navigate to another exam in the same visit."""
+        return rx.redirect(f"/exam/{exam_id}")
+
+    @rx.event
     def set_active_tab(self, value: str):
         self.active_tab = value
 
@@ -445,21 +347,6 @@ class ExamDetailState(RoleState):
         self.form_interpretation = value
 
     @rx.event
-    def select_predefined_param(self, preset_name: str):
-        """Auto-fill parameter fields when a predefined parameter is selected."""
-        self.new_lab_selected_preset = preset_name
-        if preset_name == "CUSTOM":
-            self.new_lab_parameter = ""
-            self.new_lab_unit = ""
-            self.new_lab_reference_range = ""
-        else:
-            p = _PREDEFINED_LAB_PARAMS_DICT.get(preset_name)
-            if p:
-                self.new_lab_parameter = p["name"]
-                self.new_lab_unit = p["unit"]
-                self.new_lab_reference_range = p["reference_range"]
-
-    @rx.event
     def set_new_lab_parameter(self, value: str):
         self.new_lab_parameter = value
 
@@ -494,7 +381,6 @@ class ExamDetailState(RoleState):
                 status=self.new_lab_status or "normal",
             )
         ]
-        self.new_lab_selected_preset = ""
         self.new_lab_parameter = ""
         self.new_lab_unit = ""
         self.new_lab_value = ""
@@ -800,6 +686,28 @@ class ExamDetailState(RoleState):
                     )
                     for f in files
                 ]
+                # Load sibling exams from the same visit for navigation
+                self.sibling_exams = []
+                if self.exam and self.exam.visit_id:
+                    try:
+                        siblings = list(
+                            exam.__class__.select()
+                            .where(
+                                exam.__class__.visit == self.exam.visit_id,
+                                exam.__class__.is_active == True,
+                            )
+                            .order_by(exam.__class__.exam_date)
+                        )
+                        self.sibling_exams = [
+                            SiblingExamDTO(
+                                id=str(s.id),
+                                exam_type_label=_resolve_exam_type_label(s),
+                                status=s.status.value,
+                            )
+                            for s in siblings
+                        ]
+                    except Exception:
+                        self.sibling_exams = []
         except Exception as e:
             self.error_message = f"Error loading exam: {e}"
         finally:

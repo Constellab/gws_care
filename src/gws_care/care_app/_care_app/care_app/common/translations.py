@@ -1278,6 +1278,7 @@ _EN: dict[str, str] = {
     # ── Patient portal ────────────────────────────────────────────────────────
     "no_patient_profile_linked": "No patient profile linked to your account.",
     "video_mode_label": "Video",
+    "visit_exams_nav": "Visit exams:",
 }
 
 _FR: dict[str, str] = {
@@ -2548,6 +2549,7 @@ _FR: dict[str, str] = {
     # ── Portail patient ────────────────────────────────────────────────────────
     "no_patient_profile_linked": "Aucun profil patient lié à votre compte.",
     "video_mode_label": "Visio",
+    "visit_exams_nav": "Examens du RDV :",
 }
 
 

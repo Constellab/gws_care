@@ -649,7 +649,7 @@ class PatientDetailState(ReflexMainState):
 
     @rx.event
     def go_to_exam_or_consultation(self, exam_id: str, visit_id: str):
-        """Navigate directly to the exam tab inside the consultation page."""
+        """Navigate to the consultation detail page with the exam pre-selected."""
         if visit_id and exam_id:
             return rx.redirect(f"/consultation/{visit_id}/exam/{exam_id}")
         if visit_id:

@@ -8,33 +8,12 @@ _TABLE_PREVIEW_MAX_ROWS = 50
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from .exam_detail_state import (
-    PREDEFINED_LAB_PARAMS,
     ExamDetailDTO,
     ExamDetailState,
     ExamFileRowDTO,
     LabResultRowDTO,
+    SiblingExamDTO,
 )
-
-# ── Predefined parameter groups ───────────────────────────────────────────────
-_PREDEFINED_GROUPS: list[tuple[str, list[str]]] = [
-    ("Complete Blood Count (CBC)", ["WBC", "RBC", "Hemoglobin", "Hematocrit", "MCV", "MCH", "MCHC", "Platelets"]),
-    ("Metabolic Panel", ["Glucose", "BUN", "Creatinine", "eGFR", "Sodium", "Potassium", "Chloride", "Bicarbonate", "Calcium"]),
-    ("Liver Function (LFT)", ["ALT", "AST", "ALP", "GGT", "Total Bilirubin", "Direct Bilirubin", "Total Protein", "Albumin"]),
-    ("Lipid Panel", ["Total Cholesterol", "LDL", "HDL", "Triglycerides"]),
-    ("Diabetes", ["HbA1c", "Fasting Glucose", "Insulin"]),
-    ("Thyroid", ["TSH", "fT4", "fT3"]),
-    ("Inflammation", ["CRP", "ESR", "Ferritin"]),
-    ("Coagulation", ["PT", "INR", "aPTT"]),
-    ("Iron & Vitamins", ["Iron", "Transferrin", "Saturation (%)", "Vitamin B12", "Folate", "Vitamin D"]),
-    ("Hormones", ["Testosterone", "FSH", "LH", "Estradiol", "Prolactin"]),
-    ("Urinalysis", ["Glucose (urine)", "Protein (urine)", "Blood (urine)", "pH (urine)", "Creatinine (urine)"]),
-    ("Radiology", ["ICT", "Mediastinal silhouette", "Lung parenchyma", "Pleura"]),
-    ("Spirometry / EFR", ["CVF (FVC)", "VEMS (FEV1)", "VEMS/CVF (Tiffeneau)", "DEP (PEF)", "DEM 25-75%"]),
-    ("ECG", ["Rhythm", "HR (bpm)", "PR", "QRS", "QTc", "Electrical axis"]),
-    ("Ophthalmology", ["AV OD (sc)", "AV OG (sc)", "AV ODG (ac)", "Tonus OD", "Tonus OG", "Vision couleurs", "Champ visuel"]),
-    ("ORL / Audiometry OD", ["Seuil OD 500Hz", "Seuil OD 1kHz", "Seuil OD 2kHz", "Seuil OD 4kHz", "Seuil OD 8kHz"]),
-    ("ORL / Audiometry OG", ["Seuil OG 500Hz", "Seuil OG 1kHz", "Seuil OG 2kHz", "Seuil OG 4kHz", "Seuil OG 8kHz"]),
-]
 
 _DOC_TYPE_OPTIONS = [
     ("medical_certificate", "Medical Certificate"),
@@ -55,6 +34,38 @@ _LAB_STATUS_OPTIONS = [
     ("low", "Low"),
     ("critical", "Critical"),
 ]
+
+
+# ── Sibling exam navigation ───────────────────────────────────────────────────
+
+def _sibling_exam_pill(sibling: SiblingExamDTO) -> rx.Component:
+    is_current = sibling.id == ExamDetailState.exam.id
+    return rx.button(
+        sibling.exam_type_label,
+        variant=rx.cond(is_current, "solid", "outline"),
+        color_scheme=rx.cond(is_current, "accent", "gray"),
+        size="1",
+        on_click=lambda: ExamDetailState.navigate_to_sibling(sibling.id),
+        cursor="pointer",
+    )
+
+
+def _sibling_exams_nav() -> rx.Component:
+    return rx.cond(
+        ExamDetailState.sibling_exams.length() > 1,
+        rx.card(
+            rx.hstack(
+                rx.icon("stethoscope", size=13, color="var(--gray-9)"),
+                rx.text(
+                    LanguageState.tr["visit_exams_nav"],
+                    size="2", color="var(--gray-9)", weight="medium",
+                ),
+                rx.foreach(ExamDetailState.sibling_exams, _sibling_exam_pill),
+                spacing="2", align="center", flex_wrap="wrap",
+            ),
+            padding="0.5rem 1rem", width="100%",
+        ),
+    )
 
 
 # ── Exam workflow lifeline ────────────────────────────────────────────────────
@@ -319,27 +330,8 @@ def _lab_row_edit(row: LabResultRowDTO) -> rx.Component:
     )
 
 
-def _predefined_param_select() -> rx.Component:
-    groups = []
-    for group_name, param_names in _PREDEFINED_GROUPS:
-        items = [rx.select.item(name, value=name) for name in param_names]
-        groups.append(rx.select.group(rx.select.label(group_name), *items))
-    return rx.select.root(
-        rx.select.trigger(placeholder="Select predefined parameter...", size="2"),
-        rx.select.content(
-            rx.select.item("Custom entry", value="CUSTOM"),
-            rx.select.separator(),
-            *groups,
-        ),
-        value=ExamDetailState.new_lab_selected_preset,
-        on_change=ExamDetailState.select_predefined_param,
-        size="2", width="100%",
-    )
-
-
 def _lab_add_row_form() -> rx.Component:
     return rx.vstack(
-        _predefined_param_select(),
         rx.hstack(
             rx.input(value=ExamDetailState.new_lab_parameter, on_change=ExamDetailState.set_new_lab_parameter,
                      placeholder=LanguageState.tr["placeholder_param_name"], size="2", flex="3"),
@@ -867,6 +859,8 @@ def exam_detail_page() -> rx.Component:
                             ),
                             width="100%", align="center",
                         ),
+                        # ── Sibling exam navigation ───────────────────────────
+                        _sibling_exams_nav(),
                         # ── Error alert ───────────────────────────────────────
                         rx.cond(
                             ExamDetailState.error_message != "",
