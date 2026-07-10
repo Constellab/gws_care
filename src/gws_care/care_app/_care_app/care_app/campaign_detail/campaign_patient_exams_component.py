@@ -23,6 +23,7 @@ Layout:
 import reflex as rx
 from gws_reflex_main import main_component
 
+from ..admin.general_settings_state import GeneralSettingsState
 from ..common.language_state import LanguageState
 from ..common.nav_role_state import NavRoleState
 from ..common.page_layout import page_layout
@@ -96,6 +97,7 @@ def _progress_indicator() -> rx.Component:
     # Lab Done = all results transmitted to PSC doctor
     step_lab_done = (
         (s == "LAB_ENTERED")
+        | (s == "LAB_VALIDATED")
         | (s == "PSC_INTERPRETED")
         | (s == "PSC_VALIDATED")
         | (s == "TRANSMITTED_TREATING_DOCTOR")
@@ -113,15 +115,15 @@ def _progress_indicator() -> rx.Component:
 
     return rx.card(
         rx.hstack(
-            _progress_step("Pending", step_visit_done),
+            _progress_step(LanguageState.tr["step_pending"], step_visit_done),
             _progress_connector(step_visit_done),
-            _progress_step("Visit Done", step_lab_done),
+            _progress_step(LanguageState.tr["step_visit_done"], step_lab_done),
             _progress_connector(step_lab_done),
-            _progress_step("Lab Done", step_clinic),
+            _progress_step(GeneralSettingsState.step_transmitted_label, step_clinic),
             _progress_connector(step_clinic),
-            _progress_step("Clinic Validated", step_company),
+            _progress_step(GeneralSettingsState.step_org_validated_label, step_company),
             _progress_connector(step_company),
-            _progress_step("Company Validated", step_done),
+            _progress_step(LanguageState.tr["step_company_validated"], step_done),
             width="100%",
             align="start",
             spacing="0",
@@ -275,12 +277,12 @@ def _attachment_zone() -> rx.Component:
                         rx.vstack(
                             rx.icon("upload", size=16, color="var(--gray-6)"),
                             rx.text(
-                                "Drag and drop or click to attach",
+                                LanguageState.tr["drop_files_hint"],
                                 size="1",
                                 color="var(--gray-8)",
                             ),
                             rx.text(
-                                "PDF · Images · Word · Excel",
+                                LanguageState.tr["accepted_file_formats"],
                                 size="1",
                                 color="var(--gray-7)",
                             ),
@@ -420,7 +422,7 @@ def _param_row(p: ExamParamEntry) -> rx.Component:
                     ),
                     rx.tooltip(
                         rx.icon("calculator", size=13, color="var(--accent-9)"),
-                        content="Calculated automatically",
+                        content=LanguageState.tr["hint_calc_automatically"],
                     ),
                     spacing="1",
                     align="center",
@@ -452,8 +454,8 @@ def _param_row(p: ExamParamEntry) -> rx.Component:
                                     width="160px",
                                 ),
                                 rx.select.content(
-                                    rx.select.item("Negative", value="Négatif"),
-                                    rx.select.item("Positive", value="Positif"),
+                                    rx.select.item(LanguageState.tr["option_negative"], value="Négatif"),
+                                    rx.select.item(LanguageState.tr["option_positive"], value="Positif"),
                                 ),
                                 value=p.value,
                                 on_change=CampaignPatientExamsState.set_param_value(p.param_id),
@@ -509,7 +511,7 @@ def _param_form() -> rx.Component:
                 ~CampaignPatientExamsState.active_section_is_readonly,
                 rx.button(
                     rx.icon("plus-circle", size=14),
-                    "Add a test",
+                    LanguageState.tr["btn_add_test"],
                     on_click=CampaignPatientExamsState.open_add_param_dialog,
                     size="1",
                     variant="soft",
@@ -528,7 +530,7 @@ def _param_form() -> rx.Component:
                     rx.text(LanguageState.tr["parameter_selection_label"], size="2", color="var(--gray-9)"),
                     rx.button(
                         rx.icon("check-square", size=13),
-                        "Select all",
+                        LanguageState.tr["btn_select_all"],
                         variant="ghost",
                         size="1",
                         color_scheme="blue",
@@ -536,7 +538,7 @@ def _param_form() -> rx.Component:
                     ),
                     rx.button(
                         rx.icon("square", size=13),
-                        "Deselect all",
+                        LanguageState.tr["btn_deselect_all"],
                         variant="ghost",
                         size="1",
                         color_scheme="gray",
@@ -550,12 +552,12 @@ def _param_form() -> rx.Component:
                     rx.table.header(
                         rx.table.row(
                             rx.table.column_header_cell("", width="36px"),
-                            rx.table.column_header_cell("Parameter"),
-                            rx.table.column_header_cell("Unit"),
-                            rx.table.column_header_cell("Ref."),
-                            rx.table.column_header_cell("Critical threshold"),
-                            rx.table.column_header_cell("Result"),
-                            rx.table.column_header_cell("Interpretation"),
+                            rx.table.column_header_cell(LanguageState.tr["col_parameter"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_unit"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_ref"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_critical_threshold"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_result"]),
+                            rx.table.column_header_cell(LanguageState.tr["col_interpretation"]),
                         )
                     ),
                     rx.table.body(rx.foreach(CampaignPatientExamsState.active_params, _param_row)),
@@ -570,12 +572,12 @@ def _param_form() -> rx.Component:
                 rx.vstack(
                     rx.icon("circle-check", size=32, color="var(--gray-5)"),
                     rx.text(
-                        "This exam has no defined parameters.",
+                        LanguageState.tr["hint_no_params"],
                         size="2",
                         color="var(--gray-9)",
                     ),
                     rx.text(
-                        "Record it as completed with the button below.",
+                        LanguageState.tr["hint_no_params_action"],
                         size="2",
                         color="var(--gray-9)",
                     ),
@@ -600,13 +602,13 @@ def _param_form() -> rx.Component:
                         rx.hstack(
                             rx.badge(
                                 rx.icon("pencil", size=12),
-                                "Modification in progress",
+                                LanguageState.tr["badge_modification_in_progress"],
                                 color_scheme="orange",
                                 variant="soft",
                                 size="1",
                             ),
                             rx.text(
-                                "Select an action and click Validate to re-send.",
+                                LanguageState.tr["hint_re_send_action"],
                                 size="1",
                                 color="var(--gray-9)",
                                 font_style="italic",
@@ -622,12 +624,9 @@ def _param_form() -> rx.Component:
                                     width="260px",
                                 ),
                                 rx.select.content(
-                                    rx.select.item("Save without sending", value="save"),
-                                    rx.select.item("Send to lab", value="labo"),
-                                    rx.select.item("Send to PSC doctor", value="psc"),
-                                    rx.select.item(
-                                        "Send to occupational doctor", value="travail"
-                                    ),
+                                    rx.select.item(LanguageState.tr["btn_save_without_sending"], value="save"),
+                                    rx.select.item(LanguageState.tr["btn_send_to_lab"], value="labo"),
+                                    rx.select.item(GeneralSettingsState.send_to_org_doctor_label, value="psc"),
                                 ),
                                 value=CampaignPatientExamsState.section_action,
                                 on_change=CampaignPatientExamsState.set_section_action,
@@ -635,7 +634,7 @@ def _param_form() -> rx.Component:
                             ),
                             rx.button(
                                 rx.icon("check", size=14),
-                                "Validate",
+                                LanguageState.tr["btn_validate"],
                                 color_scheme="indigo",
                                 size="2",
                                 loading=CampaignPatientExamsState.is_saving,
@@ -657,7 +656,7 @@ def _param_form() -> rx.Component:
                                 "LABO",
                                 rx.badge(
                                     rx.icon("send", size=13),
-                                    "Sent to lab",
+                                    LanguageState.tr["badge_sent_to_lab"],
                                     color_scheme="orange",
                                     variant="soft",
                                     size="2",
@@ -667,7 +666,7 @@ def _param_form() -> rx.Component:
                                 "PSC",
                                 rx.badge(
                                     rx.icon("send", size=13),
-                                    "Sent to PSC doctor",
+                                    GeneralSettingsState.sent_to_org_doctor_label,
                                     color_scheme="teal",
                                     variant="soft",
                                     size="2",
@@ -677,7 +676,7 @@ def _param_form() -> rx.Component:
                                 "TRAVAIL",
                                 rx.badge(
                                     rx.icon("send", size=13),
-                                    "Sent to occupational doctor",
+                                    LanguageState.tr["badge_sent_to_occupational"],
                                     color_scheme="blue",
                                     variant="soft",
                                     size="2",
@@ -685,7 +684,7 @@ def _param_form() -> rx.Component:
                             ),
                             rx.badge(
                                 rx.icon("send", size=13),
-                                "Sent",
+                                LanguageState.tr["badge_sent"],
                                 color_scheme="teal",
                                 variant="soft",
                                 size="2",
@@ -693,7 +692,7 @@ def _param_form() -> rx.Component:
                         ),
                         rx.button(
                             rx.icon("pencil", size=13),
-                            "Edit",
+                            LanguageState.tr["btn_edit"],
                             variant="ghost",
                             size="2",
                             color_scheme="gray",
@@ -708,17 +707,14 @@ def _param_form() -> rx.Component:
                     rx.hstack(
                         rx.select.root(
                             rx.select.trigger(
-                                placeholder="Choisir une action…",
+                                placeholder=LanguageState.tr["choose_action_placeholder"],
                                 size="2",
                                 width="260px",
                             ),
                             rx.select.content(
-                                rx.select.item("Save without sending", value="save"),
-                                rx.select.item("Send to lab", value="labo"),
-                                rx.select.item("Send to PSC doctor", value="psc"),
-                                rx.select.item(
-                                    "Send to occupational doctor", value="travail"
-                                ),
+                                rx.select.item(LanguageState.tr["btn_save_without_sending"], value="save"),
+                                rx.select.item(LanguageState.tr["btn_send_to_lab"], value="labo"),
+                                rx.select.item(GeneralSettingsState.send_to_org_doctor_label, value="psc"),
                             ),
                             value=CampaignPatientExamsState.section_action,
                             on_change=CampaignPatientExamsState.set_section_action,
@@ -726,7 +722,7 @@ def _param_form() -> rx.Component:
                         ),
                         rx.button(
                             rx.icon("check", size=14),
-                            "Validate",
+                            LanguageState.tr["btn_validate"],
                             color_scheme="indigo",
                             size="2",
                             loading=CampaignPatientExamsState.is_saving,
@@ -741,13 +737,13 @@ def _param_form() -> rx.Component:
                         rx.hstack(
                             rx.badge(
                                 rx.icon("circle-check", size=12),
-                                "Saved",
+                                LanguageState.tr["badge_saved"],
                                 color_scheme="green",
                                 variant="soft",
                                 size="1",
                             ),
                             rx.text(
-                                "Results already saved — choose an action to send.",
+                                LanguageState.tr["hint_already_saved"],
                                 size="1",
                                 color="var(--gray-9)",
                                 font_style="italic",
@@ -756,8 +752,7 @@ def _param_form() -> rx.Component:
                             align="center",
                         ),
                         rx.text(
-                            "\"Save without sending\" saves without sending — "
-                            "send later when you are ready.",
+                            LanguageState.tr["hint_save_without_sending"],
                             size="1",
                             color="var(--gray-8)",
                             font_style="italic",
@@ -797,70 +792,76 @@ def _transmit_panel() -> rx.Component:
         | (s == "PUBLISHED")
     )
     return rx.vstack(
-        # ── Transfer to PSC card ──
-        rx.card(
-            rx.hstack(
-                rx.vstack(
-                    rx.hstack(
-                        rx.icon("send", size=16, color="var(--teal-9)"),
-                        rx.text(
-                            "Transfer all results to the PSC doctor", size="3", weight="bold"
-                        ),
-                        spacing="2",
-                        align="center",
-                    ),
-                    rx.cond(
-                        CampaignPatientExamsState.all_sections_saved,
-                        rx.text(
-                            "All exams are saved. Click the button to transfer to the PSC doctor.",
-                            size="2",
-                            color="var(--gray-9)",
-                        ),
-                        rx.text(
-                            "Save all exams before transferring them all.",
-                            size="2",
-                            color="var(--orange-9)",
-                        ),
-                    ),
-                    spacing="1",
-                ),
-                rx.spacer(),
-                rx.cond(
-                    all_tx,
-                    rx.badge(
-                        rx.icon("check", size=13),
-                        "Transferred",
-                        color_scheme="teal",
-                        variant="soft",
-                        size="2",
-                    ),
-                    rx.button(
-                        rx.icon("send", size=14),
-                        "Transfer to PSC doctor",
-                        color_scheme="teal",
-                        size="3",
-                        loading=CampaignPatientExamsState.is_saving,
-                        disabled=~CampaignPatientExamsState.all_sections_saved,
-                        on_click=CampaignPatientExamsState.transmit_to_doctor,
-                    ),
-                ),
-                align="center",
-                spacing="4",
-                width="100%",
-            ),
-            width="100%",
-            background="var(--teal-2)",
-        ),
-        # ── Lab validation card (shown once transmitted, not yet validated) ──
+        # ── Transfer to PSC card (operators only) ──
         rx.cond(
-            all_tx & ~already_advanced | lab_entered,
+            CampaignPatientExamsState.viewer_is_operator,
+            rx.card(
+                rx.hstack(
+                    rx.vstack(
+                        rx.hstack(
+                            rx.icon("send", size=16, color="var(--teal-9)"),
+                            rx.text(
+                                GeneralSettingsState.transfer_all_to_org_doctor_label,
+                                size="3",
+                                weight="bold",
+                            ),
+                            spacing="2",
+                            align="center",
+                        ),
+                        rx.cond(
+                            CampaignPatientExamsState.all_sections_saved,
+                            rx.text(
+                                GeneralSettingsState.click_to_transfer_org_label,
+                                size="2",
+                                color="var(--gray-9)",
+                            ),
+                            rx.text(
+                                LanguageState.tr["hint_save_before_transfer"],
+                                size="2",
+                                color="var(--orange-9)",
+                            ),
+                        ),
+                        spacing="1",
+                    ),
+                    rx.spacer(),
+                    rx.cond(
+                        all_tx,
+                        rx.badge(
+                            rx.icon("check", size=13),
+                            LanguageState.tr["badge_transferred"],
+                            color_scheme="teal",
+                            variant="soft",
+                            size="2",
+                        ),
+                        rx.button(
+                            rx.icon("send", size=14),
+                            GeneralSettingsState.send_to_org_doctor_label,
+                            color_scheme="teal",
+                            size="3",
+                            loading=CampaignPatientExamsState.is_saving,
+                            disabled=~CampaignPatientExamsState.all_sections_saved,
+                            on_click=CampaignPatientExamsState.transmit_to_doctor,
+                        ),
+                    ),
+                    align="center",
+                    spacing="4",
+                    width="100%",
+                ),
+                width="100%",
+                background="var(--teal-2)",
+            ),
+            rx.fragment(),
+        ),
+        # ── Lab validation card (PSC doctor only, shown once transmitted) ──
+        rx.cond(
+            CampaignPatientExamsState.viewer_is_psc & (all_tx & ~already_advanced | lab_entered),
             rx.card(
                 rx.hstack(
                     rx.vstack(
                         rx.hstack(
                             rx.icon("flask-conical", size=16, color="var(--amber-9)"),
                             rx.text(
-                                "Laboratory results validation", size="3", weight="bold"
+                                LanguageState.tr["lab_validation_label"], size="3", weight="bold"
                             ),
                             spacing="2",
                             align="center",
@@ -869,7 +870,7 @@ def _transmit_panel() -> rx.Component:
                             lab_validated,
                             rx.text(LanguageState.tr["results_validated"], size="2", color="var(--green-10)"),
                             rx.text(
-                                "Confirm that the laboratory results are correct before interpretation.",
+                                LanguageState.tr["hint_confirm_lab"],
                                 size="2",
                                 color="var(--gray-9)",
                             ),
@@ -881,7 +882,7 @@ def _transmit_panel() -> rx.Component:
                         lab_validated,
                         rx.badge(
                             rx.icon("check", size=13),
-                            "Lab validated",
+                            LanguageState.tr["badge_lab_validated"],
                             color_scheme="amber",
                             variant="soft",
                             size="2",
@@ -889,7 +890,7 @@ def _transmit_panel() -> rx.Component:
                         rx.hstack(
                             rx.button(
                                 rx.icon("check-circle", size=14),
-                                "Validate lab results",
+                                LanguageState.tr["btn_validate_lab"],
                                 color_scheme="amber",
                                 size="2",
                                 loading=CampaignPatientExamsState.is_saving,
@@ -899,7 +900,7 @@ def _transmit_panel() -> rx.Component:
                                 CampaignPatientExamsState.next_patient_id != "",
                                 rx.button(
                                     rx.icon("check-circle", size=14),
-                                    "Validate and next",
+                                    LanguageState.tr["btn_validate_and_next"],
                                     color_scheme="amber",
                                     variant="soft",
                                     size="2",
@@ -952,7 +953,7 @@ def _treating_doctor_panel() -> rx.Component:
                         align="center",
                     ),
                     rx.text(
-                        "Send results to the patient's treating doctor.",
+                        LanguageState.tr["hint_treating_doctor"],
                         size="2",
                         color="var(--gray-9)",
                     ),
@@ -963,14 +964,14 @@ def _treating_doctor_panel() -> rx.Component:
                     already_sent,
                     rx.badge(
                         rx.icon("check", size=13),
-                        "Sent",
+                        LanguageState.tr["badge_sent"],
                         color_scheme="teal",
                         variant="soft",
                         size="2",
                     ),
                     rx.button(
                         rx.icon("send", size=14),
-                        "Send to treating doctor",
+                        LanguageState.tr["btn_send_to_treating_doctor"],
                         color_scheme="teal",
                         variant="soft",
                         size="2",
@@ -995,8 +996,13 @@ def _treating_doctor_panel() -> rx.Component:
 def _psc_interpretation_panel() -> rx.Component:
     """Panel for PSC doctor to add interpretation and send to enterprise doctor."""
     already_validated = CampaignPatientExamsState.medical_status == "PSC_VALIDATED"
-    lab_done = CampaignPatientExamsState.medical_status == "LAB_ENTERED"
-    can_show = lab_done | already_validated
+    # Lab must be validated BEFORE PSC doctor can interpret — LAB_ENTERED excluded
+    lab_validated_or_beyond = (
+        (CampaignPatientExamsState.medical_status == "LAB_VALIDATED")
+        | (CampaignPatientExamsState.medical_status == "PSC_INTERPRETED")
+    )
+    # SuperAdmin/Admin always see all panels; regular PSC doctors only after lab validation
+    can_show = lab_validated_or_beyond | already_validated | CampaignPatientExamsState.viewer_is_operator
     return rx.cond(
         CampaignPatientExamsState.viewer_is_psc & can_show,
         rx.card(
@@ -1009,7 +1015,7 @@ def _psc_interpretation_panel() -> rx.Component:
                         already_validated,
                         rx.badge(
                             rx.icon("check", size=13),
-                            "PSC validated",
+                            GeneralSettingsState.psc_validated_label,
                             color_scheme="blue",
                             variant="soft",
                             size="2",
@@ -1034,7 +1040,7 @@ def _psc_interpretation_panel() -> rx.Component:
                         rx.spacer(),
                         rx.button(
                             rx.icon("send", size=14),
-                            "Transfer to occupational doctor",
+                            CampaignPatientExamsState.send_to_enterprise_label,
                             color_scheme="blue",
                             size="2",
                             loading=CampaignPatientExamsState.is_saving,
@@ -1044,7 +1050,7 @@ def _psc_interpretation_panel() -> rx.Component:
                             CampaignPatientExamsState.next_patient_id != "",
                             rx.button(
                                 rx.icon("send", size=14),
-                                "Valider et suivant",
+                                LanguageState.tr["btn_validate_and_next"],
                                 color_scheme="blue",
                                 variant="soft",
                                 size="2",
@@ -1081,6 +1087,7 @@ def _enterprise_interpretation_panel() -> rx.Component:
         | (s == "TRANSMITTED_TREATING_DOCTOR")
         | already_validated
         | (s == "PUBLISHED")
+        | CampaignPatientExamsState.viewer_is_operator  # SuperAdmin/Admin see panel immediately
     )
     return rx.cond(
         CampaignPatientExamsState.viewer_is_enterprise,
@@ -1094,7 +1101,7 @@ def _enterprise_interpretation_panel() -> rx.Component:
                         already_validated,
                         rx.badge(
                             rx.icon("check", size=13),
-                            "Company validated",
+                            LanguageState.tr["badge_company_validated"],
                             color_scheme="indigo",
                             variant="soft",
                             size="2",
@@ -1108,7 +1115,7 @@ def _enterprise_interpretation_panel() -> rx.Component:
                 rx.cond(
                     ~psc_done,
                     rx.callout(
-                        "Awaiting PSC doctor validation.",
+                        GeneralSettingsState.awaiting_psc_label,
                         icon="clock",
                         color_scheme="gray",
                         size="2",
@@ -1117,7 +1124,7 @@ def _enterprise_interpretation_panel() -> rx.Component:
                         rx.text_area(
                             value=CampaignPatientExamsState.enterprise_notes,
                             on_change=CampaignPatientExamsState.set_enterprise_notes,
-                            placeholder="Interpretation / comments for the company...",
+                            placeholder=LanguageState.tr["enterprise_interp_placeholder"],
                             rows="5",
                             width="100%",
                             read_only=already_validated,
@@ -1128,7 +1135,7 @@ def _enterprise_interpretation_panel() -> rx.Component:
                                 rx.spacer(),
                                 rx.button(
                                     rx.icon("check", size=14),
-                                    "Validate interpretation",
+                                    LanguageState.tr["btn_validate_interpretation"],
                                     color_scheme="indigo",
                                     size="2",
                                     loading=CampaignPatientExamsState.is_saving,
@@ -1174,12 +1181,12 @@ def _finish_panel() -> rx.Component:
                     rx.cond(
                         already_done,
                         rx.text(
-                            "File closed and published.",
+                            LanguageState.tr["hint_file_closed_published"],
                             size="2",
                             color="var(--green-10)",
                         ),
                         rx.text(
-                            "The interpretation is validated. Close the file to mark it as complete.",
+                            LanguageState.tr["hint_close_file"],
                             size="2",
                             color="var(--gray-9)",
                         ),
@@ -1191,14 +1198,14 @@ def _finish_panel() -> rx.Component:
                     already_done,
                     rx.badge(
                         rx.icon("check", size=13),
-                        "File closed",
+                        LanguageState.tr["badge_file_closed"],
                         color_scheme="green",
                         variant="soft",
                         size="2",
                     ),
                     rx.button(
                         rx.icon("check-circle", size=14),
-                        "Finish",
+                        LanguageState.tr["btn_finish"],
                         color_scheme="green",
                         size="3",
                         loading=CampaignPatientExamsState.is_saving,
@@ -1223,9 +1230,9 @@ def _motif_dialog() -> rx.Component:
     """Dialog asking for a reason when the user modifies saved exam results."""
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Reason for modification"),
+            rx.dialog.title(LanguageState.tr["motif_dialog_title"]),
             rx.dialog.description(
-                "Indicate the reason why you are modifying already saved results.",
+                LanguageState.tr["motif_dialog_desc"],
                 size="2",
                 color="var(--gray-9)",
             ),
@@ -1249,7 +1256,7 @@ def _motif_dialog() -> rx.Component:
                     ),
                     rx.button(
                         rx.icon("check", size=14),
-                        "Confirm modification",
+                        LanguageState.tr["btn_confirm_modification"],
                         color_scheme="indigo",
                         size="2",
                         disabled=CampaignPatientExamsState.modification_motif.strip() == "",
@@ -1303,9 +1310,9 @@ def _add_param_item(p: AddParamOption) -> rx.Component:
 def _add_param_dialog() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
-            rx.dialog.title("Add tests"),
+            rx.dialog.title(LanguageState.tr["add_param_dialog_title"]),
             rx.dialog.description(
-                "Select the tests to add to this exam.",
+                LanguageState.tr["add_param_dialog_desc"],
                 size="2",
                 color="var(--gray-11)",
             ),
@@ -1326,7 +1333,8 @@ def _add_param_dialog() -> rx.Component:
                                     CampaignPatientExamsState.add_param_selected_count.to(str),
                                     " / ",
                                     CampaignPatientExamsState.add_param_options.length().to(str),
-                                    " selected",
+                                    " ",
+                                    LanguageState.tr["selected_count_suffix"],
                                     size="1",
                                     color="var(--gray-9)",
                                 ),
@@ -1360,7 +1368,7 @@ def _add_param_dialog() -> rx.Component:
                         on_click=CampaignPatientExamsState.close_add_param_dialog,
                     ),
                     rx.button(
-                        "Add tests",
+                        LanguageState.tr["btn_add_tests"],
                         on_click=CampaignPatientExamsState.save_add_params,
                         loading=CampaignPatientExamsState.is_saving_add_params,
                         disabled=(CampaignPatientExamsState.add_param_selected_count == 0)
@@ -1391,7 +1399,7 @@ def campaign_patient_exams_page() -> rx.Component:
                 rx.hstack(
                     rx.button(
                         rx.icon("chevron-left", size=14),
-                        "Back to campaign",
+                        LanguageState.tr["btn_back_to_campaign"],
                         variant="ghost",
                         size="2",
                         on_click=CampaignPatientExamsState.go_back,
@@ -1401,13 +1409,13 @@ def campaign_patient_exams_page() -> rx.Component:
                         rx.tooltip(
                             rx.button(
                                 rx.icon("stethoscope", size=14),
-                                "Doctor interpretation",
+                                LanguageState.tr["btn_doctor_interpretation"],
                                 variant="soft",
                                 color_scheme="blue",
                                 size="2",
                                 on_click=CampaignPatientExamsState.go_to_visit_detail,
                             ),
-                            content="Go to the doctor interpretation page",
+                            content=LanguageState.tr["hint_go_to_doctor_interp"],
                         ),
                         rx.fragment(),
                     ),
@@ -1474,7 +1482,7 @@ def campaign_patient_exams_page() -> rx.Component:
                                             ),
                                             href="/campaign-patient/" + CampaignPatientExamsState.cp_campaign_id + "/" + CampaignPatientExamsState.prev_patient_id,
                                         ),
-                                        content="Previous patient",
+                                        content=LanguageState.tr["tooltip_prev_patient"],
                                     ),
                                     rx.icon_button(
                                         rx.icon("chevron-left", size=16),
@@ -1502,7 +1510,7 @@ def campaign_patient_exams_page() -> rx.Component:
                                             ),
                                             href="/campaign-patient/" + CampaignPatientExamsState.cp_campaign_id + "/" + CampaignPatientExamsState.next_patient_id,
                                         ),
-                                        content="Next patient",
+                                        content=LanguageState.tr["tooltip_next_patient"],
                                     ),
                                     rx.icon_button(
                                         rx.icon("chevron-right", size=16),
@@ -1551,7 +1559,7 @@ def campaign_patient_exams_page() -> rx.Component:
                                     rx.hstack(
                                         rx.icon("notebook-pen", size=15, color="var(--accent-9)"),
                                         rx.text(
-                                            "Reason / Field observations",
+                                            LanguageState.tr["reason_field_obs_label"],
                                             size="2",
                                             weight="bold",
                                         ),
@@ -1581,7 +1589,7 @@ def campaign_patient_exams_page() -> rx.Component:
                             rx.cond(
                                 ~CampaignPatientExamsState.patient_is_on_terrain,
                                 rx.callout(
-                                    "Declare the patient's presence (or absence) first to unlock result entry.",
+                                    LanguageState.tr["hint_patient_presence"],
                                     icon="lock",
                                     color_scheme="orange",
                                     size="2",

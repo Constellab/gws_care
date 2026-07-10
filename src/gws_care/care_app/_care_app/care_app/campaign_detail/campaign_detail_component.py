@@ -1716,7 +1716,7 @@ def campaign_detail_page() -> rx.Component:
                                     rx.hstack(
                                         rx.icon("list-checks", size=15, color="var(--accent-9)"),
                                         rx.text(
-                                            "Prerequisites before validation", size="2", weight="bold"
+                                            LanguageState.tr["prerequisites_title"], size="2", weight="bold"
                                         ),
                                         spacing="2",
                                         align="center",
@@ -1745,8 +1745,8 @@ def campaign_detail_page() -> rx.Component:
                                             rx.cond(
                                                 CampaignDetailState.patients.length() > 0,
                                                 CampaignDetailState.patients.length().to_string()
-                                                + " patient(s) added",
-                                                "Add at least 1 patient (Patients tab)",
+                                                + LanguageState.tr["prereq_patients_done"],
+                                                LanguageState.tr["prereq_patients_todo"],
                                             ),
                                             size="2",
                                         ),
@@ -1765,8 +1765,8 @@ def campaign_detail_page() -> rx.Component:
                                             rx.cond(
                                                 CampaignDetailState.exam_types.length() > 0,
                                                 CampaignDetailState.exam_types.length().to_string()
-                                                + " exam(s) configured",
-                                                "Add at least 1 exam type (Exams tab)",
+                                                + LanguageState.tr["prereq_exams_done"],
+                                                LanguageState.tr["prereq_exams_todo"],
                                             ),
                                             size="2",
                                         ),
@@ -1784,8 +1784,8 @@ def campaign_detail_page() -> rx.Component:
                                         rx.text(
                                             rx.cond(
                                                 CampaignDetailState.all_exams_have_location,
-                                                "Location defined for each exam",
-                                                "Set a location for each exam (Exams tab)",
+                                                LanguageState.tr["prereq_location_done"],
+                                                LanguageState.tr["prereq_location_todo"],
                                             ),
                                             size="2",
                                         ),
@@ -1803,8 +1803,8 @@ def campaign_detail_page() -> rx.Component:
                                         rx.text(
                                             rx.cond(
                                                 CampaignDetailState.has_campaign_doctor,
-                                                "Doctor assigned",
-                                                "Assign at least 1 doctor (Doctors or Exams tab)",
+                                                LanguageState.tr["prereq_doctor_done"],
+                                                LanguageState.tr["prereq_doctor_todo"],
                                             ),
                                             size="2",
                                         ),

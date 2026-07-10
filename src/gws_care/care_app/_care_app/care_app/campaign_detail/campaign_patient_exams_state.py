@@ -149,6 +149,8 @@ class CampaignPatientExamsState(ReflexMainState):
 
     # Context
     campaign_name: str = ""
+    account_name: str = ""
+    app_language: str = "fr"
     patient_name: str = ""
     patient_number: str = ""
     patient_gender: str = ""
@@ -319,6 +321,15 @@ class CampaignPatientExamsState(ReflexMainState):
     # Role of the current viewer (set on load)
     viewer_is_psc: bool = False
     viewer_is_enterprise: bool = False
+    viewer_is_operator: bool = False
+
+    @rx.var
+    def send_to_enterprise_label(self) -> str:
+        """Button label for transferring to enterprise doctor — uses campaign account name."""
+        company = self.account_name or ("entreprise" if self.app_language == "fr" else "company")
+        if self.app_language == "fr":
+            return f"Valider et transmettre au Dr {company}"
+        return f"Validate and transfer to {company} doctor"
 
     # ── Load ──────────────────────────────────────────────────────────────
 
@@ -1199,6 +1210,7 @@ class CampaignPatientExamsState(ReflexMainState):
 
                 campaign = Campaign.get_by_id_and_check(campaign_id)
                 self.campaign_name = campaign.name
+                self.account_name = campaign.account.name if campaign.account_id else ""
                 # Normalize to the exact ID format used in FK columns in the DB
                 campaign_id = str(campaign.id)
 
@@ -1248,6 +1260,14 @@ class CampaignPatientExamsState(ReflexMainState):
                     self.visit_status = "pending"
                     self.visit_id = ""
 
+                # Sync language for bilingual computed vars
+                try:
+                    from ..common.language_state import LanguageState as _LangState
+                    lang_state = await self.get_state(_LangState)
+                    self.app_language = lang_state.language
+                except Exception:
+                    pass
+
                 # Detect viewer role
                 from gws_care.role.care_role import CareRole as _CareRole
                 from gws_care.role.user_role_service import UserRoleService
@@ -1268,6 +1288,14 @@ class CampaignPatientExamsState(ReflexMainState):
                     or _CareRole.ADMIN_PSC.value in role_vals
                     or _CareRole.DIRECTEUR_PSC.value in role_vals
                     or len(role_vals) == 0
+                )
+                self.viewer_is_operator = (
+                    _CareRole.OPERATEUR_TERRAIN.value in role_vals
+                    or _CareRole.OPERATEUR_LABO.value in role_vals
+                    or _CareRole.SUPER_ADMIN_PSC.value in role_vals
+                    or _CareRole.ADMIN_PSC.value in role_vals
+                    or _CareRole.DIRECTEUR_PSC.value in role_vals
+                    or len(role_vals) == 0  # dev mode — show all
                 )
 
                 # Index existing saved exams {marker → (exam_id, is_transmitted)}

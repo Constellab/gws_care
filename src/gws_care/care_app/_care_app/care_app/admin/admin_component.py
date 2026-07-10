@@ -4,6 +4,7 @@ import reflex as rx
 from gws_reflex_main import main_component
 
 from ..common.language_state import LanguageState
+from ..common.shared_address_phone_components import address_section, phone_input_field
 from ..exam_types.exam_types_component import exam_types_tab_content
 from ..exam_types.exam_types_state import ExamTypesState
 from ..common.page_layout import page_layout
@@ -15,17 +16,25 @@ from .import_component import import_dialog
 from .import_state import ImportState
 
 _ROLE_LABELS = {
-    "ADMIN": "Administrator",
-    "DOCTOR": "Doctor",
-    "OPERATOR": "Operator",
-    "ACCOUNT_ADMIN": "Account Admin",
+    "SUPER_ADMIN_PSC": "Super Admin",
+    "DIRECTEUR_PSC": "Directeur",
+    "ADMIN_PSC": "Admin",
+    "OPERATEUR_TERRAIN": "Opérateur terrain",
+    "OPERATEUR_LABO": "Opérateur labo",
+    "MEDECIN_PSC": "Médecin",
+    "MEDECIN_ENTREPRISE": "Médecin entreprise",
+    "RH_ENTREPRISE": "RH entreprise",
     "PATIENT": "Patient",
 }
 _ROLE_COLORS = {
-    "ADMIN": "red",
-    "DOCTOR": "blue",
-    "OPERATOR": "green",
-    "ACCOUNT_ADMIN": "orange",
+    "SUPER_ADMIN_PSC": "red",
+    "DIRECTEUR_PSC": "crimson",
+    "ADMIN_PSC": "orange",
+    "OPERATEUR_TERRAIN": "green",
+    "OPERATEUR_LABO": "teal",
+    "MEDECIN_PSC": "blue",
+    "MEDECIN_ENTREPRISE": "indigo",
+    "RH_ENTREPRISE": "yellow",
     "PATIENT": "purple",
 }
 
@@ -108,9 +117,9 @@ def _account_label_for_id(account_id: rx.Var) -> rx.Component:
 
 
 def _doctor_section(user: UserRoleRowDTO) -> rx.Component:
-    """Linked doctor selector shown when the DOCTOR role is assigned."""
+    """Linked doctor selector shown when the MEDECIN_PSC role is assigned."""
     return rx.cond(
-        user.roles.contains("DOCTOR"),
+        user.roles.contains("MEDECIN_PSC"),
         rx.box(
             rx.select.root(
                 rx.select.trigger(
@@ -131,9 +140,9 @@ def _doctor_section(user: UserRoleRowDTO) -> rx.Component:
 
 
 def _account_admin_section(user: UserRoleRowDTO) -> rx.Component:
-    """Multi-account section shown when the ACCOUNT_ADMIN role is assigned."""
+    """Multi-account section shown when the RH_ENTREPRISE role is assigned."""
     return rx.cond(
-        user.roles.contains("ACCOUNT_ADMIN"),
+        user.roles.contains("RH_ENTREPRISE"),
         rx.vstack(
             rx.hstack(
                 rx.foreach(
@@ -146,7 +155,7 @@ def _account_admin_section(user: UserRoleRowDTO) -> rx.Component:
                                 size=10,
                                 cursor="pointer",
                                 on_click=lambda: AdminState.remove_account_link(
-                                    user.id, "ACCOUNT_ADMIN", opt.id
+                                    user.id, "RH_ENTREPRISE", opt.id
                                 ),
                             ),
                             spacing="1",
@@ -168,7 +177,7 @@ def _account_admin_section(user: UserRoleRowDTO) -> rx.Component:
                 rx.select.content(
                     rx.foreach(AdminState.account_options, _account_option),
                 ),
-                on_change=lambda val: AdminState.add_account_link(user.id, "ACCOUNT_ADMIN", val),
+                on_change=lambda val: AdminState.add_account_link(user.id, "RH_ENTREPRISE", val),
                 size="1",
             ),
             spacing="1",
@@ -184,25 +193,29 @@ def _user_row(user: UserRoleRowDTO) -> rx.Component:
         rx.table.cell(rx.text(user.email, size="2", color="var(--gray-9)")),
         rx.table.cell(
             rx.vstack(
-                # ── ADMIN ──────────────────────────────────────────────────
-                _role_toggle(user, "ADMIN"),
-                # ── DOCTOR + linked doctor profile ──────────────────────────
+                # ── Rôles internes ─────────────────────────────────────────
+                _role_toggle(user, "SUPER_ADMIN_PSC"),
+                _role_toggle(user, "ADMIN_PSC"),
+                _role_toggle(user, "DIRECTEUR_PSC"),
+                _role_toggle(user, "OPERATEUR_TERRAIN"),
+                _role_toggle(user, "OPERATEUR_LABO"),
+                # ── MEDECIN_PSC + profil médecin lié ───────────────────────
                 rx.vstack(
-                    _role_toggle(user, "DOCTOR"),
+                    _role_toggle(user, "MEDECIN_PSC"),
                     _doctor_section(user),
                     spacing="1",
                     align="start",
                 ),
-                # ── OPERATOR ───────────────────────────────────────────────
-                _role_toggle(user, "OPERATOR"),
-                # ── ACCOUNT_ADMIN + account list ───────────────────────────
+                # ── Rôles externes ─────────────────────────────────────────
+                _role_toggle(user, "MEDECIN_ENTREPRISE"),
+                # ── RH_ENTREPRISE + liste de comptes ───────────────────────
                 rx.vstack(
-                    _role_toggle(user, "ACCOUNT_ADMIN"),
+                    _role_toggle(user, "RH_ENTREPRISE"),
                     _account_admin_section(user),
                     spacing="1",
                     align="start",
                 ),
-                # ── PATIENT + linked patient selector ──────────────────────
+                # ── PATIENT + sélecteur de patient lié ─────────────────────
                 rx.vstack(
                     _role_toggle(user, "PATIENT"),
                     rx.cond(
@@ -580,6 +593,94 @@ def _general_tab() -> rx.Component:
                     rx.badge(GeneralSettingsState.save_theme_error, color_scheme="red", size="1"),
                 ),
                 spacing="3",
+                width="100%",
+            ),
+            width="100%",
+        ),
+        rx.card(
+            rx.vstack(
+                rx.hstack(
+                    rx.icon("building-2", size=18, color="var(--accent-9)"),
+                    rx.heading(LanguageState.tr["org_info_title"], size="4"),
+                    spacing="2",
+                    align="center",
+                ),
+                rx.text(
+                    LanguageState.tr["org_info_desc"],
+                    size="2",
+                    color="var(--gray-10)",
+                ),
+                rx.separator(width="100%"),
+                rx.grid(
+                    rx.vstack(
+                        rx.text(LanguageState.tr["org_name_label"], size="2", weight="medium"),
+                        rx.input(
+                            value=GeneralSettingsState.form_org_name,
+                            on_change=GeneralSettingsState.set_form_org_name,
+                            placeholder=LanguageState.tr["org_name_placeholder"],
+                            width="100%",
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text(LanguageState.tr["org_acronym_label"], size="2", weight="medium"),
+                        rx.input(
+                            value=GeneralSettingsState.form_org_acronym,
+                            on_change=GeneralSettingsState.set_form_org_acronym,
+                            placeholder=LanguageState.tr["org_acronym_placeholder"],
+                            width="100%",
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text(LanguageState.tr["org_siret_label"], size="2", weight="medium"),
+                        rx.input(
+                            value=GeneralSettingsState.form_org_siret,
+                            on_change=GeneralSettingsState.set_form_org_siret,
+                            placeholder=LanguageState.tr["org_siret_placeholder"],
+                            width="100%",
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                    rx.vstack(
+                        rx.text(LanguageState.tr["org_email_label"], size="2", weight="medium"),
+                        rx.input(
+                            value=GeneralSettingsState.form_org_email,
+                            on_change=GeneralSettingsState.set_form_org_email,
+                            placeholder=LanguageState.tr["org_email_placeholder"],
+                            width="100%",
+                        ),
+                        spacing="1",
+                        width="100%",
+                    ),
+                    columns="2",
+                    spacing="4",
+                    width="100%",
+                ),
+                phone_input_field(GeneralSettingsState),
+                address_section(GeneralSettingsState, include_complement=True),
+                rx.hstack(
+                    rx.button(
+                        LanguageState.tr["btn_save"],
+                        on_click=GeneralSettingsState.save_org_info,
+                        loading=GeneralSettingsState.is_saving_org,
+                        size="2",
+                    ),
+                    rx.cond(
+                        GeneralSettingsState.save_org_success != "",
+                        rx.badge(GeneralSettingsState.save_org_success, color_scheme="green", size="1"),
+                    ),
+                    rx.cond(
+                        GeneralSettingsState.save_org_error != "",
+                        rx.badge(GeneralSettingsState.save_org_error, color_scheme="red", size="1"),
+                    ),
+                    spacing="3",
+                    align="center",
+                ),
+                spacing="4",
                 width="100%",
             ),
             width="100%",
