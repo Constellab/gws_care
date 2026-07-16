@@ -176,6 +176,8 @@ class BulkImportService:
         :param row_data: A single dict from the CSV DictReader
         :type row_data: dict
         """
+        from gws_care.account.account import Account
+        from gws_care.patient.patient_account import PatientAccount
         from gws_care.patient.patient_dto import SavePatientDTO
         from gws_care.patient.patient_service import PatientService
 
@@ -193,8 +195,19 @@ class BulkImportService:
             phone=row_data.get("phone", "").strip() or None,
             email=row_data.get("email", "").strip() or None,
             social_security_number=row_data.get("social_security_number", "").strip() or None,
+            primary_physician_name=row_data.get("primary_physician_name", "").strip() or None,
+            primary_physician_phone=row_data.get("primary_physician_phone", "").strip() or None,
         )
-        PatientService.create_patient(dto)
+        patient = PatientService.create_patient(dto)
+
+        account_name = (row_data.get("account_name") or "").strip()
+        if account_name:
+            account = Account.get_or_none(Account.name == account_name)
+            if account is not None:
+                link = PatientAccount()
+                link.patient = patient.id
+                link.account = account.id
+                link.save()
 
     @classmethod
     def parse_doctors_csv(cls, content: str) -> CsvParseResult:
@@ -385,6 +398,7 @@ class BulkImportService:
             city=row_data.get("city", "").strip() or None,
             contact_first_name=row_data.get("contact_first_name", "").strip() or None,
             contact_last_name=row_data.get("contact_last_name", "").strip() or None,
+            contact_name=row_data.get("contact_name", "").strip() or None,
             phone=row_data.get("phone", "").strip() or None,
             email=row_data.get("email", "").strip() or None,
         )

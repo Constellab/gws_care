@@ -44,24 +44,24 @@ class RoleState(ReflexMainState):
 
     @rx.var
     def is_doctor(self) -> bool:
-        """True for Clinic Doctor PSC (DOCTOR role) or ADMIN."""
+        """True for the MEDECIN role or ADMIN."""
         if self._active_role_override:
-            return self._active_role_override in ("ADMIN", "DOCTOR")
-        return self.is_admin or "DOCTOR" in self._care_roles
+            return self._active_role_override in ("ADMIN", "MEDECIN")
+        return self.is_admin or "MEDECIN" in self._care_roles
 
     @rx.var
     def is_operator(self) -> bool:
-        """True for HQ Operator PSC (OPERATOR role) or ADMIN."""
+        """True for the OPERATEUR role or ADMIN."""
         if self._active_role_override:
-            return self._active_role_override in ("ADMIN", "OPERATOR")
-        return self.is_admin or "OPERATOR" in self._care_roles
+            return self._active_role_override in ("ADMIN", "OPERATEUR")
+        return self.is_admin or "OPERATEUR" in self._care_roles
 
     @rx.var
     def is_account_admin(self) -> bool:
-        """True for Company Doctor / Responsable RH (ACCOUNT_ADMIN role) or ADMIN."""
+        """True for Responsable RH (RH_ENTREPRISE role) or ADMIN."""
         if self._active_role_override:
-            return self._active_role_override in ("ADMIN", "ACCOUNT_ADMIN")
-        return self.is_admin or "ACCOUNT_ADMIN" in self._care_roles
+            return self._active_role_override in ("ADMIN", "RH_ENTREPRISE")
+        return self.is_admin or "RH_ENTREPRISE" in self._care_roles
 
     @rx.var
     def is_rh(self) -> bool:
@@ -70,24 +70,22 @@ class RoleState(ReflexMainState):
 
     @rx.var
     def is_work_doctor(self) -> bool:
-        """True for Médecin Entreprise (MEDECIN_ENTREPRISE role) or ADMIN."""
-        if self._active_role_override:
-            return self._active_role_override in ("ADMIN", "MEDECIN_ENTREPRISE")
-        return self.is_admin or "MEDECIN_ENTREPRISE" in self._care_roles
+        """Alias for is_doctor — MEDECIN_ENTREPRISE was merged into MEDECIN."""
+        return self.is_doctor
 
     @rx.var
     def is_patient_user(self) -> bool:
         """True when the user is a linked patient (PATIENT role).
 
         Without an explicit role override, returns False when the user also
-        holds a higher-priority role (ADMIN / DOCTOR / OPERATOR / ACCOUNT_ADMIN)
+        holds a higher-priority role (ADMIN / MEDECIN / OPERATEUR / RH_ENTREPRISE)
         so the admin interface is shown by default instead of the patient portal.
         """
         if self._active_role_override:
             return self._active_role_override == "PATIENT"
         # If the user has any higher-priority role, don't activate patient UI
         has_higher_role = self._is_platform_admin or any(
-            r in self._care_roles for r in ("ADMIN", "DOCTOR", "OPERATOR", "ACCOUNT_ADMIN")
+            r in self._care_roles for r in ("ADMIN", "MEDECIN", "OPERATEUR", "RH_ENTREPRISE")
         )
         if has_higher_role:
             return False
@@ -127,15 +125,15 @@ class RoleState(ReflexMainState):
         """Label of the currently active role (override or highest actual role)."""
         labels = {
             "ADMIN": "Admin",
-            "DOCTOR": "Doctor",
-            "OPERATOR": "Operator",
-            "ACCOUNT_ADMIN": "Account Admin",
+            "MEDECIN": "Médecin",
+            "OPERATEUR": "Opérateur",
+            "RH_ENTREPRISE": "RH entreprise",
             "PATIENT": "Patient",
         }
         if self._active_role_override:
             return labels.get(self._active_role_override, self._active_role_override)
         # Show the highest role
-        for role in ("ADMIN", "DOCTOR", "OPERATOR", "ACCOUNT_ADMIN", "PATIENT"):
+        for role in ("ADMIN", "MEDECIN", "OPERATEUR", "RH_ENTREPRISE", "PATIENT"):
             if role == "ADMIN" and (self._is_platform_admin or "ADMIN" in self._care_roles):
                 return labels["ADMIN"]
             if role in self._care_roles:
@@ -144,10 +142,10 @@ class RoleState(ReflexMainState):
 
     @rx.var
     def active_role_key(self) -> str:
-        """Raw role key of the currently active role (e.g. 'ADMIN', 'DOCTOR')."""
+        """Raw role key of the currently active role (e.g. 'ADMIN', 'MEDECIN')."""
         if self._active_role_override:
             return self._active_role_override
-        for role in ("ADMIN", "DOCTOR", "OPERATOR", "ACCOUNT_ADMIN", "PATIENT"):
+        for role in ("ADMIN", "MEDECIN", "OPERATEUR", "RH_ENTREPRISE", "PATIENT"):
             if role == "ADMIN" and (self._is_platform_admin or "ADMIN" in self._care_roles):
                 return "ADMIN"
             if role in self._care_roles:
@@ -165,9 +163,9 @@ class RoleState(ReflexMainState):
         is_admin_user = self._is_platform_admin or "ADMIN" in self._care_roles
         if is_admin_user:
             # Admins can simulate every role
-            return list(("ADMIN", "OPERATOR", "DOCTOR", "ACCOUNT_ADMIN", "PATIENT"))
+            return list(("ADMIN", "OPERATEUR", "MEDECIN", "RH_ENTREPRISE", "PATIENT"))
         available: set[str] = set(self._care_roles)
-        return [r for r in ("ADMIN", "OPERATOR", "DOCTOR", "ACCOUNT_ADMIN", "PATIENT") if r in available]
+        return [r for r in ("ADMIN", "OPERATEUR", "MEDECIN", "RH_ENTREPRISE", "PATIENT") if r in available]
 
     # ── Role-switch event ─────────────────────────────────────────────────────
 
@@ -180,6 +178,24 @@ class RoleState(ReflexMainState):
     # ── Internal loader ───────────────────────────────────────────────────────
 
     async def _load_roles(self) -> None:
+        """Fetch the current user's roles from DB, retrying once if empty.
+
+        gws_core syncs gws_core users into gws_care's local mirror table
+        asynchronously (background thread) on server startup, while the web
+        server starts accepting requests immediately — so the very first
+        request after a cold restart can race ahead of that sync and see no
+        role / no local user yet, even for a real admin. If the first attempt
+        comes back with neither a platform-admin flag nor any CareRole, retry
+        once after a short delay before concluding the user genuinely has no
+        access, to avoid a false "no access" on a fresh server start.
+        """
+        await self._load_roles_once()
+        if not self._is_platform_admin and not self._care_roles:
+            import asyncio
+            await asyncio.sleep(1.5)
+            await self._load_roles_once()
+
+    async def _load_roles_once(self) -> None:
         """Fetch the current user's roles from DB.
 
         Must be called from within an authenticate_user() context.

@@ -58,9 +58,9 @@ class Visit(ModelWithUser):
     patient_notes: str = TextField(null=True)
     appointment_address: str = TextField(null=True)
 
-    # Médecin du travail (company doctor, CareRole.MEDECIN_ENTREPRISE) assigned to
-    # this campaign visit — distinct from `doctor` above, which is the PSC clinic
-    # doctor. Only relevant when visit_type=CAMPAIGN / campaign is set.
+    # Médecin du travail (company doctor, CareRole.MEDECIN) assigned to
+    # this campaign visit — distinct from `doctor` above, which is the internal
+    # clinic doctor. Only relevant when visit_type=CAMPAIGN / campaign is set.
     work_doctor: User = ForeignKeyField(User, null=True, backref="work_doctor_visits", on_delete="SET NULL")
 
     # Interpretation text — kept on CampaignVisit for fast access; authorship is in CampaignVisitValidationWorkflow

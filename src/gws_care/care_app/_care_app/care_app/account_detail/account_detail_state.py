@@ -214,12 +214,12 @@ class AccountDetailState(PatientPickerState):
                 from gws_care.role.care_role import CareRole
                 from gws_care.role.user_care_role import UserCareRole
                 from gws_care.user.user import User
-                psc_roles = list(UserCareRole.select().where(UserCareRole.role == CareRole.MEDECIN_PSC))
-                ent_roles = list(UserCareRole.select().where(UserCareRole.role == CareRole.MEDECIN_ENTREPRISE))
+                psc_roles = list(UserCareRole.select().where(UserCareRole.role == CareRole.MEDECIN))
+                ent_roles = list(UserCareRole.select().where(UserCareRole.role == CareRole.MEDECIN))
 
                 def _doctor_label(user_id) -> str:
                     u = User.get_or_none(User.id == user_id)
-                    return u.full_name if u else str(user_id)
+                    return f"{u.first_name} {u.last_name}".strip() if u else str(user_id)
 
                 self.psc_doctor_options = [
                     DoctorOptionDTO(id=str(r.user_id), label=_doctor_label(r.user_id))

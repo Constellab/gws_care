@@ -7,7 +7,7 @@ Workflow:
   2. User clicks a section → active_params populated with that section's parameters
   3. User enters values → set_param_value updates active_params in real time
   4. User clicks "Enregistrer" → save_active_section persists to Exam.lab_results (JSON)
-  5. All sections saved → user clicks "Transmettre au médecin PSC"
+  5. All sections saved → user clicks "Transmettre au médecin" (org-acronym label)
      → CampaignPatient.medical_status = LAB_ENTERED
 """
 
@@ -532,17 +532,19 @@ class CampaignPatientExamsState(ReflexMainState):
 
         self.is_saving = True
         try:
-            with await self.authenticate_user():
+            with await self.authenticate_user() as auth_user:
                 from gws_care.campaign.campaign_service import CampaignService
                 from gws_care.exam.exam import Exam
                 from gws_care.exam.exam_type import ExamStatus
+                from gws_care.user.user import User
 
+                caller = User.get_by_id(str(auth_user.id))
                 if action in ("labo", "psc"):
                     CampaignService.mark_lab_entered(campaign_id, patient_id)
                     target = "LABO" if action == "labo" else "PSC"
                     new_status = "LAB_ENTERED"
                 elif action == "travail":
-                    CampaignService.validate_psc_patient(campaign_id, patient_id)
+                    CampaignService.validate_psc_patient(campaign_id, patient_id, caller=caller)
                     target = "TRAVAIL"
                     new_status = "PSC_VALIDATED"
                 else:
@@ -569,9 +571,11 @@ class CampaignPatientExamsState(ReflexMainState):
                 else s
                 for s in self.sections
             ]
+            from ..admin.general_settings_state import GeneralSettingsState
+            org_acronym = (await self.get_state(GeneralSettingsState)).org_acronym
             target_labels = {
                 "LABO": "au labo",
-                "PSC": "au médecin PSC",
+                "PSC": f"au médecin {org_acronym}",
                 "TRAVAIL": "au médecin de travail",
             }
             sec = next((s for s in self.sections if s.exam_type_ref_id == section_id), None)
@@ -789,9 +793,11 @@ class CampaignPatientExamsState(ReflexMainState):
                 else s
                 for s in self.sections
             ]
+            from ..admin.general_settings_state import GeneralSettingsState
+            org_acronym = (await self.get_state(GeneralSettingsState)).org_acronym
             sec = next((s for s in self.sections if s.exam_type_ref_id == section_id), None)
             section_name = sec.name if sec else "cet examen"
-            self.success = f'Résultats "{section_name}" transférés au médecin PSC.'
+            self.success = f'Résultats "{section_name}" transférés au médecin {org_acronym}.'
         except Exception as e:
             self.error = str(e)
         finally:
@@ -823,39 +829,44 @@ class CampaignPatientExamsState(ReflexMainState):
             self.sections = [
                 ExamSectionVM(**{**s.dict(), "is_transmitted": True}) for s in self.sections
             ]
+            from ..admin.general_settings_state import GeneralSettingsState
+            org_acronym = (await self.get_state(GeneralSettingsState)).org_acronym
             self.success = (
-                "Résultats transmis au médecin PSC. Le dossier passe en « Résultats saisis »."
+                f"Résultats transmis au médecin {org_acronym}. Le dossier passe en « Résultats saisis »."
             )
 
-            # Notification au médecin PSC
+            # Notification aux médecins internes (première interprétation) —
+            # tous les MedicalDoctor ayant une assignation d'examen sur cette
+            # campagne (CampaignExamDoctor). Remplace l'ancienne référence à
+            # Campaign.psc_doctor, qui n'a jamais existé en base.
             try:
                 with await self.authenticate_user():
-                    from gws_care.campaign.campaign import Campaign
+                    from gws_care.campaign.campaign_service import CampaignService
                     from gws_care.notification.notification_service import NotificationService
+                    from gws_care.user.user import User
 
-                    camp = Campaign.get_by_id(campaign_id)
-                    if camp and camp.psc_doctor_id:
+                    patient_lbl = self.patient_name
+                    camp_lbl = self.campaign_name
+                    for uid in CampaignService.get_internal_doctor_user_ids_for_campaign(campaign_id):
                         try:
-                            psc_user = camp.psc_doctor
-                            patient_lbl = self.patient_name
-                            camp_lbl = self.campaign_name
+                            doc_user = User.get_by_id(uid)
                             NotificationService._dispatch(
                                 "EMAIL",
-                                to_email=getattr(psc_user, "email", None),
+                                to_email=getattr(doc_user, "email", None),
                                 to_phone=None,
-                                to_name=f"{getattr(psc_user, 'first_name', '')} {getattr(psc_user, 'last_name', '')}".strip(),
+                                to_name=f"{getattr(doc_user, 'first_name', '')} {getattr(doc_user, 'last_name', '')}".strip(),
                                 subject=f"[Care] Résultats disponibles – {patient_lbl}",
                                 body=(
                                     f"Bonjour,\n\n"
                                     f"Les résultats de laboratoire du patient {patient_lbl} "
                                     f"(campagne : {camp_lbl}) ont été saisis et sont disponibles pour interprétation.\n\n"
-                                    f"Connectez-vous sur la plateforme PSC Care pour accéder au dossier.\n\n"
-                                    f"Cordialement,\nPSC Care"
+                                    f"Connectez-vous sur la plateforme pour accéder au dossier.\n\n"
+                                    f"Cordialement"
                                 ),
                             )
-                        except Exception as exc:
-                            pass  # notification non bloquante
-            except Exception as exc:
+                        except Exception:
+                            continue
+            except Exception:
                 pass
         except Exception as e:
             self.error = str(e)
@@ -1044,7 +1055,7 @@ class CampaignPatientExamsState(ReflexMainState):
         finally:
             self.is_saving_add_params = False
 
-    # ── PSC doctor interpretation ─────────────────────────────────────────
+    # ── Internal doctor interpretation ─────────────────────────────────────
 
     @rx.event
     def set_psc_notes(self, value: str):
@@ -1052,12 +1063,12 @@ class CampaignPatientExamsState(ReflexMainState):
 
     @rx.event
     async def validate_and_send_to_enterprise(self):
-        """PSC doctor: save interpretation + validate + notify enterprise doctor."""
+        """Internal doctor: save interpretation + validate + notify company doctor."""
         await self._do_validate_psc()
 
     @rx.event
     async def validate_psc_and_next(self):
-        """PSC doctor: validate + notify enterprise + navigate to next patient."""
+        """Internal doctor: validate + notify company doctor + navigate to next patient."""
         await self._do_validate_psc()
         if self.error:
             return
@@ -1071,32 +1082,37 @@ class CampaignPatientExamsState(ReflexMainState):
         self.is_saving = True
         self.error = ""
         try:
-            with await self.authenticate_user():
+            with await self.authenticate_user() as auth_user:
                 from gws_care.campaign.campaign_service import CampaignService
+                from gws_care.user.user import User
 
-                CampaignService.add_psc_interpretation(campaign_id, patient_id, self.psc_notes)
-                CampaignService.validate_psc_patient(campaign_id, patient_id)
+                caller = User.get_by_id(str(auth_user.id))
+                CampaignService.add_psc_interpretation(campaign_id, patient_id, self.psc_notes, caller=caller)
+                CampaignService.validate_psc_patient(campaign_id, patient_id, caller=caller)
+            from ..admin.general_settings_state import GeneralSettingsState
+            org_acronym = (await self.get_state(GeneralSettingsState)).org_acronym
             self.medical_status = "PSC_VALIDATED"
-            self.success = "Interprétation PSC validée. Dossier transmis au médecin entreprise."
+            self.success = f"Interprétation {org_acronym} validée. Dossier transmis au médecin entreprise."
 
-            # Notify enterprise doctor
+            # Notify enterprise (company-scope) doctors — Campaign.enterprise_doctor
+            # never existed as a field; replaced with the real company-doctor pool.
             try:
                 with await self.authenticate_user():
-                    from gws_care.campaign.campaign import Campaign
+                    from gws_care.campaign.campaign_service import CampaignService
                     from gws_care.notification.notification_service import NotificationService
+                    from gws_care.user.user import User
 
-                    camp = Campaign.get_by_id(campaign_id)
-                    if camp and camp.enterprise_doctor_id:
-                        doc = camp.enterprise_doctor
+                    for uid in CampaignService.get_company_doctor_user_ids_for_campaign(campaign_id):
+                        doc = User.get_by_id(uid)
                         NotificationService._dispatch(
                             "EMAIL",
                             to_email=getattr(doc, "email", None),
                             to_phone=None,
                             to_name=f"{getattr(doc, 'first_name', '')} {getattr(doc, 'last_name', '')}".strip(),
-                            subject=f"[Care] Dossier validé PSC – {self.patient_name}",
+                            subject=f"[Care] Dossier validé {org_acronym} – {self.patient_name}",
                             body=(
                                 f"Bonjour,\n\nLe dossier du patient {self.patient_name} "
-                                f"a été validé par le médecin PSC dans la campagne « {self.campaign_name} ».\n"
+                                f"a été validé par le médecin {org_acronym} dans la campagne « {self.campaign_name} ».\n"
                                 "Vous pouvez maintenant ajouter votre interprétation.\n\nCordialement,\nConstellab Care"
                             ),
                         )
@@ -1168,16 +1184,19 @@ class CampaignPatientExamsState(ReflexMainState):
         self.is_saving = True
         self.error = ""
         try:
-            with await self.authenticate_user():
+            with await self.authenticate_user() as auth_user:
                 from gws_care.campaign.campaign_service import CampaignService
+                from gws_care.user.user import User
 
+                caller = User.get_by_id(str(auth_user.id))
                 CampaignService.add_enterprise_interpretation(
                     campaign_id,
                     patient_id,
                     self.enterprise_notes,
-                    self.enterprise_notes,
+                    caller=caller,
+                    patient_message=self.enterprise_notes,
                 )
-                CampaignService.validate_enterprise_patient(campaign_id, patient_id)
+                CampaignService.validate_enterprise_patient(campaign_id, patient_id, caller=caller)
             self.medical_status = "ENTERPRISE_VALIDATED"
             self.success = "Interprétation entreprise validée."
         except Exception as e:
@@ -1268,34 +1287,31 @@ class CampaignPatientExamsState(ReflexMainState):
                 except Exception:
                     pass
 
-                # Detect viewer role
+                # Detect viewer role + per-campaign doctor scope.
+                #
+                # MEDECIN_PSC and MEDECIN_ENTREPRISE were merged into a single
+                # MEDECIN role — whether a doctor sees raw (first-interpretation)
+                # or validated-only ("company") data for THIS campaign is no
+                # longer decided by role, but by how they were assigned to it
+                # (see CampaignService.get_doctor_scope_for_campaign).
+                from gws_care.campaign.campaign_service import CampaignService
                 from gws_care.role.care_role import CareRole as _CareRole
                 from gws_care.role.user_role_service import UserRoleService
 
                 with await self.authenticate_user() as auth_user:
                     roles = UserRoleService.get_roles_for_user(str(auth_user.id))
                     role_vals = [r.value for r in roles]
-                self.viewer_is_psc = (
-                    _CareRole.MEDECIN_PSC.value in role_vals
-                    or _CareRole.SUPER_ADMIN_PSC.value in role_vals
-                    or _CareRole.ADMIN_PSC.value in role_vals
-                    or _CareRole.DIRECTEUR_PSC.value in role_vals
-                    or len(role_vals) == 0  # no role → show all (dev mode)
-                )
-                self.viewer_is_enterprise = (
-                    _CareRole.MEDECIN_ENTREPRISE.value in role_vals
-                    or _CareRole.SUPER_ADMIN_PSC.value in role_vals
-                    or _CareRole.ADMIN_PSC.value in role_vals
-                    or _CareRole.DIRECTEUR_PSC.value in role_vals
-                    or len(role_vals) == 0
-                )
+                    is_admin_role = _CareRole.ADMIN.value in role_vals
+                    dev_mode_show_all = len(role_vals) == 0  # no role assigned → show all (dev mode)
+                    scope = (
+                        CampaignService.get_doctor_scope_for_campaign(campaign_id, str(auth_user.id))
+                        if _CareRole.MEDECIN.value in role_vals
+                        else "none"
+                    )
+                self.viewer_is_psc = is_admin_role or dev_mode_show_all or scope == "internal"
+                self.viewer_is_enterprise = is_admin_role or dev_mode_show_all or scope == "company"
                 self.viewer_is_operator = (
-                    _CareRole.OPERATEUR_TERRAIN.value in role_vals
-                    or _CareRole.OPERATEUR_LABO.value in role_vals
-                    or _CareRole.SUPER_ADMIN_PSC.value in role_vals
-                    or _CareRole.ADMIN_PSC.value in role_vals
-                    or _CareRole.DIRECTEUR_PSC.value in role_vals
-                    or len(role_vals) == 0  # dev mode — show all
+                    _CareRole.OPERATEUR.value in role_vals or is_admin_role or dev_mode_show_all
                 )
 
                 # Index existing saved exams {marker → (exam_id, is_transmitted)}

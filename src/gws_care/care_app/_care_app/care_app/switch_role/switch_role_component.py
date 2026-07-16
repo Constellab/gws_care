@@ -13,9 +13,9 @@ def _role_label(role_value: rx.Var) -> rx.Component:
     return rx.match(
         role_value,
         ("ADMIN", LanguageState.tr["role_admin"]),
-        ("DOCTOR", LanguageState.tr["role_doctor"]),
-        ("OPERATOR", LanguageState.tr["role_operator"]),
-        ("ACCOUNT_ADMIN", LanguageState.tr["role_account_admin"]),
+        ("MEDECIN", LanguageState.tr["role_doctor"]),
+        ("OPERATEUR", LanguageState.tr["role_operator"]),
+        ("RH_ENTREPRISE", LanguageState.tr["role_account_admin"]),
         ("PATIENT", LanguageState.tr["role_patient"]),
         role_value,
     )
@@ -26,9 +26,9 @@ def _role_desc(role_value: rx.Var) -> rx.Component:
     return rx.match(
         role_value,
         ("ADMIN", LanguageState.tr["role_admin_desc"]),
-        ("DOCTOR", LanguageState.tr["role_doctor_desc"]),
-        ("OPERATOR", LanguageState.tr["role_operator_desc"]),
-        ("ACCOUNT_ADMIN", LanguageState.tr["role_account_admin_desc"]),
+        ("MEDECIN", LanguageState.tr["role_doctor_desc"]),
+        ("OPERATEUR", LanguageState.tr["role_operator_desc"]),
+        ("RH_ENTREPRISE", LanguageState.tr["role_account_admin_desc"]),
         ("PATIENT", LanguageState.tr["role_patient_desc"]),
         "",
     )
@@ -39,9 +39,9 @@ def _role_icon(role_value: rx.Var) -> rx.Component:
     return rx.match(
         role_value,
         ("ADMIN", rx.icon("shield-check", size=28)),
-        ("DOCTOR", rx.icon("user-round-check", size=28)),
-        ("OPERATOR", rx.icon("wrench", size=28)),
-        ("ACCOUNT_ADMIN", rx.icon("building-2", size=28)),
+        ("MEDECIN", rx.icon("user-round-check", size=28)),
+        ("OPERATEUR", rx.icon("wrench", size=28)),
+        ("RH_ENTREPRISE", rx.icon("building-2", size=28)),
         ("PATIENT", rx.icon("user", size=28)),
         rx.icon("user", size=28),
     )

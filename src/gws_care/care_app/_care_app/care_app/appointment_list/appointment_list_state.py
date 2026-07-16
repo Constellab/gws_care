@@ -106,8 +106,7 @@ class AppointmentListState(ReflexMainState):
                 from gws_care.role.care_role import CareRole
                 from gws_care.role.user_role_service import UserRoleService
                 roles = UserRoleService.get_roles_for_user(str(auth_user.id))
-                _doctor_roles = {CareRole.MEDECIN_PSC, CareRole.MEDECIN_ENTREPRISE}
-                if any(r in _doctor_roles for r in roles) and CareRole.SUPER_ADMIN_PSC not in roles and CareRole.ADMIN_PSC not in roles:
+                if CareRole.MEDECIN in roles and CareRole.ADMIN not in roles:
                     self.is_doctor_view = True
                     self.doctor_context_id = str(auth_user.id)
                 else:

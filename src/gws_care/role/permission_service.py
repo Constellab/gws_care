@@ -4,10 +4,12 @@ Based on the access matrix defined in SPEC_CONSTELLAB_CARE_v2.md Section 4.
 
 Role summary
 ============
-ADMIN          → Super Admin PSC — full access (platform admin also counts)
-OPERATOR       → HQ Operator PSC — lab data entry and lab validation
-DOCTOR         → Clinic Doctor PSC — medical interpretation and clinic validation
-ACCOUNT_ADMIN  → Company Doctor / Responsable RH — scoped to one account
+ADMIN          → Full access (platform admin also counts)
+OPERATOR       → Field and lab operator — data entry and lab validation
+DOCTOR         → Medical interpretation and clinical validation (alias of MEDECIN;
+                 see CampaignService.get_doctor_scope_for_campaign for the
+                 per-campaign raw-vs-validated-only distinction)
+ACCOUNT_ADMIN  → Responsable RH — scoped to one account
 PATIENT        → Employé — read-only access to own data
 
 Usage
@@ -160,6 +162,27 @@ class PermissionService:
         raise ForbiddenException(
             "You do not have permission to access this account's data."
         )
+
+    @classmethod
+    def require_campaign_doctor_scope(cls, user: "User", campaign_id: str, allowed_scopes: set[str]) -> None:  # noqa: F821
+        """Require that the user's doctor scope for this campaign is one of *allowed_scopes*.
+
+        Scope ("internal" / "company" / "none") is computed from how the user's
+        MedicalDoctor profile is assigned to the campaign — see
+        ``CampaignService.get_doctor_scope_for_campaign``. ADMIN / platform
+        admin bypass this check entirely.
+        """
+        if cls._is_platform_admin(user):
+            return
+        roles = cls._get_user_roles(user)
+        if CareRole.ADMIN in roles:
+            return
+        from gws_care.campaign.campaign_service import CampaignService
+        scope = CampaignService.get_doctor_scope_for_campaign(campaign_id, str(user.id))
+        if scope not in allowed_scopes:
+            raise ForbiddenException(
+                "You are not assigned as a doctor on this campaign."
+            )
 
     @classmethod
     def require_own_patient(cls, user: "User", patient_id: str) -> None:  # noqa: F821

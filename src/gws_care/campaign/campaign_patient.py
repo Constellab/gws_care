@@ -17,19 +17,22 @@ class MedicalRecordStatus(str, Enum):
     PENDING = "PENDING"                                      # Patient enrolled, no results yet
     LAB_ENTERED = "LAB_ENTERED"                              # Operator/lab has saved draft results
     LAB_VALIDATED = "LAB_VALIDATED"                          # Lab results fully validated
-    PSC_INTERPRETED = "PSC_INTERPRETED"                      # PSC doctor has written interpretation (draft)
-    PSC_VALIDATED = "PSC_VALIDATED"                          # PSC doctor has validated + sent to enterprise
+    PSC_INTERPRETED = "PSC_INTERPRETED"                      # Internal doctor has written interpretation (draft)
+    PSC_VALIDATED = "PSC_VALIDATED"                          # Internal doctor has validated + sent to enterprise
     TRANSMITTED_TREATING_DOCTOR = "TRANSMITTED_TREATING_DOCTOR"  # Results sent to patient's treating doctor
     ENTERPRISE_VALIDATED = "ENTERPRISE_VALIDATED"            # Enterprise doctor has validated aptitude
     PUBLISHED = "PUBLISHED"                                  # Dossier published / closed
 
-    def get_label(self) -> str:
+    def get_label(self, org_acronym: str = "PSC") -> str:
+        """*org_acronym* lets callers with request context (GeneralSettingsState.org_acronym)
+        substitute the configured organization acronym instead of the "PSC" default.
+        """
         return {
             "PENDING": "En attente",
             "LAB_ENTERED": "Résultats saisis",
             "LAB_VALIDATED": "Résultats validés labo",
-            "PSC_INTERPRETED": "Interprétation PSC en cours",
-            "PSC_VALIDATED": "Validé PSC — transmis médecin travail",
+            "PSC_INTERPRETED": f"Interprétation {org_acronym} en cours",
+            "PSC_VALIDATED": f"Validé {org_acronym} — transmis médecin travail",
             "TRANSMITTED_TREATING_DOCTOR": "Transmis au médecin traitant",
             "ENTERPRISE_VALIDATED": "Validé médecin travail",
             "PUBLISHED": "Dossier terminé",

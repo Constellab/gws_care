@@ -38,7 +38,7 @@ def _make_cert_dto(patient_id: str, **kwargs) -> SaveMedicalCertificateDTO:
         "patient_id": patient_id,
         "issue_date": date.today(),
         "conclusion": "Fit for work",
-        "is_fit_for_work": True,
+        "fitness_decision": "FIT",
     }
     defaults.update(kwargs)
     return SaveMedicalCertificateDTO(**defaults)
@@ -65,7 +65,7 @@ class TestMedicalCertificateService(BaseTestCase):
             _make_cert_dto(
                 str(patient.id),
                 conclusion="Fit for all activities",
-                is_fit_for_work=True,
+                fitness_decision="FIT",
                 restrictions="None",
             ),
             issued_by=doctor,
@@ -79,7 +79,7 @@ class TestMedicalCertificateService(BaseTestCase):
         self.assertEqual(str(cert.issued_by_id), str(doctor.id))
 
     def test_create_certificate_not_fit_for_work(self):
-        """is_fit_for_work=False is persisted correctly."""
+        """fitness_decision='UNFIT' is persisted correctly (is_fit_for_work derived False)."""
         patient = _make_patient()
         doctor = _get_doctor()
 
@@ -87,12 +87,13 @@ class TestMedicalCertificateService(BaseTestCase):
             _make_cert_dto(
                 str(patient.id),
                 conclusion="Temporary medical leave",
-                is_fit_for_work=False,
+                fitness_decision="UNFIT",
                 restrictions="No heavy lifting for 4 weeks",
             ),
             issued_by=doctor,
         )
 
+        self.assertEqual(cert.fitness_decision, "UNFIT")
         self.assertFalse(cert.is_fit_for_work)
         self.assertEqual(cert.restrictions, "No heavy lifting for 4 weeks")
 

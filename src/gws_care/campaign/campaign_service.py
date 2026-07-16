@@ -635,20 +635,29 @@ class CampaignService:
         cp.save()
 
     @classmethod
-    def add_psc_interpretation(cls, campaign_id: str, patient_id: str, notes: str) -> None:
-        """Save PSC interpretation and advance status to PSC_INTERPRETED."""
+    def add_psc_interpretation(cls, campaign_id: str, patient_id: str, notes: str, caller: User) -> None:
+        """Save PSC interpretation and advance status to PSC_INTERPRETED.
+
+        *caller* must be the doctor with an "internal" scope on this campaign
+        (assigned to one of its exams) — see get_doctor_scope_for_campaign.
+        """
         from gws_care.campaign.campaign_patient import MedicalRecordStatus
 
+        PermissionService.require_campaign_doctor_scope(caller, campaign_id, {"internal"})
         cp = cls._get_campaign_patient(campaign_id, patient_id)
         cp.psc_notes = notes
         cp.medical_status = MedicalRecordStatus.PSC_INTERPRETED.value
         cp.save()
 
     @classmethod
-    def validate_psc_patient(cls, campaign_id: str, patient_id: str) -> None:
-        """Mark PSC interpretation as validated and advance to PSC_VALIDATED."""
+    def validate_psc_patient(cls, campaign_id: str, patient_id: str, caller: User) -> None:
+        """Mark PSC interpretation as validated and advance to PSC_VALIDATED.
+
+        *caller* must be the doctor with an "internal" scope on this campaign.
+        """
         from gws_care.campaign.campaign_patient import MedicalRecordStatus
 
+        PermissionService.require_campaign_doctor_scope(caller, campaign_id, {"internal"})
         cp = cls._get_campaign_patient(campaign_id, patient_id)
         cp.medical_status = MedicalRecordStatus.PSC_VALIDATED.value
         cp.psc_validated_at = datetime.utcnow()
@@ -685,19 +694,28 @@ class CampaignService:
 
     @classmethod
     def add_enterprise_interpretation(
-        cls, campaign_id: str, patient_id: str, notes: str, patient_message: str = ""
+        cls, campaign_id: str, patient_id: str, notes: str, caller: User, patient_message: str = ""
     ) -> None:
-        """Save enterprise doctor interpretation."""
+        """Save enterprise doctor interpretation.
+
+        *caller* must be the doctor with a "company" scope on this campaign
+        (in the campaign's doctor pool with no exam-level assignment).
+        """
+        PermissionService.require_campaign_doctor_scope(caller, campaign_id, {"company"})
         cp = cls._get_campaign_patient(campaign_id, patient_id)
         cp.enterprise_notes = notes
         cp.patient_message = patient_message or notes
         cp.save()
 
     @classmethod
-    def validate_enterprise_patient(cls, campaign_id: str, patient_id: str) -> None:
-        """Mark enterprise validation as done and advance to ENTERPRISE_VALIDATED."""
+    def validate_enterprise_patient(cls, campaign_id: str, patient_id: str, caller: User) -> None:
+        """Mark enterprise validation as done and advance to ENTERPRISE_VALIDATED.
+
+        *caller* must be the doctor with a "company" scope on this campaign.
+        """
         from gws_care.campaign.campaign_patient import MedicalRecordStatus
 
+        PermissionService.require_campaign_doctor_scope(caller, campaign_id, {"company"})
         cp = cls._get_campaign_patient(campaign_id, patient_id)
         cp.medical_status = MedicalRecordStatus.ENTERPRISE_VALIDATED.value
         cp.enterprise_validated_at = datetime.utcnow()
@@ -902,3 +920,80 @@ class CampaignService:
         CampaignDoctor.delete().where(
             (CampaignDoctor.campaign == campaign_id) & (CampaignDoctor.doctor == doctor_id)
         ).execute()
+
+    @classmethod
+    def get_doctor_scope_for_campaign(cls, campaign_id: str, user_id: str) -> str:
+        """Return this user's doctor scope on the given campaign.
+
+        Since MEDECIN_PSC and MEDECIN_ENTREPRISE were merged into a single
+        MEDECIN role, whether a doctor sees raw or validated-only results is no
+        longer decided by role — it's decided by how they were assigned to this
+        specific campaign:
+
+        - "internal": assigned to at least one exam of this campaign
+          (CampaignExamDoctor) — this is the doctor who gives the first,
+          raw-result interpretation.
+        - "company": present in the campaign's doctor pool (CampaignDoctor) but
+          with no exam-level assignment — sees validated results only.
+        - "none": not linked to a MedicalDoctor profile, or not assigned to
+          this campaign at all.
+        """
+        from gws_care.campaign.campaign_doctor import CampaignDoctor
+        from gws_care.campaign.campaign_exam import CampaignExam
+        from gws_care.campaign.campaign_exam_doctor import CampaignExamDoctor
+        from gws_care.doctor.medical_doctor import MedicalDoctor
+
+        doctor = MedicalDoctor.get_or_none(MedicalDoctor.user == user_id)
+        if doctor is None:
+            return "none"
+
+        exam_ids = CampaignExam.select(CampaignExam.id).where(CampaignExam.campaign == campaign_id)
+        is_internal = (
+            CampaignExamDoctor.select()
+            .where(CampaignExamDoctor.campaign_exam.in_(exam_ids), CampaignExamDoctor.doctor == doctor.id)
+            .exists()
+        )
+        if is_internal:
+            return "internal"
+
+        is_in_pool = (
+            CampaignDoctor.select()
+            .where(CampaignDoctor.campaign == campaign_id, CampaignDoctor.doctor == doctor.id)
+            .exists()
+        )
+        return "company" if is_in_pool else "none"
+
+    @classmethod
+    def get_internal_doctor_user_ids_for_campaign(cls, campaign_id: str) -> list[str]:
+        """Return the user_id of every doctor with an exam-level ("internal") assignment on this campaign."""
+        from gws_care.campaign.campaign_exam import CampaignExam
+        from gws_care.campaign.campaign_exam_doctor import CampaignExamDoctor
+        from gws_care.doctor.medical_doctor import MedicalDoctor
+
+        exam_ids = CampaignExam.select(CampaignExam.id).where(CampaignExam.campaign == campaign_id)
+        doctors = (
+            MedicalDoctor.select()
+            .join(CampaignExamDoctor, on=(CampaignExamDoctor.doctor == MedicalDoctor.id))
+            .where(CampaignExamDoctor.campaign_exam.in_(exam_ids), MedicalDoctor.user.is_null(False))
+            .distinct()
+        )
+        return [str(d.user_id) for d in doctors]
+
+    @classmethod
+    def get_company_doctor_user_ids_for_campaign(cls, campaign_id: str) -> list[str]:
+        """Return the user_id of every doctor with a "company" scope on this campaign
+
+        (in the campaign's doctor pool via CampaignDoctor, but with no
+        exam-level CampaignExamDoctor assignment on it).
+        """
+        from gws_care.campaign.campaign_doctor import CampaignDoctor
+        from gws_care.doctor.medical_doctor import MedicalDoctor
+
+        internal_ids = set(cls.get_internal_doctor_user_ids_for_campaign(campaign_id))
+        doctors = (
+            MedicalDoctor.select()
+            .join(CampaignDoctor, on=(CampaignDoctor.doctor == MedicalDoctor.id))
+            .where(CampaignDoctor.campaign == campaign_id, MedicalDoctor.user.is_null(False))
+            .distinct()
+        )
+        return [str(d.user_id) for d in doctors if str(d.user_id) not in internal_ids]

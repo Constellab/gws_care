@@ -6,16 +6,16 @@ Layout:
   ┌──────────────────────────────────────────────────────────┐
   │ ← Retour campagne     [Patient] [Campagne] [Statut badge]│
   ├──────────────────────────────────────────────────────────┤
-  │  [1: Résultats] ─── [2: PSC] ─── [3: Validé] ─ [4: Fin]│  progress indicator
+  │  [1: Résultats] ─ [2: Interne] ─ [3: Validé] ─ [4: Fin]│  progress indicator
   ├────────────────────┬─────────────────────────────────────┤
   │ SECTIONS (left)    │ Form: paramètres actifs (right)     │
   │ ✓ NFS  [Labo]      │ Param  | Unité | Ref | Valeur       │
   │ ○ ECG  [Sur place] │ ...                                 │
   │ ○ Glycémie [Labo]  │         [Enregistrer NFS]           │
   ├────────────────────┴─────────────────────────────────────┤
-  │         [Transmettre les résultats au médecin PSC]       │
+  │    [Transmettre les résultats au médecin interne]        │
   │         [Transmettre au médecin traitant] (optional)     │
-  │         [Interprétation PSC]                             │
+  │         [Interprétation interne]                         │
   │         [Interprétation Entreprise + Terminer]           │
   └──────────────────────────────────────────────────────────┘
 """
@@ -25,7 +25,6 @@ from gws_reflex_main import main_component
 
 from ..admin.general_settings_state import GeneralSettingsState
 from ..common.language_state import LanguageState
-from ..common.nav_role_state import NavRoleState
 from ..common.page_layout import page_layout
 from .campaign_patient_exams_state import (
     AddParamOption,
@@ -1009,7 +1008,7 @@ def _psc_interpretation_panel() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.icon("stethoscope", size=16, color="var(--blue-9)"),
-                    rx.text(LanguageState.tr["psc_doctor_interpretation"], size="3", weight="bold"),
+                    rx.text(GeneralSettingsState.org_doctor_interpretation_label, size="3", weight="bold"),
                     rx.spacer(),
                     rx.cond(
                         already_validated,
@@ -1165,7 +1164,9 @@ def _enterprise_interpretation_panel() -> rx.Component:
 def _finish_panel() -> rx.Component:
     """Shown when enterprise validated — allows closing the dossier."""
     s = CampaignPatientExamsState.medical_status
-    can_show = (s == "ENTERPRISE_VALIDATED") | (s == "PUBLISHED")
+    can_show = ((s == "ENTERPRISE_VALIDATED") | (s == "PUBLISHED")) & (
+        CampaignPatientExamsState.viewer_is_enterprise | CampaignPatientExamsState.viewer_is_operator
+    )
     already_done = s == "PUBLISHED"
     return rx.cond(
         can_show,
@@ -1616,24 +1617,12 @@ def campaign_patient_exams_page() -> rx.Component:
                             _transmit_panel(),
                             # ── Treating doctor (optional) ─────────────────
                             _treating_doctor_panel(),
-                            # ── PSC interpretation ─────────────────────────
-                            rx.cond(
-                                NavRoleState.can_see_interpretation,
-                                _psc_interpretation_panel(),
-                                rx.fragment(),
-                            ),
-                            # ── Enterprise interpretation ──────────────────
-                            rx.cond(
-                                NavRoleState.can_see_interpretation,
-                                _enterprise_interpretation_panel(),
-                                rx.fragment(),
-                            ),
-                            # ── Close record ───────────────────────────────
-                            rx.cond(
-                                NavRoleState.can_see_interpretation,
-                                _finish_panel(),
-                                rx.fragment(),
-                            ),
+                            # ── PSC interpretation (internal-scope gate is inside the panel) ──
+                            _psc_interpretation_panel(),
+                            # ── Enterprise interpretation (company-scope gate is inside the panel) ──
+                            _enterprise_interpretation_panel(),
+                            # ── Close record (viewer gate is inside the panel) ─
+                            _finish_panel(),
                             spacing="4",
                             width="100%",
                         ),

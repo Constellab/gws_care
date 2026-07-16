@@ -16,24 +16,16 @@ from .import_component import import_dialog
 from .import_state import ImportState
 
 _ROLE_LABELS = {
-    "SUPER_ADMIN_PSC": "Super Admin",
-    "DIRECTEUR_PSC": "Directeur",
-    "ADMIN_PSC": "Admin",
-    "OPERATEUR_TERRAIN": "Opérateur terrain",
-    "OPERATEUR_LABO": "Opérateur labo",
-    "MEDECIN_PSC": "Médecin",
-    "MEDECIN_ENTREPRISE": "Médecin entreprise",
+    "ADMIN": "Admin",
+    "OPERATEUR": "Opérateur",
+    "MEDECIN": "Médecin",
     "RH_ENTREPRISE": "RH entreprise",
     "PATIENT": "Patient",
 }
 _ROLE_COLORS = {
-    "SUPER_ADMIN_PSC": "red",
-    "DIRECTEUR_PSC": "crimson",
-    "ADMIN_PSC": "orange",
-    "OPERATEUR_TERRAIN": "green",
-    "OPERATEUR_LABO": "teal",
-    "MEDECIN_PSC": "blue",
-    "MEDECIN_ENTREPRISE": "indigo",
+    "ADMIN": "red",
+    "OPERATEUR": "green",
+    "MEDECIN": "blue",
     "RH_ENTREPRISE": "yellow",
     "PATIENT": "purple",
 }
@@ -117,9 +109,9 @@ def _account_label_for_id(account_id: rx.Var) -> rx.Component:
 
 
 def _doctor_section(user: UserRoleRowDTO) -> rx.Component:
-    """Linked doctor selector shown when the MEDECIN_PSC role is assigned."""
+    """Linked doctor selector shown when the MEDECIN role is assigned."""
     return rx.cond(
-        user.roles.contains("MEDECIN_PSC"),
+        user.roles.contains("MEDECIN"),
         rx.box(
             rx.select.root(
                 rx.select.trigger(
@@ -194,20 +186,15 @@ def _user_row(user: UserRoleRowDTO) -> rx.Component:
         rx.table.cell(
             rx.vstack(
                 # ── Rôles internes ─────────────────────────────────────────
-                _role_toggle(user, "SUPER_ADMIN_PSC"),
-                _role_toggle(user, "ADMIN_PSC"),
-                _role_toggle(user, "DIRECTEUR_PSC"),
-                _role_toggle(user, "OPERATEUR_TERRAIN"),
-                _role_toggle(user, "OPERATEUR_LABO"),
-                # ── MEDECIN_PSC + profil médecin lié ───────────────────────
+                _role_toggle(user, "ADMIN"),
+                _role_toggle(user, "OPERATEUR"),
+                # ── MEDECIN + profil médecin lié ────────────────────────────
                 rx.vstack(
-                    _role_toggle(user, "MEDECIN_PSC"),
+                    _role_toggle(user, "MEDECIN"),
                     _doctor_section(user),
                     spacing="1",
                     align="start",
                 ),
-                # ── Rôles externes ─────────────────────────────────────────
-                _role_toggle(user, "MEDECIN_ENTREPRISE"),
                 # ── RH_ENTREPRISE + liste de comptes ───────────────────────
                 rx.vstack(
                     _role_toggle(user, "RH_ENTREPRISE"),
@@ -667,6 +654,10 @@ def _general_tab() -> rx.Component:
                         LanguageState.tr["btn_save"],
                         on_click=GeneralSettingsState.save_org_info,
                         loading=GeneralSettingsState.is_saving_org,
+                        disabled=(
+                            (GeneralSettingsState.form_org_name.strip() == "")
+                            | (GeneralSettingsState.form_org_acronym.strip() == "")
+                        ),
                         size="2",
                     ),
                     rx.cond(

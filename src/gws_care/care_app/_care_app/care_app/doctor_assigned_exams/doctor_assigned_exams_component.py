@@ -2,6 +2,7 @@
 
 import reflex as rx
 
+from ..admin.general_settings_state import GeneralSettingsState
 from ..common.page_layout import page_layout
 from .doctor_assigned_exams_state import (
     AssignedDoctorOption,
@@ -60,7 +61,7 @@ def _assignee_badge(row: AssignedExamRowDTO) -> rx.Component:
             row.row_type == "psc",
             rx.badge(
                 rx.icon("stethoscope", size=11),
-                "PSC",
+                GeneralSettingsState.org_acronym,
                 color_scheme="blue", variant="soft", size="1",
             ),
             rx.text(row.assigned_doctor_name, size="2", color="var(--gray-11)"),
@@ -172,7 +173,7 @@ def doctor_assigned_exams_page() -> rx.Component:
             rx.separator(width="100%"),
             # ── Filters ───────────────────────────────────────────────────────
             rx.hstack(
-                # Assignee filter (Labo / PSC / doctor name)
+                # Assignee filter (Labo / internal doctor / doctor name)
                 rx.select.root(
                     rx.select.trigger(
                         placeholder="Show all",
@@ -235,8 +236,8 @@ def doctor_assigned_exams_page() -> rx.Component:
                             rx.select.item("Pending",                   value="PENDING"),
                             rx.select.item("Results entered",           value="LAB_ENTERED"),
                             rx.select.item("Lab validated",             value="LAB_VALIDATED"),
-                            rx.select.item("PSC interpretation",        value="PSC_INTERPRETED"),
-                            rx.select.item("PSC validated",             value="PSC_VALIDATED"),
+                            rx.select.item(f"{GeneralSettingsState.org_acronym} interpretation", value="PSC_INTERPRETED"),
+                            rx.select.item(f"{GeneralSettingsState.org_acronym} validated",      value="PSC_VALIDATED"),
                             rx.select.item("Sent to treating doctor",   value="TRANSMITTED_TREATING_DOCTOR"),
                             rx.select.item("Work doctor validated",     value="ENTERPRISE_VALIDATED"),
                             rx.select.item("Record completed",          value="PUBLISHED"),

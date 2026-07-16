@@ -169,6 +169,30 @@ class GeneralSettingsState(RoleState):
         return f"{self.org_acronym} validated"
 
     @rx.var
+    def org_doctor_label(self) -> str:
+        if self.app_language == "fr":
+            return f"Médecin {self.org_acronym}"
+        return f"{self.org_acronym} Doctor"
+
+    @rx.var
+    def org_doctor_placeholder(self) -> str:
+        if self.app_language == "fr":
+            return f"Sélectionner un médecin {self.org_acronym}"
+        return f"Select a {self.org_acronym} Doctor"
+
+    @rx.var
+    def org_interpretation_heading(self) -> str:
+        if self.app_language == "fr":
+            return f"Interprétation {self.org_acronym} — "
+        return f"{self.org_acronym} Interpretation — "
+
+    @rx.var
+    def org_doctor_interpretation_label(self) -> str:
+        if self.app_language == "fr":
+            return f"Interprétation Médecin {self.org_acronym}"
+        return f"{self.org_acronym} Doctor Interpretation"
+
+    @rx.var
     def theme_css(self) -> str:
         """CSS variable overrides for the active color theme."""
         if self.color_theme == "pink":
@@ -428,9 +452,12 @@ class GeneralSettingsState(RoleState):
 
     @rx.event
     async def save_org_info(self):
-        self.is_saving_org = True
         self.save_org_success = ""
         self.save_org_error = ""
+        if not self.form_org_name.strip() or not self.form_org_acronym.strip():
+            self.save_org_error = "Le nom de l'entreprise et l'acronyme sont obligatoires."
+            return
+        self.is_saving_org = True
         try:
             from gws_care.core.care_app_config_service import CareAppConfigService
             CareAppConfigService.save_org_info(
@@ -446,7 +473,7 @@ class GeneralSettingsState(RoleState):
                 country=self.form_country,
             )
             self.org_name = self.form_org_name
-            self.org_acronym = self.form_org_acronym or "PSC"
+            self.org_acronym = self.form_org_acronym
             self.org_siret = self.form_org_siret
             self.org_phone = f"{self.form_phone_dial_code} {self.form_org_phone}".strip()
             self.org_email = self.form_org_email

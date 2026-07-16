@@ -5,6 +5,7 @@ from gws_reflex_main import main_component
 
 from ..account_list.account_form_component import account_form_dialog
 from ..account_list.account_form_state import AccountFormState
+from ..admin.general_settings_state import GeneralSettingsState
 from ..common.language_state import LanguageState
 from ..common.page_layout import page_layout
 from ..common.patient_picker_component import patient_picker_widget
@@ -336,14 +337,14 @@ def _campaign_dialog() -> rx.Component:
                     rx.vstack(
                         rx.hstack(
                             rx.icon("stethoscope", size=13, color="var(--blue-9)"),
-                            rx.text(LanguageState.tr["psc_doctor_label"], size="2", weight="medium"),
+                            rx.text(GeneralSettingsState.org_doctor_label, size="2", weight="medium"),
                             spacing="1", align="center",
                         ),
                         rx.cond(
                             AccountDetailState.psc_doctor_options.length() > 0,
                             rx.select.root(
                                 rx.select.trigger(
-                                    placeholder=LanguageState.tr["psc_doctor_placeholder"],
+                                    placeholder=GeneralSettingsState.org_doctor_placeholder,
                                     width="100%",
                                 ),
                                 rx.select.content(
@@ -358,7 +359,8 @@ def _campaign_dialog() -> rx.Component:
                                 width="100%",
                             ),
                             rx.callout(
-                                "No PSC doctor found. Create a user with the PSC Doctor role in administration.",
+                                f"No {GeneralSettingsState.org_acronym} doctor found. Create a user with the "
+                                f"{GeneralSettingsState.org_acronym} Doctor role in administration.",
                                 icon="info",
                                 color_scheme="blue",
                                 size="1",

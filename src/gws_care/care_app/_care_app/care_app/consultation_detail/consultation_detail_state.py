@@ -763,7 +763,7 @@ class ConsultationDetailState(RoleState):
                 patient_name = self.consultation.patient_name if self.consultation else "le patient"
                 message = f"Nouvel examen à réaliser pour {patient_name} — {exam_label}."
                 lab_roles = list(
-                    UserCareRole.select().where(UserCareRole.role == CareRole.OPERATEUR_LABO)
+                    UserCareRole.select().where(UserCareRole.role == CareRole.OPERATEUR)
                 )
                 for role_entry in lab_roles:
                     NotificationService.create_bell(str(role_entry.user_id), message)
@@ -804,7 +804,7 @@ class ConsultationDetailState(RoleState):
                 exam.status = ExamStatus.IN_PROGRESS_INTERPRETATION
                 exam.save()
 
-                # Bell notification to PSC clinic doctors
+                # Bell notification to clinic doctors
                 exam_label = exam.exam_type.get_label()
                 patient_name = self.consultation.patient_name if self.consultation else "le patient"
                 message = (
@@ -812,10 +812,7 @@ class ConsultationDetailState(RoleState):
                     "En attente d'interprétation."
                 )
                 doctor_roles = list(
-                    UserCareRole.select().where(
-                        (UserCareRole.role == CareRole.MEDECIN_PSC)
-                        | (UserCareRole.role == CareRole.DOCTOR)
-                    )
+                    UserCareRole.select().where(UserCareRole.role == CareRole.MEDECIN)
                 )
                 for role_entry in doctor_roles:
                     NotificationService.create_bell(str(role_entry.user_id), message)
@@ -865,9 +862,13 @@ class ConsultationDetailState(RoleState):
                 if self.consultation and self.consultation.work_doctor_id:
                     NotificationService.create_bell(self.consultation.work_doctor_id, message)
                 else:
+                    # NOTE: role merge means this fallback now broadcasts to every
+                    # MEDECIN, not just former company-side doctors — there is no
+                    # per-visit internal/company distinction (unlike the campaign
+                    # flow's CampaignExamDoctor/CampaignDoctor scoping).
                     work_doctor_roles = list(
                         UserCareRole.select().where(
-                            UserCareRole.role == CareRole.MEDECIN_ENTREPRISE
+                            UserCareRole.role == CareRole.MEDECIN
                         )
                     )
                     for role_entry in work_doctor_roles:
@@ -1022,7 +1023,7 @@ class ConsultationDetailState(RoleState):
 
     @rx.event
     async def open_clinic_doctor_dialog(self):
-        """Pick the PSC clinic doctor for this campaign visit."""
+        """Pick the clinic doctor for this campaign visit."""
         if not self.consultation:
             return
         self.selected_clinic_doctor_id = self.consultation.clinic_doctor_id
@@ -1096,7 +1097,7 @@ class ConsultationDetailState(RoleState):
 
                 rows = list(
                     UserCareRole.select(UserCareRole).where(
-                        UserCareRole.role == CareRole.MEDECIN_ENTREPRISE
+                        UserCareRole.role == CareRole.MEDECIN
                     )
                 )
                 seen: set[str] = set()

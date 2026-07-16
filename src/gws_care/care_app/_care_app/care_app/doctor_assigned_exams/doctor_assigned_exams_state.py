@@ -2,14 +2,14 @@
 
 Role-based task dashboard:
   - Doctors (via CampaignExamDoctor): see their assigned exam/patient rows
-  - OPERATEUR_LABO: see all LAB_ENTERED patients (grouped under "Labo")
-  - PSC roles: see all LAB_VALIDATED + LAB_ENTERED patients (PSC interpretation queue)
-  - Admins (SUPER_ADMIN_PSC / ADMIN_PSC / DIRECTEUR_PSC): see all doctor assignments
+  - OPERATEUR: see all LAB_ENTERED patients (grouped under "Labo")
+  - MEDECIN: see all LAB_VALIDATED + LAB_ENTERED patients (internal interpretation queue)
+  - ADMIN: see all doctor assignments
 
 Filter values in filter_assignee:
   "__all__"  → show all rows
   "__lab__"  → only lab rows
-  "__psc__"  → only PSC queue rows
+  "__psc__"  → only internal-interpretation queue rows
   "{doctor_id}" → only rows for that specific doctor
 """
 
@@ -145,14 +145,16 @@ class DoctorAssignedExamsState(ReflexMainState):
         self.is_loading = True
         self.error = ""
         try:
+            from ..admin.general_settings_state import GeneralSettingsState
+            org_acronym = (await self.get_state(GeneralSettingsState)).org_acronym
             with await self.authenticate_user() as auth_user:
-                self._load_rows(auth_user.id)
+                self._load_rows(auth_user.id, org_acronym)
         except Exception as exc:
             self.error = str(exc)
         finally:
             self.is_loading = False
 
-    def _load_rows(self, auth_user_id) -> None:
+    def _load_rows(self, auth_user_id, org_acronym: str) -> None:
         from gws_care.campaign.campaign import Campaign
         from gws_care.campaign.campaign_exam import CampaignExam
         from gws_care.campaign.campaign_exam_doctor import CampaignExamDoctor
@@ -176,18 +178,12 @@ class DoctorAssignedExamsState(ReflexMainState):
         roles = UserRoleService.get_roles_for_user(str(auth_user_id))
         role_vals = [r.value if hasattr(r, "value") else str(r) for r in roles]
 
-        self.is_lab = CareRole.OPERATEUR_LABO.value in role_vals
+        self.is_lab = CareRole.OPERATEUR.value in role_vals
         self.is_psc = any(r in role_vals for r in [
-            CareRole.MEDECIN_PSC.value,
-            CareRole.SUPER_ADMIN_PSC.value,
-            CareRole.ADMIN_PSC.value,
-            CareRole.DIRECTEUR_PSC.value,
+            CareRole.MEDECIN.value,
+            CareRole.ADMIN.value,
         ])
-        is_admin = any(r in role_vals for r in [
-            CareRole.SUPER_ADMIN_PSC.value,
-            CareRole.ADMIN_PSC.value,
-            CareRole.DIRECTEUR_PSC.value,
-        ])
+        is_admin = CareRole.ADMIN.value in role_vals
         self.is_admin = is_admin
 
         _status_labels = {
@@ -198,8 +194,8 @@ class DoctorAssignedExamsState(ReflexMainState):
         _task_map: dict[str, tuple[str, str]] = {
             "PENDING":                     ("Saisir les résultats",        "orange"),
             "LAB_ENTERED":                 ("Valider résultats labo",      "amber"),
-            "LAB_VALIDATED":               ("Interprétation PSC",          "blue"),
-            "PSC_INTERPRETED":             ("Valider PSC",                 "blue"),
+            "LAB_VALIDATED":               (f"Interprétation {org_acronym}", "blue"),
+            "PSC_INTERPRETED":             (f"Valider {org_acronym}",      "blue"),
             "PSC_VALIDATED":               ("Valider médecin de travail",  "teal"),
             "TRANSMITTED_TREATING_DOCTOR": ("Valider médecin de travail",  "teal"),
             "ENTERPRISE_VALIDATED":        ("Clôturer le dossier",         "green"),
@@ -264,7 +260,7 @@ class DoctorAssignedExamsState(ReflexMainState):
                 ms = cp.medical_status or MedicalRecordStatus.PENDING.value
                 try:
                     msr = MedicalRecordStatus(ms)
-                    ms_label = msr.get_label()
+                    ms_label = msr.get_label(org_acronym)
                     ms_color = msr.get_color()
                 except Exception:
                     ms_label = ms
@@ -303,7 +299,7 @@ class DoctorAssignedExamsState(ReflexMainState):
                     can_act=camp_status in ("terrain_exam", "sample_analysis", "lab_done"),
                 ))
 
-        # ── 2. PSC queue ──────────────────────────────────────────────────────
+        # ── 2. Internal interpretation queue ──────────────────────────────────
         if self.is_psc:
             psc_statuses = [
                 MedicalRecordStatus.LAB_VALIDATED.value,
@@ -325,7 +321,7 @@ class DoctorAssignedExamsState(ReflexMainState):
                 ms = cp.medical_status or MedicalRecordStatus.PENDING.value
                 try:
                     msr = MedicalRecordStatus(ms)
-                    ms_label = msr.get_label()
+                    ms_label = msr.get_label(org_acronym)
                     ms_color = msr.get_color()
                 except Exception:
                     ms_label = ms
@@ -333,7 +329,7 @@ class DoctorAssignedExamsState(ReflexMainState):
                 result.append(AssignedExamRowDTO(
                     row_type="psc",
                     assigned_doctor_id="__psc__",
-                    assigned_doctor_name="Médecin PSC",
+                    assigned_doctor_name=f"Médecin {org_acronym}",
                     campaign_id=cid,
                     campaign_name=camp.name,
                     campaign_number=camp.campaign_number,
@@ -373,7 +369,7 @@ class DoctorAssignedExamsState(ReflexMainState):
                 result.append(AssignedExamRowDTO(
                     row_type="lab",
                     assigned_doctor_id="__lab__",
-                    assigned_doctor_name="Laboratoire PSC",
+                    assigned_doctor_name=f"Laboratoire {org_acronym}",
                     campaign_id=cid,
                     campaign_name=camp.name,
                     campaign_number=camp.campaign_number,
@@ -547,7 +543,7 @@ class DoctorAssignedExamsState(ReflexMainState):
                         row_type="lab",
                         source="private",
                         assigned_doctor_id="__lab__",
-                        assigned_doctor_name="Laboratoire PSC",
+                        assigned_doctor_name=f"Laboratoire {org_acronym}",
                         campaign_id="",
                         campaign_name="Consultation privée",
                         campaign_number=visit.visit_number,
@@ -576,7 +572,7 @@ class DoctorAssignedExamsState(ReflexMainState):
         if self.is_lab or is_admin:
             assignee_list.append(AssignedDoctorOption(id="__lab__", name="Labo"))
         if self.is_psc:
-            assignee_list.append(AssignedDoctorOption(id="__psc__", name="Médecin PSC"))
+            assignee_list.append(AssignedDoctorOption(id="__psc__", name=f"Médecin {org_acronym}"))
         for did, dname in sorted(doctor_map.items(), key=lambda x: x[1]):
             assignee_list.append(AssignedDoctorOption(id=did, name=dname))
         self.available_assignees = assignee_list

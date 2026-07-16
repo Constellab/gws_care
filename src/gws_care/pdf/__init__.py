@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 # ── Shared colour palette ─────────────────────────────────────────────────────
 
-_BLUE_DARK = (0.07, 0.27, 0.55)   # PSC brand dark blue (RGB 0–1)
+_BLUE_DARK = (0.07, 0.27, 0.55)   # brand dark blue (RGB 0–1)
 _BLUE_LIGHT = (0.88, 0.92, 0.98)  # light-blue background for table headers
 _GREEN = (0.13, 0.55, 0.13)
 _RED = (0.80, 0.10, 0.10)
@@ -785,7 +785,7 @@ def generate_prescription_pdf(prescription_id: str) -> bytes:
     """Generate a professional medical prescription PDF.
 
     Content:
-    - PSC letterhead
+    - Organization letterhead
     - Patient identity block
     - Diagnosis
     - Drug table (name, dosage, frequency, duration)

@@ -3,7 +3,7 @@
 Updated periodically (every N minutes) by a background task, so the
 dashboard never scans full tables at request time.
 
-The snapshot covers global PSC stats. Per-role derived views are computed
+The snapshot covers global stats. Per-role derived views are computed
 from the same snapshot without additional DB queries.
 """
 

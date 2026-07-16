@@ -1090,7 +1090,7 @@ def _tab_exam_params() -> rx.Component:
                             spacing="2",
                         ),
                     ),
-                    # ── Interprétation médicale (médecin PSC) ─────────────────
+                    # ── Interprétation médicale (médecin) ─────────────────────
                     # Always editable for the doctor, regardless of exam status —
                     # "Terminer" only closes param-result editing, not interpretation.
                     rx.cond(

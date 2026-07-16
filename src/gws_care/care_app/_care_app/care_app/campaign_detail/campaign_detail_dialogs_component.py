@@ -5,6 +5,7 @@ Dialogs: refuse, add_patient, add_exam_type, psc, enterprise, edit.
 
 import reflex as rx
 
+from ..admin.general_settings_state import GeneralSettingsState
 from ..common.language_state import LanguageState
 from .campaign_detail_state import CampaignDetailState
 
@@ -323,7 +324,7 @@ def _psc_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title(
                 rx.hstack(
-                    rx.text(LanguageState.tr["psc_interpretation_heading"]),
+                    rx.text(GeneralSettingsState.org_interpretation_heading),
                     rx.text(CampaignDetailState.psc_dialog_patient_name, weight="bold"),
                     spacing="1",
                 )
@@ -331,7 +332,7 @@ def _psc_dialog() -> rx.Component:
             rx.vstack(
                 rx.text("Interpretation / Conclusion *", size="2", weight="medium"),
                 rx.text_area(
-                    placeholder="Enter the PSC medical interpretation…",
+                    placeholder=f"Enter the {GeneralSettingsState.org_acronym} medical interpretation…",
                     value=CampaignDetailState.psc_notes_input,
                     on_change=CampaignDetailState.set_psc_notes,
                     width="100%",
