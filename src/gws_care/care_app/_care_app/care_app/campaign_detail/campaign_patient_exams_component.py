@@ -1086,6 +1086,16 @@ def _enterprise_interpretation_panel() -> rx.Component:
     # medical_status, which keeps advancing past ENTERPRISE_VALIDATED, so an exact
     # status match would silently unlock this panel again at later stages.
     already_validated = CampaignPatientExamsState.enterprise_validated
+    # A dossier can end up with enterprise_validated=True but no actual
+    # interpretation/message content (e.g. a historical record published via
+    # the internal doctor's direct-to-patient shortcut before this campaign
+    # had a company doctor). Locking the fields in that case leaves the
+    # company doctor unable to ever write anything — so "locked" additionally
+    # requires there to be real content behind the validated flag.
+    has_content = (CampaignPatientExamsState.enterprise_notes != "") | (
+        CampaignPatientExamsState.enterprise_patient_message != ""
+    )
+    locked = already_validated & has_content
     # No viewer_is_operator bypass here: an admin/operator previewing this page
     # must NOT be able to unlock the enterprise doctor's fields before the
     # internal doctor has actually validated — visibility of the panel is
@@ -1100,7 +1110,7 @@ def _enterprise_interpretation_panel() -> rx.Component:
                     rx.text(LanguageState.tr["company_doctor_interpretation"], size="3", weight="bold"),
                     rx.spacer(),
                     rx.cond(
-                        already_validated,
+                        locked,
                         rx.badge(
                             rx.icon("check", size=13),
                             LanguageState.tr["badge_company_validated"],
@@ -1135,7 +1145,7 @@ def _enterprise_interpretation_panel() -> rx.Component:
                             placeholder=LanguageState.tr["enterprise_interp_placeholder"],
                             rows="5",
                             width="100%",
-                            read_only=already_validated,
+                            read_only=locked,
                         ),
                         rx.text(
                             LanguageState.tr["enterprise_patient_message_label"],
@@ -1149,10 +1159,10 @@ def _enterprise_interpretation_panel() -> rx.Component:
                             placeholder=LanguageState.tr["enterprise_patient_message_placeholder"],
                             rows="4",
                             width="100%",
-                            read_only=already_validated,
+                            read_only=locked,
                         ),
                         rx.cond(
-                            ~already_validated,
+                            ~locked,
                             rx.hstack(
                                 rx.spacer(),
                                 rx.button(

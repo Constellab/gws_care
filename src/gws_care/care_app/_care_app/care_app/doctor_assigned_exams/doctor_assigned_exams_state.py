@@ -4,6 +4,9 @@ Role-based task dashboard:
   - Doctors (via CampaignExamDoctor): see their assigned exam/patient rows
   - OPERATEUR: see all LAB_ENTERED patients (grouped under "Labo")
   - MEDECIN: see all LAB_VALIDATED + LAB_ENTERED patients (internal interpretation queue)
+  - MEDECIN with "company" scope on a campaign (CampaignDoctor, no exam-level
+    assignment): see their own INTERNAL_VALIDATED patients by name, once the
+    internal doctor has handed off
   - ADMIN: see all doctor assignments
 
 Filter values in filter_assignee:
@@ -247,7 +250,9 @@ class DoctorAssignedExamsState(ReflexMainState):
 
         # Preload presence status (campaign_id, patient_id) → is the patient
         # on-site yet? Doctors have nothing to act on before that, regardless
-        # of medical_status, so these patients are skipped below.
+        # of medical_status, so these patients are skipped below. "cancelled"
+        # means the patient was explicitly marked absent on-site — just as
+        # unactionable as "pending" (never showed up), not a green light.
         on_terrain: set[tuple[str, str]] = set()
         for cid in ced_camp_ids:
             for v in Visit.select(Visit.campaign, Visit.patient, Visit.campaign_visit_status).where(
@@ -258,7 +263,7 @@ class DoctorAssignedExamsState(ReflexMainState):
                     if hasattr(v.campaign_visit_status, "value")
                     else str(v.campaign_visit_status)
                 )
-                if status != "pending":
+                if status not in ("pending", "cancelled"):
                     on_terrain.add((str(v.campaign_id), str(v.patient_id)))
 
         # Build one row per (doctor, exam_type, patient)
@@ -367,6 +372,81 @@ class DoctorAssignedExamsState(ReflexMainState):
                     action_url=f"/campaign-patient/{cid}/{patient.id}",
                     can_act=True,
                 ))
+
+        # ── 2b. Company (enterprise) interpretation queue ─────────────────────
+        # One row per (company-scope doctor, patient) once the internal doctor
+        # has validated. Unlike the internal queue above, a campaign can have a
+        # different company doctor per account, so this needs the *specific*
+        # assigned doctor's name rather than a generic org-wide label — and
+        # uses row_type="doctor" so the existing per-doctor filter/sort logic
+        # (built for CampaignExamDoctor rows) picks it up for free.
+        if self.is_internal_doctor:
+            from gws_care.campaign.campaign_service import CampaignService
+
+            company_cps = list(
+                CampaignPatient.select(CampaignPatient, Patient, Campaign)
+                .join(Patient, on=(CampaignPatient.patient == Patient.id))
+                .switch(CampaignPatient)
+                .join(Campaign, on=(CampaignPatient.campaign == Campaign.id))
+                .where(CampaignPatient.medical_status == MedicalRecordStatus.INTERNAL_VALIDATED.value)
+                .order_by(Campaign.name, Patient.last_name, Patient.first_name)
+            )
+            company_cps_by_campaign: dict[str, list] = {}
+            for cp in company_cps:
+                company_cps_by_campaign.setdefault(str(cp.campaign_id), []).append(cp)
+
+            for cid, cps in company_cps_by_campaign.items():
+                company_user_ids = CampaignService.get_company_doctor_user_ids_for_campaign(cid)
+                if not company_user_ids:
+                    continue
+                company_doctors = list(MedicalDoctor.select().where(MedicalDoctor.user.in_(company_user_ids)))
+                if not is_admin:
+                    if str(auth_user_id) not in company_user_ids:
+                        continue
+                    company_doctors = [d for d in company_doctors if str(d.user_id) == str(auth_user_id)]
+
+                for doc in company_doctors:
+                    did = str(doc.user_id)
+                    if did not in doctor_map:
+                        doctor_map[did] = doc.get_full_name()
+
+                for cp in cps:
+                    patient = cp.patient
+                    camp = cp.campaign
+                    camp_status = camp.status.value if hasattr(camp.status, "value") else str(camp.status)
+                    camp_status_label = _status_labels.get(camp_status, camp_status)
+                    ms = cp.medical_status or MedicalRecordStatus.PENDING.value
+                    try:
+                        msr = MedicalRecordStatus(ms)
+                        ms_label = msr.get_label(org_acronym)
+                        ms_color = msr.get_color()
+                    except Exception:
+                        ms_label = ms
+                        ms_color = "gray"
+                    for doc in company_doctors:
+                        result.append(AssignedExamRowDTO(
+                            row_type="doctor",
+                            assigned_doctor_id=str(doc.user_id),
+                            assigned_doctor_name=doc.get_full_name(),
+                            campaign_id=cid,
+                            campaign_name=camp.name,
+                            campaign_number=camp.campaign_number,
+                            campaign_status=camp_status,
+                            campaign_status_label=camp_status_label,
+                            exam_type_id="",
+                            exam_type_name="Tous les examens",
+                            exam_category="",
+                            patient_id=str(patient.id),
+                            patient_name=patient.get_full_name(),
+                            patient_number=patient.patient_number,
+                            medical_status=ms,
+                            medical_status_label=ms_label,
+                            medical_status_color=ms_color,
+                            pending_task=_task_map.get(ms, ("", "gray"))[0],
+                            pending_task_color=_task_map.get(ms, ("", "gray"))[1],
+                            action_url=f"/campaign-patient/{cid}/{patient.id}",
+                            can_act=True,
+                        ))
 
         # ── 3. Lab rows ───────────────────────────────────────────────────────
         if self.is_lab or is_admin:

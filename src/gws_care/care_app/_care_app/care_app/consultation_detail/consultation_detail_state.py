@@ -648,9 +648,15 @@ class ConsultationDetailState(RoleState):
                     patient_gender=patient_gender or None,
                     patient_age=patient_age if patient_age else None,
                 )
-                # Advance status from todo → in_progress_results on first save
+                # Advance status from todo → in_progress_results on first save.
+                # An exam dispatched to the lab (transmit_to_lab) sits at
+                # TRANSMITTED_TO_LAB until this point — once actual values are
+                # saved into it, it must leave that status too, otherwise it
+                # never advances and disappears from the doctor's queue (that
+                # queue explicitly excludes TRANSMITTED_TO_LAB exams, expecting
+                # them to move on once results are entered).
                 exam = Exam.get_by_id(exam_id)
-                if exam.status == ExamStatus.TODO:
+                if exam.status in (ExamStatus.TODO, ExamStatus.TRANSMITTED_TO_LAB):
                     exam.status = ExamStatus.IN_PROGRESS_RESULTS
                     exam.save()
                 # Log modification reason — only logged when re-saving already-recorded
