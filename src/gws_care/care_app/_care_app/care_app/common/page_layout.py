@@ -310,6 +310,11 @@ def _sidebar_content() -> rx.Component:
                         additional_active_route_prefixes=["/consultation/"],
                     ),
                     _nav_item("bell", LanguageState.tr["nav_notifications"], "/notifications"),
+                    _nav_item(
+                        "message-circle",
+                        LanguageState.tr["nav_messaging"],
+                        "/messaging",
+                    ),
                     width="100%",
                     spacing="1",
                     align_items="start",
@@ -380,8 +385,12 @@ def _sidebar_content() -> rx.Component:
                         ),
                     ),
                     rx.cond(
-                        RoleState.is_doctor,
+                        RoleState.is_doctor | RoleState.is_operator | RoleState.is_admin,
                         _nav_item("stethoscope", "Mes examens assignés", "/my-assigned-exams"),
+                    ),
+                    rx.cond(
+                        RoleState.is_admin,
+                        _nav_item("shield-check", LanguageState.tr["nav_audit_log"], "/audit-log"),
                     ),
                     width="100%",
                     spacing="1",

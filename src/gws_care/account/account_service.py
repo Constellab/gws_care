@@ -2,16 +2,26 @@ from gws_core import BadRequestException, NotFoundException
 
 from gws_care.account.account import Account
 from gws_care.account.account_dto import SaveAccountDTO
+from gws_care.user.user import User
 
 
 class AccountService:
     """CRUD service for Account."""
 
     @classmethod
-    def get_account(cls, account_id: str) -> Account:
+    def get_account(cls, account_id: str, user: User | None = None) -> Account:
+        """Fetch an account by id.
+
+        *user*, when provided, is checked via PermissionService.require_own_account
+        (ADMIN/OPERATOR/DOCTOR always allowed; RH_ENTREPRISE is scoped to their
+        own linked accounts). Callers with no end-user context omit it.
+        """
         account = Account.get_or_none(Account.id == account_id)
         if account is None:
             raise NotFoundException(f"Account '{account_id}' not found")
+        if user is not None:
+            from gws_care.role.permission_service import PermissionService
+            PermissionService.require_own_account(user, account_id)
         return account
 
     @classmethod

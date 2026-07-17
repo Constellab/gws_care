@@ -121,9 +121,9 @@ class AccountDetailState(PatientPickerState):
     new_campaign_start: str = ""
     new_campaign_end: str = ""
     new_campaign_location: str = ""
-    new_campaign_psc_doctor_id: str = ""
+    new_campaign_internal_doctor_id: str = ""
     new_campaign_enterprise_doctor_id: str = ""
-    psc_doctor_options: list[DoctorOptionDTO] = []
+    internal_doctor_options: list[DoctorOptionDTO] = []
     enterprise_doctor_options: list[DoctorOptionDTO] = []
 
     @rx.event
@@ -206,7 +206,7 @@ class AccountDetailState(PatientPickerState):
         self.new_campaign_start = ""
         self.new_campaign_end = ""
         self.new_campaign_location = ""
-        self.new_campaign_psc_doctor_id = ""
+        self.new_campaign_internal_doctor_id = ""
         self.new_campaign_enterprise_doctor_id = ""
         # Load doctor options
         try:
@@ -214,23 +214,23 @@ class AccountDetailState(PatientPickerState):
                 from gws_care.role.care_role import CareRole
                 from gws_care.role.user_care_role import UserCareRole
                 from gws_care.user.user import User
-                psc_roles = list(UserCareRole.select().where(UserCareRole.role == CareRole.MEDECIN))
+                internal_roles = list(UserCareRole.select().where(UserCareRole.role == CareRole.MEDECIN))
                 ent_roles = list(UserCareRole.select().where(UserCareRole.role == CareRole.MEDECIN))
 
                 def _doctor_label(user_id) -> str:
                     u = User.get_or_none(User.id == user_id)
                     return f"{u.first_name} {u.last_name}".strip() if u else str(user_id)
 
-                self.psc_doctor_options = [
+                self.internal_doctor_options = [
                     DoctorOptionDTO(id=str(r.user_id), label=_doctor_label(r.user_id))
-                    for r in psc_roles
+                    for r in internal_roles
                 ]
                 self.enterprise_doctor_options = [
                     DoctorOptionDTO(id=str(r.user_id), label=_doctor_label(r.user_id))
                     for r in ent_roles
                 ]
         except Exception:
-            self.psc_doctor_options = []
+            self.internal_doctor_options = []
             self.enterprise_doctor_options = []
 
     @rx.event
@@ -254,8 +254,8 @@ class AccountDetailState(PatientPickerState):
         self.new_campaign_location = value
 
     @rx.event
-    def set_new_campaign_psc_doctor(self, value: str):
-        self.new_campaign_psc_doctor_id = value
+    def set_new_campaign_internal_doctor(self, value: str):
+        self.new_campaign_internal_doctor_id = value
 
     @rx.event
     def set_new_campaign_enterprise_doctor(self, value: str):
@@ -302,9 +302,11 @@ class AccountDetailState(PatientPickerState):
         self.error_message = ""
 
         try:
-            with await self.authenticate_user():
+            with await self.authenticate_user() as auth_user:
                 from gws_care.account.account_service import AccountService
-                a = AccountService.get_account(account_id)
+                from gws_care.user.user import User
+                caller = User.get_by_id(str(auth_user.id))
+                a = AccountService.get_account(account_id, user=caller)
                 self.account = AccountDetailDTO(
                     id=str(a.id),
                     name=a.name,

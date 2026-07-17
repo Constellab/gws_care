@@ -250,7 +250,7 @@ class PatientNotificationsState(RoleState):
                 if patient_id:
                     from gws_care.patient.patient_service import PatientService
                     try:
-                        patient = PatientService.get_patient(patient_id)
+                        patient = PatientService.get_patient(patient_id, user=user)
                     except Exception:
                         pass
 

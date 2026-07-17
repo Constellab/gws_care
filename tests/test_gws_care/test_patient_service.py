@@ -153,6 +153,67 @@ class TestPatientService(BaseTestCase):
         found = PatientService.get_patient_by_number(patient.patient_number)
         self.assertEqual(str(found.id), str(patient.id))
 
+    def test_get_patient_with_user_admin_bypasses(self):
+        """get_patient(user=...) never raises for an ADMIN caller."""
+        import uuid
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_role_service import UserRoleService
+        from gws_care.user.user import User
+        patient = PatientService.create_patient(_make_patient_dto(first_name="AdminView"))
+        user = User()
+        user.id = uuid.uuid4()
+        user.email = f"pat_svc_admin_{uuid.uuid4().hex[:6]}@test.local"
+        user.first_name = "Admin"
+        user.last_name = "Tester"
+        user.is_active = True
+        user.save(force_insert=True)
+        UserRoleService.assign_role(str(user.id), CareRole.ADMIN)
+        found = PatientService.get_patient(str(patient.id), user=user)
+        self.assertEqual(str(found.id), str(patient.id))
+
+    def test_get_patient_with_user_restricted_doctor_unlinked_raises(self):
+        """get_patient(user=...) raises for a DOCTOR restricted to other patients."""
+        import uuid
+        from gws_core import ForbiddenException
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_role_service import UserRoleService
+        from gws_care.user.user import User
+        patient = PatientService.create_patient(_make_patient_dto(first_name="RestrictedView"))
+        user = User()
+        user.id = uuid.uuid4()
+        user.email = f"pat_svc_doc_{uuid.uuid4().hex[:6]}@test.local"
+        user.first_name = "Doc"
+        user.last_name = "Tester"
+        user.is_active = True
+        user.save(force_insert=True)
+        UserRoleService.assign_role(str(user.id), CareRole.DOCTOR)
+        UserRoleService.set_doctor_all_patients(str(user.id), False)
+        # Linked to a different patient only, not this one
+        other = PatientService.create_patient(_make_patient_dto(first_name="OtherPatient"))
+        UserRoleService.add_account_link(str(user.id), CareRole.DOCTOR, str(other.id))
+        with self.assertRaises(ForbiddenException):
+            PatientService.get_patient(str(patient.id), user=user)
+
+    def test_get_patient_with_user_restricted_doctor_linked_succeeds(self):
+        """get_patient(user=...) succeeds for a DOCTOR restricted to this patient."""
+        import uuid
+        from gws_care.role.care_role import CareRole
+        from gws_care.role.user_role_service import UserRoleService
+        from gws_care.user.user import User
+        patient = PatientService.create_patient(_make_patient_dto(first_name="RestrictedLinked"))
+        user = User()
+        user.id = uuid.uuid4()
+        user.email = f"pat_svc_doc2_{uuid.uuid4().hex[:6]}@test.local"
+        user.first_name = "Doc"
+        user.last_name = "Tester2"
+        user.is_active = True
+        user.save(force_insert=True)
+        UserRoleService.assign_role(str(user.id), CareRole.DOCTOR)
+        UserRoleService.set_doctor_all_patients(str(user.id), False)
+        UserRoleService.add_account_link(str(user.id), CareRole.DOCTOR, str(patient.id))
+        found = PatientService.get_patient(str(patient.id), user=user)
+        self.assertEqual(str(found.id), str(patient.id))
+
     # ── search_patients ───────────────────────────────────────────────────────
 
     def test_search_patients_no_filters_returns_all(self):

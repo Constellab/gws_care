@@ -41,6 +41,8 @@ class CertificateDetailState(ReflexMainState):
     error_message: str = ""
     is_archiving: bool = False
     is_sending_email: bool = False
+    is_deleting: bool = False
+    confirm_delete_open: bool = False
 
     @rx.event
     async def on_load(self):
@@ -189,3 +191,28 @@ class CertificateDetailState(ReflexMainState):
             self.error_message = f"Erreur : {e}"
         finally:
             self.is_archiving = False
+
+    @rx.event
+    def open_confirm_delete(self):
+        self.confirm_delete_open = True
+
+    @rx.event
+    def close_confirm_delete(self):
+        self.confirm_delete_open = False
+
+    @rx.event
+    async def delete_certificate(self):
+        if not self.certificate:
+            return
+        self.is_deleting = True
+        patient_id = self.certificate.patient_id
+        try:
+            with await self.authenticate_user():
+                from gws_care.certificate.medical_certificate import MedicalCertificateService
+                MedicalCertificateService.delete(self.certificate_id_param)
+            self.confirm_delete_open = False
+            return rx.redirect(f"/patient/{patient_id}")
+        except Exception as e:
+            self.error_message = f"Erreur : {e}"
+        finally:
+            self.is_deleting = False

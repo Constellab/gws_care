@@ -262,6 +262,32 @@ def _form_fields() -> rx.Component:
             ),
             columns="2", spacing="3", width="100%",
         ),
+        rx.grid(
+            _field(
+                LanguageState.tr["field_sex"],
+                rx.select.root(
+                    rx.select.trigger(placeholder=LanguageState.tr["select_sex_placeholder"]),
+                    rx.select.content(
+                        rx.select.item(LanguageState.tr["sex_male"], value="M"),
+                        rx.select.item(LanguageState.tr["sex_female"], value="F"),
+                        rx.select.item(LanguageState.tr["sex_other"], value="Autre"),
+                    ),
+                    value=PatientFormState.form_sex,
+                    on_change=PatientFormState.set_form_sex,
+                    size="2", width="100%",
+                ),
+            ),
+            _field(
+                LanguageState.tr["field_nationality"],
+                rx.input(
+                    value=PatientFormState.form_nationality,
+                    on_change=PatientFormState.set_form_nationality,
+                    placeholder=LanguageState.tr["placeholder_nationality"],
+                    size="2", width="100%",
+                ),
+            ),
+            columns="2", spacing="3", width="100%",
+        ),
         # ── Address section (IGN autocomplete for France, manual for other countries) ──
         address_section(PatientFormState),
         # ── Contact ───────────────────────────────────────────────────────────
@@ -295,6 +321,36 @@ def _form_fields() -> rx.Component:
                 ),
                 size="2", width="100%",
             ),
+        ),
+        # ── Notification preferences ──────────────────────────────────────────
+        rx.separator(width="100%"),
+        rx.text(LanguageState.tr["field_notif_prefs"], size="2", weight="bold", color="var(--gray-9)"),
+        rx.hstack(
+            rx.text(LanguageState.tr["notif_email"], size="2"),
+            rx.spacer(),
+            rx.switch(
+                checked=PatientFormState.form_notif_email,
+                on_change=PatientFormState.set_form_notif_email,
+            ),
+            width="100%", align="center",
+        ),
+        rx.hstack(
+            rx.text(LanguageState.tr["notif_sms"], size="2"),
+            rx.spacer(),
+            rx.switch(
+                checked=PatientFormState.form_notif_sms,
+                on_change=PatientFormState.set_form_notif_sms,
+            ),
+            width="100%", align="center",
+        ),
+        rx.hstack(
+            rx.text(LanguageState.tr["notif_whatsapp"], size="2"),
+            rx.spacer(),
+            rx.switch(
+                checked=PatientFormState.form_notif_whatsapp,
+                on_change=PatientFormState.set_form_notif_whatsapp,
+            ),
+            width="100%", align="center",
         ),
         # ── Account linking (required) ─────────────────────────────────────────
         _account_picker_section(),

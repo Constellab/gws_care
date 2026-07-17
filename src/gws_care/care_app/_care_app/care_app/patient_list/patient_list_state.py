@@ -42,11 +42,7 @@ class PatientListState(AccountPickerState):
     is_doctor_view: bool = False
 
     # Pagination
-    page: int = 1
     total_count: int = 0
-    total_pages: int = 1
-    has_prev_page: bool = False
-    has_next_page: bool = False
 
     _page_offset: int = 0
     _current_page_size: int = 50
@@ -166,35 +162,17 @@ class PatientListState(AccountPickerState):
         self.is_loading_more = True
         await self._load_patients(reset=False)
 
-    @rx.event
-    async def prev_page(self):
-        if self.page > 1:
-            self.page -= 1
-            self._page_offset = (self.page - 1) * self._current_page_size
-            await self._load_patients(reset=False, page_override=True)
-
-    @rx.event
-    async def next_page(self):
-        if self.has_next_page:
-            self.page += 1
-            self._page_offset = (self.page - 1) * self._current_page_size
-            await self._load_patients(reset=False, page_override=True)
-
-    async def _load_patients(self, reset: bool = True, page_override: bool = False):
+    async def _load_patients(self, reset: bool = True):
         """Internal: load patients from DB with current filters."""
-        import math
         if not await self.check_authentication():
             self.error_message = "Authentication required"
             return
 
         if reset:
             self._page_offset = 0
-            self.page = 1
             self.is_loading = True
             from gws_care.core.care_app_config_service import CareAppConfigService
             self._current_page_size = CareAppConfigService.get_page_size()
-        elif page_override:
-            self.is_loading = True
         self.error_message = ""
 
         try:
@@ -214,12 +192,10 @@ class PatientListState(AccountPickerState):
                     dob_from=self.filter_dob_from or None,
                     dob_to=self.filter_dob_to or None,
                 )
-                # Total count for pagination display
+                # Total count for the "N patient(s)" display
                 all_for_count = PatientService.search_patients(**search_kwargs)
-                total = len(all_for_count)
-                self.total_count = total
+                self.total_count = len(all_for_count)
                 ps = self._current_page_size
-                self.total_pages = max(1, math.ceil(total / ps)) if ps > 0 else 1
 
                 patients = PatientService.search_patients(
                     **search_kwargs,
@@ -261,17 +237,14 @@ class PatientListState(AccountPickerState):
                     for p in patients
                 ]
                 sort_col = self.sort_column
-                all_rows = new_rows if (reset or page_override) else self.patients + new_rows
+                all_rows = new_rows if reset else self.patients + new_rows
                 self.patients = sorted(
                     all_rows,
                     key=lambda row: (getattr(row, sort_col) or "").lower(),
                     reverse=not self.sort_ascending,
                 )
                 self.has_more = has_more
-                self.has_next_page = has_more
-                self.has_prev_page = self.page > 1
-                if not page_override:
-                    self._page_offset += ps
+                self._page_offset += ps
         except Exception as e:
             self.error_message = f"Error loading patients: {e}"
         finally:

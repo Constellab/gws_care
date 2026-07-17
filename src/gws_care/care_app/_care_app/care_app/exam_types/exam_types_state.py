@@ -148,6 +148,14 @@ class ExamTypesState(ReflexMainState):
     # Départements existants (pour autocomplete)
     existing_departments: list[str] = []
 
+    # Category/department autocomplete dropdowns (free text + searchable suggestions)
+    category_filter: str = ""
+    filtered_categories: list[str] = []
+    show_category_suggestions: bool = False
+    department_filter: str = ""
+    filtered_departments: list[str] = []
+    show_department_suggestions: bool = False
+
     # Type form dialog
     type_dialog_open: bool = False
     is_editing_type: bool = False
@@ -181,9 +189,7 @@ class ExamTypesState(ReflexMainState):
     confirm_delete_param_comment: str = ""
 
     # Age range manager — per-parameter dialog
-    age_range_manager_open: bool = False
     age_range_param_id: str = ""
-    age_range_param_name: str = ""
     age_ranges: list[AgeRangeVM] = []
     age_range_is_loading: bool = False
     # Age range form sub-dialog (create / edit)
@@ -259,6 +265,12 @@ class ExamTypesState(ReflexMainState):
         self.type_form = ExamTypeFormVM()
         self.is_editing_type = False
         self.type_form_error = ""
+        self.category_filter = ""
+        self.filtered_categories = []
+        self.show_category_suggestions = False
+        self.department_filter = ""
+        self.filtered_departments = []
+        self.show_department_suggestions = False
         self.type_dialog_open = True
 
     @rx.event
@@ -270,8 +282,28 @@ class ExamTypesState(ReflexMainState):
         self.type_form = ExamTypeFormVM(**{**self.type_form.dict(), "name": v})
 
     @rx.event
-    def set_type_category(self, v: str):
+    def set_category_filter(self, v: str):
+        """Free-text entry — also filters existing categories as a search dropdown."""
+        self.category_filter = v
         self.type_form = ExamTypeFormVM(**{**self.type_form.dict(), "category": v})
+        if not v:
+            self.filtered_categories = []
+            self.show_category_suggestions = False
+            return
+        q = v.lower()
+        self.filtered_categories = [c for c in self.existing_categories if q in c.lower()][:8]
+        self.show_category_suggestions = len(self.filtered_categories) > 0
+
+    @rx.event
+    def select_category_suggestion(self, cat: str):
+        self.category_filter = cat
+        self.type_form = ExamTypeFormVM(**{**self.type_form.dict(), "category": cat})
+        self.filtered_categories = []
+        self.show_category_suggestions = False
+
+    @rx.event
+    def close_category_suggestions(self):
+        self.show_category_suggestions = False
 
     @rx.event
     def set_type_description(self, v: str):
@@ -290,8 +322,28 @@ class ExamTypesState(ReflexMainState):
         self.type_form = ExamTypeFormVM(**{**self.type_form.dict(), "requires_attachment": v})
 
     @rx.event
-    def set_type_department(self, v: str):
+    def set_department_filter(self, v: str):
+        """Free-text entry — also filters existing departments as a search dropdown."""
+        self.department_filter = v
         self.type_form = ExamTypeFormVM(**{**self.type_form.dict(), "department": v})
+        if not v:
+            self.filtered_departments = []
+            self.show_department_suggestions = False
+            return
+        q = v.lower()
+        self.filtered_departments = [d for d in self.existing_departments if q in d.lower()][:8]
+        self.show_department_suggestions = len(self.filtered_departments) > 0
+
+    @rx.event
+    def select_department_suggestion(self, dept: str):
+        self.department_filter = dept
+        self.type_form = ExamTypeFormVM(**{**self.type_form.dict(), "department": dept})
+        self.filtered_departments = []
+        self.show_department_suggestions = False
+
+    @rx.event
+    def close_department_suggestions(self):
+        self.show_department_suggestions = False
 
     @rx.event
     def set_type_required_sample_type(self, v: str):
@@ -357,7 +409,6 @@ class ExamTypesState(ReflexMainState):
     def close_param_dialog(self):
         self.param_dialog_open = False
         self.age_range_param_id = ""
-        self.age_range_param_name = ""
         self.age_ranges = []
 
     @rx.event
@@ -948,21 +999,6 @@ class ExamTypesState(ReflexMainState):
             self.error = str(e)
 
     # ── Age range manager ─────────────────────────────────────────────────
-
-    @rx.event
-    async def open_age_range_manager(self, param_id: str, param_name: str):
-        self.age_range_param_id = param_id
-        self.age_range_param_name = param_name
-        self.age_range_manager_open = True
-        self.age_ranges = []
-        await self._load_age_ranges()
-
-    @rx.event
-    def close_age_range_manager(self):
-        self.age_range_manager_open = False
-        self.age_range_param_id = ""
-        self.age_range_param_name = ""
-        self.age_ranges = []
 
     @rx.event
     def open_create_age_range(self):

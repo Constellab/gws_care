@@ -394,19 +394,14 @@ class PatientAppointmentsState(RoleState):
     async def _load_doctors(self):
         try:
             with await self.authenticate_user():
-                from gws_care.doctor.medical_doctor import MedicalDoctor
-                doctors = list(
-                    MedicalDoctor.select()
-                    .where((MedicalDoctor.is_active == True) & (MedicalDoctor.is_archived == False))
-                    .order_by(MedicalDoctor.last_name)
-                )
+                from gws_care.doctor.medical_doctor_service import MedicalDoctorService
                 self.doctor_options = [
                     DoctorOptionDTO(
-                        id=str(d.id),
-                        name=d.get_full_name(),
+                        id=d.id,
+                        name=d.full_name,
                         specialization=d.specialization or "",
                     )
-                    for d in doctors
+                    for d in MedicalDoctorService.list_for_selection()
                 ]
                 self.filtered_booking_doctors = list(self.doctor_options)
                 specs = sorted({d.specialization for d in self.doctor_options if d.specialization})

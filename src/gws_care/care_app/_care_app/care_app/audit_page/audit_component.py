@@ -4,6 +4,7 @@ import reflex as rx
 from gws_reflex_main import main_component
 
 from ..common.page_layout import page_layout
+from ..no_access.no_access_component import no_access_page
 from .audit_state import AuditLogRowVM, AuditState
 
 _ACTION_OPTIONS = [
@@ -85,7 +86,17 @@ def _log_row(log: AuditLogRowVM) -> rx.Component:
 def audit_page() -> rx.Component:
     return main_component(
         page_layout(
-            rx.vstack(
+            rx.cond(
+                AuditState.is_admin,
+                _audit_content(),
+                no_access_page(),
+            ),
+        )
+    )
+
+
+def _audit_content() -> rx.Component:
+    return rx.vstack(
                 rx.hstack(
                     rx.vstack(
                         rx.heading("Audit log", size="6"),
@@ -188,6 +199,4 @@ def audit_page() -> rx.Component:
                     rx.fragment(),
                 ),
                 spacing="4", width="100%",
-            )
-        )
     )

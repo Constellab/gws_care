@@ -14,6 +14,8 @@ from .appointment_detail.appointment_detail_component import appointment_detail_
 from .appointment_detail.appointment_detail_state import AppointmentDetailState
 from .appointments_list.appointments_list_component import appointments_list_page
 from .appointments_list.appointments_list_state import AppointmentsListState
+from .audit_page.audit_component import audit_page
+from .audit_page.audit_state import AuditState
 from .campaign_detail.campaign_detail_component import campaign_detail_page
 from .campaign_detail.campaign_detail_state import CampaignDetailState
 from .campaign_detail.campaign_patient_exams_component import campaign_patient_exams_page
@@ -40,6 +42,8 @@ from .exam_detail.exam_detail_component import exam_detail_page
 from .exam_detail.exam_detail_state import ExamDetailState
 from .exam_types.exam_types_component import exam_types_page
 from .exam_types.exam_types_state import ExamTypesState
+from .messaging.messaging_component import messaging_page
+from .messaging.messaging_state import MessagingState
 from .no_access.no_access_component import no_access_page
 from .no_access.not_found_component import not_found_page
 from .notifications.notifications_component import notifications_page
@@ -360,6 +364,24 @@ def prescription_detail():
 def certificate_detail():
     """Certificate detail page."""
     return certificate_detail_page()
+
+
+@rx.page(
+    route="/audit-log",
+    on_load=[AuditState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme],
+)
+def audit_log():
+    """Audit log — traceability of sensitive actions (admin only)."""
+    return audit_page()
+
+
+@rx.page(
+    route="/messaging",
+    on_load=[MessagingState.on_load, LanguageState.on_load, GeneralSettingsState.load_color_theme],
+)
+def messaging():
+    """Doctor <-> patient messaging."""
+    return messaging_page()
 
 
 @rx.page(

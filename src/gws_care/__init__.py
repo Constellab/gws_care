@@ -92,6 +92,17 @@ from gws_care.core.migration_62 import Migration620
 from gws_care.core.migration_63 import Migration630
 from gws_care.core.migration_64 import Migration640
 from gws_care.core.migration_65 import Migration650
+from gws_care.core.migration_66 import Migration660
+from gws_care.core.migration_67 import Migration670
+from gws_care.core.migration_68 import Migration680
+from gws_care.core.migration_69 import Migration690
+from gws_care.core.migration_70 import Migration700
+from gws_care.core.migration_71 import Migration710
+from gws_care.core.migration_72 import Migration720
+from gws_care.core.migration_73 import Migration730
+from gws_care.core.migration_74 import Migration740
+from gws_care.core.migration_75 import Migration750
+from gws_care.core.migration_76 import Migration760
 
 # Dashboard
 from gws_care.dashboard.dashboard_snapshot import DashboardSnapshot

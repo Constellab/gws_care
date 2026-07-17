@@ -101,12 +101,27 @@ class UserRoleService:
 
     @classmethod
     def set_doctor_link(cls, user_id: str, doctor_id: str | None) -> None:
-        """Link or unlink a registered MedicalDoctor profile for a DOCTOR user."""
+        """Link or unlink a registered MedicalDoctor profile for a DOCTOR user.
+
+        Also updates MedicalDoctor.user, which is the field every permission
+        check in the app actually reads (doctor scope resolution, the
+        assigned-exams queue, appointment forms, etc.) — UserCareRole.linked_doctor_id
+        alone does not grant the doctor any of that, so leaving it out of sync
+        silently left a "linked" doctor unable to act.
+        """
+        from gws_care.doctor.medical_doctor import MedicalDoctor
+
         (
             UserCareRole.update(linked_doctor_id=doctor_id)
             .where(UserCareRole.user == user_id, UserCareRole.role == CareRole.DOCTOR)
             .execute()
         )
+
+        # MedicalDoctor.user is unique — clear whichever doctor (if any) is
+        # currently linked to this user before assigning a new one.
+        MedicalDoctor.update(user=None).where(MedicalDoctor.user == user_id).execute()
+        if doctor_id:
+            MedicalDoctor.update(user=user_id).where(MedicalDoctor.id == doctor_id).execute()
 
     # ── Patient link (PATIENT role) ───────────────────────────────────────────
 

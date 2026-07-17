@@ -131,7 +131,7 @@ class AppointmentDetailState(RoleState):
 
                 doctors = list(
                     MedicalDoctor.select()
-                    .where(MedicalDoctor.is_active == True)
+                    .where(MedicalDoctor.is_active == True, MedicalDoctor.is_archived == False)
                     .order_by(MedicalDoctor.last_name)
                 )
                 self.doctor_options = [

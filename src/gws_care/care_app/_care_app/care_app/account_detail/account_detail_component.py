@@ -341,7 +341,7 @@ def _campaign_dialog() -> rx.Component:
                             spacing="1", align="center",
                         ),
                         rx.cond(
-                            AccountDetailState.psc_doctor_options.length() > 0,
+                            AccountDetailState.internal_doctor_options.length() > 0,
                             rx.select.root(
                                 rx.select.trigger(
                                     placeholder=GeneralSettingsState.org_doctor_placeholder,
@@ -350,12 +350,12 @@ def _campaign_dialog() -> rx.Component:
                                 rx.select.content(
                                     rx.select.item("— None —", value="__none__"),
                                     rx.foreach(
-                                        AccountDetailState.psc_doctor_options,
+                                        AccountDetailState.internal_doctor_options,
                                         lambda d: rx.select.item(d.label, value=d.id),
                                     ),
                                 ),
-                                value=AccountDetailState.new_campaign_psc_doctor_id,
-                                on_change=AccountDetailState.set_new_campaign_psc_doctor,
+                                value=AccountDetailState.new_campaign_internal_doctor_id,
+                                on_change=AccountDetailState.set_new_campaign_internal_doctor,
                                 width="100%",
                             ),
                             rx.callout(

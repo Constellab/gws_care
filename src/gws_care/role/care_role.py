@@ -30,9 +30,8 @@ class CareRole(str, Enum):
     Retired tier names (V2, merged into the roles above — kept as aliases so any
     reference missed during the V2→V3 sweep still resolves instead of raising)
     -------------------------------------------------------------------------
-    SUPER_ADMIN_PSC / DIRECTEUR_PSC / ADMIN_PSC → ADMIN
     OPERATEUR_TERRAIN / OPERATEUR_LABO          → OPERATEUR
-    MEDECIN_PSC / MEDECIN_ENTREPRISE            → MEDECIN
+    MEDECIN_ENTREPRISE                          → MEDECIN
 
     Backward-compatible generic aliases (pre-V2 naming)
     ----------------------------------------------------
@@ -51,12 +50,8 @@ class CareRole(str, Enum):
     SYSTEME = "SYSTEME"
 
     # ── Retired V2 tier names — aliases to the merged V3 role ────────────────
-    SUPER_ADMIN_PSC = "ADMIN"
-    DIRECTEUR_PSC = "ADMIN"
-    ADMIN_PSC = "ADMIN"
     OPERATEUR_TERRAIN = "OPERATEUR"
     OPERATEUR_LABO = "OPERATEUR"
-    MEDECIN_PSC = "MEDECIN"
     MEDECIN_ENTREPRISE = "MEDECIN"
 
     # ── Backward-compatible pre-V2 aliases ────────────────────────────────────
@@ -77,12 +72,8 @@ class CareRole(str, Enum):
             "OPERATOR": cls.OPERATEUR,
             "ACCOUNT_ADMIN": cls.RH_ENTREPRISE,
             # Retired V2 tier names
-            "SUPER_ADMIN_PSC": cls.ADMIN,
-            "DIRECTEUR_PSC": cls.ADMIN,
-            "ADMIN_PSC": cls.ADMIN,
             "OPERATEUR_TERRAIN": cls.OPERATEUR,
             "OPERATEUR_LABO": cls.OPERATEUR,
-            "MEDECIN_PSC": cls.MEDECIN,
             "MEDECIN_ENTREPRISE": cls.MEDECIN,
         }
         return _legacy.get(value)
@@ -98,7 +89,7 @@ class CareRole(str, Enum):
         }
         return labels.get(self, self.value)
 
-    def is_psc_staff(self) -> bool:
+    def is_internal_staff(self) -> bool:
         """True for internal staff roles that have broad data access."""
         return self in (
             CareRole.ADMIN,

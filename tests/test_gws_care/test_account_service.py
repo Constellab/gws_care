@@ -1,9 +1,13 @@
 """Unit tests for AccountService."""
 
+import uuid
+
 from gws_care.account.account_dto import SaveAccountDTO
 from gws_care.account.account_service import AccountService
+from gws_care.role.care_role import CareRole
 from gws_care.user.care_user_sync_service import CareUserSyncService
-from gws_core import BadRequestException, BaseTestCase, NotFoundException
+from gws_care.user.user import User
+from gws_core import BadRequestException, BaseTestCase, ForbiddenException, NotFoundException
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -12,6 +16,18 @@ def _make_account_dto(**kwargs) -> SaveAccountDTO:
     defaults = {"name": "TestCorp"}
     defaults.update(kwargs)
     return SaveAccountDTO(**defaults)
+
+
+def _make_user(suffix: str | None = None) -> User:
+    tag = suffix or uuid.uuid4().hex[:6]
+    u = User()
+    u.id = uuid.uuid4()
+    u.email = f"account_svc_test_{tag}@test.local"
+    u.first_name = "Test"
+    u.last_name = f"User{tag}"
+    u.is_active = True
+    u.save(force_insert=True)
+    return u
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -106,6 +122,34 @@ class TestAccountService(BaseTestCase):
         """get_account returns the correct account."""
         account = AccountService.create_account(_make_account_dto(name="GetAcct"))
         found = AccountService.get_account(str(account.id))
+        self.assertEqual(str(found.id), str(account.id))
+
+    def test_get_account_with_user_admin_bypasses(self):
+        """get_account(user=...) never raises for an ADMIN caller."""
+        from gws_care.role.user_role_service import UserRoleService
+        account = AccountService.create_account(_make_account_dto(name="AdminAcct"))
+        user = _make_user("admin")
+        UserRoleService.assign_role(str(user.id), CareRole.ADMIN)
+        found = AccountService.get_account(str(account.id), user=user)
+        self.assertEqual(str(found.id), str(account.id))
+
+    def test_get_account_with_user_rh_unlinked_raises(self):
+        """get_account(user=...) raises for RH_ENTREPRISE without a link to this account."""
+        from gws_care.role.user_role_service import UserRoleService
+        account = AccountService.create_account(_make_account_dto(name="RhUnlinkedAcct"))
+        user = _make_user("rhunlinked")
+        UserRoleService.assign_role(str(user.id), CareRole.ACCOUNT_ADMIN)
+        with self.assertRaises(ForbiddenException):
+            AccountService.get_account(str(account.id), user=user)
+
+    def test_get_account_with_user_rh_linked_succeeds(self):
+        """get_account(user=...) succeeds for RH_ENTREPRISE linked to this account."""
+        from gws_care.role.user_role_service import UserRoleService
+        account = AccountService.create_account(_make_account_dto(name="RhLinkedAcct"))
+        user = _make_user("rhlinked")
+        UserRoleService.assign_role(str(user.id), CareRole.ACCOUNT_ADMIN)
+        UserRoleService.add_account_link(str(user.id), CareRole.ACCOUNT_ADMIN, str(account.id))
+        found = AccountService.get_account(str(account.id), user=user)
         self.assertEqual(str(found.id), str(account.id))
 
     # ── list_accounts ─────────────────────────────────────────────────────────

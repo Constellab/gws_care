@@ -7,7 +7,7 @@ Workflow:
   2. User clicks a section → active_params populated with that section's parameters
   3. User enters values → set_param_value updates active_params in real time
   4. User clicks "Enregistrer" → save_active_section persists to Exam.lab_results (JSON)
-  5. All sections saved → user clicks "Transmettre au médecin" (org-acronym label)
+  5. All sections saved → user clicks "Transmettre au labo"
      → CampaignPatient.medical_status = LAB_ENTERED
 """
 
@@ -138,7 +138,10 @@ class ExamSectionVM(BaseModel):
     param_count: int = 0
     is_saved: bool = False
     is_transmitted: bool = False  # True once results have been sent to the doctor
-    transmission_target: str = ""  # "LABO" | "PSC" | "TRAVAIL" — in-memory only
+    # True once this exam type has been dispatched to the lab technician's queue —
+    # a pre-entry routing signal, independent of is_saved: the lab technician still
+    # has to fill in the values afterwards, so it must NOT lock the input fields.
+    lab_dispatched: bool = False
     saved_exam_id: str = ""
     allows_attachment: bool = True
     requires_lab_validation: bool = True  # False = on-site exam, results entered directly
@@ -170,9 +173,9 @@ class CampaignPatientExamsState(ReflexMainState):
     error: str = ""
     success: str = ""
 
-    # Section action dropdown selection
-    section_action: str = "save"  # "save" | "labo" | "psc" | "travail"
-    _pending_section_action: str = ""  # action queued while motif dialog is open
+    # Section action dropdown selection (only used before the section is saved)
+    section_action: str = "save"  # "save" | "labo"
+
     visit_status: str = "pending"  # CampaignVisitStatus of the patient's visit
     visit_id: str = ""  # Visit ID for linking to the visit detail / doctor interpretation page
 
@@ -214,6 +217,12 @@ class CampaignPatientExamsState(ReflexMainState):
         return sec.is_transmitted if sec else False
 
     @rx.var
+    def active_section_is_dispatched(self) -> bool:
+        """True once this exam type has been sent to the lab technician's queue."""
+        sec = next((s for s in self.sections if s.exam_type_ref_id == self.active_section_id), None)
+        return sec.lab_dispatched if sec else False
+
+    @rx.var
     def has_saved_sections(self) -> bool:
         return any(s.is_saved for s in self.sections)
 
@@ -231,7 +240,7 @@ class CampaignPatientExamsState(ReflexMainState):
 
     @rx.var
     def can_execute_section_action(self) -> bool:
-        """Valider enabled: labo action needs no values; all others need at least one."""
+        """Valider enabled: dispatching to the lab needs no values; saving needs at least one."""
         if self.section_action == "labo":
             return True
         return self.can_save_section
@@ -250,17 +259,6 @@ class CampaignPatientExamsState(ReflexMainState):
     def all_sections_saved(self) -> bool:
         """True when every section has been saved (required before global transfer)."""
         return len(self.sections) > 0 and all(s.is_saved for s in self.sections)
-
-    @rx.var
-    def active_section_transmission_target(self) -> str:
-        """Transmission target of the currently active section (in-memory)."""
-        sec = next((s for s in self.sections if s.exam_type_ref_id == self.active_section_id), None)
-        return sec.transmission_target if sec else ""
-
-    @rx.var
-    def all_sections_transmitted(self) -> bool:
-        """True when every section has been transmitted to a doctor."""
-        return len(self.sections) > 0 and all(s.is_transmitted for s in self.sections)
 
     @rx.var
     def patient_is_on_terrain(self) -> bool:
@@ -308,18 +306,32 @@ class CampaignPatientExamsState(ReflexMainState):
     # Treating doctor transmission flag
     treating_doctor_transmitted: bool = False
 
+    # True once the lab-validated case has been handed off to the internal doctor
+    internal_notified: bool = False
+
+    # True once the internal / enterprise doctor's interpretation has been validated —
+    # these are permanent locks (unlike medical_status, which keeps advancing past
+    # this point, so they must NOT be derived from an exact medical_status match).
+    internal_validated: bool = False
+    enterprise_validated: bool = False
+
+    # False when the campaign has no company doctor at all — lets the internal
+    # doctor publish directly to the patient instead of handing off.
+    has_company_doctor: bool = True
+    internal_direct_patient_message: str = ""
+
     # Operator notes entered during the terrain phase
     terrain_notes: str = ""
     is_saving_notes: bool = False
 
-    # PSC doctor interpretation
-    psc_notes: str = ""
+    # Internal doctor interpretation
+    internal_notes: str = ""
     # Enterprise doctor interpretation
     enterprise_notes: str = ""
     enterprise_patient_message: str = ""
 
     # Role of the current viewer (set on load)
-    viewer_is_psc: bool = False
+    viewer_is_internal: bool = False
     viewer_is_enterprise: bool = False
     viewer_is_operator: bool = False
 
@@ -458,13 +470,11 @@ class CampaignPatientExamsState(ReflexMainState):
     @rx.event
     def open_motif_dialog(self):
         self.modification_motif = ""
-        self._pending_section_action = ""
         self.show_motif_dialog = True
 
     @rx.event
     def close_motif_dialog(self):
         self.show_motif_dialog = False
-        self._pending_section_action = ""
 
     @rx.event
     def enter_edit_mode(self):
@@ -473,8 +483,12 @@ class CampaignPatientExamsState(ReflexMainState):
 
     @rx.var
     def active_section_is_readonly(self) -> bool:
-        """True when the active section is transmitted AND the user hasn't clicked Modifier yet."""
-        return self.active_section_is_transmitted and not self.is_editing_section
+        """True once the active section has been saved AND the user hasn't clicked Modifier yet.
+
+        Dispatching to the lab (lab_dispatched) must NOT lock the fields — the lab
+        technician still has to fill in the values after that point.
+        """
+        return self.active_section_is_saved and not self.is_editing_section
 
     @rx.event
     def set_modification_motif(self, value: str):
@@ -482,18 +496,18 @@ class CampaignPatientExamsState(ReflexMainState):
 
     @rx.event
     async def confirm_modification(self):
-        """Save with motif, then execute any pending transmission action."""
+        """Save with motif after re-opening an already-saved section for editing."""
         self.show_motif_dialog = False
-        pending = self._pending_section_action
-        self._pending_section_action = ""
         await self._do_save_section(motif=self.modification_motif)
         if self.error:
             return
         self.is_editing_section = False
-        if pending and pending != "save":
-            await self._do_transmit_action(pending)
 
-    # ── Section action (4-option dropdown) ────────────────────────────────
+    # ── Section action (save results, or dispatch to lab, for the active exam type) ──
+    # Dispatching one exam type to the lab is a pre-entry routing signal (no values
+    # required, no effect on the patient's overall medical_status). The patient-level
+    # "Envoyer au labo" (see _transmit_panel / transmit_to_doctor) is a SEPARATE action
+    # that requires every exam type to be saved first.
 
     @rx.event
     def set_section_action(self, value: str):
@@ -501,88 +515,65 @@ class CampaignPatientExamsState(ReflexMainState):
 
     @rx.event
     async def execute_section_action(self):
-        """Save the active section and optionally transmit based on section_action."""
-        action = self.section_action
-
-        # Already saved → require modification motif before proceeding
+        """Save the active section's results, or dispatch it to the lab."""
+        # Already saved → require a modification motif before re-saving.
         if self.active_section_is_saved:
-            self._pending_section_action = action
             self.modification_motif = ""
             self.show_motif_dialog = True
             return
-
-        # Labo transmission: no values required, skip save
-        if action == "labo":
-            await self._do_transmit_action(action)
+        if self.section_action == "labo":
+            await self._dispatch_section_to_lab()
             return
-
-        # All other actions: save first (at least one value required), then transmit
         await self._do_save_section(motif="")
-        if self.error or action == "save":
-            return
-        await self._do_transmit_action(action)
 
-    async def _do_transmit_action(self, action: str):
-        """Transmit the active section based on the given action string."""
+    async def _dispatch_section_to_lab(self):
+        """Send the active exam type to the lab technician's queue (pre-entry, no values required)."""
         campaign_id = self.cp_campaign_id
         patient_id = self.cp_patient_id
         section_id = self.active_section_id
+        section_name = self.active_section_name
         if not campaign_id or not patient_id or not section_id:
             return
 
         self.is_saving = True
+        self.error = ""
         try:
-            with await self.authenticate_user() as auth_user:
-                from gws_care.campaign.campaign_service import CampaignService
-                from gws_care.exam.exam import Exam
-                from gws_care.exam.exam_type import ExamStatus
-                from gws_care.user.user import User
+            with await self.authenticate_user():
+                from datetime import date
 
-                caller = User.get_by_id(str(auth_user.id))
-                if action in ("labo", "psc"):
-                    CampaignService.mark_lab_entered(campaign_id, patient_id)
-                    target = "LABO" if action == "labo" else "PSC"
-                    new_status = "LAB_ENTERED"
-                elif action == "travail":
-                    CampaignService.validate_psc_patient(campaign_id, patient_id, caller=caller)
-                    target = "TRAVAIL"
-                    new_status = "PSC_VALIDATED"
-                else:
-                    return
+                from gws_care.campaign.campaign import Campaign
+                from gws_care.exam.exam import Exam
+                from gws_care.exam.exam_type import ExamStatus, ExamType
+                from gws_care.patient.patient import Patient
 
                 marker = f"CAMP:{campaign_id}|REF:{section_id}"
-                for exam in Exam.select().where(Exam.patient == patient_id):
-                    rv = exam.reason_for_visit or ""
-                    if rv.startswith(marker):
-                        exam.status = ExamStatus.IN_PROGRESS_INTERPRETATION
-                        exam.save()
-                        break
-
-            self.medical_status = new_status
-            self.sections = [
-                ExamSectionVM(
-                    **{
-                        **s.dict(),
-                        "is_transmitted": True,
-                        "transmission_target": target,
-                    }
+                existing = Exam.get_or_none(
+                    (Exam.patient == patient_id) & Exam.reason_for_visit.startswith(marker)
                 )
+                if existing:
+                    existing.status = ExamStatus.TRANSMITTED_TO_LAB
+                    existing.save()
+                else:
+                    patient = Patient.get_by_id_and_check(patient_id)
+                    campaign = Campaign.get_by_id_and_check(campaign_id)
+                    e = Exam()
+                    e.patient = patient
+                    e.billing_account_id = campaign.account_id
+                    e.exam_date = date.today()
+                    e.exam_type = ExamType.OTHER
+                    e.exam_type_ref_id = section_id
+                    e.status = ExamStatus.TRANSMITTED_TO_LAB
+                    e.reason_for_visit = f"{marker}|{section_name}"
+                    e.lab_results = []
+                    e.save()
+
+            self.sections = [
+                ExamSectionVM(**{**s.dict(), "lab_dispatched": True})
                 if s.exam_type_ref_id == section_id
                 else s
                 for s in self.sections
             ]
-            from ..admin.general_settings_state import GeneralSettingsState
-            org_acronym = (await self.get_state(GeneralSettingsState)).org_acronym
-            target_labels = {
-                "LABO": "au labo",
-                "PSC": f"au médecin {org_acronym}",
-                "TRAVAIL": "au médecin de travail",
-            }
-            sec = next((s for s in self.sections if s.exam_type_ref_id == section_id), None)
-            sec_name = sec.name if sec else "l'examen"
-            self.success = f'Résultats "{sec_name}" transmis {target_labels.get(target, "")} ✓'
-            self.is_editing_section = False
-
+            self.success = f'"{section_name}" envoyé au laborantin ✓'
         except Exception as e:
             self.error = str(e)
         finally:
@@ -705,6 +696,12 @@ class CampaignPatientExamsState(ReflexMainState):
 
                 if existing:
                     existing.lab_results = lab_results
+                    # Results have now actually been entered — leave the
+                    # "dispatched, awaiting entry" status so this exam stops
+                    # showing up under "Saisir les résultats" in the lab's
+                    # assigned-exams queue.
+                    if existing.status == ExamStatus.TRANSMITTED_TO_LAB:
+                        existing.status = ExamStatus.IN_PROGRESS_RESULTS
                     if motif:
                         from gws_care.exam.exam_audit_entry import ExamAuditEntry
 
@@ -803,11 +800,67 @@ class CampaignPatientExamsState(ReflexMainState):
         finally:
             self.is_saving = False
 
-    # ── Transmit to doctor ───────────────────────────────────────────────
+    # ── Transmit + validate lab results ───────────────────────────────────
+    # The lab technician/operator both enters and validates the results, so
+    # a separate "send to lab" step before "validate" is a redundant click —
+    # this single action does both DB transitions (LAB_ENTERED then
+    # LAB_VALIDATED) so the audit trail keeps both timestamps.
 
     @rx.event
-    async def transmit_to_doctor(self):
-        """Mark patient results as submitted — transitions to LAB_ENTERED."""
+    async def transmit_and_validate_lab(self):
+        """Mark all results as submitted AND validated in one operator action."""
+        campaign_id = self.cp_campaign_id
+        patient_id = self.cp_patient_id
+        self.is_saving = True
+        self.error = ""
+        try:
+            with await self.authenticate_user() as auth_user:
+                from gws_care.campaign.campaign_patient import CampaignPatient, MedicalRecordStatus
+                from gws_care.campaign.campaign_service import CampaignService
+                from gws_care.visit.campaign_visit_service import CampaignVisitService
+                from gws_care.visit.visit import Visit
+
+                # Move all draft campaign exams for this patient to PENDING
+                marker_prefix = f"CAMP:{campaign_id}|"
+                self._mark_campaign_exams_pending(campaign_id, patient_id, marker_prefix)
+                # Persist LAB_ENTERED then LAB_VALIDATED to DB
+                CampaignService.mark_lab_entered(campaign_id, patient_id)
+
+                cp = CampaignPatient.get_or_none(
+                    (CampaignPatient.campaign == campaign_id)
+                    & (CampaignPatient.patient == patient_id)
+                )
+                if cp:
+                    cp.medical_status = MedicalRecordStatus.LAB_VALIDATED.value
+                    cp.save()
+
+                visit = Visit.get_or_none(
+                    (Visit.campaign == campaign_id) & (Visit.patient == patient_id)
+                )
+                if visit:
+                    try:
+                        CampaignVisitService.validate_lab(visit.id, auth_user)
+                    except Exception:
+                        pass
+
+            self.medical_status = "LAB_VALIDATED"
+            # Mark every section as transmitted in local state
+            self.sections = [
+                ExamSectionVM(**{**s.dict(), "is_transmitted": True}) for s in self.sections
+            ]
+            self.success = "Résultats de laboratoire validés ✓"
+        except Exception as e:
+            self.error = str(e)
+        finally:
+            self.is_saving = False
+
+    @rx.event
+    async def notify_internal_doctor(self):
+        """After lab validation: hand off the case to the internal doctor(s)
+
+        assigned to this campaign's exams (CampaignExamDoctor), by email and
+        in-app bell notification, and record the hand-off timestamp.
+        """
         campaign_id = self.cp_campaign_id
         patient_id = self.cp_patient_id
         self.is_saving = True
@@ -815,59 +868,54 @@ class CampaignPatientExamsState(ReflexMainState):
         try:
             with await self.authenticate_user():
                 from gws_care.campaign.campaign_service import CampaignService
-                from gws_care.exam.exam import Exam
-                from gws_care.exam.exam_type import ExamStatus
+                from gws_care.notification.notification_enums import (
+                    NotificationChannel,
+                    NotificationType,
+                )
+                from gws_care.notification.notification_service import NotificationService
+                from gws_care.user.user import User
 
-                # Move all draft campaign exams for this patient to PENDING
-                marker_prefix = f"CAMP:{campaign_id}|"
-                self._mark_campaign_exams_pending(campaign_id, patient_id, marker_prefix)
-                # Persist LAB_ENTERED status to DB
-                CampaignService.mark_lab_entered(campaign_id, patient_id)
+                CampaignService.mark_internal_notified(campaign_id, patient_id)
 
-            self.medical_status = "LAB_ENTERED"
-            # Mark every section as transmitted in local state
-            self.sections = [
-                ExamSectionVM(**{**s.dict(), "is_transmitted": True}) for s in self.sections
-            ]
-            from ..admin.general_settings_state import GeneralSettingsState
-            org_acronym = (await self.get_state(GeneralSettingsState)).org_acronym
-            self.success = (
-                f"Résultats transmis au médecin {org_acronym}. Le dossier passe en « Résultats saisis »."
-            )
-
-            # Notification aux médecins internes (première interprétation) —
-            # tous les MedicalDoctor ayant une assignation d'examen sur cette
-            # campagne (CampaignExamDoctor). Remplace l'ancienne référence à
-            # Campaign.psc_doctor, qui n'a jamais existé en base.
-            try:
-                with await self.authenticate_user():
-                    from gws_care.campaign.campaign_service import CampaignService
-                    from gws_care.notification.notification_service import NotificationService
-                    from gws_care.user.user import User
-
-                    patient_lbl = self.patient_name
-                    camp_lbl = self.campaign_name
-                    for uid in CampaignService.get_internal_doctor_user_ids_for_campaign(campaign_id):
-                        try:
-                            doc_user = User.get_by_id(uid)
-                            NotificationService._dispatch(
-                                "EMAIL",
-                                to_email=getattr(doc_user, "email", None),
-                                to_phone=None,
-                                to_name=f"{getattr(doc_user, 'first_name', '')} {getattr(doc_user, 'last_name', '')}".strip(),
-                                subject=f"[Care] Résultats disponibles – {patient_lbl}",
-                                body=(
-                                    f"Bonjour,\n\n"
-                                    f"Les résultats de laboratoire du patient {patient_lbl} "
-                                    f"(campagne : {camp_lbl}) ont été saisis et sont disponibles pour interprétation.\n\n"
-                                    f"Connectez-vous sur la plateforme pour accéder au dossier.\n\n"
-                                    f"Cordialement"
-                                ),
-                            )
-                        except Exception:
-                            continue
-            except Exception:
-                pass
+                patient_lbl = self.patient_name
+                camp_lbl = self.campaign_name
+                bell_message = (
+                    f"Résultats de laboratoire du patient {patient_lbl} "
+                    f"(campagne : {camp_lbl}) disponibles pour interprétation."
+                )
+                bell_log = NotificationService._create_log(
+                    notification_type=NotificationType.LAB_DONE,
+                    channel=NotificationChannel.IN_APP,
+                    subject=f"[Care] Résultats disponibles – {patient_lbl}",
+                    body=bell_message,
+                    recipient_email=None,
+                    recipient_phone=None,
+                    recipient_name=None,
+                    sent_by=None,
+                    extra_data={"campaign_id": campaign_id, "patient_id": patient_id},
+                )
+                for uid in CampaignService.get_internal_doctor_user_ids_for_campaign(campaign_id):
+                    try:
+                        doc_user = User.get_by_id(uid)
+                        NotificationService.create_bell(uid, bell_message, log=bell_log)
+                        NotificationService._dispatch(
+                            "EMAIL",
+                            to_email=getattr(doc_user, "email", None),
+                            to_phone=None,
+                            to_name=f"{getattr(doc_user, 'first_name', '')} {getattr(doc_user, 'last_name', '')}".strip(),
+                            subject=f"[Care] Résultats disponibles – {patient_lbl}",
+                            body=(
+                                f"Bonjour,\n\n"
+                                f"Les résultats de laboratoire du patient {patient_lbl} "
+                                f"(campagne : {camp_lbl}) ont été validés et sont disponibles pour interprétation.\n\n"
+                                f"Connectez-vous sur la plateforme pour accéder au dossier.\n\n"
+                                f"Cordialement"
+                            ),
+                        )
+                    except Exception:
+                        continue
+            self.internal_notified = True
+            self.success = "Dossier transmis au médecin."
         except Exception as e:
             self.error = str(e)
         finally:
@@ -1058,25 +1106,29 @@ class CampaignPatientExamsState(ReflexMainState):
     # ── Internal doctor interpretation ─────────────────────────────────────
 
     @rx.event
-    def set_psc_notes(self, value: str):
-        self.psc_notes = value
+    def set_internal_notes(self, value: str):
+        self.internal_notes = value
+
+    @rx.event
+    def set_internal_direct_patient_message(self, value: str):
+        self.internal_direct_patient_message = value
 
     @rx.event
     async def validate_and_send_to_enterprise(self):
         """Internal doctor: save interpretation + validate + notify company doctor."""
-        await self._do_validate_psc()
+        await self._do_validate_internal()
 
     @rx.event
-    async def validate_psc_and_next(self):
+    async def validate_internal_and_next(self):
         """Internal doctor: validate + notify company doctor + navigate to next patient."""
-        await self._do_validate_psc()
+        await self._do_validate_internal()
         if self.error:
             return
         nxt = self.next_patient_id
         if nxt:
             return rx.redirect("/campaign-patient/" + self.cp_campaign_id + "/" + nxt)
 
-    async def _do_validate_psc(self):
+    async def _do_validate_internal(self):
         campaign_id = self.cp_campaign_id
         patient_id = self.cp_patient_id
         self.is_saving = True
@@ -1087,11 +1139,12 @@ class CampaignPatientExamsState(ReflexMainState):
                 from gws_care.user.user import User
 
                 caller = User.get_by_id(str(auth_user.id))
-                CampaignService.add_psc_interpretation(campaign_id, patient_id, self.psc_notes, caller=caller)
-                CampaignService.validate_psc_patient(campaign_id, patient_id, caller=caller)
+                CampaignService.add_internal_interpretation(campaign_id, patient_id, self.internal_notes, caller=caller)
+                CampaignService.validate_internal_patient(campaign_id, patient_id, caller=caller)
             from ..admin.general_settings_state import GeneralSettingsState
             org_acronym = (await self.get_state(GeneralSettingsState)).org_acronym
-            self.medical_status = "PSC_VALIDATED"
+            self.medical_status = "INTERNAL_VALIDATED"
+            self.internal_validated = True
             self.success = f"Interprétation {org_acronym} validée. Dossier transmis au médecin entreprise."
 
             # Notify enterprise (company-scope) doctors — Campaign.enterprise_doctor
@@ -1123,6 +1176,39 @@ class CampaignPatientExamsState(ReflexMainState):
         finally:
             self.is_saving = False
 
+    @rx.event
+    async def publish_directly_to_patient(self):
+        """Internal doctor: validate + publish straight to the patient — only
+        available when the campaign has no company doctor assigned at all."""
+        campaign_id = self.cp_campaign_id
+        patient_id = self.cp_patient_id
+        if not self.internal_notes.strip():
+            self.error = "L'interprétation est obligatoire avant validation."
+            return
+        self.is_saving = True
+        self.error = ""
+        try:
+            with await self.authenticate_user() as auth_user:
+                from gws_care.campaign.campaign_service import CampaignService
+                from gws_care.user.user import User
+
+                caller = User.get_by_id(str(auth_user.id))
+                CampaignService.publish_internal_directly_to_patient(
+                    campaign_id,
+                    patient_id,
+                    self.internal_notes,
+                    self.internal_direct_patient_message,
+                    caller=caller,
+                )
+            self.medical_status = "ENTERPRISE_VALIDATED"
+            self.internal_validated = True
+            self.enterprise_validated = True
+            self.success = "Résultats validés et publiés au patient."
+        except Exception as e:
+            self.error = str(e)
+        finally:
+            self.is_saving = False
+
     # ── Transmit to treating doctor ───────────────────────────────────────────
 
     @rx.event
@@ -1138,7 +1224,14 @@ class CampaignPatientExamsState(ReflexMainState):
 
                 CampaignService.transmit_to_treating_doctor(campaign_id, patient_id)
             self.treating_doctor_transmitted = True
-            self.medical_status = "TRANSMITTED_TREATING_DOCTOR"
+            # Mirror CampaignService.transmit_to_treating_doctor's own guard: only
+            # advance the displayed status if the dossier hasn't already moved past
+            # this point — this is an optional, out-of-band notification and must
+            # never regress an already-validated/closed dossier's displayed status.
+            if self.medical_status in (
+                "LAB_ENTERED", "LAB_VALIDATED", "INTERNAL_INTERPRETED", "INTERNAL_VALIDATED",
+            ):
+                self.medical_status = "TRANSMITTED_TREATING_DOCTOR"
             self.success = "Résultats transmis au médecin traitant."
         except Exception as e:
             self.error = str(e)
@@ -1171,15 +1264,21 @@ class CampaignPatientExamsState(ReflexMainState):
     @rx.event
     def set_enterprise_notes(self, value: str):
         self.enterprise_notes = value
+
+    @rx.event
+    def set_enterprise_patient_message(self, value: str):
         self.enterprise_patient_message = value
 
     @rx.event
     async def validate_enterprise(self):
-        """Enterprise doctor: save interpretation + validate."""
+        """Enterprise doctor: save interpretation + patient message + validate."""
         campaign_id = self.cp_campaign_id
         patient_id = self.cp_patient_id
         if not self.enterprise_notes.strip():
             self.error = "L'interprétation est obligatoire avant validation."
+            return
+        if not self.enterprise_patient_message.strip():
+            self.error = "Le message au patient est obligatoire avant validation."
             return
         self.is_saving = True
         self.error = ""
@@ -1194,10 +1293,11 @@ class CampaignPatientExamsState(ReflexMainState):
                     patient_id,
                     self.enterprise_notes,
                     caller=caller,
-                    patient_message=self.enterprise_notes,
+                    patient_message=self.enterprise_patient_message,
                 )
                 CampaignService.validate_enterprise_patient(campaign_id, patient_id, caller=caller)
             self.medical_status = "ENTERPRISE_VALIDATED"
+            self.enterprise_validated = True
             self.success = "Interprétation entreprise validée."
         except Exception as e:
             self.error = str(e)
@@ -1212,6 +1312,9 @@ class CampaignPatientExamsState(ReflexMainState):
         # Use router.page.params (consistent with other states; avoids stale-state issues)
         campaign_id = self.router.page.params.get("cp_campaign_id", "") or self.cp_campaign_id
         patient_id = self.router.page.params.get("cp_patient_id", "") or self.cp_patient_id
+        # Optional deep-link: land directly on the exam type a specific task concerns
+        # (e.g. from "Mes examens assignés") instead of always defaulting to the first tab.
+        requested_exam_type_id = self.router.page.params.get("exam_type_id", "")
         if not campaign_id or not patient_id:
             self.error = "Paramètres manquants dans l'URL."
             return
@@ -1258,11 +1361,19 @@ class CampaignPatientExamsState(ReflexMainState):
                 )
                 self.medical_status = cp.medical_status if cp else "PENDING"
                 self.terrain_notes = (cp.terrain_notes or "") if cp else ""
-                self.psc_notes = (cp.psc_notes or "") if cp else ""
+                self.internal_notes = (cp.internal_notes or "") if cp else ""
                 self.enterprise_notes = (cp.enterprise_notes or "") if cp else ""
-                self.enterprise_patient_message = (cp.enterprise_notes or "") if cp else ""
+                self.enterprise_patient_message = (cp.patient_message or "") if cp else ""
                 self.treating_doctor_transmitted = (
                     bool(cp.treating_doctor_transmitted_at) if cp else False
+                )
+                self.internal_notified = bool(cp.internal_notified_at) if cp else False
+                self.internal_validated = bool(cp.internal_validated_at) if cp else False
+                self.enterprise_validated = bool(cp.enterprise_validated_at) if cp else False
+
+                from gws_care.campaign.campaign_service import CampaignService as _CampaignService
+                self.has_company_doctor = bool(
+                    _CampaignService.get_company_doctor_user_ids_for_campaign(campaign_id)
                 )
 
                 # Load visit status (determines whether entry form is unlocked)
@@ -1308,21 +1419,26 @@ class CampaignPatientExamsState(ReflexMainState):
                         if _CareRole.MEDECIN.value in role_vals
                         else "none"
                     )
-                self.viewer_is_psc = is_admin_role or dev_mode_show_all or scope == "internal"
+                self.viewer_is_internal = is_admin_role or dev_mode_show_all or scope == "internal"
                 self.viewer_is_enterprise = is_admin_role or dev_mode_show_all or scope == "company"
                 self.viewer_is_operator = (
                     _CareRole.OPERATEUR.value in role_vals or is_admin_role or dev_mode_show_all
                 )
 
-                # Index existing saved exams {marker → (exam_id, is_transmitted)}
-                # is_transmitted = exam.status == PENDING (was submitted)
+                # Index existing exams {marker → (exam_id, is_saved, is_transmitted, is_dispatched)}
+                # is_saved = actual result values have been entered and persisted
+                # is_transmitted = exam.status == IN_PROGRESS_INTERPRETATION (sent onward)
+                # is_dispatched = exam.status == TRANSMITTED_TO_LAB (sent to the lab
+                #   technician's queue, BEFORE values are necessarily filled in)
                 marker_prefix = f"CAMP:{campaign_id}|"
-                existing_map: dict[str, tuple[str, bool]] = {}
+                existing_map: dict[str, tuple[str, bool, bool, bool]] = {}
                 for exam in Exam.select().where(Exam.patient == patient_id):
                     rv = exam.reason_for_visit or ""
                     if rv.startswith(marker_prefix):
+                        is_saved_exam = bool(exam.lab_results)
                         is_tx = exam.status == ExamStatus.IN_PROGRESS_INTERPRETATION
-                        existing_map[rv] = (str(exam.id), is_tx)
+                        is_dispatched = exam.status == ExamStatus.TRANSMITTED_TO_LAB
+                        existing_map[rv] = (str(exam.id), is_saved_exam, is_tx, is_dispatched)
 
                 from peewee import fn
 
@@ -1418,11 +1534,13 @@ class CampaignPatientExamsState(ReflexMainState):
                         saved_exam_id = ""
                         is_saved = False
                         is_transmitted = False
-                        for rv_key, (eid, is_tx) in existing_map.items():
+                        is_dispatched = False
+                        for rv_key, (eid, is_saved_exam, is_tx, is_disp) in existing_map.items():
                             if rv_key.startswith(marker):
                                 saved_exam_id = eid
-                                is_saved = True
+                                is_saved = is_saved_exam
                                 is_transmitted = is_tx
+                                is_dispatched = is_disp
                                 break
                         sections.append(
                             ExamSectionVM(
@@ -1432,6 +1550,7 @@ class CampaignPatientExamsState(ReflexMainState):
                                 param_count=param_counts.get(ref_id, 0),
                                 is_saved=is_saved,
                                 is_transmitted=is_transmitted,
+                                lab_dispatched=is_dispatched,
                                 saved_exam_id=saved_exam_id,
                                 allows_attachment=ref.allows_attachment,
                                 requires_lab_validation=ref.requires_lab_validation,
@@ -1444,9 +1563,13 @@ class CampaignPatientExamsState(ReflexMainState):
 
                 self.sections = sections
                 if sections:
-                    first = sections[0]
-                    self.active_section_id = first.exam_type_ref_id
-                    await self._load_active_params(first.exam_type_ref_id)
+                    requested = next(
+                        (s for s in sections if s.exam_type_ref_id == requested_exam_type_id),
+                        None,
+                    )
+                    target = requested or sections[0]
+                    self.active_section_id = target.exam_type_ref_id
+                    await self._load_active_params(target.exam_type_ref_id)
                     await self._load_section_files()
         except Exception as e:
             self.error = f"Erreur de chargement : {e}"
@@ -1469,7 +1592,11 @@ class CampaignPatientExamsState(ReflexMainState):
                 existing = Exam.get_or_none(
                     (Exam.patient == patient_id) & Exam.reason_for_visit.startswith(marker)
                 )
-                has_existing = existing is not None
+                # An Exam row can exist before any value has been entered (e.g. it was
+                # dispatched to the lab technician's queue with lab_results=[]) — only
+                # count it as "existing" once results were actually saved, otherwise
+                # every non-required param gets silently deselected and locked out.
+                has_existing = bool(existing and existing.lab_results)
                 if existing and existing.lab_results:
                     for row in existing.lab_results:
                         name = row.get("parameter", "")

@@ -1,8 +1,9 @@
 """Audit log page state (US-210)."""
 
 import reflex as rx
-from gws_reflex_main import ReflexMainState
 from pydantic import BaseModel
+
+from ..common.role_state import RoleState
 
 
 class AuditLogRowVM(BaseModel):
@@ -17,7 +18,7 @@ class AuditLogRowVM(BaseModel):
     created_at: str
 
 
-class AuditState(ReflexMainState):
+class AuditState(RoleState):
     logs: list[AuditLogRowVM] = []
     is_loading: bool = False
     error: str = ""

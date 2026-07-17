@@ -8,6 +8,7 @@ from gws_care.account.account import Account
 from gws_care.patient.patient import Patient
 from gws_care.patient.patient_account import PatientAccount
 from gws_care.patient.patient_dto import SavePatientDTO
+from gws_care.user.user import User
 
 
 class PatientService:
@@ -16,10 +17,20 @@ class PatientService:
     VALID_GENDERS = {"M", "F", "Other"}
 
     @classmethod
-    def get_patient(cls, patient_id: str) -> Patient:
+    def get_patient(cls, patient_id: str, user: User | None = None) -> Patient:
+        """Fetch a patient by id.
+
+        *user*, when provided, is checked via PermissionService.require_own_patient
+        (ADMIN/OPERATOR/unrestricted-DOCTOR always allowed; a restricted DOCTOR,
+        ACCOUNT_ADMIN, or PATIENT is scoped to their own linked patients).
+        Callers with no end-user context (system/notification code) omit it.
+        """
         patient = Patient.get_or_none(Patient.id == patient_id)
         if patient is None:
             raise NotFoundException(f"Patient '{patient_id}' not found")
+        if user is not None:
+            from gws_care.role.permission_service import PermissionService
+            PermissionService.require_own_patient(user, patient_id)
         return patient
 
     @classmethod

@@ -417,27 +417,35 @@ def _detail_view() -> rx.Component:
 
 # ── Dialogs ───────────────────────────────────────────────────────────────────
 
-def _category_suggestion(cat: str) -> rx.Component:
-    return rx.badge(
-        cat,
-        color_scheme="gray",
-        variant="outline",
-        size="1",
+def _category_suggestion_item(cat: str) -> rx.Component:
+    return rx.box(
+        rx.hstack(
+            rx.icon("tag", size=12, color="var(--accent-9)"),
+            rx.text(cat, size="2"),
+            spacing="2",
+            align="center",
+        ),
+        padding="0.4rem 0.75rem",
         cursor="pointer",
-        on_click=ExamTypesState.set_type_category(cat),
-        _hover={"background": "var(--accent-3)", "border_color": "var(--accent-9)"},
+        _hover={"background": "var(--accent-2)"},
+        on_mouse_down=lambda: ExamTypesState.select_category_suggestion(cat),
+        width="100%",
     )
 
 
-def _department_suggestion(dept: str) -> rx.Component:
-    return rx.badge(
-        dept,
-        color_scheme="purple",
-        variant="outline",
-        size="1",
+def _department_suggestion_item(dept: str) -> rx.Component:
+    return rx.box(
+        rx.hstack(
+            rx.icon("tag", size=12, color="var(--purple-9)"),
+            rx.text(dept, size="2"),
+            spacing="2",
+            align="center",
+        ),
+        padding="0.4rem 0.75rem",
         cursor="pointer",
-        on_click=ExamTypesState.set_type_department(dept),
-        _hover={"background": "var(--purple-3)", "border_color": "var(--purple-9)"},
+        _hover={"background": "var(--purple-2)"},
+        on_mouse_down=lambda: ExamTypesState.select_department_suggestion(dept),
+        width="100%",
     )
 
 
@@ -459,42 +467,88 @@ def _type_dialog() -> rx.Component:
                 rx.vstack(
                     rx.text(LanguageState.tr["category_required_label"], size="2", weight="medium"),
                     rx.text(LanguageState.tr["free_text_suggestion_hint"], size="1", color="var(--gray-9)"),
-                    rx.input(
-                        placeholder="ex: Biology, Immunology, Serology, ECG…",
-                        value=ExamTypesState.type_form.category,
-                        on_change=ExamTypesState.set_type_category,
-                        width="100%",
-                    ),
-                    rx.cond(
-                        ExamTypesState.existing_categories.length() > 0,
-                        rx.flex(
-                            rx.foreach(ExamTypesState.existing_categories, _category_suggestion),
-                            flex_wrap="wrap",
-                            gap="0.4rem",
-                            padding_top="0.25rem",
+                    rx.box(
+                        rx.cond(
+                            ExamTypesState.show_category_suggestions,
+                            rx.box(
+                                position="fixed", top="0", left="0", right="0", bottom="0",
+                                z_index="49", background="transparent",
+                                on_click=ExamTypesState.close_category_suggestions,
+                            ),
+                            rx.fragment(),
                         ),
-                        rx.fragment(),
+                        rx.input(
+                            placeholder="ex: Biology, Immunology, Serology, ECG…",
+                            value=ExamTypesState.category_filter,
+                            on_change=ExamTypesState.set_category_filter,
+                            width="100%",
+                        ),
+                        rx.cond(
+                            ExamTypesState.show_category_suggestions,
+                            rx.box(
+                                rx.vstack(
+                                    rx.foreach(ExamTypesState.filtered_categories, _category_suggestion_item),
+                                    spacing="0",
+                                    width="100%",
+                                ),
+                                position="absolute",
+                                top="100%", left="0", right="0",
+                                background="white",
+                                border="1px solid var(--gray-5)",
+                                border_radius="var(--radius-2)",
+                                box_shadow="0 4px 12px var(--gray-a5)",
+                                z_index="100",
+                                max_height="220px",
+                                overflow_y="auto",
+                            ),
+                            rx.fragment(),
+                        ),
+                        position="relative",
+                        width="100%",
                     ),
                     spacing="1", width="100%",
                 ),
                 rx.vstack(
                     rx.text(LanguageState.tr["department_label"], size="2", weight="medium"),
                     rx.text(LanguageState.tr["free_text_suggestion_hint"], size="1", color="var(--gray-9)"),
-                    rx.input(
-                        placeholder="ex: Cytology, Radiology, Cardiology, ENT, Biology…",
-                        value=ExamTypesState.type_form.department,
-                        on_change=ExamTypesState.set_type_department,
-                        width="100%",
-                    ),
-                    rx.cond(
-                        ExamTypesState.existing_departments.length() > 0,
-                        rx.flex(
-                            rx.foreach(ExamTypesState.existing_departments, _department_suggestion),
-                            flex_wrap="wrap",
-                            gap="0.4rem",
-                            padding_top="0.25rem",
+                    rx.box(
+                        rx.cond(
+                            ExamTypesState.show_department_suggestions,
+                            rx.box(
+                                position="fixed", top="0", left="0", right="0", bottom="0",
+                                z_index="49", background="transparent",
+                                on_click=ExamTypesState.close_department_suggestions,
+                            ),
+                            rx.fragment(),
                         ),
-                        rx.fragment(),
+                        rx.input(
+                            placeholder="ex: Cytology, Radiology, Cardiology, ENT, Biology…",
+                            value=ExamTypesState.department_filter,
+                            on_change=ExamTypesState.set_department_filter,
+                            width="100%",
+                        ),
+                        rx.cond(
+                            ExamTypesState.show_department_suggestions,
+                            rx.box(
+                                rx.vstack(
+                                    rx.foreach(ExamTypesState.filtered_departments, _department_suggestion_item),
+                                    spacing="0",
+                                    width="100%",
+                                ),
+                                position="absolute",
+                                top="100%", left="0", right="0",
+                                background="white",
+                                border="1px solid var(--gray-5)",
+                                border_radius="var(--radius-2)",
+                                box_shadow="0 4px 12px var(--gray-a5)",
+                                z_index="100",
+                                max_height="220px",
+                                overflow_y="auto",
+                            ),
+                            rx.fragment(),
+                        ),
+                        position="relative",
+                        width="100%",
                     ),
                     spacing="1", width="100%",
                 ),
@@ -1127,74 +1181,6 @@ def _age_range_row(r: AgeRangeVM) -> rx.Component:
                 spacing="1",
             )
         ),
-    )
-
-
-def _age_range_manager_dialog() -> rx.Component:
-    tr = LanguageState.tr
-    return rx.dialog.root(
-        rx.dialog.content(
-            rx.dialog.title(
-                rx.hstack(
-                    rx.icon("chart-no-axes-gantt", size=18, color="var(--violet-9)"),
-                    rx.text(tr["age_range_manager_title"]),
-                    spacing="2", align="center",
-                )
-            ),
-            rx.dialog.description(
-                rx.text(
-                    tr["param_colon"],
-                    rx.text.strong(ExamTypesState.age_range_param_name),
-                    size="2", color="var(--gray-11)",
-                )
-            ),
-            rx.cond(
-                ExamTypesState.age_range_is_loading,
-                rx.center(rx.spinner(size="3"), padding="2rem"),
-                rx.vstack(
-                    rx.cond(
-                        ExamTypesState.age_ranges.length() == 0,
-                        rx.callout.root(
-                            rx.callout.icon(rx.icon("info", size=16)),
-                            rx.callout.text(tr["no_age_ranges_msg"]),
-                            color_scheme="gray", variant="surface", size="1",
-                        ),
-                        rx.table.root(
-                            rx.table.header(
-                                rx.table.row(
-                                    rx.table.column_header_cell(tr["col_age_range"]),
-                                    rx.table.column_header_cell(tr["gender_label"]),
-                                    rx.table.column_header_cell(tr["col_normal_values"]),
-                                    rx.table.column_header_cell(tr["col_critical_col"]),
-                                    rx.table.column_header_cell(""),
-                                )
-                            ),
-                            rx.table.body(
-                                rx.foreach(ExamTypesState.age_ranges, _age_range_row)
-                            ),
-                            width="100%", size="1",
-                        ),
-                    ),
-                    rx.button(
-                        rx.icon("plus-circle", size=14), tr["add_age_range_btn"],
-                        on_click=ExamTypesState.open_create_age_range,
-                        size="2", variant="soft", color_scheme="violet",
-                    ),
-                    spacing="3", width="100%", align="start",
-                ),
-            ),
-            rx.hstack(
-                rx.dialog.close(
-                    rx.button(tr["close_btn"], variant="soft", color_scheme="gray",
-                               on_click=ExamTypesState.close_age_range_manager),
-                ),
-                justify="end", margin_top="1rem", width="100%",
-            ),
-            max_width="700px",
-            on_interact_outside=ExamTypesState.close_age_range_manager,
-            on_escape_key_down=ExamTypesState.close_age_range_manager,
-        ),
-        open=ExamTypesState.age_range_manager_open,
     )
 
 

@@ -17,8 +17,8 @@ class MedicalRecordStatus(str, Enum):
     PENDING = "PENDING"                                      # Patient enrolled, no results yet
     LAB_ENTERED = "LAB_ENTERED"                              # Operator/lab has saved draft results
     LAB_VALIDATED = "LAB_VALIDATED"                          # Lab results fully validated
-    PSC_INTERPRETED = "PSC_INTERPRETED"                      # Internal doctor has written interpretation (draft)
-    PSC_VALIDATED = "PSC_VALIDATED"                          # Internal doctor has validated + sent to enterprise
+    INTERNAL_INTERPRETED = "INTERNAL_INTERPRETED"            # Internal doctor has written interpretation (draft)
+    INTERNAL_VALIDATED = "INTERNAL_VALIDATED"                # Internal doctor has validated + sent to enterprise
     TRANSMITTED_TREATING_DOCTOR = "TRANSMITTED_TREATING_DOCTOR"  # Results sent to patient's treating doctor
     ENTERPRISE_VALIDATED = "ENTERPRISE_VALIDATED"            # Enterprise doctor has validated aptitude
     PUBLISHED = "PUBLISHED"                                  # Dossier published / closed
@@ -31,8 +31,8 @@ class MedicalRecordStatus(str, Enum):
             "PENDING": "En attente",
             "LAB_ENTERED": "Résultats saisis",
             "LAB_VALIDATED": "Résultats validés labo",
-            "PSC_INTERPRETED": f"Interprétation {org_acronym} en cours",
-            "PSC_VALIDATED": f"Validé {org_acronym} — transmis médecin travail",
+            "INTERNAL_INTERPRETED": f"Interprétation {org_acronym} en cours",
+            "INTERNAL_VALIDATED": f"Validé {org_acronym} — transmis médecin travail",
             "TRANSMITTED_TREATING_DOCTOR": "Transmis au médecin traitant",
             "ENTERPRISE_VALIDATED": "Validé médecin travail",
             "PUBLISHED": "Dossier terminé",
@@ -43,8 +43,8 @@ class MedicalRecordStatus(str, Enum):
             "PENDING": "gray",
             "LAB_ENTERED": "orange",
             "LAB_VALIDATED": "amber",
-            "PSC_INTERPRETED": "blue",
-            "PSC_VALIDATED": "blue",
+            "INTERNAL_INTERPRETED": "blue",
+            "INTERNAL_VALIDATED": "blue",
             "TRANSMITTED_TREATING_DOCTOR": "teal",
             "ENTERPRISE_VALIDATED": "green",
             "PUBLISHED": "green",
@@ -72,12 +72,13 @@ class CampaignPatient(Model):
     terrain_notes: str = TextField(null=True, default=None)
 
     # Doctor notes / interpretations
-    psc_notes: str = TextField(null=True, default=None)
+    internal_notes: str = TextField(null=True, default=None)
     enterprise_notes: str = TextField(null=True, default=None)
     patient_message: str = TextField(null=True, default=None)
 
     # Audit timestamps
-    psc_validated_at: datetime = DateTimeField(null=True, default=None)
+    internal_notified_at: datetime = DateTimeField(null=True, default=None)
+    internal_validated_at: datetime = DateTimeField(null=True, default=None)
     enterprise_validated_at: datetime = DateTimeField(null=True, default=None)
     treating_doctor_transmitted_at: datetime = DateTimeField(null=True, default=None)
     published_at: datetime = DateTimeField(null=True, default=None)

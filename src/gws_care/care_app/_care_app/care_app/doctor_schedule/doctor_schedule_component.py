@@ -3,7 +3,7 @@
 import reflex as rx
 
 from ..common.page_layout import page_layout
-from .doctor_schedule_state import DoctorScheduleState, ScheduleBlockDTO, DoctorOptionDTO, UnavailableDayDTO
+from .doctor_schedule_state import DoctorOptionDTO, DoctorScheduleState, ScheduleBlockDTO, UnavailableDayDTO
 
 
 # ── Doctor filter bar ─────────────────────────────────────────────────────────

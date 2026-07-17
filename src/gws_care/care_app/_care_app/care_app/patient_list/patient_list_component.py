@@ -259,34 +259,14 @@ def patient_list_page() -> rx.Component:
                     empty_state("user-x", LanguageState.tr["no_patients_found"]),
                 ),
             ),
-            # ── Pagination controls ───────────────────────────────────────────
-            rx.hstack(
+            rx.cond(
+                PatientListState.total_count > 0,
                 rx.text(
-                    PatientListState.total_count.to(str) + " patient(s) — page ",
-                    PatientListState.page.to(str),
-                    " / ",
-                    PatientListState.total_pages.to(str),
+                    PatientListState.total_count.to(str) + " patient(s)",
                     size="2",
                     color="var(--gray-9)",
+                    padding_top="0.5rem",
                 ),
-                rx.spacer(),
-                rx.button(
-                    rx.icon("chevron-left", size=14),
-                    on_click=PatientListState.prev_page,
-                    variant="soft",
-                    size="2",
-                    disabled=~PatientListState.has_prev_page,
-                ),
-                rx.button(
-                    rx.icon("chevron-right", size=14),
-                    on_click=PatientListState.next_page,
-                    variant="soft",
-                    size="2",
-                    disabled=~PatientListState.has_next_page,
-                ),
-                width="100%",
-                align="center",
-                padding_top="0.5rem",
             ),
         )
     )

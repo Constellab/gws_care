@@ -189,18 +189,6 @@ class CampaignService:
         return campaign
 
     @classmethod
-    def mark_lab_done(cls, campaign_id: str) -> Campaign:
-        """Mark a campaign as LAB_DONE (Lab Validation)."""
-        campaign = cls.get_campaign(campaign_id)
-        if campaign.status not in (CampaignStatus.TERRAIN_EXAM, CampaignStatus.SAMPLE_ANALYSIS):
-            raise BadRequestException(
-                "Only TERRAIN_EXAM or SAMPLE_ANALYSIS campaigns can be marked as lab done"
-            )
-        campaign.status = CampaignStatus.LAB_DONE
-        campaign.save()
-        return campaign
-
-    @classmethod
     def validate_lab_campaign(cls, campaign_id: str, user: User) -> Campaign:
         """Phase 2.1 — Lab Validation (HQ Operator).
 
@@ -517,30 +505,6 @@ class CampaignService:
         link.delete_instance()
 
     @classmethod
-    def assign_doctor_to_exam_ref(
-        cls, campaign_id: str, exam_ref_id: str, doctor_id: str | None
-    ) -> None:
-        """Assign (or unassign) a MedicalDoctor to an exam type within a campaign."""
-        from gws_care.campaign.campaign_exam import CampaignExam
-        from gws_care.doctor.medical_doctor import MedicalDoctor
-
-        link = CampaignExam.get_or_none(
-            (CampaignExam.campaign == campaign_id) & (CampaignExam.exam_type_ref == exam_ref_id)
-        )
-        if link is None:
-            raise BadRequestException("Ce type d'examen n'est pas dans cette campagne.")
-        if doctor_id:
-            doc = MedicalDoctor.get_or_none(MedicalDoctor.id == doctor_id)
-            if doc is None:
-                raise BadRequestException("Médecin introuvable.")
-            link.assigned_doctor_id = str(doc.id)
-            link.assigned_doctor_name = doc.get_full_name()
-        else:
-            link.assigned_doctor_id = None
-            link.assigned_doctor_name = None
-        link.save()
-
-    @classmethod
     def get_campaign_exam_doctors_map(cls, campaign_id: str) -> dict:
         """Return {exam_type_ref_id: [MedicalDoctor, ...]} for all exams in the campaign."""
         from gws_care.campaign.campaign_exam import CampaignExam
@@ -628,15 +592,22 @@ class CampaignService:
             cp.save()
 
     @classmethod
-    def save_psc_notes_draft(cls, campaign_id: str, patient_id: str, notes: str) -> None:
-        """Save PSC doctor notes as draft (no status change)."""
+    def mark_internal_notified(cls, campaign_id: str, patient_id: str) -> None:
+        """Record that the lab-validated case was handed off to the internal doctor."""
         cp = cls._get_campaign_patient(campaign_id, patient_id)
-        cp.psc_notes = notes
+        cp.internal_notified_at = datetime.utcnow()
         cp.save()
 
     @classmethod
-    def add_psc_interpretation(cls, campaign_id: str, patient_id: str, notes: str, caller: User) -> None:
-        """Save PSC interpretation and advance status to PSC_INTERPRETED.
+    def save_internal_notes_draft(cls, campaign_id: str, patient_id: str, notes: str) -> None:
+        """Save internal doctor notes as draft (no status change)."""
+        cp = cls._get_campaign_patient(campaign_id, patient_id)
+        cp.internal_notes = notes
+        cp.save()
+
+    @classmethod
+    def add_internal_interpretation(cls, campaign_id: str, patient_id: str, notes: str, caller: User) -> None:
+        """Save internal interpretation and advance status to INTERNAL_INTERPRETED.
 
         *caller* must be the doctor with an "internal" scope on this campaign
         (assigned to one of its exams) — see get_doctor_scope_for_campaign.
@@ -645,13 +616,13 @@ class CampaignService:
 
         PermissionService.require_campaign_doctor_scope(caller, campaign_id, {"internal"})
         cp = cls._get_campaign_patient(campaign_id, patient_id)
-        cp.psc_notes = notes
-        cp.medical_status = MedicalRecordStatus.PSC_INTERPRETED.value
+        cp.internal_notes = notes
+        cp.medical_status = MedicalRecordStatus.INTERNAL_INTERPRETED.value
         cp.save()
 
     @classmethod
-    def validate_psc_patient(cls, campaign_id: str, patient_id: str, caller: User) -> None:
-        """Mark PSC interpretation as validated and advance to PSC_VALIDATED.
+    def validate_internal_patient(cls, campaign_id: str, patient_id: str, caller: User) -> None:
+        """Mark internal interpretation as validated and advance to INTERNAL_VALIDATED.
 
         *caller* must be the doctor with an "internal" scope on this campaign.
         """
@@ -659,22 +630,38 @@ class CampaignService:
 
         PermissionService.require_campaign_doctor_scope(caller, campaign_id, {"internal"})
         cp = cls._get_campaign_patient(campaign_id, patient_id)
-        cp.medical_status = MedicalRecordStatus.PSC_VALIDATED.value
-        cp.psc_validated_at = datetime.utcnow()
+        cp.medical_status = MedicalRecordStatus.INTERNAL_VALIDATED.value
+        cp.internal_validated_at = datetime.utcnow()
         cp.save()
 
     @classmethod
-    def validate_psc_campaign(cls, campaign_id: str) -> None:
-        """Mark all PSC_INTERPRETED patients in campaign as PSC_VALIDATED."""
+    def publish_internal_directly_to_patient(
+        cls, campaign_id: str, patient_id: str, notes: str, patient_message: str, caller: User
+    ) -> None:
+        """Internal doctor validates and publishes directly to the patient.
+
+        Only allowed when the campaign has NO company doctor assigned at all —
+        otherwise the normal hand-off (add_internal_interpretation → validate_internal_patient
+        → enterprise doctor validates) must be used. *caller* must be the doctor
+        with an "internal" scope on this campaign.
+        """
         from gws_care.campaign.campaign_patient import MedicalRecordStatus
 
-        CampaignPatient.update(
-            medical_status=MedicalRecordStatus.PSC_VALIDATED.value,
-            psc_validated_at=datetime.utcnow(),
-        ).where(
-            (CampaignPatient.campaign == campaign_id)
-            & (CampaignPatient.medical_status == MedicalRecordStatus.PSC_INTERPRETED.value)
-        ).execute()
+        PermissionService.require_campaign_doctor_scope(caller, campaign_id, {"internal"})
+        if cls.get_company_doctor_user_ids_for_campaign(campaign_id):
+            raise BadRequestException(
+                "Un médecin d'entreprise est assigné à cette campagne — "
+                "la transmission directe au patient n'est pas autorisée."
+            )
+        cp = cls._get_campaign_patient(campaign_id, patient_id)
+        cp.internal_notes = notes
+        cp.enterprise_notes = notes
+        cp.patient_message = patient_message
+        now = datetime.utcnow()
+        cp.internal_validated_at = now
+        cp.enterprise_validated_at = now
+        cp.medical_status = MedicalRecordStatus.ENTERPRISE_VALIDATED.value
+        cp.save()
 
     @classmethod
     def transmit_to_treating_doctor(cls, campaign_id: str, patient_id: str) -> None:
@@ -684,8 +671,8 @@ class CampaignService:
         cp = cls._get_campaign_patient(campaign_id, patient_id)
         cp.treating_doctor_transmitted_at = datetime.utcnow()
         if cp.medical_status in (
-            MedicalRecordStatus.PSC_VALIDATED.value,
-            MedicalRecordStatus.PSC_INTERPRETED.value,
+            MedicalRecordStatus.INTERNAL_VALIDATED.value,
+            MedicalRecordStatus.INTERNAL_INTERPRETED.value,
             MedicalRecordStatus.LAB_VALIDATED.value,
             MedicalRecordStatus.LAB_ENTERED.value,
         ):

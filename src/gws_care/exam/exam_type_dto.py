@@ -21,7 +21,10 @@ class ExamTypeModelDTO(ModelDTO):
 
 
 class SaveExamTypeModelDTO(BaseModelDTO):
-    """DTO for creating or updating an exam type."""
+    """DTO for creating an exam type. Kept for test fixtures only — the live
+
+    app creates exam types exclusively via ExamTypeRef ("Référentiel examens").
+    """
 
     code: str
     name: str

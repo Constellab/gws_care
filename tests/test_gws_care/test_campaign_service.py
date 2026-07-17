@@ -136,8 +136,9 @@ class TestCampaignService(BaseTestCase):
         campaign = CampaignService.start_campaign(str(campaign.id))
         self.assertEqual(campaign.status, CampaignStatus.TERRAIN_EXAM)
 
-        # IN_PROGRESS → LAB_DONE
-        campaign = CampaignService.mark_lab_done(str(campaign.id))
+        # IN_PROGRESS → LAB_DONE (mark_lab_done was dead code, removed; set directly)
+        campaign.status = CampaignStatus.LAB_DONE
+        campaign.save()
         self.assertEqual(campaign.status, CampaignStatus.LAB_DONE)
 
         # LAB_DONE → DOCTOR_CLINIC_VALIDATED

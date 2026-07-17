@@ -269,20 +269,17 @@ class AppointmentFormState(FormDialogState, rx.State):
         can be called directly with the selected doctor id.
         """
         try:
-            from gws_care.doctor.medical_doctor import MedicalDoctor
+            from gws_care.doctor.medical_doctor_service import MedicalDoctorService
 
-            all_options: list[DoctorOption] = []
-            for md in (
-                MedicalDoctor.select()
-                .where((MedicalDoctor.is_active == True) & (MedicalDoctor.is_archived == False))
-                .order_by(MedicalDoctor.last_name, MedicalDoctor.first_name)
-            ):
-                all_options.append(DoctorOption(
-                    id=str(md.id),
-                    name=md.get_full_name(),
-                    specialty=md.specialization or "",
-                    doctor_record_id=str(md.id),
-                ))
+            all_options = [
+                DoctorOption(
+                    id=d.id,
+                    name=d.full_name,
+                    specialty=d.specialization or "",
+                    doctor_record_id=d.id,
+                )
+                for d in MedicalDoctorService.list_for_selection()
+            ]
 
             specs = sorted({o.specialty for o in all_options if o.specialty})
             self.specialty_options = specs

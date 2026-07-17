@@ -81,6 +81,29 @@ def _presc_info_card() -> rx.Component:
     )
 
 
+def _confirm_delete_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title(LanguageState.tr["delete_prescription_title"]),
+            rx.alert_dialog.description(LanguageState.tr["delete_prescription_desc"], size="2"),
+            rx.hstack(
+                rx.alert_dialog.cancel(
+                    rx.button(LanguageState.tr["cancel_btn"], variant="soft", color_scheme="gray",
+                               on_click=PrescriptionDetailState.close_confirm_delete),
+                ),
+                rx.alert_dialog.action(
+                    rx.button(LanguageState.tr["delete_btn"], color_scheme="red",
+                               on_click=PrescriptionDetailState.delete_prescription,
+                               loading=PrescriptionDetailState.is_deleting),
+                ),
+                justify="end", spacing="2", margin_top="1rem", width="100%",
+            ),
+            max_width="400px",
+        ),
+        open=PrescriptionDetailState.confirm_delete_open,
+    )
+
+
 def prescription_detail_page() -> rx.Component:
     return main_component(
         page_layout(
@@ -135,8 +158,41 @@ def prescription_detail_page() -> rx.Component:
                                     variant="soft",
                                     size="2",
                                 ),
+                                rx.button(
+                                    rx.icon("mail", size=14),
+                                    LanguageState.tr["send_pdf_email_btn"],
+                                    on_click=PrescriptionDetailState.send_pdf_email,
+                                    loading=PrescriptionDetailState.is_sending_email,
+                                    variant="soft",
+                                    size="2",
+                                ),
+                                rx.button(
+                                    rx.icon(
+                                        rx.cond(PrescriptionDetailState.prescription.is_archived, "rotate-ccw", "archive"),
+                                        size=14,
+                                    ),
+                                    rx.cond(
+                                        PrescriptionDetailState.prescription.is_archived,
+                                        LanguageState.tr["unarchive_btn"],
+                                        LanguageState.tr["archive_btn"],
+                                    ),
+                                    on_click=PrescriptionDetailState.toggle_archive,
+                                    loading=PrescriptionDetailState.is_archiving,
+                                    variant="soft",
+                                    color_scheme="gray",
+                                    size="2",
+                                ),
+                                rx.button(
+                                    rx.icon("trash-2", size=14),
+                                    LanguageState.tr["delete_btn"],
+                                    on_click=PrescriptionDetailState.open_confirm_delete,
+                                    variant="soft",
+                                    color_scheme="red",
+                                    size="2",
+                                ),
                                 spacing="2",
                                 width="100%",
+                                flex_wrap="wrap",
                             ),
 
                             # ── Patient / prescription metadata card ───────────
@@ -276,5 +332,6 @@ def prescription_detail_page() -> rx.Component:
                 width="100%",
                 spacing="4",
             ),
+            _confirm_delete_dialog(),
         )
     )

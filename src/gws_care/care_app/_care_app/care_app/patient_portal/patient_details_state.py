@@ -124,9 +124,11 @@ class PatientDetailsState(RoleState):
         self.is_loading = True
         self.error_message = ""
         try:
-            with await self.authenticate_user():
+            with await self.authenticate_user() as auth_user:
                 from gws_care.patient.patient_service import PatientService
-                p = PatientService.get_patient(patient_id)
+                from gws_care.user.user import User
+                caller = User.get_by_id(str(auth_user.id))
+                p = PatientService.get_patient(patient_id, user=caller)
 
                 # Resolve account
                 account_name = ""
@@ -260,11 +262,13 @@ class PatientDetailsState(RoleState):
         self.edit_error = ""
         self.edit_is_saving = True
         try:
-            with await self.authenticate_user():
+            with await self.authenticate_user() as auth_user:
                 from datetime import date
                 from gws_care.patient.patient_dto import SavePatientDTO
                 from gws_care.patient.patient_service import PatientService
-                p = PatientService.get_patient(patient_id)
+                from gws_care.user.user import User
+                caller = User.get_by_id(str(auth_user.id))
+                p = PatientService.get_patient(patient_id, user=caller)
                 dto = SavePatientDTO(
                     last_name=p.last_name,
                     first_name=p.first_name,

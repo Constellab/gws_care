@@ -9,7 +9,7 @@ Role-based task dashboard:
 Filter values in filter_assignee:
   "__all__"  → show all rows
   "__lab__"  → only lab rows
-  "__psc__"  → only internal-interpretation queue rows
+  "__internal__"  → only internal-interpretation queue rows
   "{doctor_id}" → only rows for that specific doctor
 """
 
@@ -21,14 +21,14 @@ from pydantic import BaseModel
 class AssignedDoctorOption(BaseModel):
     """Entry for the assignee filter dropdown."""
 
-    id: str   # doctor ID, "__lab__", or "__psc__"
+    id: str   # doctor ID, "__lab__", or "__internal__"
     name: str
 
 
 class AssignedExamRowDTO(BaseModel):
     """One row in the assigned-exams table."""
 
-    # "doctor" | "lab" | "psc"
+    # "doctor" | "lab" | "internal"
     row_type: str = "doctor"
     # "campaign" | "private"
     source: str = "campaign"
@@ -44,7 +44,7 @@ class AssignedExamRowDTO(BaseModel):
     campaign_status: str = ""
     campaign_status_label: str = ""
 
-    # Exam type (may be "Tous les examens" for lab/psc rows)
+    # Exam type (may be "Tous les examens" for lab/internal rows)
     exam_type_id: str = ""
     exam_type_name: str = ""
     exam_category: str = ""
@@ -79,10 +79,10 @@ class DoctorAssignedExamsState(ReflexMainState):
 
     my_doctor_id: str = ""
     is_lab: bool = False
-    is_psc: bool = False
+    is_internal_doctor: bool = False
     is_admin: bool = False
 
-    # "__all__" | "__lab__" | "__psc__" | doctor_id
+    # "__all__" | "__lab__" | "__internal__" | doctor_id
     filter_assignee: str = "__all__"
     filter_status: str = "__all__"
     filter_source: str = "__all__"
@@ -94,8 +94,8 @@ class DoctorAssignedExamsState(ReflexMainState):
         fa = self.filter_assignee
         if fa == "__lab__":
             result = [r for r in result if r.row_type == "lab"]
-        elif fa == "__psc__":
-            result = [r for r in result if r.row_type == "psc"]
+        elif fa == "__internal__":
+            result = [r for r in result if r.row_type == "internal"]
         elif fa != "__all__":
             result = [r for r in result if r.row_type == "doctor" and r.assigned_doctor_id == fa]
         if self.filter_status != "__all__":
@@ -179,7 +179,7 @@ class DoctorAssignedExamsState(ReflexMainState):
         role_vals = [r.value if hasattr(r, "value") else str(r) for r in roles]
 
         self.is_lab = CareRole.OPERATEUR.value in role_vals
-        self.is_psc = any(r in role_vals for r in [
+        self.is_internal_doctor = any(r in role_vals for r in [
             CareRole.MEDECIN.value,
             CareRole.ADMIN.value,
         ])
@@ -195,8 +195,8 @@ class DoctorAssignedExamsState(ReflexMainState):
             "PENDING":                     ("Saisir les résultats",        "orange"),
             "LAB_ENTERED":                 ("Valider résultats labo",      "amber"),
             "LAB_VALIDATED":               (f"Interprétation {org_acronym}", "blue"),
-            "PSC_INTERPRETED":             (f"Valider {org_acronym}",      "blue"),
-            "PSC_VALIDATED":               ("Valider médecin de travail",  "teal"),
+            "INTERNAL_INTERPRETED":        (f"Valider {org_acronym}",      "blue"),
+            "INTERNAL_VALIDATED":          ("Valider médecin de travail",  "teal"),
             "TRANSMITTED_TREATING_DOCTOR": ("Valider médecin de travail",  "teal"),
             "ENTERPRISE_VALIDATED":        ("Clôturer le dossier",         "green"),
             "PUBLISHED":                   ("Terminé",                     "green"),
@@ -245,6 +245,22 @@ class DoctorAssignedExamsState(ReflexMainState):
                 .where(CampaignPatient.campaign == cid)
             )
 
+        # Preload presence status (campaign_id, patient_id) → is the patient
+        # on-site yet? Doctors have nothing to act on before that, regardless
+        # of medical_status, so these patients are skipped below.
+        on_terrain: set[tuple[str, str]] = set()
+        for cid in ced_camp_ids:
+            for v in Visit.select(Visit.campaign, Visit.patient, Visit.campaign_visit_status).where(
+                Visit.campaign == cid
+            ):
+                status = (
+                    v.campaign_visit_status.value
+                    if hasattr(v.campaign_visit_status, "value")
+                    else str(v.campaign_visit_status)
+                )
+                if status != "pending":
+                    on_terrain.add((str(v.campaign_id), str(v.patient_id)))
+
         # Build one row per (doctor, exam_type, patient)
         for ced in assigned_ceds:
             ce = ced.campaign_exam
@@ -257,6 +273,8 @@ class DoctorAssignedExamsState(ReflexMainState):
 
             for cp in campaign_patients.get(cid, []):
                 patient = cp.patient
+                if (cid, str(patient.id)) not in on_terrain:
+                    continue  # patient not yet declared present on-site
                 ms = cp.medical_status or MedicalRecordStatus.PENDING.value
                 try:
                     msr = MedicalRecordStatus(ms)
@@ -295,24 +313,24 @@ class DoctorAssignedExamsState(ReflexMainState):
                     medical_status_color=ms_color,
                     pending_task=_task_map.get(ms, ("", "gray"))[0],
                     pending_task_color=_task_map.get(ms, ("", "gray"))[1],
-                    action_url=f"/campaign-patient/{cid}/{patient.id}",
+                    action_url=f"/campaign-patient/{cid}/{patient.id}?exam_type_id={ce.exam_type_ref_id}",
                     can_act=camp_status in ("terrain_exam", "sample_analysis", "lab_done"),
                 ))
 
         # ── 2. Internal interpretation queue ──────────────────────────────────
-        if self.is_psc:
-            psc_statuses = [
+        if self.is_internal_doctor:
+            internal_statuses = [
                 MedicalRecordStatus.LAB_VALIDATED.value,
             ]
-            psc_cps = list(
+            internal_cps = list(
                 CampaignPatient.select(CampaignPatient, Patient, Campaign)
                 .join(Patient, on=(CampaignPatient.patient == Patient.id))
                 .switch(CampaignPatient)
                 .join(Campaign, on=(CampaignPatient.campaign == Campaign.id))
-                .where(CampaignPatient.medical_status.in_(psc_statuses))
+                .where(CampaignPatient.medical_status.in_(internal_statuses))
                 .order_by(Campaign.name, Patient.last_name, Patient.first_name)
             )
-            for cp in psc_cps:
+            for cp in internal_cps:
                 patient = cp.patient
                 camp = cp.campaign
                 cid = str(camp.id)
@@ -327,8 +345,8 @@ class DoctorAssignedExamsState(ReflexMainState):
                     ms_label = ms
                     ms_color = "gray"
                 result.append(AssignedExamRowDTO(
-                    row_type="psc",
-                    assigned_doctor_id="__psc__",
+                    row_type="internal",
+                    assigned_doctor_id="__internal__",
                     assigned_doctor_name=f"Médecin {org_acronym}",
                     campaign_id=cid,
                     campaign_name=camp.name,
@@ -387,6 +405,73 @@ class DoctorAssignedExamsState(ReflexMainState):
                     pending_task="Valider résultats labo",
                     pending_task_color="amber",
                     action_url=f"/campaign-patient/{cid}/{patient.id}",
+                    can_act=camp_status in ("terrain_exam", "sample_analysis", "lab_done"),
+                ))
+
+        # ── 3b. Lab rows — exam types explicitly dispatched to the lab, awaiting entry ──
+        # One row per (campaign, patient, exam type) that was sent via the per-exam-type
+        # "Envoyer au labo" action — NOT a blanket "patient is pending" query, so the lab
+        # technician only sees exam types actually routed to them.
+        if self.is_lab or is_admin:
+            dispatched_exams = list(
+                Exam.select(Exam, Patient)
+                .join(Patient)
+                .where(
+                    Exam.status == ExamStatus.TRANSMITTED_TO_LAB,
+                    Exam.reason_for_visit.startswith("CAMP:"),
+                )
+            )
+            camp_ids_needed: set[str] = set()
+            ref_ids_needed: set[str] = set()
+            parsed: list[tuple] = []  # (exam, patient, campaign_id, ref_id)
+            for exam in dispatched_exams:
+                rv = exam.reason_for_visit or ""
+                # Format: "CAMP:{campaign_id}|REF:{exam_type_ref_id}|{name}"
+                try:
+                    camp_part, ref_part = rv.split("|", 1)
+                    dcid = camp_part[len("CAMP:"):]
+                    ref_id = ref_part[len("REF:"):].split("|", 1)[0]
+                except ValueError:
+                    continue
+                camp_ids_needed.add(dcid)
+                ref_ids_needed.add(ref_id)
+                parsed.append((exam, exam.patient, dcid, ref_id))
+
+            camps_by_id = {
+                str(c.id): c for c in Campaign.select().where(Campaign.id.in_(camp_ids_needed))
+            } if camp_ids_needed else {}
+            refs_by_id = {
+                str(r.id): r for r in ExamTypeRef.select().where(ExamTypeRef.id.in_(ref_ids_needed))
+            } if ref_ids_needed else {}
+
+            for exam, patient, dcid, ref_id in parsed:
+                camp = camps_by_id.get(dcid)
+                ref = refs_by_id.get(ref_id)
+                if not camp or not ref:
+                    continue
+                camp_status = camp.status.value if hasattr(camp.status, "value") else str(camp.status)
+                camp_status_label = _status_labels.get(camp_status, camp_status)
+                result.append(AssignedExamRowDTO(
+                    row_type="lab",
+                    campaign_id=dcid,
+                    campaign_name=camp.name,
+                    campaign_number=camp.campaign_number,
+                    campaign_status=camp_status,
+                    campaign_status_label=camp_status_label,
+                    exam_type_id=ref_id,
+                    exam_type_name=ref.name,
+                    exam_category="",
+                    patient_id=str(patient.id),
+                    patient_name=patient.get_full_name(),
+                    patient_number=patient.patient_number,
+                    medical_status=MedicalRecordStatus.PENDING.value,
+                    medical_status_label="En attente",
+                    medical_status_color="orange",
+                    assigned_doctor_id="__lab__",
+                    assigned_doctor_name=f"Laboratoire {org_acronym}",
+                    pending_task="Saisir les résultats",
+                    pending_task_color="orange",
+                    action_url=f"/campaign-patient/{dcid}/{patient.id}?exam_type_id={ref_id}",
                     can_act=camp_status in ("terrain_exam", "sample_analysis", "lab_done"),
                 ))
 
@@ -567,20 +652,85 @@ class DoctorAssignedExamsState(ReflexMainState):
             except Exception:
                 pass
 
+        # ── 6. Appointment rows — scheduled lab work, not yet an exam ──────────
+        if self.is_lab or is_admin:
+            try:
+                from gws_care.appointment.appointment import Appointment
+                from gws_care.appointment.appointment_status import AppointmentStatus
+
+                appt_exams = {
+                    tag_exam.reason_for_visit[len("APPT:"):]: tag_exam
+                    for tag_exam in Exam.select().where(
+                        Exam.reason_for_visit.startswith("APPT:")
+                    )
+                }
+                pending_appts = list(
+                    Appointment.select(Appointment, Patient)
+                    .join(Patient)
+                    .where(
+                        Appointment.status == AppointmentStatus.SCHEDULED,
+                        Appointment.exam_type_ref_id.is_null(False),
+                    )
+                    .order_by(Appointment.scheduled_at.asc())
+                )
+                for appt in pending_appts:
+                    patient = appt.patient
+                    exam_type_name = ""
+                    try:
+                        if appt.exam_type_ref_id:
+                            ref = ExamTypeRef.get_or_none(ExamTypeRef.id == appt.exam_type_ref_id)
+                            if ref:
+                                exam_type_name = ref.name
+                        if not exam_type_name:
+                            exam_type_name = appt.exam_type.get_label()
+                    except Exception:
+                        pass
+                    linked_exam = appt_exams.get(str(appt.id))
+                    action_url = (
+                        f"/exam/{linked_exam.id}" if linked_exam else f"/patient/{patient.id}"
+                    )
+                    result.append(AssignedExamRowDTO(
+                        row_type="lab",
+                        source="private",
+                        assigned_doctor_id="__lab__",
+                        assigned_doctor_name=f"Laboratoire {org_acronym}",
+                        campaign_id="",
+                        campaign_name="Rendez-vous",
+                        campaign_number="",
+                        campaign_status="",
+                        campaign_status_label="",
+                        exam_type_id=str(appt.exam_type_ref_id) if appt.exam_type_ref_id else "",
+                        exam_type_name=exam_type_name,
+                        exam_category="",
+                        patient_id=str(patient.id),
+                        patient_name=patient.get_full_name(),
+                        patient_number=patient.patient_number,
+                        medical_status="SCHEDULED",
+                        medical_status_label="Rendez-vous planifié",
+                        medical_status_color="gray",
+                        pending_task="Saisir au labo",
+                        pending_task_color="amber",
+                        scheduled_at=appt.scheduled_at.strftime("%d/%m/%Y") if appt.scheduled_at else "",
+                        action_url=action_url,
+                        can_act=True,
+                    ))
+            except Exception:
+                pass
+
         # ── Build assignee dropdown ───────────────────────────────────────────
         assignee_list: list[AssignedDoctorOption] = []
         if self.is_lab or is_admin:
             assignee_list.append(AssignedDoctorOption(id="__lab__", name="Labo"))
-        if self.is_psc:
-            assignee_list.append(AssignedDoctorOption(id="__psc__", name=f"Médecin {org_acronym}"))
+        if self.is_internal_doctor:
+            assignee_list.append(AssignedDoctorOption(id="__internal__", name=f"Médecin {org_acronym}"))
         for did, dname in sorted(doctor_map.items(), key=lambda x: x[1]):
             assignee_list.append(AssignedDoctorOption(id=did, name=dname))
         self.available_assignees = assignee_list
 
-        # Sort: actionable first, then lab/psc (most urgent), then name
+        # Sort: actionable first, then lab/internal (most urgent), then name
         result.sort(key=lambda r: (
             0 if r.can_act else 1,
-            0 if r.row_type in ("lab", "psc") else 1,
+            0 if r.row_type in ("lab", "internal") else 1,
             r.assigned_doctor_name,
             r.campaign_name,
             r.patient_name,

@@ -43,7 +43,7 @@ class DashboardSnapshot(Model):
     exams_labo_validated: int = IntegerField(default=0)
 
     # Medical workflow
-    dossiers_awaiting_psc: int = IntegerField(default=0)
+    dossiers_awaiting_internal: int = IntegerField(default=0)
     dossiers_available_medecin_entreprise: int = IntegerField(default=0)
     dossiers_published_patient: int = IntegerField(default=0)
 
@@ -120,11 +120,11 @@ class DashboardSnapshotService:
             Exam.status == ExamStatus.LAB_VALIDATED.value
         ).count()
 
-        dossiers_psc = CampaignPatient.select().where(
+        dossiers_internal = CampaignPatient.select().where(
             CampaignPatient.medical_status == MedicalRecordStatus.LAB_VALIDATED.value
         ).count()
         dossiers_ent = CampaignPatient.select().where(
-            CampaignPatient.medical_status == MedicalRecordStatus.PSC_VALIDATED.value
+            CampaignPatient.medical_status == MedicalRecordStatus.INTERNAL_VALIDATED.value
         ).count()
         dossiers_published = CampaignPatient.select().where(
             CampaignPatient.medical_status == MedicalRecordStatus.PUBLISHED.value
@@ -159,7 +159,7 @@ class DashboardSnapshotService:
             exams_done=exams_done,
             exams_to_enter=exams_to_enter,
             exams_labo_validated=exams_labo_validated,
-            dossiers_awaiting_psc=dossiers_psc,
+            dossiers_awaiting_internal=dossiers_internal,
             dossiers_available_medecin_entreprise=dossiers_ent,
             dossiers_published_patient=dossiers_published,
             notifications_sent=notif_sent,

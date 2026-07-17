@@ -19,9 +19,11 @@ class PatientQrState(ReflexMainState):
         if not patient_id:
             return
         try:
-            with await self.authenticate_user():
+            with await self.authenticate_user() as auth_user:
                 from gws_care.patient.patient_service import PatientService
-                patient = PatientService.get_patient(patient_id)
+                from gws_care.user.user import User
+                caller = User.get_by_id(str(auth_user.id))
+                patient = PatientService.get_patient(patient_id, user=caller)
                 token = patient.qr_token or patient.patient_number
             self.qr_image_data_url = self._make_qr_data_url(token)
         except Exception as exc:
@@ -31,9 +33,11 @@ class PatientQrState(ReflexMainState):
     async def download_qr(self, patient_id: str, patient_number: str) -> None:
         """Download the QR code as a PNG file."""
         try:
-            with await self.authenticate_user():
+            with await self.authenticate_user() as auth_user:
                 from gws_care.patient.patient_service import PatientService
-                patient = PatientService.get_patient(patient_id)
+                from gws_care.user.user import User
+                caller = User.get_by_id(str(auth_user.id))
+                patient = PatientService.get_patient(patient_id, user=caller)
                 token = patient.qr_token or patient.patient_number
             png_bytes = self._make_qr_png_bytes(token)
             filename = f"QR_{patient_number}.png"

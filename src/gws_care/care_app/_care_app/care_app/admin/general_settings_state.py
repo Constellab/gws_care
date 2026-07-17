@@ -145,13 +145,13 @@ class GeneralSettingsState(RoleState):
         return f"All exams are saved. Click the button to transfer to the {self.org_acronym} doctor."
 
     @rx.var
-    def psc_validated_label(self) -> str:
+    def org_validated_label(self) -> str:
         if self.app_language == "fr":
             return f"{self.org_acronym} validé"
         return f"{self.org_acronym} validated"
 
     @rx.var
-    def awaiting_psc_label(self) -> str:
+    def awaiting_org_label(self) -> str:
         if self.app_language == "fr":
             return f"En attente de validation du médecin {self.org_acronym}."
         return f"Awaiting {self.org_acronym} doctor validation."

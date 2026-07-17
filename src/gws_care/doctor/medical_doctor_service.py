@@ -104,13 +104,6 @@ class MedicalDoctorService:
         d.delete_instance()
 
     @classmethod
-    def get_doctor_model(cls, doctor_id: str) -> Optional[MedicalDoctor]:
-        try:
-            return MedicalDoctor.get_by_id(doctor_id)
-        except Exception:
-            return None
-
-    @classmethod
     def get_specializations(cls) -> List[str]:
         """Return sorted list of distinct active (non-archived) specializations."""
         specs = set()
@@ -142,10 +135,3 @@ class MedicalDoctorService:
             for d in query
         ]
 
-    @classmethod
-    def get_doctor_by_id_or_none(cls, doctor_id: str) -> Optional["MedicalDoctorDTO"]:
-        """Return None if doctor not found (no exception)."""
-        try:
-            return cls.get_doctor(doctor_id)
-        except Exception:
-            return None

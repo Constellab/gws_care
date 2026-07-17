@@ -782,12 +782,14 @@ class PatientDetailState(ReflexMainState):
         self.error_message = ""
 
         try:
-            with await self.authenticate_user():
+            with await self.authenticate_user() as auth_user:
                 from gws_care.exam.exam_service import ExamService
                 from gws_care.patient.patient_service import PatientService
+                from gws_care.user.user import User
                 from gws_care.visit.campaign_visit_service import CampaignVisitService
 
-                p = PatientService.get_patient(patient_id)
+                caller = User.get_by_id(str(auth_user.id))
+                p = PatientService.get_patient(patient_id, user=caller)
                 # Resolve referent doctor from PatientDoctor table
                 physician_id = ""
                 physician_full_name = ""
