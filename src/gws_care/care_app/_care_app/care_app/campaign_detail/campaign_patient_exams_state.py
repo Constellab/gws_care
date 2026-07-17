@@ -314,6 +314,12 @@ class CampaignPatientExamsState(ReflexMainState):
     # this point, so they must NOT be derived from an exact medical_status match).
     internal_validated: bool = False
     enterprise_validated: bool = False
+    # Snapshot taken at load time (or right after a real validate_enterprise
+    # call) of whether enterprise_validated was set with real content behind
+    # it — unlike a plain `enterprise_notes != ""` check in the component,
+    # this does NOT change while the doctor is still typing, so the panel
+    # doesn't lock itself the instant a character is typed into either field.
+    enterprise_validated_with_content: bool = False
 
     # False when the campaign has no company doctor at all — lets the internal
     # doctor publish directly to the patient instead of handing off.
@@ -1277,9 +1283,6 @@ class CampaignPatientExamsState(ReflexMainState):
         if not self.enterprise_notes.strip():
             self.error = "L'interprétation est obligatoire avant validation."
             return
-        if not self.enterprise_patient_message.strip():
-            self.error = "Le message au patient est obligatoire avant validation."
-            return
         self.is_saving = True
         self.error = ""
         try:
@@ -1298,6 +1301,7 @@ class CampaignPatientExamsState(ReflexMainState):
                 CampaignService.validate_enterprise_patient(campaign_id, patient_id, caller=caller)
             self.medical_status = "ENTERPRISE_VALIDATED"
             self.enterprise_validated = True
+            self.enterprise_validated_with_content = bool(self.enterprise_patient_message.strip())
             self.success = "Interprétation entreprise validée."
         except Exception as e:
             self.error = str(e)
@@ -1370,6 +1374,12 @@ class CampaignPatientExamsState(ReflexMainState):
                 self.internal_notified = bool(cp.internal_notified_at) if cp else False
                 self.internal_validated = bool(cp.internal_validated_at) if cp else False
                 self.enterprise_validated = bool(cp.enterprise_validated_at) if cp else False
+                self.enterprise_validated_with_content = bool(
+                    cp
+                    and cp.enterprise_validated_at
+                    and (cp.enterprise_notes or "").strip()
+                    and (cp.patient_message or "").strip()
+                )
 
                 from gws_care.campaign.campaign_service import CampaignService as _CampaignService
                 self.has_company_doctor = bool(

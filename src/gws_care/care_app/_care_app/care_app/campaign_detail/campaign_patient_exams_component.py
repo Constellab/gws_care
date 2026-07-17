@@ -1086,16 +1086,17 @@ def _enterprise_interpretation_panel() -> rx.Component:
     # medical_status, which keeps advancing past ENTERPRISE_VALIDATED, so an exact
     # status match would silently unlock this panel again at later stages.
     already_validated = CampaignPatientExamsState.enterprise_validated
-    # A dossier can end up with enterprise_validated=True but no actual
-    # interpretation/message content (e.g. a historical record published via
-    # the internal doctor's direct-to-patient shortcut before this campaign
-    # had a company doctor). Locking the fields in that case leaves the
-    # company doctor unable to ever write anything — so "locked" additionally
-    # requires there to be real content behind the validated flag.
-    has_content = (CampaignPatientExamsState.enterprise_notes != "") | (
-        CampaignPatientExamsState.enterprise_patient_message != ""
-    )
-    locked = already_validated & has_content
+    # locked is a snapshot taken at load time (or right after a real
+    # validate_enterprise call) — NOT recomputed from the live text area
+    # values, otherwise the panel would lock itself the instant a character
+    # is typed into either field (both become "non-empty" mid-typing, before
+    # anything is actually saved). It also protects against a dossier that
+    # ended up with enterprise_validated=True but no message, purely as a
+    # side effect of the internal doctor's direct-to-patient shortcut from
+    # before this campaign had a company doctor recognized — that leftover
+    # state stays open for the company doctor to complete/re-submit instead
+    # of being stuck read-only with nothing they can do about it.
+    locked = CampaignPatientExamsState.enterprise_validated_with_content
     # No viewer_is_operator bypass here: an admin/operator previewing this page
     # must NOT be able to unlock the enterprise doctor's fields before the
     # internal doctor has actually validated — visibility of the panel is
